@@ -35,7 +35,7 @@ object LineColorHelper {
             ligne == "D" && familleTransport == "MET" -> METRO_D_COLOR
             
             // Funiculaire (détection par nom de ligne ou type)
-            ligne == "F" || nomTypeLigne.contains("funiculaire") -> FUNICULAR_COLOR
+            ligne == "F1" || ligne == "F2" || nomTypeLigne.contains("funiculaire") -> FUNICULAR_COLOR
             
             // Trams (famille TRA ou TRAM)
             familleTransport == "TRA" || familleTransport == "TRAM" -> TRAM_COLOR
@@ -55,7 +55,7 @@ object LineColorHelper {
         
         return when {
             familleTransport == "MET" -> "Métro $ligne"
-            ligne == "F" || nomTypeLigne.contains("funiculaire") -> "Funiculaire $ligne"
+            ligne == "F1" || ligne == "F2" || nomTypeLigne.contains("funiculaire") -> "Funiculaire $ligne"
             familleTransport == "TRA" || familleTransport == "TRAM" -> "Tram $ligne"
             else -> "Bus $ligne"
         }
