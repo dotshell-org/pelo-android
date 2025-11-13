@@ -47,7 +47,7 @@ object BusIconHelper {
         
         // Si la chaîne contient des virgules, chaque entrée représente une ligne avec un sens (ex: 5:A)
         val entries = desserte.split(",")
-        return if (entries.size > 1) {
+        val rawLines: List<String> = if (entries.size > 1) {
             entries.mapNotNull { part ->
                 val trimmed = part.trim()
                 if (trimmed.isEmpty()) null else trimmed.substringBefore(":").trim()
@@ -68,6 +68,17 @@ object BusIconHelper {
             // Conserver l'ordre: première vraie ligne + autres lignes valides éventuelles
             listOf(first) + filteredRest
         }
+
+        // Dédupliquer en conservant l'ordre, comparaison insensible à la casse
+        val seen = HashSet<String>()
+        val unique = ArrayList<String>(rawLines.size)
+        rawLines.forEach { line ->
+            val key = line.uppercase()
+            if (seen.add(key)) {
+                unique.add(line)
+            }
+        }
+        return unique
     }
     
     /**
