@@ -6,12 +6,32 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Route
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarDefaults
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.pelotcl.app.ui.theme.PeloTheme
+import com.pelotcl.app.ui.theme.Red500
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -19,29 +39,116 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             PeloTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Tristan",
-                        modifier = Modifier.padding(innerPadding)
-                    )
-                }
+                NavBar(modifier = Modifier.fillMaxSize())
             }
         }
     }
 }
 
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
+private enum class Destination(
+    val route: String,
+    val label: String,
+    val icon: ImageVector,
+    val contentDescription: String
+) {
+    PLAN(
+        route = "plan",
+        label = "Plan",
+        icon = Icons.Filled.Map,
+        contentDescription = "Onglet Plan"
+    ),
+    LIGNES(
+        route = "lignes",
+        label = "Lignes",
+        icon = Icons.Filled.Route,
+        contentDescription = "Onglet Lignes"
+    ),
+    PARAMETRES(
+        route = "parametres",
+        label = "Paramètres",
+        icon = Icons.Filled.Settings,
+        contentDescription = "Onglet Paramètres"
+    );
+
+    companion object {
+        val entries: List<Destination> = values().toList()
+    }
 }
 
-@Preview(showBackground = true)
 @Composable
-fun GreetingPreview() {
-    PeloTheme {
-        Greeting("Tristan")
+fun NavBar(modifier: Modifier = Modifier) {
+    val navController = rememberNavController()
+    val startDestination = Destination.PLAN
+    var selectedDestination by rememberSaveable { mutableIntStateOf(startDestination.ordinal) }
+
+    Scaffold(
+        modifier = modifier,
+        bottomBar = {
+            NavigationBar(
+                windowInsets = NavigationBarDefaults.windowInsets,
+                containerColor = Color.Black
+            ) {
+                Destination.entries.forEachIndexed { index, destination ->
+                    NavigationBarItem(
+                        selected = selectedDestination == index,
+                        onClick = {
+                            if (selectedDestination != index) {
+                                navController.navigate(destination.route) {
+                                    launchSingleTop = true
+                                    popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                    restoreState = true
+                                }
+                                selectedDestination = index
+                            }
+                        },
+                        icon = {
+                            Icon(
+                                destination.icon,
+                                contentDescription = destination.contentDescription
+                            )
+                        },
+                        label = { Text(destination.label) },
+                        colors = NavigationBarItemDefaults.colors(
+                            indicatorColor = Red500,
+                            selectedIconColor = Color.White,
+                            unselectedIconColor = Color.White,
+                            selectedTextColor = Color.White,
+                            unselectedTextColor = Color.White
+                        )
+                    )
+                }
+            }
+        }
+    ) { contentPadding ->
+        AppNavHost(navController, startDestination, modifier = Modifier.padding(contentPadding))
     }
+}
+
+@Composable
+private fun AppNavHost(
+    navController: androidx.navigation.NavHostController,
+    startDestination: Destination,
+    modifier: Modifier = Modifier
+) {
+    NavHost(
+        navController = navController,
+        startDestination = startDestination.route,
+        modifier = modifier
+    ) {
+        composable(Destination.PLAN.route) {
+            SimpleScreen(title = "Plan")
+        }
+        composable(Destination.LIGNES.route) {
+            SimpleScreen(title = "Lignes")
+        }
+        composable(Destination.PARAMETRES.route) {
+            SimpleScreen(title = "Paramètres")
+        }
+    }
+}
+
+@Composable
+private fun SimpleScreen(title: String) {
+    // Placeholder content for each tab. Replace with real screens later.
+    Text(text = title)
 }
