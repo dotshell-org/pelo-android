@@ -151,7 +151,15 @@ private fun addStopsToMap(
         val secondaryLayerPrefix = "transport-stops-layer-secondary"
 
         // Remove old layers and sources if they exist
+        // Remove previous fixed slots (1..3)
         (1..3).forEach { idx ->
+            val pId = "$priorityLayerPrefix-$idx"
+            val sId = "$secondaryLayerPrefix-$idx"
+            style.getLayer(pId)?.let { style.removeLayer(it) }
+            style.getLayer(sId)?.let { style.removeLayer(it) }
+        }
+        // Also remove a reasonable range of dynamic slot layers from previous runs (-25..25)
+        (-25..25).forEach { idx ->
             val pId = "$priorityLayerPrefix-$idx"
             val sId = "$secondaryLayerPrefix-$idx"
             style.getLayer(pId)?.let { style.removeLayer(it) }
@@ -159,9 +167,10 @@ private fun addStopsToMap(
         }
         style.getSource(sourceId)?.let { style.removeSource(it) }
 
-        // Collect unique icons and valid stops
+        // Collect unique icons, valid stops, and used slot indices
         val requiredIcons = mutableSetOf<String>()
         val validStops = mutableListOf<com.pelotcl.app.data.model.StopFeature>()
+        val usedSlots = mutableSetOf<Int>()
 
         stops.forEach { stop ->
             val drawableNames = BusIconHelper.getAllDrawableNamesForStop(stop)
@@ -172,6 +181,13 @@ private fun addStopsToMap(
             if (availableNames.isNotEmpty()) {
                 requiredIcons.addAll(availableNames)
                 validStops.add(stop)
+                val n = availableNames.size
+                val start = -(n - 1)
+                var slot = start
+                repeat(n) {
+                    usedSlots.add(slot)
+                    slot += 2
+                }
             }
         }
 
@@ -190,59 +206,54 @@ private fun addStopsToMap(
             }
         }
 
-        // Create GeoJSON for stops with icon information
-        val stopsGeoJson = createStopsGeoJsonFromStops(validStops)
+        // Create GeoJSON for stops with icon information (unlimited by using per-line features)
+        val stopsGeoJson = createStopsGeoJsonFromStops(validStops, context)
 
         // Add data source for stops
         val stopsSource = GeoJsonSource(sourceId, stopsGeoJson)
         style.addSource(stopsSource)
 
-        // Create stacked layers for up to 3 icons per stop
+        // Two data-driven layers across arbitrary number of slots
         val iconSizesPriority = 0.7f
         val iconSizesSecondary = 0.62f
-        // Slot offsets: 1 = top, 2 = center, 3 = bottom (y in pixels)
-        val offsets: Map<Int, Array<Float>> = mapOf(
-            1 to arrayOf(0f, -26f),
-            2 to arrayOf(0f, 0f),
-            3 to arrayOf(0f, 26f)
-        )
 
-        (1..3).forEach { idx ->
-            val propName = "icon$idx"
+        // Build layers for each used slot index with static offset per layer
+        usedSlots.sorted().forEach { slotIndex ->
+            val yOffset = slotIndex * 13f // 26px between adjacent icons
 
-            val priorityLayerId = "$priorityLayerPrefix-$idx"
+            val priorityLayerId = "$priorityLayerPrefix-$slotIndex"
             val priorityLayer = SymbolLayer(priorityLayerId, sourceId).apply {
                 setProperties(
-                    PropertyFactory.iconImage("{$propName}"),
+                    PropertyFactory.iconImage("{icon}"),
                     PropertyFactory.iconSize(iconSizesPriority),
                     PropertyFactory.iconAllowOverlap(true),
                     PropertyFactory.iconIgnorePlacement(true),
                     PropertyFactory.iconAnchor("center"),
-                    PropertyFactory.iconOffset(offsets[idx] ?: arrayOf(0f, 0f))
+                    PropertyFactory.iconOffset(arrayOf(0f, yOffset))
                 )
                 setFilter(
                     Expression.all(
                         Expression.eq(Expression.get("priority_stop"), true),
-                        Expression.has(propName)
+                        Expression.eq(Expression.get("slot"), slotIndex)
                     )
                 )
             }
             style.addLayer(priorityLayer)
 
-            val secondaryLayerId = "$secondaryLayerPrefix-$idx"
+            val secondaryLayerId = "$secondaryLayerPrefix-$slotIndex"
             val secondaryLayer = SymbolLayer(secondaryLayerId, sourceId).apply {
                 setProperties(
-                    PropertyFactory.iconImage("{$propName}"),
+                    PropertyFactory.iconImage("{icon}"),
                     PropertyFactory.iconSize(iconSizesSecondary),
                     PropertyFactory.iconAllowOverlap(true),
                     PropertyFactory.iconIgnorePlacement(true),
                     PropertyFactory.iconAnchor("center"),
-                    PropertyFactory.iconOffset(offsets[idx] ?: arrayOf(0f, 0f))
+                    PropertyFactory.iconOffset(arrayOf(0f, yOffset))
                 )
                 setFilter(
                     Expression.all(
                         Expression.eq(Expression.get("priority_stop"), false),
-                        Expression.has(propName)
+                        Expression.eq(Expression.get("slot"), slotIndex)
                     )
                 )
                 setMinZoom(SECONDARY_STOPS_MIN_ZOOM)
@@ -295,61 +306,57 @@ private fun createGeoJsonFromFeature(feature: com.pelotcl.app.data.model.Feature
 /**
  * Crée un GeoJSON contenant des Points pour tous les arrêts de transport avec informations d'icônes
  */
-private fun createStopsGeoJsonFromStops(stops: List<com.pelotcl.app.data.model.StopFeature>): String {
+private fun createStopsGeoJsonFromStops(
+    stops: List<com.pelotcl.app.data.model.StopFeature>,
+    context: android.content.Context
+): String {
     val features = JsonArray()
 
     stops.forEach { stop ->
         val lineNames = BusIconHelper.getAllLinesForStop(stop)
         if (lineNames.isEmpty()) return@forEach
-        val drawableNames = BusIconHelper.getAllDrawableNamesForStop(stop)
+        val drawableNamesAll = BusIconHelper.getAllDrawableNamesForStop(stop)
+        // Filter to only available icons to avoid generating non-rendering features
+        val drawableNames = drawableNamesAll.filter { name ->
+            val id = context.resources.getIdentifier(name, "drawable", context.packageName)
+            id != 0
+        }
+        if (drawableNames.isEmpty()) return@forEach
 
         val mainLine = lineNames.firstOrNull()
         val isPriorityStop = mainLine != null && ALWAYS_VISIBLE_LINES.contains(mainLine.uppercase())
 
-        // Map lines to slots: 1=top, 2=center, 3=bottom
-        val slotToIcon: MutableMap<Int, String> = mutableMapOf()
-        when (drawableNames.size) {
-            1 -> {
-                slotToIcon[2] = drawableNames[0]
+        // Compute centered slot indices for N icons: -(n-1), -(n-3), ..., (n-1)
+        val n = drawableNames.size
+        var slot = -(n - 1)
+
+        drawableNames.forEach { iconName ->
+            val pointFeature = JsonObject().apply {
+                addProperty("type", "Feature")
+
+                val pointGeometry = JsonObject().apply {
+                    addProperty("type", "Point")
+                    val coordinatesArray = JsonArray()
+                    coordinatesArray.add(stop.geometry.coordinates[0])
+                    coordinatesArray.add(stop.geometry.coordinates[1])
+                    add("coordinates", coordinatesArray)
+                }
+                add("geometry", pointGeometry)
+
+                val properties = JsonObject().apply {
+                    addProperty("nom", stop.properties.nom)
+                    addProperty("desserte", stop.properties.desserte)
+                    addProperty("pmr", stop.properties.pmr)
+                    addProperty("type", "stop")
+                    addProperty("priority_stop", isPriorityStop)
+                    addProperty("icon", iconName)
+                    addProperty("slot", slot)
+                }
+                add("properties", properties)
             }
-            2 -> {
-                slotToIcon[1] = drawableNames[0]
-                slotToIcon[3] = drawableNames[1]
-            }
-            else -> {
-                // Take first three
-                slotToIcon[1] = drawableNames[0]
-                slotToIcon[2] = drawableNames[1]
-                slotToIcon[3] = drawableNames[2]
-            }
+            features.add(pointFeature)
+            slot += 2
         }
-
-        val pointFeature = JsonObject().apply {
-            addProperty("type", "Feature")
-
-            val pointGeometry = JsonObject().apply {
-                addProperty("type", "Point")
-                val coordinatesArray = JsonArray()
-                coordinatesArray.add(stop.geometry.coordinates[0])
-                coordinatesArray.add(stop.geometry.coordinates[1])
-                add("coordinates", coordinatesArray)
-            }
-            add("geometry", pointGeometry)
-
-            val properties = JsonObject().apply {
-                addProperty("nom", stop.properties.nom)
-                addProperty("desserte", stop.properties.desserte)
-                addProperty("pmr", stop.properties.pmr)
-                addProperty("type", "stop")
-                addProperty("priority_stop", isPriorityStop)
-                // Set icon slots
-                slotToIcon[1]?.let { addProperty("icon1", it) }
-                slotToIcon[2]?.let { addProperty("icon2", it) }
-                slotToIcon[3]?.let { addProperty("icon3", it) }
-            }
-            add("properties", properties)
-        }
-        features.add(pointFeature)
     }
 
     val geoJsonCollection = JsonObject().apply {
