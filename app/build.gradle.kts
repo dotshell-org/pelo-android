@@ -58,6 +58,14 @@ dependencies {
     // MapLibre
     implementation(libs.maplibre.android)
 
+    // Retrofit for network calls
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.gson)
+    implementation(libs.gson)
+    
+    // ViewModel
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
