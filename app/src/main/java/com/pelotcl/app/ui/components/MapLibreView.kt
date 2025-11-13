@@ -19,9 +19,9 @@ import org.maplibre.android.maps.MapLibreMap
 @Composable
 fun MapLibreView(
     modifier: Modifier = Modifier,
-    initialPosition: LatLng = LatLng(46.8182, 8.2275), // Centre de la Suisse
-    initialZoom: Double = 7.0,
-    styleUrl: String = "https://demotiles.maplibre.org/style.json", // Style MapLibre par défaut
+    initialPosition: LatLng = LatLng(45.75, 4.85),
+    initialZoom: Double = 10.0,
+    styleUrl: String = "https://tiles.openfreemap.org/styles/positron",
     onMapReady: (MapLibreMap) -> Unit = {}
 ) {
     val context = LocalContext.current

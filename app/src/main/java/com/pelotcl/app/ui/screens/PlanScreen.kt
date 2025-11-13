@@ -12,12 +12,11 @@ fun PlanScreen(modifier: Modifier = Modifier) {
     Box(modifier = modifier.fillMaxSize()) {
         MapLibreView(
             modifier = Modifier.fillMaxSize(),
-            initialPosition = LatLng(46.8182, 8.2275), // Centre de la Suisse
-            initialZoom = 7.0,
-            styleUrl = "https://demotiles.maplibre.org/style.json", // Style MapLibre par défaut
+            initialPosition = LatLng(45.75, 4.85),
+            initialZoom = 10.0,
+            styleUrl = "https://tiles.openfreemap.org/styles/positron",
             onMapReady = { map ->
-                // Vous pouvez ajouter des marqueurs, des couches, etc. ici
-                // Exemple: map.addMarker(MarkerOptions().position(LatLng(46.8182, 8.2275)))
+                // 
             }
         )
     }
