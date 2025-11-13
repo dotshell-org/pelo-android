@@ -14,51 +14,60 @@ object BusIconHelper {
      * @return Le nom du drawable (sans l'extension .xml) ou null si aucune ligne trouvée
      */
     fun getIconNameForStop(stopFeature: StopFeature): String? {
-        val desserte = stopFeature.properties.desserte
-        
-        if (desserte.isBlank()) {
-            return null
-        }
-        
-        // Parse la desserte pour extraire les lignes (format: "M:A:B" ou "C17:22:31")
-        val lines = parseDesserte(desserte)
-        
-        if (lines.isEmpty()) {
-            return null
-        }
-        
-        // Prendre la première ligne
+        val lines = getAllLinesForStop(stopFeature)
+        if (lines.isEmpty()) return null
         val firstLine = lines.first()
-        
-        // Convertir le nom de la ligne en nom de drawable
         return getDrawableNameForLine(firstLine)
     }
     
     /**
-     * Retourne toutes les lignes qui desservent un arrêt
-     * 
-     * @param stopFeature L'arrêt de transport
-     * @return Liste des noms de lignes
+     * Retourne toutes les lignes qui desservent un arrêt (noms des lignes)
      */
     fun getAllLinesForStop(stopFeature: StopFeature): List<String> {
         return parseDesserte(stopFeature.properties.desserte)
     }
+
+    /**
+     * Retourne les noms des drawables pour toutes les lignes d'un arrêt, dans l'ordre
+     */
+    fun getAllDrawableNamesForStop(stopFeature: StopFeature): List<String> {
+        return getAllLinesForStop(stopFeature).map { getDrawableNameForLine(it) }
+    }
     
     /**
-     * Parse la chaîne desserte pour extraire la liste des lignes
-     * 
-     * @param desserte Chaîne de desserte (ex: "M:A:B", "C17:22:31")
-     * @return Liste des noms de lignes
+     * Parse la chaîne desserte pour extraire la liste des lignes.
+     * Cas gérés:
+     *  - "5:A,86:A,JD844:R" -> ["5", "86", "JD844"]
+     *  - "M:A:B" -> ["M"] (les suffixes ":A"/":R" signifient Aller/Retour, à ignorer)
+     *  - "A:B" (métro) -> ["A"]
+     *  - "C17:22:31" (ancien format) -> ["C17", "22", "31"]
      */
     private fun parseDesserte(desserte: String): List<String> {
-        if (desserte.isBlank()) {
-            return emptyList()
-        }
+        if (desserte.isBlank()) return emptyList()
         
-        // Séparer par ":" et filtrer les valeurs vides
-        return desserte.split(":")
-            .filter { it.isNotBlank() }
-            .map { it.trim() }
+        // Si la chaîne contient des virgules, chaque entrée représente une ligne avec un sens (ex: 5:A)
+        val entries = desserte.split(",")
+        return if (entries.size > 1) {
+            entries.mapNotNull { part ->
+                val trimmed = part.trim()
+                if (trimmed.isEmpty()) null else trimmed.substringBefore(":").trim()
+            }.filter { it.isNotEmpty() }
+        } else {
+            // Pas de virgule: séparer par ":". Les tokens "A"/"R" (Aller/Retour) après le premier sont ignorés.
+            val tokens = desserte.split(":")
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+            if (tokens.isEmpty()) return emptyList()
+            val first = tokens.first()
+            val rest = tokens.drop(1)
+            val filteredRest = rest.filter { t ->
+                val up = t.uppercase()
+                // Ne pas garder les directions Aller/Retour
+                up != "A" && up != "R"
+            }
+            // Conserver l'ordre: première vraie ligne + autres lignes valides éventuelles
+            listOf(first) + filteredRest
+        }
     }
     
     /**
