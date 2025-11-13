@@ -32,8 +32,8 @@ import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
 
-private val ALWAYS_VISIBLE_LINES = setOf("F1", "F2", "B", "C", "D")
-private const val SECONDARY_STOPS_MIN_ZOOM = 13.8f
+private val ALWAYS_VISIBLE_LINES = setOf("F1", "F2", "A", "B", "C", "D")
+private const val SECONDARY_STOPS_MIN_ZOOM = 15f
 
 @Composable
 fun PlanScreen(
@@ -270,9 +270,9 @@ private fun createStopsGeoJsonFromStops(stops: List<com.pelotcl.app.data.model.S
 
     stops.forEach { stop ->
         val iconName = BusIconHelper.getIconNameForStop(stop)!!
-        val isPriorityStop = BusIconHelper.getAllLinesForStop(stop).any { line ->
-            ALWAYS_VISIBLE_LINES.contains(line.uppercase())
-        }
+        val linesForStop = BusIconHelper.getAllLinesForStop(stop)
+        val mainLine = linesForStop.firstOrNull()
+        val isPriorityStop = mainLine != null && ALWAYS_VISIBLE_LINES.contains(mainLine.uppercase())
 
         val pointFeature = JsonObject().apply {
             addProperty("type", "Feature")
@@ -306,3 +306,4 @@ private fun createStopsGeoJsonFromStops(stops: List<com.pelotcl.app.data.model.S
 
     return geoJsonCollection.toString()
 }
+
