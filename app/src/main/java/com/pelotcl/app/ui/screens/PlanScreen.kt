@@ -33,6 +33,7 @@ import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
 
 private val ALWAYS_VISIBLE_LINES = setOf("F1", "F2", "A", "B", "C", "D")
+private const val PRIORITY_STOPS_MIN_ZOOM = 12.5f
 private const val SECONDARY_STOPS_MIN_ZOOM = 15f
 
 @Composable
@@ -237,6 +238,7 @@ private fun addStopsToMap(
                         Expression.eq(Expression.get("slot"), slotIndex)
                     )
                 )
+                setMinZoom(PRIORITY_STOPS_MIN_ZOOM)
             }
             style.addLayer(priorityLayer)
 

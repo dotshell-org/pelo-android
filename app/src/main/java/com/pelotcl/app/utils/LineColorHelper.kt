@@ -8,13 +8,13 @@ import com.pelotcl.app.data.model.Feature
 object LineColorHelper {
     
     // Couleurs définies
-    private const val METRO_A_COLOR = "#F472B6"  // Rose
-    private const val METRO_B_COLOR = "#3B82F6"  // Bleu
-    private const val METRO_C_COLOR = "#EAB308"  // Jaune
-    private const val METRO_D_COLOR = "#22C55E"  // Vert
-    private const val TRAM_COLOR = "#A855F7"     // Violet
-    private const val FUNICULAR_COLOR = "#84CC16" // Lime
-    private const val BUS_COLOR = "#EF4444"      // Rouge
+    private const val METRO_A_COLOR = "#EC4899"
+    private const val METRO_B_COLOR = "#3B82F6"
+    private const val METRO_C_COLOR = "#F59E0B"
+    private const val METRO_D_COLOR = "#22C55E"
+    private const val TRAM_COLOR = "#A855F7"
+    private const val FUNICULAR_COLOR = "#84CC16"
+    private const val BUS_COLOR = "#EF4444"
     
     /**
      * Retourne la couleur hexadécimale appropriée pour une ligne de transport
