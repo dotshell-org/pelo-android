@@ -30,6 +30,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.pelotcl.app.ui.screens.PlanScreen
 import com.pelotcl.app.ui.theme.PeloTheme
 import com.pelotcl.app.ui.theme.Red500
 
@@ -136,7 +137,7 @@ private fun AppNavHost(
         modifier = modifier
     ) {
         composable(Destination.PLAN.route) {
-            SimpleScreen(title = "Plan")
+            PlanScreen()
         }
         composable(Destination.LIGNES.route) {
             SimpleScreen(title = "Lignes")
