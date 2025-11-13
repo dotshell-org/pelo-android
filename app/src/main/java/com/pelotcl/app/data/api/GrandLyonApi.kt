@@ -11,7 +11,7 @@ import retrofit2.http.Query
 interface GrandLyonApi {
     
     /**
-     * Récupère les lignes de métro/tram TCL depuis l'API WFS de Grand Lyon
+     * Récupère les lignes de métro/funiculaire TCL depuis l'API WFS de Grand Lyon
      * 
      * @param service Type de service (WFS)
      * @param version Version du protocole WFS (2.0.0)
@@ -29,6 +29,22 @@ interface GrandLyonApi {
         @Query("VERSION") version: String = "2.0.0",
         @Query("request") request: String = "GetFeature",
         @Query("typename") typename: String = "sytral:tcl_sytral.tcllignemf_2_0_0",
+        @Query("outputFormat") outputFormat: String = "application/json",
+        @Query("SRSNAME") srsName: String = "EPSG:4171",
+        @Query("startIndex") startIndex: Int = 0,
+        @Query("sortby") sortBy: String = "gid",
+        @Query("count") count: Int = 1000
+    ): FeatureCollection
+
+    /**
+     * Récupère les lignes de tram TCL depuis l'API WFS de Grand Lyon
+     */
+    @GET("geoserver/sytral/ows")
+    suspend fun getTramLines(
+        @Query("SERVICE") service: String = "WFS",
+        @Query("VERSION") version: String = "2.0.0",
+        @Query("request") request: String = "GetFeature",
+        @Query("typename") typename: String = "sytral:tcl_sytral.tcllignetram_2_0_0",
         @Query("outputFormat") outputFormat: String = "application/json",
         @Query("SRSNAME") srsName: String = "EPSG:4171",
         @Query("startIndex") startIndex: Int = 0,

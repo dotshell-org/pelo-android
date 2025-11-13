@@ -18,18 +18,24 @@ class TransportRepository {
      */
     suspend fun getAllLines(): Result<FeatureCollection> {
         return try {
-            val response = api.getTransportLines()
-            
+            val metroFuniculaire = api.getTransportLines()
+            val trams = api.getTramLines()
+
+            // Fusionner les features des deux couches
+            val allFeatures = (metroFuniculaire.features + trams.features)
+
             // Grouper par code_trace et ne garder que le premier de chaque groupe (sens aller)
-            val uniqueLines = response.features
+            val uniqueLines = allFeatures
                 .groupBy { it.properties.codeTrace }
                 .map { (_, features) -> features.first() }
-            
-            val filteredCollection = response.copy(
+
+            val filteredCollection = metroFuniculaire.copy(
                 features = uniqueLines,
-                numberReturned = uniqueLines.size
+                numberReturned = uniqueLines.size,
+                totalFeatures = (metroFuniculaire.totalFeatures ?: 0) + (trams.totalFeatures ?: 0),
+                numberMatched = (metroFuniculaire.numberMatched ?: 0) + (trams.numberMatched ?: 0)
             )
-            
+
             Result.success(filteredCollection)
         } catch (e: Exception) {
             Result.failure(e)
@@ -41,11 +47,14 @@ class TransportRepository {
      */
     suspend fun getLineByName(lineName: String): Result<Feature?> {
         return try {
-            val response = api.getTransportLines()
-            
+            val metroFuniculaire = api.getTransportLines()
+            val trams = api.getTramLines()
+
+            val allFeatures = (metroFuniculaire.features + trams.features)
+
             // Trouver la ligne et prendre le premier résultat (sens aller)
-            val line = response.features
-                .filter { it.properties.ligne == lineName }
+            val line = allFeatures
+                .filter { it.properties.ligne.equals(lineName, ignoreCase = true) }
                 .firstOrNull()
             
             Result.success(line)

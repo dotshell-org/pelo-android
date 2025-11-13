@@ -126,7 +126,7 @@ private fun addLineToMap(
         val lineLayer = LineLayer(layerId, sourceId).apply {
             setProperties(
                 PropertyFactory.lineColor(lineColor),
-                PropertyFactory.lineWidth(4f),
+                PropertyFactory.lineWidth(if (feature.properties.familleTransport == "TRA" || feature.properties.familleTransport == "TRAM") 2f else 4f),
                 PropertyFactory.lineOpacity(0.8f),
                 PropertyFactory.lineCap("round"),
                 PropertyFactory.lineJoin("round")
