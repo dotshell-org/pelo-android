@@ -25,11 +25,15 @@ import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LineColorHelper
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
+
+private val ALWAYS_VISIBLE_LINES = setOf("F1", "F2", "B", "C", "D")
+private const val SECONDARY_STOPS_MIN_ZOOM = 13.8f
 
 @Composable
 fun PlanScreen(
@@ -143,16 +147,19 @@ private fun addStopsToMap(
 ) {
     map.getStyle { style ->
         val sourceId = "transport-stops"
-        val layerId = "transport-stops-layer"
-        
-        // Supprimer l'ancienne couche et source si elles existent
-        style.getLayer(layerId)?.let { style.removeLayer(it) }
+        val priorityLayerId = "transport-stops-layer-priority"
+        val secondaryLayerId = "transport-stops-layer-secondary"
+
+        // Remove old layers and sources if they exist
+        listOf(priorityLayerId, secondaryLayerId).forEach { id ->
+            style.getLayer(id)?.let { style.removeLayer(it) }
+        }
         style.getSource(sourceId)?.let { style.removeSource(it) }
-        
-        // Collecter toutes les icônes uniques nécessaires
+
+        // Collect unique icons and valid stops
         val requiredIcons = mutableSetOf<String>()
         val validStops = mutableListOf<com.pelotcl.app.data.model.StopFeature>()
-        
+
         stops.forEach { stop ->
             val iconName = BusIconHelper.getIconNameForStop(stop)
             if (iconName != null) {
@@ -163,8 +170,8 @@ private fun addStopsToMap(
                 }
             }
         }
-        
-        // Charger toutes les icônes dans le style
+
+        // Load all icons into the style
         requiredIcons.forEach { iconName ->
             try {
                 val resourceId = context.resources.getIdentifier(iconName, "drawable", context.packageName)
@@ -175,34 +182,43 @@ private fun addStopsToMap(
                     }
                 }
             } catch (e: Exception) {
-                // Ignorer les erreurs de chargement d'icônes spécifiques
-                println("Erreur lors du chargement de l'icône $iconName: ${e.message}")
+                println("Error loading icon $iconName: ${e.message}")
             }
         }
-        
-        // Créer le GeoJSON pour les arrêts avec informations d'icônes
+
+        // Create GeoJSON for stops with icon information
         val stopsGeoJson = createStopsGeoJsonFromStops(validStops)
-        
-        // Ajouter la source de données pour les arrêts
+
+        // Add data source for stops
         val stopsSource = GeoJsonSource(sourceId, stopsGeoJson)
         style.addSource(stopsSource)
-        
-        // Créer la couche de symboles pour les arrêts
-        val stopsLayer = SymbolLayer(layerId, sourceId).apply {
+
+        // Create two layers: priority stops always visible, secondary stops visible at closer zoom
+        val priorityStopsLayer = SymbolLayer(priorityLayerId, sourceId).apply {
             setProperties(
-                // Utiliser l'icône spécifiée dans les propriétés GeoJSON
                 PropertyFactory.iconImage("{icon}"),
-                // Taille de l'icône (ajustable selon les besoins)
                 PropertyFactory.iconSize(0.7f),
-                // Permettre le chevauchement des icônes
                 PropertyFactory.iconAllowOverlap(true),
                 PropertyFactory.iconIgnorePlacement(true),
-                // Centrer l'icône sur le point
                 PropertyFactory.iconAnchor("center")
             )
+            setFilter(Expression.eq(Expression.get("priority_stop"), true))
         }
-        
-        style.addLayer(stopsLayer)
+
+        val secondaryStopsLayer = SymbolLayer(secondaryLayerId, sourceId).apply {
+            setProperties(
+                PropertyFactory.iconImage("{icon}"),
+                PropertyFactory.iconSize(0.65f),
+                PropertyFactory.iconAllowOverlap(true),
+                PropertyFactory.iconIgnorePlacement(true),
+                PropertyFactory.iconAnchor("center")
+            )
+            setFilter(Expression.eq(Expression.get("priority_stop"), false))
+            setMinZoom(SECONDARY_STOPS_MIN_ZOOM)
+        }
+
+        style.addLayer(priorityStopsLayer)
+        style.addLayer(secondaryStopsLayer)
     }
 }
 
@@ -251,41 +267,42 @@ private fun createGeoJsonFromFeature(feature: com.pelotcl.app.data.model.Feature
  */
 private fun createStopsGeoJsonFromStops(stops: List<com.pelotcl.app.data.model.StopFeature>): String {
     val features = JsonArray()
-    
-    // Parcourir tous les arrêts pour créer les features GeoJSON
+
     stops.forEach { stop ->
         val iconName = BusIconHelper.getIconNameForStop(stop)!!
-        
+        val isPriorityStop = BusIconHelper.getAllLinesForStop(stop).any { line ->
+            ALWAYS_VISIBLE_LINES.contains(line.uppercase())
+        }
+
         val pointFeature = JsonObject().apply {
             addProperty("type", "Feature")
-            
-            // Géométrie du point (utiliser directement les coordonnées de l'arrêt)
+
             val pointGeometry = JsonObject().apply {
                 addProperty("type", "Point")
                 val coordinatesArray = JsonArray()
-                coordinatesArray.add(stop.geometry.coordinates[0]) // longitude
-                coordinatesArray.add(stop.geometry.coordinates[1]) // latitude
+                coordinatesArray.add(stop.geometry.coordinates[0])
+                coordinatesArray.add(stop.geometry.coordinates[1])
                 add("coordinates", coordinatesArray)
             }
             add("geometry", pointGeometry)
-            
-            // Propriétés du point avec information d'icône
+
             val properties = JsonObject().apply {
                 addProperty("nom", stop.properties.nom)
                 addProperty("desserte", stop.properties.desserte)
                 addProperty("pmr", stop.properties.pmr)
                 addProperty("type", "stop")
-                addProperty("icon", iconName) // Nom de l'icône à utiliser
+                addProperty("icon", iconName)
+                addProperty("priority_stop", isPriorityStop)
             }
             add("properties", properties)
         }
         features.add(pointFeature)
     }
-    
+
     val geoJsonCollection = JsonObject().apply {
         addProperty("type", "FeatureCollection")
         add("features", features)
     }
-    
+
     return geoJsonCollection.toString()
 }
