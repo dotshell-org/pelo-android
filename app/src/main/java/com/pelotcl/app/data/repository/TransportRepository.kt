@@ -3,6 +3,7 @@ package com.pelotcl.app.data.repository
 import com.pelotcl.app.data.api.RetrofitInstance
 import com.pelotcl.app.data.model.Feature
 import com.pelotcl.app.data.model.FeatureCollection
+import com.pelotcl.app.data.model.StopCollection
 
 /**
  * Repository pour gérer les données des lignes de transport
@@ -48,6 +49,18 @@ class TransportRepository {
                 .firstOrNull()
             
             Result.success(line)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Récupère tous les arrêts de transport
+     */
+    suspend fun getAllStops(): Result<StopCollection> {
+        return try {
+            val response = api.getTransportStops()
+            Result.success(response)
         } catch (e: Exception) {
             Result.failure(e)
         }

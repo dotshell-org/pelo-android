@@ -3,6 +3,7 @@ package com.pelotcl.app.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pelotcl.app.data.model.Feature
+import com.pelotcl.app.data.model.StopFeature
 import com.pelotcl.app.data.repository.TransportRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,6 +20,15 @@ sealed class TransportLinesUiState {
 }
 
 /**
+ * État de l'UI pour les arrêts de transport
+ */
+sealed class TransportStopsUiState {
+    object Loading : TransportStopsUiState()
+    data class Success(val stops: List<StopFeature>) : TransportStopsUiState()
+    data class Error(val message: String) : TransportStopsUiState()
+}
+
+/**
  * ViewModel pour gérer les données des lignes de transport
  */
 class TransportViewModel : ViewModel() {
@@ -27,6 +37,9 @@ class TransportViewModel : ViewModel() {
     
     private val _uiState = MutableStateFlow<TransportLinesUiState>(TransportLinesUiState.Loading)
     val uiState: StateFlow<TransportLinesUiState> = _uiState.asStateFlow()
+    
+    private val _stopsUiState = MutableStateFlow<TransportStopsUiState>(TransportStopsUiState.Loading)
+    val stopsUiState: StateFlow<TransportStopsUiState> = _stopsUiState.asStateFlow()
     
     /**
      * Charge toutes les lignes de transport
@@ -63,6 +76,24 @@ class TransportViewModel : ViewModel() {
                 .onFailure { exception ->
                     _uiState.value = TransportLinesUiState.Error(
                         exception.message ?: "Une erreur est survenue"
+                    )
+                }
+        }
+    }
+    
+    /**
+     * Charge tous les arrêts de transport
+     */
+    fun loadAllStops() {
+        viewModelScope.launch {
+            _stopsUiState.value = TransportStopsUiState.Loading
+            repository.getAllStops()
+                .onSuccess { stopCollection ->
+                    _stopsUiState.value = TransportStopsUiState.Success(stopCollection.features)
+                }
+                .onFailure { exception ->
+                    _stopsUiState.value = TransportStopsUiState.Error(
+                        exception.message ?: "Une erreur est survenue lors du chargement des arrêts"
                     )
                 }
         }

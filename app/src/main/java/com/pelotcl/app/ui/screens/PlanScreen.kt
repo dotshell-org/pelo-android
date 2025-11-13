@@ -17,10 +17,12 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.pelotcl.app.ui.components.MapLibreView
 import com.pelotcl.app.ui.viewmodel.TransportLinesUiState
+import com.pelotcl.app.ui.viewmodel.TransportStopsUiState
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.utils.LineColorHelper
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.sources.GeoJsonSource
@@ -31,11 +33,13 @@ fun PlanScreen(
     viewModel: TransportViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val stopsUiState by viewModel.stopsUiState.collectAsState()
     var mapInstance by remember { mutableStateOf<MapLibreMap?>(null) }
     
-    // Charger toutes les lignes au démarrage
+    // Charger toutes les lignes et arrêts au démarrage
     LaunchedEffect(Unit) {
         viewModel.loadAllLines()
+        viewModel.loadAllStops()
     }
     
     // Quand les données sont chargées et la carte est prête, afficher les lignes
@@ -47,6 +51,18 @@ fun PlanScreen(
                 state.lines.forEach { feature ->
                     addLineToMap(map, feature)
                 }
+            }
+            else -> {}
+        }
+    }
+    
+    // Quand les arrêts sont chargés et la carte est prête, afficher les arrêts
+    LaunchedEffect(stopsUiState, mapInstance) {
+        val map = mapInstance ?: return@LaunchedEffect
+        
+        when (val state = stopsUiState) {
+            is TransportStopsUiState.Success -> {
+                addStopsToMap(map, state.stops)
             }
             else -> {}
         }
@@ -64,7 +80,7 @@ fun PlanScreen(
         )
         
         // Afficher un indicateur de chargement
-        if (uiState is TransportLinesUiState.Loading) {
+        if (uiState is TransportLinesUiState.Loading || stopsUiState is TransportStopsUiState.Loading) {
             CircularProgressIndicator(
                 modifier = Modifier.align(Alignment.Center)
             )
@@ -88,11 +104,11 @@ private fun addLineToMap(
         style.getSource(sourceId)?.let { style.removeSource(it) }
         
         // Créer le GeoJSON pour la ligne
-        val geoJson = createGeoJsonFromFeature(feature)
+        val lineGeoJson = createGeoJsonFromFeature(feature)
         
-        // Ajouter la source de données
-        val source = GeoJsonSource(sourceId, geoJson)
-        style.addSource(source)
+        // Ajouter la source de données pour la ligne
+        val lineSource = GeoJsonSource(sourceId, lineGeoJson)
+        style.addSource(lineSource)
         
         // Obtenir la couleur appropriée pour cette ligne
         val lineColor = LineColorHelper.getColorForLine(feature)
@@ -109,6 +125,43 @@ private fun addLineToMap(
         }
         
         style.addLayer(lineLayer)
+    }
+}
+
+/**
+ * Ajoute tous les arrêts de transport sur la carte avec des cercles
+ */
+private fun addStopsToMap(
+    map: MapLibreMap,
+    stops: List<com.pelotcl.app.data.model.StopFeature>
+) {
+    map.getStyle { style ->
+        val sourceId = "transport-stops"
+        val layerId = "transport-stops-layer"
+        
+        // Supprimer l'ancienne couche et source si elles existent
+        style.getLayer(layerId)?.let { style.removeLayer(it) }
+        style.getSource(sourceId)?.let { style.removeSource(it) }
+        
+        // Créer le GeoJSON pour les arrêts
+        val stopsGeoJson = createStopsGeoJsonFromStops(stops)
+        
+        // Ajouter la source de données pour les arrêts
+        val stopsSource = GeoJsonSource(sourceId, stopsGeoJson)
+        style.addSource(stopsSource)
+        
+        // Créer la couche de cercles pour les arrêts
+        val stopsLayer = CircleLayer(layerId, sourceId).apply {
+            setProperties(
+                PropertyFactory.circleColor("#FFFFFF"),
+                PropertyFactory.circleRadius(4f),
+                PropertyFactory.circleOpacity(0.8f),
+                PropertyFactory.circleStrokeColor("#333333"),
+                PropertyFactory.circleStrokeWidth(2f)
+            )
+        }
+        
+        style.addLayer(stopsLayer)
     }
 }
 
@@ -150,4 +203,45 @@ private fun createGeoJsonFromFeature(feature: com.pelotcl.app.data.model.Feature
     }
     
     return geoJsonObject.toString()
+}
+
+/**
+ * Crée un GeoJSON contenant des Points pour tous les arrêts de transport
+ */
+private fun createStopsGeoJsonFromStops(stops: List<com.pelotcl.app.data.model.StopFeature>): String {
+    val features = JsonArray()
+    
+    // Parcourir tous les arrêts pour créer les features GeoJSON
+    stops.forEach { stop ->
+        val pointFeature = JsonObject().apply {
+            addProperty("type", "Feature")
+            
+            // Géométrie du point (utiliser directement les coordonnées de l'arrêt)
+            val pointGeometry = JsonObject().apply {
+                addProperty("type", "Point")
+                val coordinatesArray = JsonArray()
+                coordinatesArray.add(stop.geometry.coordinates[0]) // longitude
+                coordinatesArray.add(stop.geometry.coordinates[1]) // latitude
+                add("coordinates", coordinatesArray)
+            }
+            add("geometry", pointGeometry)
+            
+            // Propriétés du point
+            val properties = JsonObject().apply {
+                addProperty("nom", stop.properties.nom)
+                addProperty("desserte", stop.properties.desserte)
+                addProperty("pmr", stop.properties.pmr)
+                addProperty("type", "stop")
+            }
+            add("properties", properties)
+        }
+        features.add(pointFeature)
+    }
+    
+    val geoJsonCollection = JsonObject().apply {
+        addProperty("type", "FeatureCollection")
+        add("features", features)
+    }
+    
+    return geoJsonCollection.toString()
 }

@@ -13,6 +13,7 @@ object LineColorHelper {
     private const val METRO_C_COLOR = "#EAB308"  // Jaune
     private const val METRO_D_COLOR = "#22C55E"  // Vert
     private const val TRAM_COLOR = "#A855F7"     // Violet
+    private const val FUNICULAR_COLOR = "#84CC16" // Lime
     private const val BUS_COLOR = "#EF4444"      // Rouge
     
     /**
@@ -24,6 +25,7 @@ object LineColorHelper {
     fun getColorForLine(feature: Feature): String {
         val ligne = feature.properties.ligne
         val familleTransport = feature.properties.familleTransport
+        val nomTypeLigne = feature.properties.nomTypeLigne.lowercase()
         
         return when {
             // Métros
@@ -31,6 +33,9 @@ object LineColorHelper {
             ligne == "B" && familleTransport == "MET" -> METRO_B_COLOR
             ligne == "C" && familleTransport == "MET" -> METRO_C_COLOR
             ligne == "D" && familleTransport == "MET" -> METRO_D_COLOR
+            
+            // Funiculaire (détection par nom de ligne ou type)
+            ligne == "F" || nomTypeLigne.contains("funiculaire") -> FUNICULAR_COLOR
             
             // Trams (famille TRA ou TRAM)
             familleTransport == "TRA" || familleTransport == "TRAM" -> TRAM_COLOR
@@ -46,9 +51,11 @@ object LineColorHelper {
     fun getLineTypeDescription(feature: Feature): String {
         val ligne = feature.properties.ligne
         val familleTransport = feature.properties.familleTransport
+        val nomTypeLigne = feature.properties.nomTypeLigne.lowercase()
         
         return when {
             familleTransport == "MET" -> "Métro $ligne"
+            ligne == "F" || nomTypeLigne.contains("funiculaire") -> "Funiculaire $ligne"
             familleTransport == "TRA" || familleTransport == "TRAM" -> "Tram $ligne"
             else -> "Bus $ligne"
         }
