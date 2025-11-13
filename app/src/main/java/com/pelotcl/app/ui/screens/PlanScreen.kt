@@ -18,6 +18,7 @@ import com.google.gson.JsonObject
 import com.pelotcl.app.ui.components.MapLibreView
 import com.pelotcl.app.ui.viewmodel.TransportLinesUiState
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
+import com.pelotcl.app.utils.LineColorHelper
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.style.layers.LineLayer
@@ -32,12 +33,12 @@ fun PlanScreen(
     val uiState by viewModel.uiState.collectAsState()
     var mapInstance by remember { mutableStateOf<MapLibreMap?>(null) }
     
-    // Charger la ligne A au démarrage
+    // Charger toutes les lignes au démarrage
     LaunchedEffect(Unit) {
-        viewModel.loadLineByName("A")
+        viewModel.loadAllLines()
     }
     
-    // Quand les données sont chargées et la carte est prête, afficher la ligne
+    // Quand les données sont chargées et la carte est prête, afficher les lignes
     LaunchedEffect(uiState, mapInstance) {
         val map = mapInstance ?: return@LaunchedEffect
         
@@ -72,15 +73,15 @@ fun PlanScreen(
 }
 
 /**
- * Ajoute une ligne de transport sur la carte MapLibre
+ * Ajoute une ligne de transport sur la carte MapLibre avec la couleur appropriée
  */
 private fun addLineToMap(
     map: MapLibreMap,
     feature: com.pelotcl.app.data.model.Feature
 ) {
     map.getStyle { style ->
-        val sourceId = "line-${feature.properties.ligne}"
-        val layerId = "layer-${feature.properties.ligne}"
+        val sourceId = "line-${feature.properties.ligne}-${feature.properties.codeTrace}"
+        val layerId = "layer-${feature.properties.ligne}-${feature.properties.codeTrace}"
         
         // Supprimer l'ancienne couche et source si elles existent
         style.getLayer(layerId)?.let { style.removeLayer(it) }
@@ -93,10 +94,13 @@ private fun addLineToMap(
         val source = GeoJsonSource(sourceId, geoJson)
         style.addSource(source)
         
-        // Créer la couche de ligne avec la couleur rose
+        // Obtenir la couleur appropriée pour cette ligne
+        val lineColor = LineColorHelper.getColorForLine(feature)
+        
+        // Créer la couche de ligne avec la couleur appropriée
         val lineLayer = LineLayer(layerId, sourceId).apply {
             setProperties(
-                PropertyFactory.lineColor("#F472B6"), // Rose (Pink 400 from Tailwind)
+                PropertyFactory.lineColor(lineColor),
                 PropertyFactory.lineWidth(4f),
                 PropertyFactory.lineOpacity(0.8f),
                 PropertyFactory.lineCap("round"),

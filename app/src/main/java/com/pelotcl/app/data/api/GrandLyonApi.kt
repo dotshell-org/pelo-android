@@ -32,6 +32,6 @@ interface GrandLyonApi {
         @Query("SRSNAME") srsName: String = "EPSG:4171",
         @Query("startIndex") startIndex: Int = 0,
         @Query("sortby") sortBy: String = "gid",
-        @Query("count") count: Int = 100
+        @Query("count") count: Int = 1000
     ): FeatureCollection
 }
