@@ -67,20 +67,42 @@ class TransportRepository {
      * Récupère tous les arrêts de transport
      * Filtre les doublons pour les métros et funiculaires (ne garde qu'un arrêt par station)
      * Les stations de correspondance (plusieurs lignes) s'affichent empilées comme les bus
-     * Filtre également les arrêts de tram en sens retour (ne garde que les arrêts aller)
+     * Filtre intelligemment les arrêts de tram : garde les arrêts aller, mais aussi les arrêts
+     * retour qui n'ont pas d'équivalent aller (certains terminus)
      */
     suspend fun getAllStops(): Result<StopCollection> {
         return try {
             val response = api.getTransportStops()
             
-            // Filtrer d'abord les arrêts de tram en direction retour (finissant par :R)
-            val stopsWithoutTramRetour = response.features.filter { stop ->
-                val desserte = stop.properties.desserte
-                // Détecter si c'est un arrêt de tram en direction retour
-                // Les lignes de tram sont T1, T2, T3, etc. et se terminent par :R pour retour
-                val isTramRetour = desserte.matches(Regex(".*\\bT\\d+:R\\b.*"))
-                !isTramRetour // Garder seulement les arrêts qui ne sont pas des trams retour
+            // Filtrer intelligemment les arrêts de tram : 
+            // Grouper par nom et ligne de tram, puis garder :A en priorité, sinon :R
+            val tramStopsGrouped = response.features
+                .filter { stop -> 
+                    stop.properties.desserte.matches(Regex(".*\\bT\\d+:[AR]\\b.*"))
+                }
+                .groupBy { stop ->
+                    // Grouper par nom d'arrêt et numéro de ligne de tram
+                    val tramLineMatch = Regex("\\bT(\\d+):[AR]\\b").find(stop.properties.desserte)
+                    if (tramLineMatch != null) {
+                        "${stop.properties.nom}_T${tramLineMatch.groupValues[1]}"
+                    } else {
+                        stop.id.toString()
+                    }
+                }
+            
+            // Pour chaque groupe, garder :A en priorité, sinon :R
+            val dedupedTramStops = tramStopsGrouped.values.map { stops ->
+                stops.firstOrNull { it.properties.desserte.contains(":A") } 
+                    ?: stops.first()
             }
+            
+            // Garder tous les arrêts non-tram
+            val nonTramStops = response.features.filter { stop ->
+                !stop.properties.desserte.matches(Regex(".*\\bT\\d+:[AR]\\b.*"))
+            }
+            
+            // Combiner les arrêts de tram dédupliqués avec les autres arrêts
+            val stopsWithoutTramRetour = dedupedTramStops + nonTramStops
             
             // Filtrer les arrêts de métro et funiculaire pour éviter les doublons par quai
             // Pour les correspondances, on fusionne toutes les dessertes en une seule
