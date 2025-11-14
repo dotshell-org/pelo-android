@@ -2,8 +2,10 @@ package com.pelotcl.app.ui.components
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -11,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -32,6 +35,26 @@ data class LineInfo(
     val lineName: String,
     val currentStationName: String
 )
+
+/**
+ * Retourne la couleur d'une ligne selon son nom et type
+ */
+private fun getLineColor(lineName: String): Color {
+    return when (lineName.uppercase()) {
+        // Métros
+        "A" -> Color(0xFFEC4899) // Rose
+        "B" -> Color(0xFF3B82F6) // Bleu
+        "C" -> Color(0xFFF59E0B) // Orange
+        "D" -> Color(0xFF22C55E) // Vert
+        // Funiculaires
+        "F1", "F2" -> Color(0xFF84CC16) // Vert lime
+        // Trams (commence par T)
+        else -> when {
+            lineName.uppercase().startsWith("T") -> Color(0xFFA855F7) // Violet
+            else -> Color(0xFFEF4444) // Rouge (Bus)
+        }
+    }
+}
 
 /**
  * Bottom sheet affichant les détails d'une ligne de transport :
@@ -158,44 +181,7 @@ fun LineDetailsBottomSheet(
                             .fillMaxWidth()
                             .verticalScroll(rememberScrollState())
                     ) {
-                        // Section des prochains départs
-                        Text(
-                            text = "Prochains départs",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.Black
-                        )
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        if (nextDepartures.isEmpty()) {
-                            Text(
-                                text = "Aucun départ prévu",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Gray700,
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            )
-                        } else {
-                            nextDepartures.forEach { departure ->
-                                DepartureItem(departure)
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(vertical = 4.dp),
-                                    color = Gray200
-                                )
-                            }
-                        }
-                        
                         Spacer(modifier = Modifier.height(24.dp))
-                        
-                        // Section des arrêts de la ligne
-                        Text(
-                            text = "Arrêts de la ligne",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.Black
-                        )
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
                         
                         if (lineStops.isEmpty()) {
                             Text(
@@ -205,14 +191,17 @@ fun LineDetailsBottomSheet(
                                 modifier = Modifier.padding(vertical = 8.dp)
                             )
                         } else {
-                            lineStops.forEach { stop ->
-                                StopItem(stop)
-                                if (stop != lineStops.last()) {
-                                    HorizontalDivider(
-                                        modifier = Modifier.padding(vertical = 4.dp),
-                                        color = Gray200
-                                    )
-                                }
+                            // Obtenir la couleur de la ligne
+                            val lineColor = getLineColor(lineInfo.lineName)
+                            
+                            // Afficher tous les arrêts avec ligne verticale
+                            lineStops.forEachIndexed { index, stop ->
+                                StopItemWithLine(
+                                    stop = stop,
+                                    lineColor = lineColor,
+                                    isFirst = index == 0,
+                                    isLast = index == lineStops.size - 1
+                                )
                             }
                         }
                     }
@@ -253,44 +242,81 @@ private fun DepartureItem(departure: StopDeparture) {
 }
 
 /**
- * Item affichant un arrêt de la ligne
+ * Item affichant un arrêt de la ligne avec une ligne verticale et un cercle
  */
 @Composable
-private fun StopItem(stop: LineStopInfo) {
+private fun StopItemWithLine(
+    stop: LineStopInfo,
+    lineColor: Color,
+    isFirst: Boolean,
+    isLast: Boolean
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (stop.isCurrentStop) Color(0xFFEFF6FF) else Color.Transparent)
-            .padding(vertical = 12.dp, horizontal = if (stop.isCurrentStop) 8.dp else 0.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .height(IntrinsicSize.Min),
+        verticalAlignment = Alignment.Top
     ) {
-        // Numéro de séquence
+        // Colonne avec la ligne verticale et le cercle
         Box(
             modifier = Modifier
-                .size(32.dp)
-                .background(
-                    color = if (stop.isCurrentStop) Color(0xFF2563EB) else Gray200,
-                    shape = MaterialTheme.shapes.small
-                ),
-            contentAlignment = Alignment.Center
+                .width(40.dp)
+                .fillMaxHeight(),
+            contentAlignment = Alignment.TopCenter
         ) {
-            Text(
-                text = stop.stopSequence.toString(),
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Bold,
-                color = if (stop.isCurrentStop) Color.White else Gray700
+            // Ligne verticale (ne s'affiche pas pour le premier arrêt en haut)
+            if (!isFirst) {
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .fillMaxHeight()
+                        .offset(y = (-24).dp)
+                        .background(lineColor.copy(alpha = 0.5f))
+                        .align(Alignment.TopCenter)
+                )
+            }
+            
+            // Ligne verticale (ne s'affiche pas pour le dernier arrêt en bas)
+            if (!isLast) {
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .fillMaxHeight()
+                        .offset(y = 24.dp)
+                        .background(lineColor.copy(alpha = 0.5f))
+                        .align(Alignment.TopCenter)
+                )
+            }
+            
+            // Cercle pour l'arrêt - aligné avec le texte
+            Box(
+                modifier = Modifier
+                    .size(16.dp)
+                    .clip(CircleShape)
+                    .background(if (stop.isCurrentStop) lineColor else Color.White)
+                    .border(
+                        width = 3.dp,
+                        color = lineColor,
+                        shape = CircleShape
+                    )
+                    .align(Alignment.TopCenter)
+                    .offset(y = 0.dp)
             )
         }
         
-        Spacer(modifier = Modifier.width(12.dp))
-        
         // Nom de l'arrêt
-        Text(
-            text = stop.stopName,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = if (stop.isCurrentStop) FontWeight.Bold else FontWeight.Normal,
-            color = if (stop.isCurrentStop) Color(0xFF2563EB) else Color.Black
-        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 12.dp, bottom = 22.dp)
+        ) {
+            Text(
+                text = stop.stopName,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = if (stop.isCurrentStop) FontWeight.Bold else FontWeight.Normal,
+                color = if (stop.isCurrentStop) lineColor else Color.Black
+            )
+        }
     }
 }
 

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -23,6 +24,11 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,8 +36,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.pelotcl.app.data.gtfs.GtfsParser
+import com.pelotcl.app.data.gtfs.StopDeparture
 import com.pelotcl.app.ui.theme.Gray200
+import com.pelotcl.app.ui.theme.Gray500
 import com.pelotcl.app.ui.theme.Gray700
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Données d'une station pour l'affichage dans le bottom sheet
@@ -83,6 +96,40 @@ fun StationBottomSheet(
     onDismiss: () -> Unit,
     onLineClick: (String) -> Unit = {}
 ) {
+    val context = LocalContext.current
+    
+    // Map pour stocker les horaires de chaque ligne
+    var departuresByLine by remember { mutableStateOf<Map<String, List<StopDeparture>>>(emptyMap()) }
+    
+    // Charger les horaires pour toutes les lignes
+    LaunchedEffect(stationInfo) {
+        if (stationInfo != null) {
+            val departures = mutableMapOf<String, List<StopDeparture>>()
+            
+            withTimeoutOrNull(3000L) {
+                withContext(Dispatchers.IO) {
+                    try {
+                        val parser = GtfsParser(context)
+                        val sortedLines = sortLines(stationInfo.lignes)
+                        
+                        sortedLines.forEach { lineName ->
+                            val lineDepartures = parser.getNextDepartures(
+                                stopName = stationInfo.nom,
+                                lineName = lineName,
+                                maxResults = 2
+                            )
+                            departures[lineName] = lineDepartures
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            }
+            
+            departuresByLine = departures
+        }
+    }
+    
     if (stationInfo != null) {
         ModalBottomSheet(
             onDismissRequest = onDismiss,
@@ -132,6 +179,7 @@ fun StationBottomSheet(
                     sortedLines.forEachIndexed { index, ligne ->
                         LineListItem(
                             lineName = ligne,
+                            departures = departuresByLine[ligne] ?: emptyList(),
                             onClick = { onLineClick(ligne) }
                         )
                         
@@ -150,11 +198,12 @@ fun StationBottomSheet(
 }
 
 /**
- * Item de liste pour une ligne de transport
+ * Item de liste pour une ligne de transport avec les prochains horaires
  */
 @Composable
 private fun LineListItem(
     lineName: String,
+    departures: List<StopDeparture>,
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
@@ -186,6 +235,31 @@ private fun LineListItem(
             )
         }
         
+        // Horaires au centre
+        Spacer(modifier = Modifier.width(20.dp))
+        Row(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (departures.isEmpty()) {
+                Text(
+                    text = "Chargement...",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Gray700
+                )
+            } else {
+                departures.take(2).forEach { departure ->
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = formatTime(departure.departureTime),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Gray500,
+                        fontSize = 16.sp
+                    )
+                }
+            }
+        }
+        
         // Chevron à droite
         Icon(
             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
@@ -193,6 +267,18 @@ private fun LineListItem(
             tint = Gray700,
             modifier = Modifier.size(24.dp)
         )
+    }
+}
+
+/**
+ * Formate un temps HH:MM:SS en HH:MM
+ */
+private fun formatTime(time: String): String {
+    val parts = time.split(":")
+    return if (parts.size >= 2) {
+        "${parts[0]}:${parts[1]}"
+    } else {
+        time
     }
 }
 

@@ -17,6 +17,130 @@ class GtfsParser(private val context: Context) {
     private var stopsCacheLoaded = false
     
     /**
+     * Normalise un nom de station pour la comparaison
+     * Garde uniquement les lettres et convertit en minuscules
+     * Ex: "Saxe - Gambetta" devient "saxegambetta"
+     */
+    private fun normalizeStationName(name: String): String {
+        return name.filter { it.isLetter() }.lowercase()
+    }
+    
+    /**
+     * Normalise les mots d'un nom de station en gérant les abréviations
+     * Ex: "L." devient "l", "Louis" devient "louis"
+     * Filtre aussi les mots génériques comme "gare" qui peuvent être omis
+     */
+    private fun normalizeWords(name: String): List<String> {
+        val ignoredWords = setOf("gare", "station", "arret")
+        
+        return name.split(Regex("[\\s\\-,.]+"))
+            .filter { it.isNotEmpty() }
+            .map { word -> 
+                // Retirer les points et garder uniquement les lettres
+                word.filter { it.isLetter() }.lowercase()
+            }
+            .filter { it.isNotEmpty() && it !in ignoredWords }
+    }
+    
+    /**
+     * Compare deux noms de station de manière flexible
+     * Gère les abréviations : "L. Pradel" match avec "Louis Pradel"
+     * Gère aussi les abréviations de mots : "Cat." match avec "Cathédrale"
+     */
+    private fun stationNamesMatch(name1: String, name2: String): Boolean {
+        // D'abord essayer la comparaison simple
+        val normalized1 = normalizeStationName(name1)
+        val normalized2 = normalizeStationName(name2)
+        
+        if (normalized1 == normalized2) {
+            return true
+        }
+        
+        // Ensuite essayer avec les mots séparés pour gérer les abréviations
+        val words1 = normalizeWords(name1)
+        val words2 = normalizeWords(name2)
+        
+        // Si un des deux noms a moins de mots, c'est peut-être une version abrégée
+        if (words1.size != words2.size) {
+            val shorter = if (words1.size < words2.size) words1 else words2
+            val longer = if (words1.size < words2.size) words2 else words1
+            
+            // Vérifier si tous les mots de la version courte matchent avec la version longue
+            // Soit exactement, soit comme début de mot (pour les abréviations)
+            // Gère aussi les mots composés (ex: "partdieu" match "part" + "dieu")
+            var shorterIndex = 0
+            var longerIndex = 0
+            
+            while (shorterIndex < shorter.size && longerIndex < longer.size) {
+                val shortWord = shorter[shorterIndex]
+                val longWord = longer[longerIndex]
+                
+                // Match exact
+                if (shortWord == longWord) {
+                    shorterIndex++
+                    longerIndex++
+                }
+                // Le mot long commence par le mot court (ex: "cat" match "cathedrale")
+                // Minimum 3 lettres pour éviter les faux positifs
+                else if (shortWord.length >= 3 && longWord.startsWith(shortWord)) {
+                    shorterIndex++
+                    longerIndex++
+                }
+                // Le mot court est une initiale du mot long (ex: "l" match "louis")
+                else if (shortWord.length == 1 && longWord.startsWith(shortWord)) {
+                    shorterIndex++
+                    longerIndex++
+                }
+                // Le mot court pourrait être un mot composé (ex: "partdieu" match "part" + "dieu")
+                // Essayer de matcher le mot court avec plusieurs mots longs consécutifs
+                else if (shortWord.length > longWord.length) {
+                    var combinedWord = longWord
+                    var tempIndex = longerIndex + 1
+                    var matched = false
+                    
+                    // Essayer de combiner des mots consécutifs pour voir si on obtient le mot court
+                    while (tempIndex < longer.size && combinedWord.length < shortWord.length) {
+                        combinedWord += longer[tempIndex]
+                        if (combinedWord == shortWord) {
+                            // Match trouvé !
+                            longerIndex = tempIndex + 1
+                            shorterIndex++
+                            matched = true
+                            break
+                        }
+                        tempIndex++
+                    }
+                    
+                    if (!matched) {
+                        // Pas de match, avancer dans la version longue
+                        longerIndex++
+                    }
+                }
+                // Peut-être que le mot long n'a pas d'équivalent dans la version courte
+                else {
+                    longerIndex++
+                }
+            }
+            
+            // Si on a matché tous les mots de la version courte, c'est bon
+            return shorterIndex == shorter.size
+        }
+        
+        // Sinon, vérifier que tous les mots matchent dans l'ordre
+        if (words1.size == words2.size) {
+            return words1.zip(words2).all { (w1, w2) ->
+                w1 == w2 || 
+                (w1.length == 1 && w2.startsWith(w1)) ||
+                (w2.length == 1 && w1.startsWith(w2)) ||
+                (w1.length >= 3 && w2.startsWith(w1)) ||
+                (w2.length >= 3 && w1.startsWith(w2))
+            }
+        }
+        
+        return false
+    }
+    
+    /**
      * Charge toutes les routes depuis routes.txt
      */
     fun loadRoutes(): Map<String, GtfsRoute> {
@@ -108,7 +232,7 @@ class GtfsParser(private val context: Context) {
     fun findStopIdByName(stopName: String): String? {
         val stops = loadStops()
         return stops.values.find { 
-            it.stopName.equals(stopName, ignoreCase = true) 
+            stationNamesMatch(it.stopName, stopName)
         }?.stopId
     }
     
@@ -228,7 +352,7 @@ class GtfsParser(private val context: Context) {
                                 stopId = stopId,
                                 stopName = stop.stopName,
                                 stopSequence = stopSequence,
-                                isCurrentStop = stop.stopName.equals(currentStopName, ignoreCase = true)
+                                isCurrentStop = currentStopName?.let { stationNamesMatch(stop.stopName, it) } ?: false
                             ))
                         }
                     }
@@ -261,7 +385,7 @@ class GtfsParser(private val context: Context) {
                 stopId = "mock_${index}",
                 stopName = stopName.trim(),
                 stopSequence = index + 1,
-                isCurrentStop = stopName.trim().equals(currentStopName, ignoreCase = true)
+                isCurrentStop = currentStopName?.let { stationNamesMatch(stopName.trim(), it) } ?: false
             )
         }
     }
