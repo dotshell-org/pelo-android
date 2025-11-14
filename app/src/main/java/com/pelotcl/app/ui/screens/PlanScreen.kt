@@ -121,7 +121,7 @@ fun PlanScreen(
     // Charger toutes les lignes et arrêts au démarrage
     LaunchedEffect(Unit) {
         viewModel.loadAllLines()
-        viewModel.loadAllStops()
+        viewModel.preloadStops() // Précharge les arrêts en arrière-plan pour le cache
     }
     
     // Quand les données sont chargées et la carte est prête, afficher les lignes
@@ -215,6 +215,7 @@ fun PlanScreen(
         LineDetailsBottomSheet(
             lineInfo = selectedLine,
             sheetState = lineDetailsSheetState,
+            viewModel = viewModel,
             onDismiss = {
                 scope.launch {
                     lineDetailsSheetState.hide()

@@ -114,21 +114,22 @@ object ConnectionsHelper {
     }
     
     /**
-     * Parse le champ desserte et extrait les lignes de métro (A, B, C, D) 
-     * et de funiculaire (F1, F2) uniquement
+     * Parse le champ desserte et extrait les lignes de métro (A, B, C, D),
+     * de funiculaire (F1, F2) et de tram (T1-T7)
      * 
      * Format du champ desserte :
      * - "A:A" = Métro A en direction Aller (le :A est la direction, pas la ligne!)
      * - "5:A,86:A" = Bus 5 et 86 en direction Aller
      * - "A:A,D:A" = Métros A et D
      * - "F1:A,F2:A" = Funiculaires F1 et F2
+     * - "T1:A,T2:A" = Trams T1 et T2
      * 
      * IMPORTANT: Ne pas confondre ":A" (direction Aller) avec la ligne de métro A
      * 
      * @param desserte Le champ desserte de l'arrêt
-     * @return Liste des lignes de métro et funiculaire
+     * @return Liste des lignes de métro, funiculaire et tram
      */
-    fun parseMetroAndFunicularConnections(desserte: String): List<String> {
+    fun parseMetroFunicularAndTramConnections(desserte: String): List<String> {
         val connections = mutableSetOf<String>()
         
         if (desserte.isBlank()) return emptyList()
@@ -152,18 +153,20 @@ object ConnectionsHelper {
             if (lineName in listOf("F1", "F2")) {
                 connections.add(lineName)
             }
+            
+            // Vérifier si c'est une ligne de tram (T1 à T7)
+            if (lineName.matches(Regex("T[1-7]"))) {
+                connections.add(lineName)
+            }
         }
         
-        // Trier pour avoir un ordre cohérent : A, B, C, D, F1, F2
+        // Trier pour avoir un ordre cohérent : A, B, C, D, F1, F2, T1-T7
         return connections.sortedWith(compareBy { line ->
-            when (line) {
-                "A" -> 1
-                "B" -> 2
-                "C" -> 3
-                "D" -> 4
-                "F1" -> 5
-                "F2" -> 6
-                else -> 99
+            when {
+                line in listOf("A", "B", "C", "D") -> line[0].code
+                line.startsWith("F") -> 100 + line.substring(1).toIntOrNull()!! 
+                line.startsWith("T") -> 200 + line.substring(1).toIntOrNull()!!
+                else -> 9999
             }
         })
     }
@@ -190,7 +193,7 @@ object ConnectionsHelper {
         // Extraire toutes les connexions depuis les dessertes
         val allConnections = mutableSetOf<String>()
         for (stop in matchingStops) {
-            val connections = parseMetroAndFunicularConnections(stop.properties.desserte)
+            val connections = parseMetroFunicularAndTramConnections(stop.properties.desserte)
             allConnections.addAll(connections)
         }
         

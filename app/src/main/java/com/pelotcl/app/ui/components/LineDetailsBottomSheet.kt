@@ -28,9 +28,9 @@ import androidx.compose.ui.zIndex
 import com.pelotcl.app.data.gtfs.GtfsParser
 import com.pelotcl.app.data.gtfs.LineStopInfo
 import com.pelotcl.app.data.gtfs.StopDeparture
-import com.pelotcl.app.data.repository.TransportRepository
 import com.pelotcl.app.ui.theme.Gray200
 import com.pelotcl.app.ui.theme.Gray700
+import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.utils.ConnectionsHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -72,6 +72,7 @@ private fun getLineColor(lineName: String): Color {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LineDetailsBottomSheet(
+    viewModel: TransportViewModel,
     lineInfo: LineInfo?,
     sheetState: SheetState,
     onDismiss: () -> Unit,
@@ -87,12 +88,11 @@ fun LineDetailsBottomSheet(
         if (lineInfo != null) {
             isLoading = true
             
-            // Timeout de 5 secondes pour éviter le chargement infini
-            val result = withTimeoutOrNull(5000L) {
+            // Timeout de 1 seconde (tout est optimisé avec l'index)
+            val result = withTimeoutOrNull(1000L) {
                 withContext(Dispatchers.IO) {
                     try {
                         val parser = GtfsParser(context)
-                        val repository = TransportRepository()
                         
                         // Charger les arrêts de la ligne
                         val stops = parser.getLineStops(
@@ -101,16 +101,11 @@ fun LineDetailsBottomSheet(
                             currentStopName = lineInfo.currentStationName
                         )
                         
-                        // Charger tous les arrêts pour trouver les correspondances
-                        val allStopsResult = repository.getAllStops()
-                        val allStops = allStopsResult.getOrNull()?.features ?: emptyList()
-                        
-                        // Enrichir les arrêts avec les informations de correspondances
+                        // Enrichir les arrêts avec les correspondances depuis l'index pré-calculé (O(1) par arrêt)
                         val enrichedStops = stops.map { stop ->
-                            val connections = ConnectionsHelper.findConnectionsForStop(
+                            val connections = viewModel.getConnectionsForStop(
                                 stopName = stop.stopName,
-                                currentLine = lineInfo.lineName,
-                                allStops = allStops
+                                currentLine = lineInfo.lineName
                             )
                             stop.copy(connections = connections)
                         }

@@ -135,31 +135,31 @@ object LineStopsCache {
     private val metroStops = mapOf(
         "A" to listOf(
             "Perrache", "Ampère Victor Hugo", "Bellecour", "Cordeliers", 
-            "Hôtel de Ville Louis Pradel", "Foch", "Masséna", "Charpennes Charles Hernu",
+            "Hôtel de Ville L. Pradel", "Foch", "Masséna", "Charpennes Charles Hernu",
             "République Villeurbanne", "Gratte-Ciel", "Flachet", "Cusset", 
             "Laurent Bonnevay Astroballe", "Vaulx-en-Velin La Soie"
         ),
         "B" to listOf(
-            "Charpennes Charles Hernu", "Brotteaux", "Part-Dieu Vivier Merle",
+            "Charpennes Charles Hernu", "Brotteaux", "Gare Part-Dieu V.Merle",
             "Place Guichard Bourse du Travail", "Saxe Gambetta", "Jean Macé",
             "Place Jean Jaurès", "Debourg", "Stade de Gerland", "Gare d'Oullins",
             "Oullins Centre", "St-Genis-Laval Hôpital Sud"
         ),
         "C" to listOf(
-            "Hôtel de Ville Louis Pradel", "Croix-Paquet", "Croix-Rousse",
+            "Hôtel de Ville L. Pradel", "Croix-Paquet", "Croix-Rousse",
             "Hénon", "Cuire"
         ),
         "D" to listOf(
-            "Gare de Vaise", "Valmy", "Gorge de Loup", "Vieux Lyon Cathédrale St Jean",
+            "Gare de Vaise", "Valmy", "Gorge de Loup", "Vieux Lyon Cat. St Jean",
             "Bellecour", "Guillotière Gabriel Péri", "Saxe Gambetta", "Garibaldi",
             "Sans Souci", "Monplaisir Lumière", "Grange Blanche", "Laennec",
             "Mermoz Pinel", "Parilly", "Gare de Vénissieux"
         ),
         "F1" to listOf(
-            "Vieux Lyon Cathédrale St Jean", "Minimes Théatres Romains", "Saint Just"
+            "Vieux Lyon Cat. St Jean", "Minimes Théatres Romains", "Saint Just"
         ),
         "F2" to listOf(
-            "Vieux Lyon Cathédrale St Jean", "Fourvière"
+            "Vieux Lyon Cat. St Jean", "Fourvière"
         )
     )
     
