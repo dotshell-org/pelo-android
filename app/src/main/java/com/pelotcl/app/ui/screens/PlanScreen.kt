@@ -5,9 +5,14 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -19,7 +24,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.location.LocationServices
@@ -54,7 +61,9 @@ private const val SECONDARY_STOPS_MIN_ZOOM = 15f
 @Composable
 fun PlanScreen(
     modifier: Modifier = Modifier,
-    viewModel: TransportViewModel = viewModel()
+    contentPadding: androidx.compose.foundation.layout.PaddingValues = androidx.compose.foundation.layout.PaddingValues(0.dp),
+    viewModel: TransportViewModel = viewModel(),
+    onSheetStateChanged: (Boolean) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val stopsUiState by viewModel.stopsUiState.collectAsState()
@@ -66,15 +75,21 @@ fun PlanScreen(
     var userLocation by remember { mutableStateOf<LatLng?>(null) }
     var shouldCenterOnUser by remember { mutableStateOf(false) }
     
-    // Bottom sheet state
-    val sheetState = rememberModalBottomSheetState()
+    // Bottom sheet state for BottomSheetScaffold
+    val scaffoldSheetState = rememberBottomSheetScaffoldState()
     var selectedStation by remember { mutableStateOf<StationInfo?>(null) }
-    var showBottomSheet by remember { mutableStateOf(false) }
-    
-    // Line details bottom sheet state
-    val lineDetailsSheetState = rememberModalBottomSheetState()
     var selectedLine by remember { mutableStateOf<LineInfo?>(null) }
-    var showLineDetailsSheet by remember { mutableStateOf(false) }
+    
+    // Determine which content to show: station info or line details
+    var showLineDetails by remember { mutableStateOf(false) }
+    
+    // Track if the sheet is expanded (to hide search bar)
+    var isSheetExpanded by remember { mutableStateOf(false) }
+    
+    // Notify parent when sheet state changes
+    LaunchedEffect(isSheetExpanded) {
+        onSheetStateChanged(isSheetExpanded)
+    }
     
     // Permission launcher - must be registered before STARTED lifecycle state
     val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -148,7 +163,9 @@ fun PlanScreen(
                     // Callback when a station is clicked
                     scope.launch {
                         selectedStation = clickedStationInfo
-                        showBottomSheet = true
+                        showLineDetails = false
+                        isSheetExpanded = true
+                        scaffoldSheetState.bottomSheetState.expand()
                     }
                 }
             }
@@ -156,85 +173,77 @@ fun PlanScreen(
         }
     }
     
-    Box(modifier = modifier.fillMaxSize()) {
-        MapLibreView(
-            modifier = Modifier.fillMaxSize(),
-            initialPosition = LatLng(45.75, 4.85),
-            initialZoom = 12.0,
-            styleUrl = "https://tiles.openfreemap.org/styles/positron",
-            onMapReady = { map ->
-                mapInstance = map
-            },
-            searchResults = emptyList(),
-            onSearch = {},
-            userLocation = userLocation,
-            centerOnUserLocation = shouldCenterOnUser
-        )
-        
-        // Afficher un indicateur de chargement
-        if (uiState is TransportLinesUiState.Loading || stopsUiState is TransportStopsUiState.Loading) {
-            CircularProgressIndicator(
-                modifier = Modifier.align(Alignment.Center)
-            )
-        }
-    }
+    // Calculate bottom padding (height of navbar + drag handle)
+    val bottomPadding = contentPadding.calculateBottomPadding() + 40.dp
     
-    // Bottom sheet pour afficher les informations de la station
-    if (showBottomSheet) {
-        StationBottomSheet(
-            stationInfo = selectedStation,
-            sheetState = sheetState,
-            onDismiss = {
-                scope.launch {
-                    sheetState.hide()
-                }.invokeOnCompletion {
-                    if (!sheetState.isVisible) {
-                        showBottomSheet = false
-                    }
-                }
-            },
-            onLineClick = { lineName ->
-                // Quand on clique sur une ligne, fermer le sheet de la station
-                // et ouvrir le sheet des détails de la ligne
-                scope.launch {
-                    sheetState.hide()
-                }.invokeOnCompletion {
-                    showBottomSheet = false
-                    selectedLine = LineInfo(
-                        lineName = lineName,
-                        currentStationName = selectedStation?.nom ?: ""
+    // Determine peek height: 0 when closed, bottomPadding when expanded (for line details)
+    val peekHeight = if (isSheetExpanded && showLineDetails) bottomPadding else 0.dp
+    
+    BottomSheetScaffold(
+        scaffoldState = scaffoldSheetState,
+        sheetPeekHeight = peekHeight,
+        modifier = modifier.padding(contentPadding),
+        sheetContainerColor = Color.White,
+        sheetContent = {
+            Column(
+                modifier = Modifier
+                    .padding(bottom = bottomPadding)
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (showLineDetails && selectedLine != null) {
+                    // Afficher les détails de la ligne
+                    LineDetailsSheetContent(
+                        lineInfo = selectedLine!!,
+                        viewModel = viewModel,
+                        onBackToStation = {
+                            showLineDetails = false
+                        }
                     )
-                    showLineDetailsSheet = true
+                } else if (selectedStation != null) {
+                    // Afficher les informations de la station
+                    StationSheetContent(
+                        stationInfo = selectedStation!!,
+                        onDismiss = {
+                            scope.launch { 
+                                scaffoldSheetState.bottomSheetState.partialExpand()
+                                isSheetExpanded = false
+                            }
+                        },
+                        onLineClick = { lineName ->
+                            selectedLine = LineInfo(
+                                lineName = lineName,
+                                currentStationName = selectedStation?.nom ?: ""
+                            )
+                            showLineDetails = true
+                        }
+                    )
                 }
             }
-        )
-    }
-    
-    // Bottom sheet pour afficher les détails d'une ligne
-    if (showLineDetailsSheet) {
-        LineDetailsBottomSheet(
-            lineInfo = selectedLine,
-            sheetState = lineDetailsSheetState,
-            viewModel = viewModel,
-            onDismiss = {
-                scope.launch {
-                    lineDetailsSheetState.hide()
-                }.invokeOnCompletion {
-                    if (!lineDetailsSheetState.isVisible) {
-                        showLineDetailsSheet = false
-                    }
-                }
-            },
-            onBackToStation = {
-                // Retour au sheet de la station
-                scope.launch {
-                    lineDetailsSheetState.hide()
-                }.invokeOnCompletion {
-                    showLineDetailsSheet = false
-                    showBottomSheet = true
-                }
+        }
+    ) { innerPadding ->
+        Box(modifier = Modifier.fillMaxSize()) {
+            MapLibreView(
+                modifier = Modifier.fillMaxSize(),
+                initialPosition = LatLng(45.75, 4.85),
+                initialZoom = 12.0,
+                styleUrl = "https://tiles.openfreemap.org/styles/positron",
+                onMapReady = { map ->
+                    mapInstance = map
+                },
+                searchResults = emptyList(),
+                onSearch = {},
+                userLocation = userLocation,
+                centerOnUserLocation = shouldCenterOnUser
+            )
+            
+            // Afficher un indicateur de chargement
+            if (uiState is TransportLinesUiState.Loading || stopsUiState is TransportStopsUiState.Loading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.align(Alignment.Center)
+                )
             }
-        )
+        }
     }
     
     // Reset center flag after first centering
@@ -243,6 +252,43 @@ fun PlanScreen(
             shouldCenterOnUser = false
         }
     }
+}
+
+/**
+ * Content for station info sheet (without ModalBottomSheet wrapper)
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun StationSheetContent(
+    stationInfo: StationInfo,
+    onDismiss: () -> Unit,
+    onLineClick: (String) -> Unit
+) {
+    StationBottomSheet(
+        stationInfo = stationInfo,
+        sheetState = null,
+        onDismiss = onDismiss,
+        onLineClick = onLineClick
+    )
+}
+
+/**
+ * Content for line details sheet (without ModalBottomSheet wrapper)
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LineDetailsSheetContent(
+    lineInfo: LineInfo,
+    viewModel: TransportViewModel,
+    onBackToStation: () -> Unit
+) {
+    LineDetailsBottomSheet(
+        lineInfo = lineInfo,
+        sheetState = null,
+        viewModel = viewModel,
+        onDismiss = {},
+        onBackToStation = onBackToStation
+    )
 }
 
 /**

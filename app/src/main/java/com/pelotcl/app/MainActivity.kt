@@ -23,6 +23,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -93,6 +95,7 @@ fun NavBar(modifier: Modifier = Modifier) {
     val navController = rememberNavController()
     val startDestination = Destination.PLAN
     var selectedDestination by rememberSaveable { mutableIntStateOf(startDestination.ordinal) }
+    var isBottomSheetOpen by remember { mutableStateOf(false) }
 
     Box(modifier = modifier) {
         Scaffold(
@@ -137,14 +140,17 @@ fun NavBar(modifier: Modifier = Modifier) {
             // Ne pas appliquer le padding pour l'écran Plan (plein écran)
             val shouldApplyPadding = selectedDestination != Destination.PLAN.ordinal
             AppNavHost(
-                navController, 
-                startDestination, 
+                navController = navController, 
+                startDestination = startDestination,
+                contentPadding = contentPadding,
+                isBottomSheetOpen = isBottomSheetOpen,
+                onBottomSheetStateChanged = { isOpen -> isBottomSheetOpen = isOpen },
                 modifier = if (shouldApplyPadding) Modifier.padding(contentPadding) else Modifier
             )
         }
         
-        // Barre de recherche au-dessus de tout uniquement sur l'écran Plan
-        if (selectedDestination == Destination.PLAN.ordinal) {
+        // Barre de recherche au-dessus de tout uniquement sur l'écran Plan et quand le bottom sheet est fermé
+        if (selectedDestination == Destination.PLAN.ordinal && !isBottomSheetOpen) {
             SimpleSearchBar(
                 searchResults = emptyList(),
                 onSearch = {},
@@ -161,6 +167,9 @@ fun NavBar(modifier: Modifier = Modifier) {
 private fun AppNavHost(
     navController: androidx.navigation.NavHostController,
     startDestination: Destination,
+    contentPadding: androidx.compose.foundation.layout.PaddingValues,
+    isBottomSheetOpen: Boolean,
+    onBottomSheetStateChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     NavHost(
@@ -169,7 +178,10 @@ private fun AppNavHost(
         modifier = modifier
     ) {
         composable(Destination.PLAN.route) {
-            PlanScreen()
+            PlanScreen(
+                contentPadding = contentPadding,
+                onSheetStateChanged = onBottomSheetStateChanged
+            )
         }
         composable(Destination.LIGNES.route) {
             SimpleScreen(title = "Lignes")

@@ -74,7 +74,7 @@ private fun getLineColor(lineName: String): Color {
 fun LineDetailsBottomSheet(
     viewModel: TransportViewModel,
     lineInfo: LineInfo?,
-    sheetState: SheetState,
+    sheetState: SheetState?,
     onDismiss: () -> Unit,
     onBackToStation: () -> Unit
 ) {
@@ -135,11 +135,7 @@ fun LineDetailsBottomSheet(
     }
     
     if (lineInfo != null) {
-        ModalBottomSheet(
-            onDismissRequest = onDismiss,
-            sheetState = sheetState,
-            containerColor = Color.White
-        ) {
+        val content = @Composable {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -225,6 +221,19 @@ fun LineDetailsBottomSheet(
                     }
                 }
             }
+        }
+        
+        // If sheetState is provided, wrap in ModalBottomSheet, otherwise show content directly
+        if (sheetState != null) {
+            ModalBottomSheet(
+                onDismissRequest = onDismiss,
+                sheetState = sheetState,
+                containerColor = Color.White
+            ) {
+                content()
+            }
+        } else {
+            content()
         }
     }
 }

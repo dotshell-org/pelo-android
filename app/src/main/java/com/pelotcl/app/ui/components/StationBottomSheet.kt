@@ -16,9 +16,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Accessible
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetState
@@ -92,7 +94,7 @@ private fun sortLines(lines: List<String>): List<String> {
 @Composable
 fun StationBottomSheet(
     stationInfo: StationInfo?,
-    sheetState: SheetState,
+    sheetState: SheetState?,
     onDismiss: () -> Unit,
     onLineClick: (String) -> Unit = {}
 ) {
@@ -131,11 +133,7 @@ fun StationBottomSheet(
     }
     
     if (stationInfo != null) {
-        ModalBottomSheet(
-            onDismissRequest = onDismiss,
-            sheetState = sheetState,
-            containerColor = Color.White
-        ) {
+        val content = @Composable {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -163,6 +161,15 @@ fun StationBottomSheet(
                             contentDescription = "Station accessible PMR",
                             tint = Color(0xFF2563EB),
                             modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    
+                    // Bouton de fermeture
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Fermer",
+                            tint = Gray700
                         )
                     }
                 }
@@ -193,6 +200,19 @@ fun StationBottomSheet(
                     }
                 }
             }
+        }
+        
+        // If sheetState is provided, wrap in ModalBottomSheet, otherwise show content directly
+        if (sheetState != null) {
+            ModalBottomSheet(
+                onDismissRequest = onDismiss,
+                sheetState = sheetState,
+                containerColor = Color.White
+            ) {
+                content()
+            }
+        } else {
+            content()
         }
     }
 }
