@@ -77,10 +77,11 @@ class TransportRepository {
             val filteredStops = response.features.groupBy { stop ->
                 val desserte = stop.properties.desserte
                 
-                // Détection métro: desserte commence par A:, B:, C: ou D:
-                // Détection funiculaire: desserte contient F1: ou F2:
+                // Détection stricte métro: desserte commence par A:, B:, C: ou D:
+                // Détection stricte funiculaire: desserte commence par F1: ou F2:
+                // Cela exclut les bus qui ont ces lignes plus tard dans leur desserte
                 val isMetro = desserte.matches(Regex("^[ABCD]:.*"))
-                val isFunicular = desserte.contains("F1:") || desserte.contains("F2:")
+                val isFunicular = desserte.matches(Regex("^F[12]:.*"))
                 
                 if (isMetro || isFunicular) {
                     // Grouper uniquement par nom de station pour que toutes les lignes
