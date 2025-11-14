@@ -67,14 +67,24 @@ class TransportRepository {
      * Récupère tous les arrêts de transport
      * Filtre les doublons pour les métros et funiculaires (ne garde qu'un arrêt par station)
      * Les stations de correspondance (plusieurs lignes) s'affichent empilées comme les bus
+     * Filtre également les arrêts de tram en sens retour (ne garde que les arrêts aller)
      */
     suspend fun getAllStops(): Result<StopCollection> {
         return try {
             val response = api.getTransportStops()
             
+            // Filtrer d'abord les arrêts de tram en direction retour (finissant par :R)
+            val stopsWithoutTramRetour = response.features.filter { stop ->
+                val desserte = stop.properties.desserte
+                // Détecter si c'est un arrêt de tram en direction retour
+                // Les lignes de tram sont T1, T2, T3, etc. et se terminent par :R pour retour
+                val isTramRetour = desserte.matches(Regex(".*\\bT\\d+:R\\b.*"))
+                !isTramRetour // Garder seulement les arrêts qui ne sont pas des trams retour
+            }
+            
             // Filtrer les arrêts de métro et funiculaire pour éviter les doublons par quai
             // Pour les correspondances, on fusionne toutes les dessertes en une seule
-            val filteredStops = response.features.groupBy { stop ->
+            val filteredStops = stopsWithoutTramRetour.groupBy { stop ->
                 val desserte = stop.properties.desserte
                 
                 // Détection stricte métro: desserte commence par A:, B:, C: ou D:
