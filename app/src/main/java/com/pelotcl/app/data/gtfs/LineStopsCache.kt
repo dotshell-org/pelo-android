@@ -216,11 +216,12 @@ object LineStopsCache {
     )
     
     /**
-     * Récupère les arrêts d'une ligne depuis le cache
+     * Récupère les arrêts d'une lgigne depuis le cache
      * @return Liste d'arrêts ou null si la ligne n'est pas dans le cache
      */
     fun getLineStops(lineName: String, currentStopName: String?): List<LineStopInfo>? {
-        val stops = metroStops[lineName.uppercase()] ?: tramStops[lineName.uppercase()]
+        val normalizedLineName = lineName.trim().uppercase()
+        val stops = metroStops[normalizedLineName] ?: tramStops[normalizedLineName]
         
         return stops?.mapIndexed { index, stopName ->
             LineStopInfo(
