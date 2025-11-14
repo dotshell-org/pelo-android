@@ -65,14 +65,15 @@ class TransportRepository {
     
     /**
      * Récupère tous les arrêts de transport
-     * Filtre les doublons pour les métros et funiculaires (ne garde qu'un arrêt par station par ligne)
+     * Filtre les doublons pour les métros et funiculaires (ne garde qu'un arrêt par station)
+     * Les stations de correspondance (plusieurs lignes) s'affichent empilées comme les bus
      */
     suspend fun getAllStops(): Result<StopCollection> {
         return try {
             val response = api.getTransportStops()
             
             // Filtrer les arrêts de métro et funiculaire pour éviter les doublons par quai
-            // On garde un arrêt par (nom de station + ligne) pour gérer les correspondances
+            // Pour les correspondances, on fusionne toutes les dessertes en une seule
             val filteredStops = response.features.groupBy { stop ->
                 val desserte = stop.properties.desserte
                 
@@ -82,22 +83,35 @@ class TransportRepository {
                 val isFunicular = desserte.contains("F1:") || desserte.contains("F2:")
                 
                 if (isMetro || isFunicular) {
-                    // Extraire la ligne principale (première ligne de métro/funiculaire dans la desserte)
-                    val mainLine = when {
-                        isMetro -> desserte.substring(0, 1) // A, B, C ou D
-                        desserte.contains("F1:") -> "F1"
-                        desserte.contains("F2:") -> "F2"
-                        else -> desserte
-                    }
-                    // Grouper par nom de station + ligne pour garder les correspondances
-                    "${stop.properties.nom}|$mainLine"
+                    // Grouper uniquement par nom de station pour que toutes les lignes
+                    // d'une même station (correspondances) s'affichent empilées au même endroit
+                    stop.properties.nom
                 } else {
                     // Pour les autres (bus, tram), garder chaque arrêt unique
                     stop.id
                 }
             }.map { (_, stops) ->
-                // Prioriser les arrêts avec sens Aller (desserte contient :A)
-                stops.firstOrNull { it.properties.desserte.contains(":A") } ?: stops.first()
+                if (stops.size == 1) {
+                    // Un seul arrêt pour ce groupe, le retourner tel quel
+                    stops.first()
+                } else {
+                    // Plusieurs arrêts (correspondance): fusionner les dessertes
+                    val baseStop = stops.firstOrNull { it.properties.desserte.contains(":A") } ?: stops.first()
+                    
+                    // Collecter toutes les lignes uniques de tous les arrêts de cette station
+                    val allDessertes = stops.map { it.properties.desserte }.toSet()
+                    
+                    // Fusionner les dessertes en une seule chaîne avec virgules
+                    // Ex: "A:A" + "D:A" -> "A:A,D:A"
+                    val mergedDesserte = allDessertes.joinToString(",")
+                    
+                    // Créer un nouvel arrêt avec la desserte fusionnée
+                    baseStop.copy(
+                        properties = baseStop.properties.copy(
+                            desserte = mergedDesserte
+                        )
+                    )
+                }
             }
             
             val filteredCollection = response.copy(

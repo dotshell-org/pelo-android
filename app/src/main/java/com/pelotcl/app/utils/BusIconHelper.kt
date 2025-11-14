@@ -37,36 +37,61 @@ object BusIconHelper {
     /**
      * Parse la chaîne desserte pour extraire la liste des lignes.
      * Cas gérés:
-     *  - "5:A,86:A,JD844:R" -> ["5", "86", "JD844"]
-     *  - "M:A:B" -> ["M"] (les suffixes ":A"/":R" signifient Aller/Retour, à ignorer)
-     *  - "A:B" (métro) -> ["A"]
+     *  - "5:A,86:A,JD844:R" -> ["5", "86", "JD844"] (bus avec directions)
+     *  - "A:A,D:A" -> ["A", "D"] (métro A et D, :A = direction Aller)
+     *  - "F1:A,F2:A" -> ["F1", "F2"] (funiculaires)
+     *  - "M:A:B" -> ["M", "B"] (bus M avec plusieurs destinations, ignorer :A/:R)
      *  - "C17:22:31" (ancien format) -> ["C17", "22", "31"]
+     * 
+     * IMPORTANT: Ne pas confondre ":A" (direction Aller) avec la ligne de métro A
      */
     private fun parseDesserte(desserte: String): List<String> {
         if (desserte.isBlank()) return emptyList()
         
-        // Si la chaîne contient des virgules, chaque entrée représente une ligne avec un sens (ex: 5:A)
+        // Si la chaîne contient des virgules, chaque entrée représente une ligne avec un sens (ex: 5:A ou A:A)
         val entries = desserte.split(",")
         val rawLines: List<String> = if (entries.size > 1) {
+            // Format avec virgules: "5:A,86:A" ou "A:A,D:A"
             entries.mapNotNull { part ->
                 val trimmed = part.trim()
-                if (trimmed.isEmpty()) null else trimmed.substringBefore(":").trim()
+                if (trimmed.isEmpty()) null else {
+                    // Extraire la ligne (avant le premier ":")
+                    trimmed.substringBefore(":").trim()
+                }
             }.filter { it.isNotEmpty() }
         } else {
-            // Pas de virgule: séparer par ":". Les tokens "A"/"R" (Aller/Retour) après le premier sont ignorés.
+            // Pas de virgule: format ancien ou simple
+            // Ex: "M:A:B" ou "C17:22:31" ou "A:A" (un seul arrêt)
             val tokens = desserte.split(":")
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
             if (tokens.isEmpty()) return emptyList()
-            val first = tokens.first()
-            val rest = tokens.drop(1)
-            val filteredRest = rest.filter { t ->
-                val up = t.uppercase()
-                // Ne pas garder les directions Aller/Retour
-                up != "A" && up != "R"
+            
+            // Pour une seule entrée sans virgule comme "A:A" (métro A direction Aller),
+            // on ne prend que le premier token
+            if (tokens.size == 2) {
+                val first = tokens[0]
+                val second = tokens[1]
+                // Si le second token est "A" ou "R" (direction), on ne garde que le premier
+                if (second.uppercase() == "A" || second.uppercase() == "R") {
+                    listOf(first)
+                } else {
+                    // Sinon c'est peut-être un format ancien avec plusieurs lignes
+                    tokens
+                }
+            } else if (tokens.size > 2) {
+                // Format du type "M:A:B" -> garder M et B, ignorer A/R qui sont des directions
+                val first = tokens.first()
+                val rest = tokens.drop(1).filter { t ->
+                    val up = t.uppercase()
+                    // Ne pas garder les directions Aller/Retour seules
+                    up != "A" && up != "R"
+                }
+                listOf(first) + rest
+            } else {
+                // Un seul token, pas de ":", on le garde tel quel
+                tokens
             }
-            // Conserver l'ordre: première vraie ligne + autres lignes valides éventuelles
-            listOf(first) + filteredRest
         }
 
         // Dédupliquer en conservant l'ordre, comparaison insensible à la casse
