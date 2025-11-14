@@ -142,8 +142,8 @@ object LineStopsCache {
         "B" to listOf(
             "Charpennes Charles Hernu", "Brotteaux", "Part-Dieu Vivier Merle",
             "Place Guichard Bourse du Travail", "Saxe Gambetta", "Jean Macé",
-            "Place Jean Jaurès", "Debourg", "Stade de Gerland", "Oullins Gare",
-            "Gare d'Oullins"
+            "Place Jean Jaurès", "Debourg", "Stade de Gerland", "Gare d'Oullins",
+            "Oullins Centre", "St-Genis-Laval Hôpital Sud"
         ),
         "C" to listOf(
             "Hôtel de Ville Louis Pradel", "Croix-Paquet", "Croix-Rousse",
@@ -156,10 +156,10 @@ object LineStopsCache {
             "Mermoz Pinel", "Parilly", "Gare de Vénissieux"
         ),
         "F1" to listOf(
-            "Vieux Lyon Cathédrale St Jean", "Saint-Just", "Fourvière"
+            "Vieux Lyon Cathédrale St Jean", "Minimes Théatres Romains", "Saint Just"
         ),
         "F2" to listOf(
-            "Croix-Rousse", "Croix-Paquet"
+            "Vieux Lyon Cathédrale St Jean", "Fourvière"
         )
     )
     
@@ -168,37 +168,50 @@ object LineStopsCache {
      */
     private val tramStops = mapOf(
         "T1" to listOf(
-            "IUT Feyssine", "La Doua Gaston Berger", "Université Lyon 1",
-            "Flachet", "Charpennes", "Reconnaissance Balzac", "Les Brosses",
-            "Cusset", "Tolstoï", "Gratte-Ciel", "Hôtel de Région Montrochet",
-            "Maisons Neuves", "Gare de Vénissieux", "Vénissieux Centre"
+            "IUT Feyssine", "Croix-Luizet", "INSA - Einstein", "La Doua - Gaston Berger",
+            "Université Lyon 1", "Condorcet", "Le Tonkin", "Charpennes Charles Hernu",
+            "Collège Bellecombe", "Thiers - Lafayette", "Gare Part-Dieu V.Merle",
+            "Part-Dieu Auditorium", "Palais Justice Mairie 3e", "Saxe - Préfecture", "Liberté",
+            "Guillotière Gabriel Péri", "Saint-André", "Rue de l'Université", "Quai Claude Bernard",
+            "Perrache", "Place des Archives", "Sainte-Blandine", "Hôtel Région Montrochet",
+            "Musée des Confluences", "Halle Tony Garnier", "ENS Lyon", "Debourg"
         ),
         "T2" to listOf(
-            "Porte des Alpes Parc Technologique", "Le Soler", "Centre Médical",
-            "Jean Macé", "Rue de l'Université", "Debourg", "Jet d'Eau Mendès France",
-            "Stade de Gerland", "Tony Garnier", "Place Jean Jaurès",
-            "Sainte-Blandine", "Perrache"
+            "Saint-Priest Bel Air", "Cordière", "Saint-Priest Jules Ferry", "Esplanade des Arts",
+            "St-Priest Hôtel de Ville", "Alfred de Vigny", "Salvador Allende", "Hauts de Feuilly",
+            "Parc Technologique", "Porte des Alpes", "Europe - Université", "Rebufer", "Les Alizés",
+            "Bron Hôtel de Ville", "Boutasse - C. Rousset", "Essarts - Iris", "Desgenettes",
+            "Ambroise Paré", "Grande Blanche", "Jean XXIII - M. Bastié", "Bachut - Mairie du 8ème",
+            "Villon", "Jet d'Eau - M. France", "Route de Vienne", "Garibaldi - Berthelot", "Jean Macé",
+            "Centre Berthelot", "Perrache", "Place des Archives", "Sainte-Blandine", "Hôtel Région Montrochet"
         ),
         "T3" to listOf(
-            "Gare Part-Dieu Vivier Merle", "Dauphiné Lacassagne", "Reconnaissance Balzac",
-            "Charpennes", "République Villeurbanne", "Gratte-Ciel",
-            "Dedieu", "Fleur", "La Sucrière", "Gare de Vaise"
+            "Meyzieu les Panettes", "Meyzieu Z.i.", "Meyzieu Lycée Beltrame", "Meyzieu Gare",
+            "Décines Grand Large", "Décines Centre", "Décines Roosevelt", "Vaulx-en-Velin La Soie",
+            "Bel Air - Les Brosses", "Gare de Villeurbane", "Reconnaissance - Balzac", "Dauphiné - Lacassagne",
+            "Gare Part-Dieu Villette", "Vaulx-en-Velin La Soie"
         ),
         "T4" to listOf(
-            "Hôpital Feyzin Vénissieux", "Vénissieux Centre", "Joliot Curie",
-            "Division Leclerc", "Maisons Neuves", "Hôtel de Région Montrochet"
+            "Hôp. Feyzin Vénissieux", "Darnaise", "Lenine - Corsiere", "Maurice Thorez", "Division Leclerc",
+            "Venissy Frida Kahlo", "Herriot - Cagne", "Lycée Jacques Brel", "M. Houël Hôtel de Ville",
+            "Croizat - Paul Bert", "Gare de Vénissieux", "La Borelle", "Joliot-Curie - M. Sembat", "Etats-Unis Viviani",
+            "Beauvisage CISL", "Etats-Unis Tony Garnier", "Lycée Lumière", "Jet d'Eau - M. France", "Lycee Colbert",
+            "Manufacture Montluc", "Archives Departementales", "Gare Part-Dieu Vilette", "Thiers - Lafayette",
+            "Collège Bellecombe", "Charpennes Charles Hernu", "Le Tonkin", "Condorcet", "Université Lyon 1",
+            "La Doua - Gaston Berger", "INSA - Einstein", "Croix-Luizet", "IUT Feyssine"
         ),
         "T5" to listOf(
-            "Grange Blanche", "Vinatier", "Neuilly Gambetta", "Pressensé",
-            "Les Essarts Iris", "Lycée Lumière Jean Moulin"
+            "Eurexpo Entrée Princ.", "Chassieu ZAC du Chêne", "Parc du Chêne", "Lycee J.P. Sartre", "De Tassigny - Curial",
+            "Les Alizés", "Bron Hôtel de Ville", "Boutasse - C. Rousset", "Essarts - Iris", "Desgenettes", "Ambroise Paré",
+            "Grange Blanche"
         ),
         "T6" to listOf(
-            "Gare de Vénissieux", "Vénissieux Le Puisoz", "Vénissieux La Borelle",
-            "Vénissieux Moulin à Vent", "Château de Feyzin", "Hôpital Feyzin Vénissieux"
+            "Hôpitaux Est - Pinel", "Vinatier", "Desgenettes", "Essarts - Laennec", "Mermoz - Pinel", "Mermoz - Moselle",
+            "Mermoz - Californie", "Grande Rouge - Santy", "Beauvisage CISL", "Beauvisage - Pressensé", "Petite Guille",
+            "Moulin à Vent", "Challemel Lacour Artill.", "Debourg", "Mermoz - Pinel"
         ),
         "T7" to listOf(
-            "Vaulx-en-Velin La Soie", "Carrel", "Léon Blum", "Bonnevay",
-            "Charmettes Paul Santy", "Boutasse Camille Rousset"
+            "Décines OL Vallée", "Décines Grand Large", "Décines Centre", "Décines Roosevelt", "Vaulx-en-Velin La Soie"
         )
     )
     
