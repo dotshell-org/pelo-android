@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -16,9 +17,15 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
+import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
+import org.maplibre.android.style.layers.CircleLayer
+import org.maplibre.android.style.layers.PropertyFactory
+import org.maplibre.android.style.sources.GeoJsonSource
+import com.google.gson.JsonObject
+import com.google.gson.JsonArray
 
 @Composable
 fun MapLibreView(
@@ -28,7 +35,9 @@ fun MapLibreView(
     styleUrl: String = "https://tiles.openfreemap.org/styles/positron",
     onMapReady: (MapLibreMap) -> Unit = {},
     searchResults: List<String> = emptyList(),
-    onSearch: (String) -> Unit = {}
+    onSearch: (String) -> Unit = {},
+    userLocation: LatLng? = null,
+    centerOnUserLocation: Boolean = false
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -46,12 +55,74 @@ fun MapLibreView(
                 
                 map.setStyle(styleUrl) { style ->
                     // Configuration de la position initiale de la caméra
+                    val targetPosition = if (centerOnUserLocation && userLocation != null) {
+                        userLocation
+                    } else {
+                        initialPosition
+                    }
+                    
+                    val zoom = if (centerOnUserLocation && userLocation != null) {
+                        15.0
+                    } else {
+                        initialZoom
+                    }
+                    
                     map.cameraPosition = CameraPosition.Builder()
-                        .target(initialPosition)
-                        .zoom(initialZoom)
+                        .target(targetPosition)
+                        .zoom(zoom)
                         .build()
                     
                     onMapReady(map)
+                }
+            }
+        }
+    }
+
+    // Update user location on map when it changes
+    LaunchedEffect(userLocation) {
+        if (userLocation != null) {
+            mapView.getMapAsync { map ->
+                map.getStyle { style ->
+                    // Remove existing user location layer and source if any
+                    style.getLayer("user-location-layer")?.let { style.removeLayer(it) }
+                    style.getSource("user-location-source")?.let { style.removeSource(it) }
+                    
+                    // Create GeoJSON for user location
+                    val userLocationGeoJson = JsonObject().apply {
+                        addProperty("type", "Feature")
+                        val geometryObject = JsonObject().apply {
+                            addProperty("type", "Point")
+                            val coordinatesArray = JsonArray()
+                            coordinatesArray.add(userLocation.longitude)
+                            coordinatesArray.add(userLocation.latitude)
+                            add("coordinates", coordinatesArray)
+                        }
+                        add("geometry", geometryObject)
+                    }.toString()
+                    
+                    // Add source for user location
+                    val userLocationSource = GeoJsonSource("user-location-source", userLocationGeoJson)
+                    style.addSource(userLocationSource)
+                    
+                    // Add a blue circle layer for user location
+                    val userLocationLayer = CircleLayer("user-location-layer", "user-location-source").apply {
+                        setProperties(
+                            PropertyFactory.circleRadius(10f),
+                            PropertyFactory.circleColor("#3B82F6"),
+                            PropertyFactory.circleStrokeWidth(3f),
+                            PropertyFactory.circleStrokeColor("#FFFFFF"),
+                            PropertyFactory.circleOpacity(0.9f)
+                        )
+                    }
+                    style.addLayer(userLocationLayer)
+                    
+                    // Center on user location if requested
+                    if (centerOnUserLocation) {
+                        map.animateCamera(
+                            CameraUpdateFactory.newLatLngZoom(userLocation, 15.0),
+                            1000
+                        )
+                    }
                 }
             }
         }

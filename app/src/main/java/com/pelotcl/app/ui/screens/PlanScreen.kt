@@ -1,5 +1,9 @@
 package com.pelotcl.app.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -15,6 +19,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.pelotcl.app.ui.components.MapLibreView
@@ -45,6 +52,52 @@ fun PlanScreen(
     val stopsUiState by viewModel.stopsUiState.collectAsState()
     var mapInstance by remember { mutableStateOf<MapLibreMap?>(null) }
     val context = LocalContext.current
+    
+    // Location state
+    var userLocation by remember { mutableStateOf<LatLng?>(null) }
+    var shouldCenterOnUser by remember { mutableStateOf(false) }
+    
+    // Permission launcher - must be registered before STARTED lifecycle state
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val granted = permissions.entries.any { it.value }
+        if (granted) {
+            // Get location once permission is granted
+            getLocation(context) { location ->
+                userLocation = location
+                shouldCenterOnUser = true
+            }
+        }
+    }
+    
+    // Check and request location permission
+    LaunchedEffect(Unit) {
+        val hasPermission = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED ||
+        ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        
+        if (hasPermission) {
+            // Already have permission, get location
+            getLocation(context) { location ->
+                userLocation = location
+                shouldCenterOnUser = true
+            }
+        } else {
+            // Request permission
+            locationPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
+    }
     
     // Charger toutes les lignes et arrêts au démarrage
     LaunchedEffect(Unit) {
@@ -88,7 +141,9 @@ fun PlanScreen(
                 mapInstance = map
             },
             searchResults = emptyList(),
-            onSearch = {}
+            onSearch = {},
+            userLocation = userLocation,
+            centerOnUserLocation = shouldCenterOnUser
         )
         
         // Afficher un indicateur de chargement
@@ -96,6 +151,13 @@ fun PlanScreen(
             CircularProgressIndicator(
                 modifier = Modifier.align(Alignment.Center)
             )
+        }
+    }
+    
+    // Reset center flag after first centering
+    LaunchedEffect(shouldCenterOnUser) {
+        if (shouldCenterOnUser) {
+            shouldCenterOnUser = false
         }
     }
 }
@@ -369,5 +431,36 @@ private fun createStopsGeoJsonFromStops(
     }
 
     return geoJsonCollection.toString()
+}
+
+/**
+ * Helper function to get current location
+ */
+private fun getLocation(
+    context: android.content.Context,
+    onSuccess: (LatLng) -> Unit
+) {
+    try {
+        val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+        val cancellationTokenSource = CancellationTokenSource()
+        
+        fusedLocationClient.getCurrentLocation(
+            Priority.PRIORITY_HIGH_ACCURACY,
+            cancellationTokenSource.token
+        ).addOnSuccessListener { location ->
+            if (location != null) {
+                onSuccess(LatLng(location.latitude, location.longitude))
+            } else {
+                // Try to get last known location as fallback
+                fusedLocationClient.lastLocation.addOnSuccessListener { lastLocation ->
+                    if (lastLocation != null) {
+                        onSuccess(LatLng(lastLocation.latitude, lastLocation.longitude))
+                    }
+                }
+            }
+        }
+    } catch (e: SecurityException) {
+        // Location permission not granted
+    }
 }
 

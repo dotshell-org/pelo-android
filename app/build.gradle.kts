@@ -60,6 +60,9 @@ dependencies {
     // MapLibre
     implementation(libs.maplibre.android)
 
+    // Location Services
+    implementation("com.google.android.gms:play-services-location:21.0.1")
+
     // Retrofit for network calls
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.gson)
