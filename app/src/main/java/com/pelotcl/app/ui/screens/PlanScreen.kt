@@ -7,12 +7,15 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,15 +28,17 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.pelotcl.app.ui.components.MapLibreView
+import com.pelotcl.app.ui.components.StationBottomSheet
+import com.pelotcl.app.ui.components.StationInfo
 import com.pelotcl.app.ui.viewmodel.TransportLinesUiState
 import com.pelotcl.app.ui.viewmodel.TransportStopsUiState
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LineColorHelper
+import kotlinx.coroutines.launch
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.style.expressions.Expression
-import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
@@ -43,6 +48,7 @@ private val ALWAYS_VISIBLE_LINES = setOf("F1", "F2", "A", "B", "C", "D")
 private const val PRIORITY_STOPS_MIN_ZOOM = 12.5f
 private const val SECONDARY_STOPS_MIN_ZOOM = 15f
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlanScreen(
     modifier: Modifier = Modifier,
@@ -52,10 +58,16 @@ fun PlanScreen(
     val stopsUiState by viewModel.stopsUiState.collectAsState()
     var mapInstance by remember { mutableStateOf<MapLibreMap?>(null) }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     
     // Location state
     var userLocation by remember { mutableStateOf<LatLng?>(null) }
     var shouldCenterOnUser by remember { mutableStateOf(false) }
+    
+    // Bottom sheet state
+    val sheetState = rememberModalBottomSheetState()
+    var selectedStation by remember { mutableStateOf<StationInfo?>(null) }
+    var showBottomSheet by remember { mutableStateOf(false) }
     
     // Permission launcher - must be registered before STARTED lifecycle state
     val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -125,7 +137,13 @@ fun PlanScreen(
         
         when (val state = stopsUiState) {
             is TransportStopsUiState.Success -> {
-                addStopsToMap(map, state.stops, context)
+                addStopsToMap(map, state.stops, context) { clickedStationInfo ->
+                    // Callback when a station is clicked
+                    scope.launch {
+                        selectedStation = clickedStationInfo
+                        showBottomSheet = true
+                    }
+                }
             }
             else -> {}
         }
@@ -152,6 +170,23 @@ fun PlanScreen(
                 modifier = Modifier.align(Alignment.Center)
             )
         }
+    }
+    
+    // Bottom sheet pour afficher les informations de la station
+    if (showBottomSheet) {
+        StationBottomSheet(
+            stationInfo = selectedStation,
+            sheetState = sheetState,
+            onDismiss = {
+                scope.launch {
+                    sheetState.hide()
+                }.invokeOnCompletion {
+                    if (!sheetState.isVisible) {
+                        showBottomSheet = false
+                    }
+                }
+            }
+        )
     }
     
     // Reset center flag after first centering
@@ -208,7 +243,8 @@ private fun addLineToMap(
 private fun addStopsToMap(
     map: MapLibreMap,
     stops: List<com.pelotcl.app.data.model.StopFeature>,
-    context: android.content.Context
+    context: android.content.Context,
+    onStationClick: (StationInfo) -> Unit = {}
 ) {
     map.getStyle { style ->
         val sourceId = "transport-stops"
@@ -325,6 +361,67 @@ private fun addStopsToMap(
                 setMinZoom(SECONDARY_STOPS_MIN_ZOOM)
             }
             style.addLayer(secondaryLayer)
+        }
+        
+        // Add click listener for all stop layers
+        map.addOnMapClickListener { point ->
+            val pixel = map.projection.toScreenLocation(point)
+            
+            // Check all layers for clicked features
+            val allLayerIds = usedSlots.flatMap { idx ->
+                listOf(
+                    "$priorityLayerPrefix-$idx",
+                    "$secondaryLayerPrefix-$idx"
+                )
+            }
+            
+            val features = map.queryRenderedFeatures(pixel, *allLayerIds.toTypedArray())
+            
+            if (features.isNotEmpty()) {
+                val feature = features.first()
+                
+                // Extract station info from the feature properties using public getters
+                val stationName = feature.getStringProperty("nom") ?: ""
+                val desserte = feature.getStringProperty("desserte") ?: ""
+                val isPmr = feature.getBooleanProperty("pmr") ?: false
+                
+                // Parse all lines from desserte
+                val lines = BusIconHelper.getAllLinesForStop(
+                    com.pelotcl.app.data.model.StopFeature(
+                        type = "Feature",
+                        id = "",
+                        geometry = com.pelotcl.app.data.model.StopGeometry("Point", listOf(0.0, 0.0)),
+                        properties = com.pelotcl.app.data.model.StopProperties(
+                            id = 0,
+                            nom = stationName,
+                            desserte = desserte,
+                            pmr = isPmr,
+                            ascenseur = false,
+                            escalator = false,
+                            gid = 0,
+                            lastUpdate = "",
+                            lastUpdateFme = "",
+                            adresse = "",
+                            localiseFaceAAdresse = false,
+                            commune = "",
+                            insee = "",
+                            zone = ""
+                        )
+                    )
+                )
+                
+                val stationInfo = StationInfo(
+                    nom = stationName,
+                    lignes = lines,
+                    isPmr = isPmr,
+                    desserte = desserte
+                )
+                
+                onStationClick(stationInfo)
+                true // Consume the click event
+            } else {
+                false // Don't consume the click event
+            }
         }
     }
 }
