@@ -86,7 +86,9 @@ fun PlanScreen(
             styleUrl = "https://tiles.openfreemap.org/styles/positron",
             onMapReady = { map ->
                 mapInstance = map
-            }
+            },
+            searchResults = emptyList(),
+            onSearch = {}
         )
         
         // Afficher un indicateur de chargement

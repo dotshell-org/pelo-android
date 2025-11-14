@@ -2,7 +2,7 @@ package com.pelotcl.app.ui.components
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
@@ -83,15 +83,6 @@ fun MapLibreView(
         AndroidView(
             factory = { mapView },
             modifier = Modifier.matchParentSize()
-        )
-
-        // Overlay de la barre de recherche en haut
-        SimpleSearchBar(
-            searchResults = searchResults,
-            onSearch = onSearch,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
         )
     }
 }

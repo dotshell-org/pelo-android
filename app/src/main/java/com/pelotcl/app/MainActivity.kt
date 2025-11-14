@@ -4,7 +4,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Map
@@ -23,13 +26,16 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.pelotcl.app.ui.components.SimpleSearchBar
 import com.pelotcl.app.ui.screens.PlanScreen
 import com.pelotcl.app.ui.theme.PeloTheme
 import com.pelotcl.app.ui.theme.Red500
@@ -82,46 +88,60 @@ fun NavBar(modifier: Modifier = Modifier) {
     val startDestination = Destination.PLAN
     var selectedDestination by rememberSaveable { mutableIntStateOf(startDestination.ordinal) }
 
-    Scaffold(
-        modifier = modifier,
-        bottomBar = {
-            NavigationBar(
-                windowInsets = NavigationBarDefaults.windowInsets,
-                containerColor = Color.Black
-            ) {
-                Destination.entries.forEachIndexed { index, destination ->
-                    NavigationBarItem(
-                        selected = selectedDestination == index,
-                        onClick = {
-                            if (selectedDestination != index) {
-                                navController.navigate(destination.route) {
-                                    launchSingleTop = true
-                                    popUpTo(navController.graph.startDestinationId) { saveState = true }
-                                    restoreState = true
+    Box(modifier = modifier) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            bottomBar = {
+                NavigationBar(
+                    windowInsets = NavigationBarDefaults.windowInsets,
+                    containerColor = Color.Black
+                ) {
+                    Destination.entries.forEachIndexed { index, destination ->
+                        NavigationBarItem(
+                            selected = selectedDestination == index,
+                            onClick = {
+                                if (selectedDestination != index) {
+                                    navController.navigate(destination.route) {
+                                        launchSingleTop = true
+                                        popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                        restoreState = true
+                                    }
+                                    selectedDestination = index
                                 }
-                                selectedDestination = index
-                            }
-                        },
-                        icon = {
-                            Icon(
-                                destination.icon,
-                                contentDescription = destination.contentDescription
+                            },
+                            icon = {
+                                Icon(
+                                    destination.icon,
+                                    contentDescription = destination.contentDescription
+                                )
+                            },
+                            label = { Text(destination.label) },
+                            colors = NavigationBarItemDefaults.colors(
+                                indicatorColor = Red500,
+                                selectedIconColor = Color.White,
+                                unselectedIconColor = Color.White,
+                                selectedTextColor = Color.White,
+                                unselectedTextColor = Color.White
                             )
-                        },
-                        label = { Text(destination.label) },
-                        colors = NavigationBarItemDefaults.colors(
-                            indicatorColor = Red500,
-                            selectedIconColor = Color.White,
-                            unselectedIconColor = Color.White,
-                            selectedTextColor = Color.White,
-                            unselectedTextColor = Color.White
                         )
-                    )
+                    }
                 }
             }
+        ) { contentPadding ->
+            AppNavHost(navController, startDestination, modifier = Modifier.padding(contentPadding))
         }
-    ) { contentPadding ->
-        AppNavHost(navController, startDestination, modifier = Modifier.padding(contentPadding))
+        
+        // Barre de recherche au-dessus de tout uniquement sur l'écran Plan
+        if (selectedDestination == Destination.PLAN.ordinal) {
+            SimpleSearchBar(
+                searchResults = emptyList(),
+                onSearch = {},
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .padding(top = 4.dp)
+            )
+        }
     }
 }
 

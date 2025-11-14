@@ -1,13 +1,13 @@
 package com.pelotcl.app.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
@@ -26,7 +26,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
@@ -46,7 +45,7 @@ fun SimpleSearchBar(
     var query by rememberSaveable { mutableStateOf("") }
 
     Box(
-        modifier
+        (if (expanded) Modifier.fillMaxSize().background(Color.Black) else modifier)
             .semantics { isTraversalGroup = true }
             .padding(0.dp)
     ) {
@@ -55,7 +54,7 @@ fun SimpleSearchBar(
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .semantics { traversalIndex = 0f }
-                .padding(horizontal = if (expanded) 0.dp else 20.dp),
+                .padding(horizontal = if (expanded) 0.dp else 10.dp),
             inputField = {
                 SearchBarDefaults.InputField(
                     query = query,
@@ -66,7 +65,7 @@ fun SimpleSearchBar(
                     },
                     expanded = expanded,
                     onExpandedChange = { expanded = it },
-                    placeholder = { Text("Recherche", color = Color.Black.copy(alpha = 0.6f)) },
+                    placeholder = { Text("Recherche", color = Color.White) },
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Default.Search,
@@ -79,26 +78,25 @@ fun SimpleSearchBar(
                         )
                     },
                     colors = TextFieldDefaults.colors(
-                        focusedTextColor = Color.Black,
-                        unfocusedTextColor = Color.Black,
-                        cursorColor = Color.Black,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        cursorColor = Color.White,
                         focusedIndicatorColor = Color.Transparent,
                         unfocusedIndicatorColor = Color.Transparent,
                         disabledIndicatorColor = Color.Transparent,
-                        focusedContainerColor = Color.White,
-                        unfocusedContainerColor = Color.White,
-                        focusedPlaceholderColor = Color.Black.copy(alpha = 0.6f),
-                        unfocusedPlaceholderColor = Color.Black.copy(alpha = 0.6f)
+                        focusedContainerColor = Color.Black,
+                        unfocusedContainerColor = Color.Black,
+                        focusedPlaceholderColor = Color.White.copy(alpha = 0.6f),
+                        unfocusedPlaceholderColor = Color.White.copy(alpha = 0.6f)
                     )
                 )
             },
             expanded = expanded,
             onExpandedChange = { expanded = it },
             colors = SearchBarDefaults.colors(
-                containerColor = Color.White,
+                containerColor = Color.Black,
                 dividerColor = Color.Transparent
-            ),
-            shadowElevation = 2.dp,
+            )
         ) {
             Column(
                 Modifier.verticalScroll(rememberScrollState())
