@@ -1,20 +1,22 @@
 package com.pelotcl.app.ui.components
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Accessible
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -28,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.pelotcl.app.ui.theme.Gray200
 import com.pelotcl.app.ui.theme.Gray700
 
 /**
@@ -44,12 +47,13 @@ data class StationInfo(
  * Bottom sheet affichant les informations d'une station
  * (nom de la station et toutes les lignes qui la desservent)
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StationBottomSheet(
     stationInfo: StationInfo?,
     sheetState: SheetState,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onLineClick: (String) -> Unit = {}
 ) {
     if (stationInfo != null) {
         ModalBottomSheet(
@@ -90,23 +94,25 @@ fun StationBottomSheet(
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                // Section des lignes
-                Text(
-                    text = "Lignes",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Gray700,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-                
-                // Affichage des icônes de lignes
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                // Liste scrollable des lignes
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
                 ) {
-                    stationInfo.lignes.forEach { ligne ->
-                        LineIcon(lineName = ligne)
+                    stationInfo.lignes.forEachIndexed { index, ligne ->
+                        LineListItem(
+                            lineName = ligne,
+                            onClick = { onLineClick(ligne) }
+                        )
+                        
+                        // Divider entre les lignes, sauf après la dernière
+                        if (index < stationInfo.lignes.size - 1) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 4.dp),
+                                color = Gray200
+                            )
+                        }
                     }
                 }
             }
@@ -115,27 +121,48 @@ fun StationBottomSheet(
 }
 
 /**
- * Affiche l'icône d'une ligne de transport
+ * Item de liste pour une ligne de transport
  */
 @Composable
-private fun LineIcon(lineName: String) {
+private fun LineListItem(
+    lineName: String,
+    onClick: () -> Unit
+) {
     val context = LocalContext.current
     val drawableName = getDrawableNameForLine(lineName)
     val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
     
-    if (resourceId != 0) {
-        Image(
-            painter = painterResource(id = resourceId),
-            contentDescription = "Ligne $lineName",
-            modifier = Modifier.size(48.dp)
-        )
-    } else {
-        // Fallback si l'icône n'existe pas
-        Text(
-            text = lineName,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Bold,
-            color = Gray700
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Icône de la ligne à gauche
+        if (resourceId != 0) {
+            Image(
+                painter = painterResource(id = resourceId),
+                contentDescription = "Ligne $lineName",
+                modifier = Modifier.size(60.dp)
+            )
+        } else {
+            // Fallback si l'icône n'existe pas
+            Text(
+                text = lineName,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Gray700
+            )
+        }
+        
+        // Chevron à droite
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = "Voir la ligne $lineName",
+            tint = Gray700,
+            modifier = Modifier.size(24.dp)
         )
     }
 }
