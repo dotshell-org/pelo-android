@@ -70,5 +70,6 @@ data class LineStopInfo(
     val stopId: String,
     val stopName: String,
     val stopSequence: Int,
-    val isCurrentStop: Boolean = false
+    val isCurrentStop: Boolean = false,
+    val connections: List<String> = emptyList() // Liste des lignes de métro/funiculaire en correspondance
 )

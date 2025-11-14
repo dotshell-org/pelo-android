@@ -1,5 +1,6 @@
 package com.pelotcl.app.ui.components
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -14,16 +15,23 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PaintingStyle.Companion.Stroke
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.pelotcl.app.data.gtfs.GtfsParser
 import com.pelotcl.app.data.gtfs.LineStopInfo
 import com.pelotcl.app.data.gtfs.StopDeparture
+import com.pelotcl.app.data.repository.TransportRepository
 import com.pelotcl.app.ui.theme.Gray200
 import com.pelotcl.app.ui.theme.Gray700
+import com.pelotcl.app.utils.ConnectionsHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -84,6 +92,7 @@ fun LineDetailsBottomSheet(
                 withContext(Dispatchers.IO) {
                     try {
                         val parser = GtfsParser(context)
+                        val repository = TransportRepository()
                         
                         // Charger les arrêts de la ligne
                         val stops = parser.getLineStops(
@@ -92,6 +101,20 @@ fun LineDetailsBottomSheet(
                             currentStopName = lineInfo.currentStationName
                         )
                         
+                        // Charger tous les arrêts pour trouver les correspondances
+                        val allStopsResult = repository.getAllStops()
+                        val allStops = allStopsResult.getOrNull()?.features ?: emptyList()
+                        
+                        // Enrichir les arrêts avec les informations de correspondances
+                        val enrichedStops = stops.map { stop ->
+                            val connections = ConnectionsHelper.findConnectionsForStop(
+                                stopName = stop.stopName,
+                                currentLine = lineInfo.lineName,
+                                allStops = allStops
+                            )
+                            stop.copy(connections = connections)
+                        }
+                        
                         // Charger les prochains départs
                         val departures = parser.getNextDepartures(
                             stopName = lineInfo.currentStationName,
@@ -99,7 +122,7 @@ fun LineDetailsBottomSheet(
                             maxResults = 5
                         )
                         
-                        Pair(stops, departures)
+                        Pair(enrichedStops, departures)
                     } catch (e: Exception) {
                         e.printStackTrace()
                         null
@@ -241,9 +264,6 @@ private fun DepartureItem(departure: StopDeparture) {
     }
 }
 
-/**
- * Item affichant un arrêt de la ligne avec une ligne verticale et un cercle
- */
 @Composable
 private fun StopItemWithLine(
     stop: LineStopInfo,
@@ -254,67 +274,128 @@ private fun StopItemWithLine(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(vertical = 4.dp)
             .height(IntrinsicSize.Min),
-        verticalAlignment = Alignment.Top
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        // Colonne avec la ligne verticale et le cercle
         Box(
             modifier = Modifier
                 .width(40.dp)
                 .fillMaxHeight(),
-            contentAlignment = Alignment.TopCenter
+            contentAlignment = Alignment.Center
         ) {
-            // Ligne verticale (ne s'affiche pas pour le premier arrêt en haut)
             if (!isFirst) {
                 Box(
                     modifier = Modifier
                         .width(4.dp)
-                        .fillMaxHeight()
-                        .offset(y = (-24).dp)
-                        .background(lineColor.copy(alpha = 0.5f))
-                        .align(Alignment.TopCenter)
+                        .height(30.dp)
+                        .offset(y = (-16).dp)
+                        .background(lineColor)
+                        .align(Alignment.Center)
                 )
             }
-            
-            // Ligne verticale (ne s'affiche pas pour le dernier arrêt en bas)
+
             if (!isLast) {
                 Box(
                     modifier = Modifier
                         .width(4.dp)
-                        .fillMaxHeight()
-                        .offset(y = 24.dp)
-                        .background(lineColor.copy(alpha = 0.5f))
-                        .align(Alignment.TopCenter)
+                        .height(30.dp)
+                        .offset(y = (16).dp)
+                        .background(lineColor)
+                        .align(Alignment.Center)
                 )
             }
-            
-            // Cercle pour l'arrêt - aligné avec le texte
+
             Box(
                 modifier = Modifier
                     .size(16.dp)
                     .clip(CircleShape)
-                    .background(if (stop.isCurrentStop) lineColor else Color.White)
+                    .background(
+                        if (stop.isCurrentStop) lineColor else Color.White
+                    )
                     .border(
                         width = 3.dp,
                         color = lineColor,
                         shape = CircleShape
                     )
-                    .align(Alignment.TopCenter)
-                    .offset(y = 0.dp)
             )
         }
-        
-        // Nom de l'arrêt
-        Column(
+
+        // Partie droite : texte + correspondances
+        Row(
             modifier = Modifier
                 .weight(1f)
-                .padding(start = 12.dp, bottom = 22.dp)
+                .padding(start = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
+
             Text(
                 text = stop.stopName,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = if (stop.isCurrentStop) FontWeight.Bold else FontWeight.Normal,
-                color = if (stop.isCurrentStop) lineColor else Color.Black
+                color = if (stop.isCurrentStop) lineColor else Color.Black,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+
+            if (stop.connections.isNotEmpty()) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    stop.connections.forEach { connectionLine ->
+                        ConnectionBadge(lineName = connectionLine)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Badge affichant une ligne de correspondance (métro ou funiculaire)
+ * Utilise les images TCL comme sur la carte
+ */
+@Composable
+private fun ConnectionBadge(lineName: String) {
+    val context = LocalContext.current
+    
+    // Convertir le nom de ligne en nom de drawable (même logique que pour la carte)
+    val drawableName = getDrawableNameForLine(lineName)
+    val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
+    
+    if (resourceId != 0) {
+        // Afficher l'image TCL
+        Image(
+            painter = painterResource(id = resourceId),
+            contentDescription = "Ligne $lineName",
+            modifier = Modifier.size(40.dp)
+        )
+    } else {
+        // Fallback: cercle coloré si l'image n'existe pas
+        val backgroundColor = when (lineName) {
+            "A" -> Color(0xFFEC4899) // Rose
+            "B" -> Color(0xFF3B82F6) // Bleu
+            "C" -> Color(0xFFF59E0B) // Orange
+            "D" -> Color(0xFF22C55E) // Vert
+            "F1", "F2" -> Color(0xFF84CC16) // Vert lime
+            else -> Color.Gray
+        }
+        
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(CircleShape)
+                .background(backgroundColor),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = lineName,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                fontSize = if (lineName.length > 1) 9.sp else 11.sp
             )
         }
     }

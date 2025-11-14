@@ -70,6 +70,7 @@ dependencies {
     
     // ViewModel
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.compose.ui.geometry)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
