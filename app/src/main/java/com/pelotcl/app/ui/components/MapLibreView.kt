@@ -35,6 +35,9 @@ fun MapLibreView(
     val mapView = remember {
         MapView(context).apply {
             getMapAsync { map ->
+                // Désactiver la rotation de la carte
+                map.uiSettings.isRotateGesturesEnabled = false
+                
                 map.setStyle(styleUrl) { style ->
                     // Configuration de la position initiale de la caméra
                     map.cameraPosition = CameraPosition.Builder()
