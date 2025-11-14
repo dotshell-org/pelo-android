@@ -44,6 +44,34 @@ data class StationInfo(
 )
 
 /**
+ * Trie les lignes dans l'ordre : Métro (A,B,C,D), Funiculaire (F1,F2), Tram (T1-T7), Bus (par numéro)
+ */
+private fun sortLines(lines: List<String>): List<String> {
+    return lines.sortedWith(compareBy { line ->
+        when {
+            // Métro - ordre A, B, C, D
+            line.uppercase() == "A" -> 1000
+            line.uppercase() == "B" -> 1001
+            line.uppercase() == "C" -> 1002
+            line.uppercase() == "D" -> 1003
+            // Funiculaire - ordre F1, F2
+            line.uppercase() == "F1" -> 2000
+            line.uppercase() == "F2" -> 2001
+            // Tram - commence par T, trier par numéro
+            line.uppercase().startsWith("T") -> {
+                val num = line.substring(1).toIntOrNull() ?: 0
+                3000 + num
+            }
+            // Bus - trier par numéro
+            else -> {
+                val num = line.toIntOrNull() ?: 9999
+                10000 + num
+            }
+        }
+    })
+}
+
+/**
  * Bottom sheet affichant les informations d'une station
  * (nom de la station et toutes les lignes qui la desservent)
  */
@@ -94,20 +122,21 @@ fun StationBottomSheet(
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                // Liste scrollable des lignes
+                // Liste scrollable des lignes (triées)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .verticalScroll(rememberScrollState())
                 ) {
-                    stationInfo.lignes.forEachIndexed { index, ligne ->
+                    val sortedLines = sortLines(stationInfo.lignes)
+                    sortedLines.forEachIndexed { index, ligne ->
                         LineListItem(
                             lineName = ligne,
                             onClick = { onLineClick(ligne) }
                         )
                         
                         // Divider entre les lignes, sauf après la dernière
-                        if (index < stationInfo.lignes.size - 1) {
+                        if (index < sortedLines.size - 1) {
                             HorizontalDivider(
                                 modifier = Modifier.padding(vertical = 4.dp),
                                 color = Gray200

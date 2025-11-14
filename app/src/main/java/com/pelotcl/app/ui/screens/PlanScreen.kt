@@ -27,6 +27,8 @@ import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import com.pelotcl.app.ui.components.LineDetailsBottomSheet
+import com.pelotcl.app.ui.components.LineInfo
 import com.pelotcl.app.ui.components.MapLibreView
 import com.pelotcl.app.ui.components.StationBottomSheet
 import com.pelotcl.app.ui.components.StationInfo
@@ -68,6 +70,11 @@ fun PlanScreen(
     val sheetState = rememberModalBottomSheetState()
     var selectedStation by remember { mutableStateOf<StationInfo?>(null) }
     var showBottomSheet by remember { mutableStateOf(false) }
+    
+    // Line details bottom sheet state
+    val lineDetailsSheetState = rememberModalBottomSheetState()
+    var selectedLine by remember { mutableStateOf<LineInfo?>(null) }
+    var showLineDetailsSheet by remember { mutableStateOf(false) }
     
     // Permission launcher - must be registered before STARTED lifecycle state
     val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -184,6 +191,46 @@ fun PlanScreen(
                     if (!sheetState.isVisible) {
                         showBottomSheet = false
                     }
+                }
+            },
+            onLineClick = { lineName ->
+                // Quand on clique sur une ligne, fermer le sheet de la station
+                // et ouvrir le sheet des détails de la ligne
+                scope.launch {
+                    sheetState.hide()
+                }.invokeOnCompletion {
+                    showBottomSheet = false
+                    selectedLine = LineInfo(
+                        lineName = lineName,
+                        currentStationName = selectedStation?.nom ?: ""
+                    )
+                    showLineDetailsSheet = true
+                }
+            }
+        )
+    }
+    
+    // Bottom sheet pour afficher les détails d'une ligne
+    if (showLineDetailsSheet) {
+        LineDetailsBottomSheet(
+            lineInfo = selectedLine,
+            sheetState = lineDetailsSheetState,
+            onDismiss = {
+                scope.launch {
+                    lineDetailsSheetState.hide()
+                }.invokeOnCompletion {
+                    if (!lineDetailsSheetState.isVisible) {
+                        showLineDetailsSheet = false
+                    }
+                }
+            },
+            onBackToStation = {
+                // Retour au sheet de la station
+                scope.launch {
+                    lineDetailsSheetState.hide()
+                }.invokeOnCompletion {
+                    showLineDetailsSheet = false
+                    showBottomSheet = true
                 }
             }
         )
