@@ -1,20 +1,24 @@
 package com.pelotcl.app.ui.components
 
-import android.content.Context
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.geometry.LatLng
-import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.MapView
 
 @Composable
 fun MapLibreView(
@@ -22,7 +26,9 @@ fun MapLibreView(
     initialPosition: LatLng = LatLng(45.75, 4.85),
     initialZoom: Double = 10.0,
     styleUrl: String = "https://tiles.openfreemap.org/styles/positron",
-    onMapReady: (MapLibreMap) -> Unit = {}
+    onMapReady: (MapLibreMap) -> Unit = {},
+    searchResults: List<String> = emptyList(),
+    onSearch: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -73,8 +79,19 @@ fun MapLibreView(
         }
     }
 
-    AndroidView(
-        factory = { mapView },
-        modifier = modifier
-    )
+    Box(modifier = modifier) {
+        AndroidView(
+            factory = { mapView },
+            modifier = Modifier.matchParentSize()
+        )
+
+        // Overlay de la barre de recherche en haut
+        SimpleSearchBar(
+            searchResults = searchResults,
+            onSearch = onSearch,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+        )
+    }
 }
