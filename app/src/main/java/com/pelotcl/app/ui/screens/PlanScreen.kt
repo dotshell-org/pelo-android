@@ -34,6 +34,7 @@ import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import com.pelotcl.app.data.model.StopFeature
 import com.pelotcl.app.ui.components.LineDetailsBottomSheet
 import com.pelotcl.app.ui.components.LineInfo
 import com.pelotcl.app.ui.components.MapLibreView
@@ -56,6 +57,23 @@ import org.maplibre.android.style.sources.GeoJsonSource
 private val ALWAYS_VISIBLE_LINES = setOf("F1", "F2", "A", "B", "C", "D")
 private const val PRIORITY_STOPS_MIN_ZOOM = 12.5f
 private const val SECONDARY_STOPS_MIN_ZOOM = 15f
+
+/**
+ * Détermine si une ligne est un métro, tram ou funiculaire (pas un bus)
+ */
+private fun isMetroTramOrFunicular(lineName: String): Boolean {
+    val upperName = lineName.uppercase()
+    return when {
+        // Métros
+        upperName in setOf("A", "B", "C", "D") -> true
+        // Funiculaires
+        upperName in setOf("F1", "F2") -> true
+        // Trams (commence par T)
+        upperName.startsWith("T") -> true
+        // Sinon c'est un bus
+        else -> false
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -167,6 +185,24 @@ fun PlanScreen(
                         isSheetExpanded = true
                         scaffoldSheetState.bottomSheetState.expand()
                     }
+                }
+            }
+            else -> {}
+        }
+    }
+    
+    // Filtrer les lignes visibles en fonction de la ligne sélectionnée
+    LaunchedEffect(showLineDetails, selectedLine, uiState, mapInstance) {
+        val map = mapInstance ?: return@LaunchedEffect
+        
+        when (val state = uiState) {
+            is TransportLinesUiState.Success -> {
+                if (showLineDetails && selectedLine != null) {
+                    // Afficher uniquement la ligne sélectionnée
+                    filterMapLines(map, state.lines, selectedLine!!.lineName)
+                } else {
+                    // Afficher toutes les lignes
+                    showAllMapLines(map, state.lines)
                 }
             }
             else -> {}
@@ -289,6 +325,137 @@ private fun LineDetailsSheetContent(
         onDismiss = {},
         onBackToStation = onBackToStation
     )
+}
+
+/**
+ * Filtre les lignes de la carte pour n'afficher que celle spécifiée
+ */
+private fun filterMapLines(
+    map: MapLibreMap,
+    allLines: List<com.pelotcl.app.data.model.Feature>,
+    selectedLineName: String
+) {
+    map.getStyle { style ->
+        allLines.forEach { feature ->
+            val layerId = "layer-${feature.properties.ligne}-${feature.properties.codeTrace}"
+            
+            // Afficher la couche si c'est la ligne sélectionnée, sinon la cacher
+            style.getLayer(layerId)?.let { layer ->
+                if (feature.properties.ligne.equals(selectedLineName, ignoreCase = true)) {
+                    layer.setProperties(PropertyFactory.visibility("visible"))
+                } else {
+                    layer.setProperties(PropertyFactory.visibility("none"))
+                }
+            }
+        }
+        
+        // Filtrer également les arrêts pour n'afficher que ceux de la ligne sélectionnée
+        filterMapStops(style, selectedLineName)
+    }
+}
+
+/**
+ * Filtre les arrêts pour n'afficher que ceux de la ligne sélectionnée
+ * Sur ces arrêts, affiche toutes les icônes de correspondances métro/tram/funiculaire empilées
+ * En mode filtré, les trams sont au même niveau que métro/funiculaire (priority stops)
+ */
+private fun filterMapStops(
+    style: org.maplibre.android.maps.Style,
+    selectedLineName: String
+) {
+    val priorityLayerPrefix = "transport-stops-layer-priority"
+    val secondaryLayerPrefix = "transport-stops-layer-secondary"
+    
+    // Créer le nom de la propriété pour cette ligne
+    val linePropertyName = "has_line_${selectedLineName.uppercase()}"
+    
+    (-25..25).forEach { idx ->
+        val priorityLayerId = "$priorityLayerPrefix-$idx"
+        val secondaryLayerId = "$secondaryLayerPrefix-$idx"
+        
+        (style.getLayer(priorityLayerId) as? SymbolLayer)?.let { layer ->
+            // Filtrer pour n'afficher que les arrêts qui ont la propriété has_line_X = true
+            layer.setFilter(
+                Expression.all(
+                    Expression.eq(Expression.get("priority_stop"), true),
+                    Expression.eq(Expression.get("slot"), idx),
+                    Expression.eq(Expression.get(linePropertyName), true)
+                )
+            )
+            // Garder le même minZoom que d'habitude (déjà à PRIORITY_STOPS_MIN_ZOOM)
+        }
+        
+        (style.getLayer(secondaryLayerId) as? SymbolLayer)?.let { layer ->
+            // En mode filtré, afficher tous les arrêts de la ligne (y compris trams et correspondances métro)
+            // ET promouvoir leur zoom au niveau priority pour une meilleure visibilité
+            layer.setFilter(
+                Expression.all(
+                    Expression.eq(Expression.get("priority_stop"), false),
+                    Expression.eq(Expression.get("slot"), idx),
+                    Expression.eq(Expression.get(linePropertyName), true)
+                )
+            )
+            // Réduire le minZoom pour TOUS les arrêts de la ligne en mode filtré
+            // (pas seulement les trams, pour voir aussi les correspondances métro)
+            layer.setMinZoom(PRIORITY_STOPS_MIN_ZOOM)
+        }
+    }
+}
+
+/**
+ * Affiche toutes les lignes sur la carte
+ */
+private fun showAllMapLines(
+    map: MapLibreMap,
+    allLines: List<com.pelotcl.app.data.model.Feature>
+) {
+    map.getStyle { style ->
+        allLines.forEach { feature ->
+            val layerId = "layer-${feature.properties.ligne}-${feature.properties.codeTrace}"
+            
+            // Rendre toutes les couches visibles
+            style.getLayer(layerId)?.let { layer ->
+                layer.setProperties(PropertyFactory.visibility("visible"))
+            }
+        }
+        
+        // Réafficher tous les arrêts
+        showAllMapStops(style)
+    }
+}
+
+/**
+ * Réaffiche tous les arrêts sur la carte
+ */
+private fun showAllMapStops(
+    style: org.maplibre.android.maps.Style
+) {
+    val priorityLayerPrefix = "transport-stops-layer-priority"
+    val secondaryLayerPrefix = "transport-stops-layer-secondary"
+    
+    // Restaurer les filtres originaux pour tous les arrêts
+    (-25..25).forEach { idx ->
+        (style.getLayer("$priorityLayerPrefix-$idx") as? SymbolLayer)?.let { layer ->
+            layer.setFilter(
+                Expression.all(
+                    Expression.eq(Expression.get("priority_stop"), true),
+                    Expression.eq(Expression.get("slot"), idx)
+                )
+            )
+            layer.setMinZoom(PRIORITY_STOPS_MIN_ZOOM)
+        }
+        
+        (style.getLayer("$secondaryLayerPrefix-$idx") as? SymbolLayer)?.let { layer ->
+            layer.setFilter(
+                Expression.all(
+                    Expression.eq(Expression.get("priority_stop"), false),
+                    Expression.eq(Expression.get("slot"), idx)
+                )
+            )
+            // Restaurer le minZoom original pour les arrêts secondaires
+            layer.setMinZoom(SECONDARY_STOPS_MIN_ZOOM)
+        }
+    }
 }
 
 /**
@@ -561,6 +728,96 @@ private fun createGeoJsonFromFeature(feature: com.pelotcl.app.data.model.Feature
 }
 
 /**
+ * Fusionne les arrêts qui ont le même nom (correspondances métro/tram/funiculaire)
+ * Fusionne UNIQUEMENT les arrêts M/F/T/Tb entre eux, les bus restent séparés
+ */
+private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>): List<com.pelotcl.app.data.model.StopFeature> {
+    // Fonction pour vérifier si une ligne est M/F/T/Tb
+    fun isMetroTramFuni(line: String): Boolean {
+        val upperLine = line.uppercase()
+        return upperLine in setOf("A", "B", "C", "D") || // Métro A, B, C, D
+               upperLine.startsWith("F") || // Funiculaire (F1, F2)
+               upperLine.startsWith("T") // Tram (T1-T7) et Trolleybus (Tb)
+    }
+    
+    // Fonction pour normaliser un nom d'arrêt (même logique que dans TransportViewModel)
+    fun normalizeStopName(name: String): String {
+        return name.filter { it.isLetter() }.lowercase()
+    }
+    
+    // Séparer les arrêts en deux groupes :
+    // - Arrêts qui ne contiennent QUE des lignes M/F/T/Tb (pas de bus)
+    // - Tous les autres arrêts (bus purs ou mixtes bus+M/F/T/Tb)
+    val (pureMetroTramFuni, otherStops) = stops.partition { stop ->
+        val allLines = BusIconHelper.getAllLinesForStop(stop)
+        val isPure = allLines.isNotEmpty() && allLines.all { isMetroTramFuni(it) }
+        
+        // Debug log pour certains arrêts
+        if (stop.properties.nom.contains("Perrache", ignoreCase = true) || 
+            stop.properties.nom.contains("Bellecour", ignoreCase = true)) {
+            android.util.Log.d("MergeStops", "Arrêt: ${stop.properties.nom}, Lignes: $allLines, isPure: $isPure")
+        }
+        
+        isPure
+    }
+    
+    // Grouper les arrêts M/F/T/Tb purs par nom NORMALISÉ (sans espaces, ponctuation, etc.)
+    val stopsByName = pureMetroTramFuni.groupBy { normalizeStopName(it.properties.nom) }
+    
+    // Debug log pour les groupes
+    stopsByName.forEach { (normalizedName, group) ->
+        if (group.size > 1) {
+            val names = group.map { it.properties.nom }
+            val lines = group.flatMap { BusIconHelper.getAllLinesForStop(it) }
+            android.util.Log.d("MergeStops", "Fusion: $normalizedName -> $names avec lignes: $lines")
+        }
+    }
+    
+    val merged = stopsByName.map { (name, stopsGroup) ->
+        if (stopsGroup.size == 1) {
+            // Un seul arrêt M/F/T/Tb : pas de fusion
+            stopsGroup.first()
+        } else {
+            // Plusieurs arrêts M/F/T/Tb avec le même nom : fusionner
+            val mergedDesserte = stopsGroup
+                .flatMap { BusIconHelper.getAllLinesForStop(it) }
+                .distinct()
+                .sorted()
+                .joinToString(", ")
+            
+            val firstStop = stopsGroup.first()
+            val isPmr = stopsGroup.any { it.properties.pmr }
+            
+            // Retourner un seul arrêt fusionné
+            com.pelotcl.app.data.model.StopFeature(
+                type = firstStop.type,
+                id = firstStop.id,
+                geometry = firstStop.geometry,
+                properties = com.pelotcl.app.data.model.StopProperties(
+                    id = firstStop.properties.id,
+                    nom = firstStop.properties.nom,
+                    desserte = mergedDesserte,
+                    pmr = isPmr,
+                    ascenseur = firstStop.properties.ascenseur,
+                    escalator = firstStop.properties.escalator,
+                    gid = firstStop.properties.gid,
+                    lastUpdate = firstStop.properties.lastUpdate.orEmpty(),
+                    lastUpdateFme = firstStop.properties.lastUpdateFme.orEmpty(),
+                    adresse = firstStop.properties.adresse.orEmpty(),
+                    localiseFaceAAdresse = firstStop.properties.localiseFaceAAdresse,
+                    commune = firstStop.properties.commune.orEmpty(),
+                    insee = firstStop.properties.insee.orEmpty(),
+                    zone = firstStop.properties.zone.orEmpty()
+                )
+            )
+        }
+    }
+    
+    // Retourner les arrêts fusionnés (M/F/T/Tb purs) + tous les autres arrêts (bus et mixtes)
+    return merged + otherStops
+}
+
+/**
  * Crée un GeoJSON contenant des Points pour tous les arrêts de transport avec informations d'icônes
  */
 private fun createStopsGeoJsonFromStops(
@@ -568,26 +825,40 @@ private fun createStopsGeoJsonFromStops(
     context: android.content.Context
 ): String {
     val features = JsonArray()
+    
+    // Fusionner les arrêts qui ont le même nom (correspondances métro/tram/funiculaire)
+    val mergedStops = mergeStopsByName(stops)
 
-    stops.forEach { stop ->
-        val lineNames = BusIconHelper.getAllLinesForStop(stop)
-        if (lineNames.isEmpty()) return@forEach
+    mergedStops.forEach { stop ->
+        val lineNamesAll = BusIconHelper.getAllLinesForStop(stop)
+        if (lineNamesAll.isEmpty()) return@forEach
         val drawableNamesAll = BusIconHelper.getAllDrawableNamesForStop(stop)
-        // Filter to only available icons to avoid generating non-rendering features
-        val drawableNames = drawableNamesAll.filter { name ->
-            val id = context.resources.getIdentifier(name, "drawable", context.packageName)
+        
+        // Filter to only available icons AND keep lineNames synchronized
+        val validPairs = lineNamesAll.zip(drawableNamesAll).filter { (_, drawableName) ->
+            val id = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
             id != 0
         }
-        if (drawableNames.isEmpty()) return@forEach
-
-        val mainLine = lineNames.firstOrNull()
-        val isPriorityStop = mainLine != null && ALWAYS_VISIBLE_LINES.contains(mainLine.uppercase())
+        
+        if (validPairs.isEmpty()) return@forEach
+        
+        val lineNames = validPairs.map { it.first }
+        val drawableNames = validPairs.map { it.second }
+        
+        // Vérifier si l'arrêt dessert au moins un tram
+        val hasTram = lineNames.any { it.uppercase().startsWith("T") }
 
         // Compute centered slot indices for N icons: -(n-1), -(n-3), ..., (n-1)
         val n = drawableNames.size
         var slot = -(n - 1)
 
-        drawableNames.forEach { iconName ->
+        drawableNames.forEachIndexed { index, iconName ->
+            // Déterminer la ligne correspondant à cette icône
+            val lineName = lineNames[index].uppercase()
+            
+            // isPriorityStop doit être basé sur l'ICÔNE actuelle, pas sur la ligne principale de l'arrêt
+            val isPriorityStop = ALWAYS_VISIBLE_LINES.contains(lineName)
+            
             val pointFeature = JsonObject().apply {
                 addProperty("type", "Feature")
 
@@ -606,8 +877,16 @@ private fun createStopsGeoJsonFromStops(
                     addProperty("pmr", stop.properties.pmr)
                     addProperty("type", "stop")
                     addProperty("priority_stop", isPriorityStop)
+                    addProperty("has_tram", hasTram)
                     addProperty("icon", iconName)
                     addProperty("slot", slot)
+                    
+                    // Ajouter TOUTES les lignes de l'arrêt comme propriétés booléennes
+                    // (pas seulement celles qui ont un drawable)
+                    // Cela permet à toutes les features d'un arrêt d'avoir les mêmes propriétés has_line_*
+                    lineNamesAll.forEach { line ->
+                        addProperty("has_line_${line.uppercase()}", true)
+                    }
                 }
                 add("properties", properties)
             }
