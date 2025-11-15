@@ -25,6 +25,18 @@ class TransportRepository {
             // Fusionner uniquement métro/funiculaire et trams (PAS les bus)
             val allFeatures = (metroFuniculaire.features + trams.features)
 
+            // Log des lignes de tram avant grouping
+            val tramLines = trams.features.map { it.properties.ligne }.distinct().sorted()
+            android.util.Log.d("TransportRepository", "Tram lines from API: $tramLines")
+            android.util.Log.d("TransportRepository", "Total tram features before grouping: ${trams.features.size}")
+            
+            // Log des code_trace pour T1
+            val t1Features = trams.features.filter { it.properties.ligne.equals("T1", ignoreCase = true) }
+            android.util.Log.d("TransportRepository", "T1 features count: ${t1Features.size}")
+            t1Features.forEach { feature ->
+                android.util.Log.d("TransportRepository", "T1 code_trace: ${feature.properties.codeTrace}, sens: ${feature.properties.sens}")
+            }
+
             // Grouper par code_trace et ne garder que le premier de chaque groupe (sens aller)
             val uniqueLines = allFeatures
                 .groupBy { it.properties.codeTrace }

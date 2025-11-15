@@ -66,8 +66,8 @@ private fun isMetroTramOrFunicular(lineName: String): Boolean {
         upperName in setOf("A", "B", "C", "D") -> true
         // Funiculaires
         upperName in setOf("F1", "F2") -> true
-        // Trams (commence par T) - temporairement exclu T1 pour le charger à la demande
-        upperName.startsWith("T") && upperName != "T1" -> true
+        // Trams (commence par T)
+        upperName.startsWith("T") -> true
         // Sinon c'est un bus
         else -> false
     }
@@ -273,7 +273,7 @@ fun PlanScreen(
     // Charger une ligne de bus à la demande quand elle est sélectionnée
     // Et la retirer quand on ferme les détails
     LaunchedEffect(showLineDetails, selectedLine) {
-        if (showLineDetails && selectedLine != null) {
+        if (showLin eDetails && selectedLine != null) {
             val lineName = selectedLine!!.lineName
             android.util.Log.d("PlanScreen", "showLineDetails=true, lineName=$lineName")
             
