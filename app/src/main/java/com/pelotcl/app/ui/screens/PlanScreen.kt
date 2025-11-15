@@ -245,13 +245,13 @@ fun PlanScreen(
     }
     
     // Calculate bottom padding (height of navbar + drag handle)
-    val bottomPadding = contentPadding.calculateBottomPadding() + 40.dp
+    val bottomPadding = contentPadding.calculateBottomPadding()
     
     // Determine peek height:
     // - 0 when closed (station sheet not expanded)
     // - Compact header height for line details (drag handle + header + padding)
     val peekHeight = if (isSheetExpanded && showLineDetails) {
-        bottomPadding + 120.dp // Hauteur du header compact avec icône et nom de station
+        bottomPadding + 150.dp;
     } else {
         0.dp
     }

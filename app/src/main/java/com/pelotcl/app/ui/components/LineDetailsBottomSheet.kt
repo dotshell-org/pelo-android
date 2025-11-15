@@ -1,6 +1,5 @@
 package com.pelotcl.app.ui.components
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -15,23 +14,17 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PaintingStyle.Companion.Stroke
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
 import com.pelotcl.app.data.gtfs.GtfsParser
 import com.pelotcl.app.data.gtfs.LineStopInfo
 import com.pelotcl.app.data.gtfs.StopDeparture
-import com.pelotcl.app.ui.theme.Gray200
 import com.pelotcl.app.ui.theme.Gray700
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
-import com.pelotcl.app.utils.ConnectionsHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -80,27 +73,26 @@ fun LineDetailsBottomSheet(
 ) {
     val context = LocalContext.current
     var lineStops by remember { mutableStateOf<List<LineStopInfo>>(emptyList()) }
-    var nextDepartures by remember { mutableStateOf<List<StopDeparture>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
-    
+
     // Charger les données quand lineInfo change
     LaunchedEffect(lineInfo) {
         if (lineInfo != null) {
             isLoading = true
-            
+
             // Timeout de 1 seconde (tout est optimisé avec l'index)
             val result = withTimeoutOrNull(1000L) {
                 withContext(Dispatchers.IO) {
                     try {
                         val parser = GtfsParser(context)
-                        
+
                         // Charger les arrêts de la ligne
                         val stops = parser.getLineStops(
                             lineName = lineInfo.lineName,
                             direction = 0,
                             currentStopName = lineInfo.currentStationName
                         )
-                        
+
                         // Enrichir les arrêts avec les correspondances depuis l'index pré-calculé (O(1) par arrêt)
                         val enrichedStops = stops.map { stop ->
                             val connections = viewModel.getConnectionsForStop(
@@ -109,14 +101,14 @@ fun LineDetailsBottomSheet(
                             )
                             stop.copy(connections = connections)
                         }
-                        
+
                         // Charger les prochains départs
                         val departures = parser.getNextDepartures(
                             stopName = lineInfo.currentStationName,
                             lineName = lineInfo.lineName,
                             maxResults = 5
                         )
-                        
+
                         Pair(enrichedStops, departures)
                     } catch (e: Exception) {
                         e.printStackTrace()
@@ -124,29 +116,26 @@ fun LineDetailsBottomSheet(
                     }
                 }
             }
-            
+
             if (result != null) {
                 lineStops = result.first
-                nextDepartures = result.second
             }
-            
+
             isLoading = false
         }
     }
-    
+
     if (lineInfo != null) {
         val content = @Composable {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
-                    .padding(bottom = 32.dp)
+                    .fillMaxSize()
             ) {
                 // Header compact avec flèche retour, icône de ligne (petite) et nom de la station
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp),
+                        .padding(horizontal = 24.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.Start,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -158,13 +147,13 @@ fun LineDetailsBottomSheet(
                             tint = Gray700
                         )
                     }
-                    
+
                     Spacer(modifier = Modifier.width(8.dp))
-                    
+
                     // Icône de la ligne (plus petite)
                     val drawableName = getDrawableNameForLine(lineInfo.lineName)
                     val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
-                    
+
                     if (resourceId != 0) {
                         Image(
                             painter = painterResource(id = resourceId),
@@ -187,9 +176,9 @@ fun LineDetailsBottomSheet(
                             )
                         }
                     }
-                    
+
                     Spacer(modifier = Modifier.width(12.dp))
-                    
+
                     // Nom de la station
                     Text(
                         text = lineInfo.currentStationName,
@@ -199,14 +188,12 @@ fun LineDetailsBottomSheet(
                         modifier = Modifier.weight(1f)
                     )
                 }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
+
                 if (isLoading) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(200.dp),
+                            .weight(1f),
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator()
@@ -215,10 +202,13 @@ fun LineDetailsBottomSheet(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .weight(1f)
                             .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 24.dp)
+                            .padding(top = 10.dp, bottom = 40.dp)
                     ) {
                         Spacer(modifier = Modifier.height(24.dp))
-                        
+
                         if (lineStops.isEmpty()) {
                             Text(
                                 text = "Aucun arrêt trouvé",
@@ -229,7 +219,7 @@ fun LineDetailsBottomSheet(
                         } else {
                             // Obtenir la couleur de la ligne
                             val lineColor = getLineColor(lineInfo.lineName)
-                            
+
                             // Afficher tous les arrêts avec ligne verticale
                             lineStops.forEachIndexed { index, stop ->
                                 StopItemWithLine(
@@ -244,7 +234,7 @@ fun LineDetailsBottomSheet(
                 }
             }
         }
-        
+
         // If sheetState is provided, wrap in ModalBottomSheet, otherwise show content directly
         if (sheetState != null) {
             ModalBottomSheet(
@@ -257,36 +247,6 @@ fun LineDetailsBottomSheet(
         } else {
             content()
         }
-    }
-}
-
-/**
- * Item affichant un départ
- */
-@Composable
-private fun DepartureItem(departure: StopDeparture) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = departure.destination,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                color = Color.Black
-            )
-        }
-        
-        Text(
-            text = formatTime(departure.departureTime),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF2563EB)
-        )
     }
 }
 
@@ -386,11 +346,11 @@ private fun StopItemWithLine(
 @Composable
 private fun ConnectionBadge(lineName: String) {
     val context = LocalContext.current
-    
+
     // Convertir le nom de ligne en nom de drawable (même logique que pour la carte)
     val drawableName = getDrawableNameForLine(lineName)
     val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
-    
+
     if (resourceId != 0) {
         // Afficher l'image TCL
         Image(
@@ -408,7 +368,7 @@ private fun ConnectionBadge(lineName: String) {
             "F1", "F2" -> Color(0xFF84CC16) // Vert lime
             else -> Color.Gray
         }
-        
+
         Box(
             modifier = Modifier
                 .size(24.dp)
@@ -428,27 +388,15 @@ private fun ConnectionBadge(lineName: String) {
 }
 
 /**
- * Formate un temps HH:MM:SS en HH:MM
- */
-private fun formatTime(time: String): String {
-    val parts = time.split(":")
-    return if (parts.size >= 2) {
-        "${parts[0]}:${parts[1]}"
-    } else {
-        time
-    }
-}
-
-/**
  * Convertit un nom de ligne en nom de drawable
  */
 private fun getDrawableNameForLine(lineName: String): String {
     if (lineName.isBlank()) {
         return ""
     }
-    
+
     val isNumericOnly = lineName.all { it.isDigit() }
-    
+
     return if (isNumericOnly) {
         "_$lineName"
     } else {
