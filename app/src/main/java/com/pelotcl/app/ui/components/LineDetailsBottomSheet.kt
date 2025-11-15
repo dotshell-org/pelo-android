@@ -201,12 +201,14 @@ fun LineDetailsBottomSheet(
                         Spacer(modifier = Modifier.height(24.dp))
 
                         if (lineStops.isEmpty()) {
-                            Text(
-                                text = "Aucun arrêt trouvé",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Gray700,
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator()
+                            }
                         } else {
                             // Obtenir la couleur de la ligne
                             val lineColor = getLineColor(lineInfo.lineName)

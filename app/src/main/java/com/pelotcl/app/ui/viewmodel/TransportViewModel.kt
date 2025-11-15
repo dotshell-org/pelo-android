@@ -5,8 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.pelotcl.app.data.model.Feature
 import com.pelotcl.app.data.model.StopFeature
 import com.pelotcl.app.data.repository.TransportRepository
-import com.pelotcl.app.utils.ConnectionsHelper
 import com.pelotcl.app.utils.Connection
+import com.pelotcl.app.utils.ConnectionsHelper
+import com.pelotcl.app.utils.TransportType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -51,7 +52,7 @@ class TransportViewModel : ViewModel() {
     
     // Index pré-calculé des correspondances par nom d'arrêt
     // Clé = nom d'arrêt normalisé, Valeur = liste des lignes en correspondance
-    private var connectionsIndex: Map<String, List<Connection>> = emptyMap()
+    private var connectionsIndex: Map<String, List<com.pelotcl.app.utils.Connection>> = emptyMap()
 
     /**
      * Normalise un nom de station pour l'utiliser comme clé d'index
@@ -112,23 +113,43 @@ class TransportViewModel : ViewModel() {
      * Permet un accès O(1) au lieu de parcourir tous les arrêts à chaque fois
      */
     private fun buildConnectionsIndex(allStops: List<StopFeature>) {
-        val index = mutableMapOf<String, List<com.pelotcl.app.utils.Connection>>()
-        allStops.forEach { stop ->
-            val stopName = stop.properties.nom
-            val normalized = normalizeStopName(stopName)
-            val connections = ConnectionsHelper.parseAllConnections(stop.properties.desserte)
-            if (connections.isNotEmpty()) {
-                index[normalized] = connections
+        // Étape 1: Regrouper les arrêts par nom approximatif pour trouver un nom "canonique"
+        val stopGroups = mutableMapOf<String, MutableList<StopFeature>>()
+        val canonicalNames = mutableMapOf<String, String>()
+
+        for (stop in allStops) {
+            val normalizedName = normalizeStopName(stop.properties.nom)
+            var foundGroup = false
+            for (key in stopGroups.keys) {
+                if (key.startsWith(normalizedName) || normalizedName.startsWith(key)) {
+                    stopGroups[key]?.add(stop)
+                    canonicalNames[normalizedName] = key
+                    foundGroup = true
+                    break
+                }
+            }
+            if (!foundGroup) {
+                stopGroups[normalizedName] = mutableListOf(stop)
+                canonicalNames[normalizedName] = normalizedName
+            }
+        }
+
+        // Étape 2: Construire l'index en utilisant les groupes
+        val index = mutableMapOf<String, List<Connection>>()
+        for ((canonicalName, stopsInGroup) in stopGroups) {
+            val allConnectionsForGroup = stopsInGroup
+                .flatMap { stop -> ConnectionsHelper.parseAllConnections(stop.properties.desserte) }
+                .distinctBy { it.lineName }
+            
+            // Associer ce groupe de correspondances à tous les noms normalisés du groupe
+            val allNormalizedNamesInGroup = stopsInGroup.map { normalizeStopName(it.properties.nom) }.distinct()
+            for (name in allNormalizedNamesInGroup) {
+                index[name] = allConnectionsForGroup
             }
         }
         connectionsIndex = index
     }
 
-    private fun findConnectionsForStop(stopName: String): List<com.pelotcl.app.utils.Connection> {
-        val normalized = normalizeStopName(stopName)
-        return connectionsIndex[normalized] ?: emptyList()
-    }
-    
     /**
      * Charge toutes les lignes de transport
      */
@@ -347,10 +368,10 @@ class TransportViewModel : ViewModel() {
                     // Convertir en LineStopInfo
                     return orderedStops.mapIndexed { index, stop ->
                         val connections = getConnectionsForStop(stop.properties.nom, lineName)
-                        val filteredConnections = connections.filter { 
-                            it.transportType == com.pelotcl.app.utils.TransportType.METRO ||
-                            it.transportType == com.pelotcl.app.utils.TransportType.TRAM ||
-                            it.transportType == com.pelotcl.app.utils.TransportType.FUNICULAR
+                        val filteredConnections = connections.filter {
+                            it.transportType == TransportType.METRO ||
+                            it.transportType == TransportType.TRAM ||
+                            it.transportType == TransportType.FUNICULAR
                         }
                         com.pelotcl.app.data.gtfs.LineStopInfo(
                             stopId = stop.properties.id.toString(),
@@ -375,10 +396,10 @@ class TransportViewModel : ViewModel() {
         
         return uniqueStops.mapIndexed { index, stop ->
             val connections = getConnectionsForStop(stop.properties.nom, lineName)
-            val filteredConnections = connections.filter { 
-                it.transportType == com.pelotcl.app.utils.TransportType.METRO ||
-                it.transportType == com.pelotcl.app.utils.TransportType.TRAM ||
-                it.transportType == com.pelotcl.app.utils.TransportType.FUNICULAR
+            val filteredConnections = connections.filter {
+                it.transportType == TransportType.METRO ||
+                it.transportType == TransportType.TRAM ||
+                it.transportType == TransportType.FUNICULAR
             }
             com.pelotcl.app.data.gtfs.LineStopInfo(
                 stopId = stop.properties.id.toString(),
