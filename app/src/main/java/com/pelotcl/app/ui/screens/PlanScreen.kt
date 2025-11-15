@@ -205,9 +205,6 @@ fun PlanScreen(
                         android.util.Log.d("PlanScreen", "Added line to map: $lineKey")
                     }
                 }
-                
-                // Update displayed lines tracker
-                displayedLines = currentLineNames
             }
             else -> {}
         }
@@ -273,10 +270,10 @@ fun PlanScreen(
     // Charger une ligne de bus à la demande quand elle est sélectionnée
     // Et la retirer quand on ferme les détails
     LaunchedEffect(showLineDetails, selectedLine) {
-        if (showLin eDetails && selectedLine != null) {
+        if (showLineDetails && selectedLine != null) {
             val lineName = selectedLine!!.lineName
             android.util.Log.d("PlanScreen", "showLineDetails=true, lineName=$lineName")
-            
+
             // Si c'est un bus (pas métro/tram/funiculaire), charger la ligne à la demande
             if (!isMetroTramOrFunicular(lineName)) {
                 android.util.Log.d("PlanScreen", "Loading bus line: $lineName")
@@ -950,13 +947,13 @@ private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>
                     ascenseur = firstStop.properties.ascenseur,
                     escalator = firstStop.properties.escalator,
                     gid = firstStop.properties.gid,
-                    lastUpdate = firstStop.properties.lastUpdate.orEmpty(),
-                    lastUpdateFme = firstStop.properties.lastUpdateFme.orEmpty(),
-                    adresse = firstStop.properties.adresse.orEmpty(),
+                    lastUpdate = firstStop.properties.lastUpdate,
+                    lastUpdateFme = firstStop.properties.lastUpdateFme,
+                    adresse = firstStop.properties.adresse,
                     localiseFaceAAdresse = firstStop.properties.localiseFaceAAdresse,
-                    commune = firstStop.properties.commune.orEmpty(),
-                    insee = firstStop.properties.insee.orEmpty(),
-                    zone = firstStop.properties.zone.orEmpty()
+                    commune = firstStop.properties.commune,
+                    insee = firstStop.properties.insee,
+                    zone = firstStop.properties.zone
                 )
             )
         }
