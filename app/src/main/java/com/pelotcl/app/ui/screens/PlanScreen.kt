@@ -205,6 +205,9 @@ fun PlanScreen(
                         android.util.Log.d("PlanScreen", "Added line to map: $lineKey")
                     }
                 }
+                
+                // Update displayed lines to match current state
+                displayedLines = currentLineNames
             }
             else -> {}
         }
