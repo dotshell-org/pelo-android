@@ -201,8 +201,22 @@ fun PlanScreen(
                 addStopsToMap(map, state.stops, context) { clickedStationInfo ->
                     // Callback when a station is clicked
                     scope.launch {
+                        // If line details are open, simulate clicking back arrow first
+                        if (showLineDetails) {
+                            // Step 1: Close line details (back to station view)
+                            selectedLine = null
+                            showLineDetails = false
+                            
+                            // Step 2: Close the sheet completely
+                            scaffoldSheetState.bottomSheetState.partialExpand()
+                            isSheetExpanded = false
+                            
+                            // Step 3: Wait a bit for the animation
+                            kotlinx.coroutines.delay(300)
+                        }
+                        
+                        // Now open the new station (whether we closed line details or not)
                         selectedStation = clickedStationInfo
-                        showLineDetails = false
                         isSheetExpanded = true
                         scaffoldSheetState.bottomSheetState.expand()
                     }
