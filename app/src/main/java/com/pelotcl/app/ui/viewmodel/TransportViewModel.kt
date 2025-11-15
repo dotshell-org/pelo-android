@@ -176,6 +176,44 @@ class TransportViewModel : ViewModel() {
     }
     
     /**
+     * Ajoute une ligne spécifique aux lignes déjà chargées (pour les lignes de bus à la demande)
+     * Ne modifie pas l'état si la ligne est déjà présente
+     */
+    fun addLineToLoaded(lineName: String) {
+        viewModelScope.launch {
+            val currentState = _uiState.value
+            
+            // Ne rien faire si on n'est pas dans un état Success
+            if (currentState !is TransportLinesUiState.Success) {
+                return@launch
+            }
+            
+            // Vérifier si la ligne est déjà chargée
+            val isAlreadyLoaded = currentState.lines.any { 
+                it.properties.ligne.equals(lineName, ignoreCase = true) 
+            }
+            
+            if (isAlreadyLoaded) {
+                return@launch // Ligne déjà présente, ne rien faire
+            }
+            
+            // Charger la ligne depuis l'API
+            repository.getLineByName(lineName)
+                .onSuccess { feature ->
+                    if (feature != null) {
+                        // Ajouter la nouvelle ligne aux lignes existantes
+                        val updatedLines = currentState.lines + feature
+                        _uiState.value = TransportLinesUiState.Success(updatedLines)
+                    }
+                }
+                .onFailure { exception ->
+                    // En cas d'erreur, ne pas changer l'état (garder les lignes actuelles)
+                    android.util.Log.e("TransportViewModel", "Erreur lors du chargement de la ligne $lineName: ${exception.message}")
+                }
+        }
+    }
+    
+    /**
      * Charge tous les arrêts de transport
      */
     fun loadAllStops() {

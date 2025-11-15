@@ -244,31 +244,6 @@ private fun LineListItem(
             )
         }
         
-        // Horaires au centre
-        Spacer(modifier = Modifier.width(20.dp))
-        Row(
-            modifier = Modifier.weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            if (departures.isEmpty()) {
-                Text(
-                    text = "Chargement...",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Gray700
-                )
-            } else {
-                departures.take(2).forEach { departure ->
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = formatTime(departure.departureTime),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Gray500,
-                        fontSize = 16.sp
-                    )
-                }
-            }
-        }
-        
         // Chevron à droite
         Icon(
             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,

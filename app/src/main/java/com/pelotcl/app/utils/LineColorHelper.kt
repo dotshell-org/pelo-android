@@ -25,7 +25,7 @@ object LineColorHelper {
     fun getColorForLine(feature: Feature): String {
         val ligne = feature.properties.ligne
         val familleTransport = feature.properties.familleTransport
-        val nomTypeLigne = feature.properties.nomTypeLigne.lowercase()
+        val nomTypeLigne = feature.properties.nomTypeLigne?.lowercase() ?: ""
         
         return when {
             // Métros
@@ -51,7 +51,7 @@ object LineColorHelper {
     fun getLineTypeDescription(feature: Feature): String {
         val ligne = feature.properties.ligne
         val familleTransport = feature.properties.familleTransport
-        val nomTypeLigne = feature.properties.nomTypeLigne.lowercase()
+        val nomTypeLigne = feature.properties.nomTypeLigne?.lowercase() ?: ""
         
         return when {
             familleTransport == "MET" -> "Métro $ligne"

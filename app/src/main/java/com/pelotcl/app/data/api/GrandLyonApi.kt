@@ -51,6 +51,23 @@ interface GrandLyonApi {
         @Query("sortby") sortBy: String = "gid",
         @Query("count") count: Int = 1000
     ): FeatureCollection
+
+    /**
+     * Récupère les lignes de bus TCL depuis l'API WFS de Grand Lyon
+     * Les lignes sont triées par gid pour garantir l'ordre correct
+     */
+    @GET("geoserver/sytral/ows")
+    suspend fun getBusLines(
+        @Query("SERVICE") service: String = "WFS",
+        @Query("VERSION") version: String = "2.0.0",
+        @Query("request") request: String = "GetFeature",
+        @Query("typename") typename: String = "sytral:tcl_sytral.tcllignebus_2_0_0",
+        @Query("outputFormat") outputFormat: String = "application/json",
+        @Query("SRSNAME") srsName: String = "EPSG:4171",
+        @Query("startIndex") startIndex: Int = 0,
+        @Query("sortby") sortBy: String = "gid",
+        @Query("count") count: Int = 10000
+    ): FeatureCollection
     
     /**
      * Récupère les arrêts de transport TCL depuis l'API WFS de Grand Lyon

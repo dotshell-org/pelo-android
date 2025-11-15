@@ -213,14 +213,40 @@ fun PlanScreen(
                             kotlinx.coroutines.delay(300)
                         }
                         
-                        // Now open the new station (whether we closed line details or not)
-                        selectedStation = clickedStationInfo
-                        isSheetExpanded = true
-                        scaffoldSheetState.bottomSheetState.expand()
+                        // Check if the station has only one line
+                        if (clickedStationInfo.lignes.size == 1) {
+                            // Directly open line details for the single line
+                            selectedStation = clickedStationInfo
+                            selectedLine = LineInfo(
+                                lineName = clickedStationInfo.lignes[0],
+                                currentStationName = clickedStationInfo.nom
+                            )
+                            showLineDetails = true
+                            isSheetExpanded = true
+                            scaffoldSheetState.bottomSheetState.expand()
+                        } else {
+                            // Open the station sheet showing all lines
+                            selectedStation = clickedStationInfo
+                            isSheetExpanded = true
+                            scaffoldSheetState.bottomSheetState.expand()
+                        }
                     }
                 }
             }
             else -> {}
+        }
+    }
+    
+    // Charger une ligne de bus à la demande quand elle est sélectionnée
+    LaunchedEffect(showLineDetails, selectedLine) {
+        if (showLineDetails && selectedLine != null) {
+            val lineName = selectedLine!!.lineName
+            
+            // Si c'est un bus (pas métro/tram/funiculaire), charger la ligne à la demande
+            if (!isMetroTramOrFunicular(lineName)) {
+                // Ajouter la ligne de bus aux lignes déjà chargées (sans remplacer)
+                viewModel.addLineToLoaded(lineName)
+            }
         }
     }
     

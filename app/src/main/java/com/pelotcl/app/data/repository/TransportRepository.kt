@@ -13,15 +13,16 @@ class TransportRepository {
     private val api = RetrofitInstance.api
     
     /**
-     * Récupère toutes les lignes de transport (sens aller uniquement)
-     * Filtre pour ne garder qu'une ligne sur deux (évite les doublons aller/retour)
+     * Récupère toutes les lignes de transport (métro, funiculaire et tram UNIQUEMENT)
+     * Les lignes de BUS ne sont PAS chargées par défaut pour éviter de surcharger le téléphone
+     * Pour charger une ligne de bus spécifique, utiliser getLineByName()
      */
     suspend fun getAllLines(): Result<FeatureCollection> {
         return try {
             val metroFuniculaire = api.getTransportLines()
             val trams = api.getTramLines()
 
-            // Fusionner les features des deux couches
+            // Fusionner uniquement métro/funiculaire et trams (PAS les bus)
             val allFeatures = (metroFuniculaire.features + trams.features)
 
             // Grouper par code_trace et ne garder que le premier de chaque groupe (sens aller)
@@ -44,20 +45,33 @@ class TransportRepository {
     
     /**
      * Récupère une ligne spécifique par son nom (sens aller uniquement)
+     * Cherche d'abord dans métro/funiculaire/tram, puis dans les bus si non trouvé
+     * Cela permet de charger les lignes de bus uniquement à la demande
      */
     suspend fun getLineByName(lineName: String): Result<Feature?> {
         return try {
             val metroFuniculaire = api.getTransportLines()
             val trams = api.getTramLines()
 
-            val allFeatures = (metroFuniculaire.features + trams.features)
+            val priorityFeatures = (metroFuniculaire.features + trams.features)
 
-            // Trouver la ligne et prendre le premier résultat (sens aller)
-            val line = allFeatures
+            // Chercher d'abord dans métro/funiculaire/tram
+            val line = priorityFeatures
                 .filter { it.properties.ligne.equals(lineName, ignoreCase = true) }
                 .firstOrNull()
             
-            Result.success(line)
+            // Si trouvé, retourner
+            if (line != null) {
+                return Result.success(line)
+            }
+            
+            // Sinon, chercher dans les bus (chargement à la demande)
+            val bus = api.getBusLines()
+            val busLine = bus.features
+                .filter { it.properties.ligne.equals(lineName, ignoreCase = true) }
+                .firstOrNull()
+            
+            Result.success(busLine)
         } catch (e: Exception) {
             Result.failure(e)
         }
