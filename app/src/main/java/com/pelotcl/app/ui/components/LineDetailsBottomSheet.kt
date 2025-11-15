@@ -84,7 +84,7 @@ fun LineDetailsBottomSheet(
             // Attendre que la ligne soit chargée dans le state
             val lineLoaded = when (linesState) {
                 is TransportLinesUiState.Success -> {
-                    (linesState as TransportLinesUiState.Success).lines.any { 
+                    (linesState as TransportLinesUiState.Success).lines.any {
                         it.properties.ligne.equals(lineInfo.lineName, ignoreCase = true)
                     }
                 }
@@ -104,7 +104,24 @@ fun LineDetailsBottomSheet(
                         )
                         
                         android.util.Log.d("LineDetailsBottomSheet", "Loaded ${stops.size} stops for line ${lineInfo.lineName} from API")
-                        lineStops = stops
+                        
+                        // Si 0 stops trouvés, c'est probablement un problème de cache
+                        // Recharger le cache des arrêts sans affecter la carte
+                        if (stops.isEmpty()) {
+                            android.util.Log.w("LineDetailsBottomSheet", "0 stops found for line ${lineInfo.lineName}, forcing cache reload...")
+                            viewModel.reloadStopsCache() // Recharger uniquement le cache
+                            kotlinx.coroutines.delay(500) // Attendre que le cache soit mis à jour
+                            
+                            // Réessayer
+                            val stopsRetry = viewModel.getStopsForLine(
+                                lineName = lineInfo.lineName,
+                                currentStopName = lineInfo.currentStationName
+                            )
+                            android.util.Log.d("LineDetailsBottomSheet", "Retry: Loaded ${stopsRetry.size} stops for line ${lineInfo.lineName}")
+                            lineStops = stopsRetry
+                        } else {
+                            lineStops = stops
+                        }
                     } catch (e: Exception) {
                         android.util.Log.e("LineDetailsBottomSheet", "Error loading stops: ${e.message}")
                         e.printStackTrace()

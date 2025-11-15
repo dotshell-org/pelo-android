@@ -109,6 +109,22 @@ class TransportViewModel : ViewModel() {
     }
     
     /**
+     * Force le rechargement du cache des arrêts
+     * Utile quand on détecte des données incorrectes
+     */
+    suspend fun reloadStopsCache() {
+        repository.getAllStops()
+            .onSuccess { stopCollection ->
+                cachedStops = stopCollection.features
+                buildConnectionsIndex(stopCollection.features)
+                android.util.Log.d("TransportViewModel", "Stops cache reloaded: ${stopCollection.features.size} stops")
+            }
+            .onFailure { exception ->
+                android.util.Log.e("TransportViewModel", "Error reloading stops cache: ${exception.message}")
+            }
+    }
+    
+    /**
      * Construit un index des correspondances pour chaque arrêt
      * Permet un accès O(1) au lieu de parcourir tous les arrêts à chaque fois
      */

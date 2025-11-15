@@ -37,6 +37,13 @@ class TransportRepository {
                 numberMatched = (metroFuniculaire.numberMatched ?: 0) + (trams.numberMatched ?: 0)
             )
 
+            // Log des lignes chargées
+            val lineNames = uniqueLines.map { it.properties.ligne }.sorted()
+            android.util.Log.d("TransportRepository", "Loaded lines: $lineNames")
+            android.util.Log.d("TransportRepository", "Metro/Funicular count: ${metroFuniculaire.features.size}")
+            android.util.Log.d("TransportRepository", "Tram count: ${trams.features.size}")
+            android.util.Log.d("TransportRepository", "Total unique lines: ${uniqueLines.size}")
+
             Result.success(filteredCollection)
         } catch (e: Exception) {
             Result.failure(e)

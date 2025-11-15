@@ -66,8 +66,8 @@ private fun isMetroTramOrFunicular(lineName: String): Boolean {
         upperName in setOf("A", "B", "C", "D") -> true
         // Funiculaires
         upperName in setOf("F1", "F2") -> true
-        // Trams (commence par T)
-        upperName.startsWith("T") -> true
+        // Trams (commence par T) - temporairement exclu T1 pour le charger à la demande
+        upperName.startsWith("T") && upperName != "T1" -> true
         // Sinon c'est un bus
         else -> false
     }
@@ -240,10 +240,20 @@ fun PlanScreen(
                         if (clickedStationInfo.lignes.size == 1) {
                             // Directly open line details for the single line
                             selectedStation = clickedStationInfo
+                            val lineName = clickedStationInfo.lignes[0]
                             selectedLine = LineInfo(
-                                lineName = clickedStationInfo.lignes[0],
+                                lineName = lineName,
                                 currentStationName = clickedStationInfo.nom
                             )
+                            
+                            // Si c'est un bus ou T1, charger la ligne avant d'ouvrir le bottom sheet
+                            if (!isMetroTramOrFunicular(lineName)) {
+                                android.util.Log.d("PlanScreen", "Pre-loading line: $lineName")
+                                viewModel.addLineToLoaded(lineName)
+                                // Attendre un peu que la ligne soit ajoutée au state
+                                kotlinx.coroutines.delay(100)
+                            }
+                            
                             showLineDetails = true
                             isSheetExpanded = true
                             scaffoldSheetState.bottomSheetState.expand()
@@ -350,10 +360,23 @@ fun PlanScreen(
                                 lineName = lineName,
                                 currentStationName = selectedStation?.nom ?: ""
                             )
-                            showLineDetails = true
-                            // Expand the sheet when showing line details
-                            scope.launch {
-                                scaffoldSheetState.bottomSheetState.expand()
+                            
+                            // Si c'est un bus ou T1, charger la ligne avant d'ouvrir le bottom sheet
+                            if (!isMetroTramOrFunicular(lineName)) {
+                                android.util.Log.d("PlanScreen", "Pre-loading line from station sheet: $lineName")
+                                scope.launch {
+                                    viewModel.addLineToLoaded(lineName)
+                                    // Attendre un peu que la ligne soit ajoutée au state
+                                    kotlinx.coroutines.delay(100)
+                                    showLineDetails = true
+                                    scaffoldSheetState.bottomSheetState.expand()
+                                }
+                            } else {
+                                showLineDetails = true
+                                // Expand the sheet when showing line details
+                                scope.launch {
+                                    scaffoldSheetState.bottomSheetState.expand()
+                                }
                             }
                         }
                     )
