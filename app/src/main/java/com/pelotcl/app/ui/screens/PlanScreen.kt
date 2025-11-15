@@ -13,7 +13,6 @@ import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberBottomSheetScaffoldState
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -34,7 +33,6 @@ import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
-import com.pelotcl.app.data.model.StopFeature
 import com.pelotcl.app.ui.components.LineDetailsBottomSheet
 import com.pelotcl.app.ui.components.LineInfo
 import com.pelotcl.app.ui.components.MapLibreView
@@ -259,7 +257,7 @@ fun PlanScreen(
     BottomSheetScaffold(
         scaffoldState = scaffoldSheetState,
         sheetPeekHeight = peekHeight,
-        modifier = modifier.padding(contentPadding),
+        modifier = modifier,
         sheetContainerColor = Color.White,
         sheetContent = {
             Column(
@@ -302,7 +300,7 @@ fun PlanScreen(
                 }
             }
         }
-    ) { innerPadding ->
+    ) { _ ->
         Box(modifier = Modifier.fillMaxSize()) {
             MapLibreView(
                 modifier = Modifier.fillMaxSize(),
