@@ -304,19 +304,34 @@ class GtfsParser(private val context: Context) {
         direction: Int = 0,
         currentStopName: String? = null
     ): List<LineStopInfo> {
+        android.util.Log.d("GtfsParser", "getLineStops called for line: $lineName, direction: $direction, currentStop: $currentStopName")
+        
         // D'abord, essayer de récupérer depuis le cache
         val cachedStops = LineStopsCache.getLineStops(lineName, currentStopName)
         if (cachedStops != null) {
+            android.util.Log.d("GtfsParser", "Found $lineName in cache with ${cachedStops.size} stops")
             return cachedStops
         }
         
         val routes = loadRoutes()
+        android.util.Log.d("GtfsParser", "Loaded ${routes.size} routes. Available keys: ${routes.keys.take(10)}")
+        
         val stops = loadStops()
         
-        val route = routes[lineName] ?: return emptyList()
+        val route = routes[lineName]
+        if (route == null) {
+            android.util.Log.w("GtfsParser", "Route '$lineName' not found in routes map. Returning empty list.")
+            return emptyList()
+        }
+        android.util.Log.d("GtfsParser", "Found route: ${route.routeShortName} - ${route.routeLongName}")
         
         // Trouver un trip de cette ligne avec la direction spécifiée
-        val tripId = findTripForRoute(route.routeId, direction) ?: return generateMockLineStops(lineName, currentStopName)
+        val tripId = findTripForRoute(route.routeId, direction)
+        if (tripId == null) {
+            android.util.Log.w("GtfsParser", "No trip found for route ${route.routeId} with direction $direction. Generating mock stops.")
+            return generateMockLineStops(lineName, currentStopName)
+        }
+        android.util.Log.d("GtfsParser", "Found trip ID: $tripId")
         
         val lineStops = mutableListOf<LineStopInfo>()
         val stopIds = mutableSetOf<String>() // Pour éviter les doublons
@@ -364,9 +379,11 @@ class GtfsParser(private val context: Context) {
         
         // Si on n'a pas trouvé d'arrêts, utiliser des données simulées
         if (lineStops.isEmpty()) {
+            android.util.Log.w("GtfsParser", "No stops found in stop_times.txt for trip $tripId. Generating mock stops.")
             return generateMockLineStops(lineName, currentStopName)
         }
         
+        android.util.Log.d("GtfsParser", "Successfully loaded ${lineStops.size} stops for line $lineName")
         return lineStops.sortedBy { it.stopSequence }
     }
     
@@ -375,12 +392,15 @@ class GtfsParser(private val context: Context) {
      */
     private fun generateMockLineStops(lineName: String, currentStopName: String?): List<LineStopInfo> {
         val routes = loadRoutes()
-        val route = routes[lineName] ?: return emptyList()
+        val route = routes[lineName] ?: run {
+            android.util.Log.w("GtfsParser", "No route found for line $lineName when generating mock stops")
+            return emptyList()
+        }
         
         // Extraire les arrêts depuis le nom long de la route
         val routeParts = route.routeLongName.split(" - ")
         
-        return routeParts.mapIndexed { index, stopName ->
+        val mockStops = routeParts.mapIndexed { index, stopName ->
             LineStopInfo(
                 stopId = "mock_${index}",
                 stopName = stopName.trim(),
@@ -388,6 +408,9 @@ class GtfsParser(private val context: Context) {
                 isCurrentStop = currentStopName?.let { stationNamesMatch(stopName.trim(), it) } ?: false
             )
         }
+        
+        android.util.Log.d("GtfsParser", "Generated ${mockStops.size} mock stops for line $lineName: ${mockStops.map { it.stopName }}")
+        return mockStops
     }
     
     /**

@@ -1,7 +1,27 @@
-
 package com.pelotcl.app.utils
 
 import com.pelotcl.app.data.model.StopFeature
+
+enum class TransportType {
+    BUS,
+    METRO,
+    TRAM,
+    FUNICULAR,
+    UNKNOWN
+}
+
+fun getTransportType(lineName: String): TransportType {
+    return when {
+        lineName.matches(Regex("T[1-7]")) -> TransportType.TRAM
+        lineName in listOf("A", "B", "C", "D") -> TransportType.METRO
+        lineName in listOf("F1", "F2") -> TransportType.FUNICULAR
+        // Les lignes de bus peuvent être des numéros, des "C" suivis de numéros, ou d'autres lettres.
+        // C'est plus simple de considérer tout le reste comme un bus par défaut.
+        else -> TransportType.BUS
+    }
+}
+
+data class Connection(val lineName: String, val transportType: TransportType)
 
 /**
  * Utilitaire pour gérer les correspondances de transport
@@ -171,6 +191,38 @@ object ConnectionsHelper {
         })
     }
     
+    /**
+     * Parse le champ desserte et extrait toutes les lignes (y compris les lignes de bus)
+     * 
+     * Format du champ desserte :
+     * - "A:A" = Métro A en direction Aller (le :A est la direction, pas la ligne!)
+     * - "5:A,86:A" = Bus 5 et 86 en direction Aller
+     * - "A:A,D:A" = Métros A et D
+     * - "F1:A,F2:A" = Funiculaires F1 et F2
+     * - "T1:A,T2:A" = Trams T1 et T2
+     * 
+     * IMPORTANT: Ne pas confondre ":A" (direction Aller) avec la ligne de métro A
+     * 
+     * @param desserte Le champ desserte de l'arrêt
+     * @return Liste de toutes les lignes présentes dans la desserte
+     */
+    fun parseAllConnections(desserte: String): List<Connection> {
+        val connections = mutableListOf<Connection>()
+        if (desserte.isBlank()) return connections
+
+        val lines = desserte.split(",")
+        for (line in lines) {
+            val parts = line.trim().split(":")
+            if (parts.size == 2) {
+                val lineName = parts[0]
+                val direction = parts[1]
+                val transportType = getTransportType(lineName)
+                connections.add(Connection(lineName, transportType))
+            }
+        }
+        return connections.distinctBy { it.lineName }
+    }
+
     /**
      * Trouve les correspondances de métro et funiculaire pour un arrêt donné
      * en cherchant dans la liste de tous les arrêts

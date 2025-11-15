@@ -176,15 +176,38 @@ fun PlanScreen(
         viewModel.preloadStops() // Précharge les arrêts en arrière-plan pour le cache
     }
     
-    // Quand les données sont chargées et la carte est prête, afficher les lignes
+    // Track which lines are currently displayed on the map
+    var displayedLines by remember { mutableStateOf<Set<String>>(emptySet()) }
+    
+    // Quand les données sont chargées et la carte est prête, mettre à jour les lignes
     LaunchedEffect(uiState, mapInstance) {
         val map = mapInstance ?: return@LaunchedEffect
         
         when (val state = uiState) {
             is TransportLinesUiState.Success -> {
-                state.lines.forEach { feature ->
-                    addLineToMap(map, feature)
+                // Get current line names from state
+                val currentLineNames = state.lines.map { 
+                    "${it.properties.ligne}-${it.properties.codeTrace}" 
+                }.toSet()
+                
+                // Remove lines that are no longer in the state
+                val linesToRemove = displayedLines - currentLineNames
+                linesToRemove.forEach { lineKey ->
+                    removeLineFromMap(map, lineKey)
+                    android.util.Log.d("PlanScreen", "Removed line from map: $lineKey")
                 }
+                
+                // Add new lines that aren't yet displayed
+                state.lines.forEach { feature ->
+                    val lineKey = "${feature.properties.ligne}-${feature.properties.codeTrace}"
+                    if (lineKey !in displayedLines) {
+                        addLineToMap(map, feature)
+                        android.util.Log.d("PlanScreen", "Added line to map: $lineKey")
+                    }
+                }
+                
+                // Update displayed lines tracker
+                displayedLines = currentLineNames
             }
             else -> {}
         }
@@ -238,14 +261,25 @@ fun PlanScreen(
     }
     
     // Charger une ligne de bus à la demande quand elle est sélectionnée
+    // Et la retirer quand on ferme les détails
     LaunchedEffect(showLineDetails, selectedLine) {
         if (showLineDetails && selectedLine != null) {
             val lineName = selectedLine!!.lineName
+            android.util.Log.d("PlanScreen", "showLineDetails=true, lineName=$lineName")
             
             // Si c'est un bus (pas métro/tram/funiculaire), charger la ligne à la demande
             if (!isMetroTramOrFunicular(lineName)) {
+                android.util.Log.d("PlanScreen", "Loading bus line: $lineName")
                 // Ajouter la ligne de bus aux lignes déjà chargées (sans remplacer)
                 viewModel.addLineToLoaded(lineName)
+            }
+        } else if (!showLineDetails && selectedLine != null) {
+            // Quand on ferme les détails, retirer la ligne de bus si c'en était une
+            val lineName = selectedLine!!.lineName
+            android.util.Log.d("PlanScreen", "showLineDetails=false, lineName=$lineName")
+            if (!isMetroTramOrFunicular(lineName)) {
+                android.util.Log.d("PlanScreen", "Removing bus line: $lineName")
+                viewModel.removeLineFromLoaded(lineName)
             }
         }
     }
@@ -564,6 +598,29 @@ private fun addLineToMap(
         }
         
         style.addLayer(lineLayer)
+    }
+}
+
+/**
+ * Retire une ligne de transport de la carte MapLibre
+ */
+private fun removeLineFromMap(
+    map: MapLibreMap,
+    lineKey: String  // Format: "ligne-codeTrace" (ex: "86-123456")
+) {
+    map.getStyle { style ->
+        val sourceId = "line-$lineKey"
+        val layerId = "layer-$lineKey"
+        
+        // Supprimer la couche et la source
+        style.getLayer(layerId)?.let { 
+            style.removeLayer(it)
+            android.util.Log.d("PlanScreen", "Removed layer: $layerId")
+        }
+        style.getSource(sourceId)?.let { 
+            style.removeSource(it)
+            android.util.Log.d("PlanScreen", "Removed source: $sourceId")
+        }
     }
 }
 

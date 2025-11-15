@@ -20,14 +20,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.pelotcl.app.data.gtfs.GtfsParser
 import com.pelotcl.app.data.gtfs.LineStopInfo
-import com.pelotcl.app.data.gtfs.StopDeparture
 import com.pelotcl.app.ui.theme.Gray700
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
+import com.pelotcl.app.ui.viewmodel.TransportLinesUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Informations d'une ligne pour l'affichage dans le bottom sheet
@@ -74,51 +72,44 @@ fun LineDetailsBottomSheet(
     val context = LocalContext.current
     var lineStops by remember { mutableStateOf<List<LineStopInfo>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    
+    // Observer le state des lignes pour attendre que la ligne soit chargée
+    val linesState by viewModel.uiState.collectAsState()
 
-    // Charger les données quand lineInfo change
-    LaunchedEffect(lineInfo) {
+    // Charger les données quand lineInfo change ET que la ligne est dans le state
+    LaunchedEffect(lineInfo, linesState) {
         if (lineInfo != null) {
             isLoading = true
 
-            // Timeout de 1 seconde (tout est optimisé avec l'index)
-            val result = withTimeoutOrNull(1000L) {
-                withContext(Dispatchers.IO) {
-                    try {
-                        val parser = GtfsParser(context)
-
-                        // Charger les arrêts de la ligne
-                        val stops = parser.getLineStops(
-                            lineName = lineInfo.lineName,
-                            direction = 0,
-                            currentStopName = lineInfo.currentStationName
-                        )
-
-                        // Enrichir les arrêts avec les correspondances depuis l'index pré-calculé (O(1) par arrêt)
-                        val enrichedStops = stops.map { stop ->
-                            val connections = viewModel.getConnectionsForStop(
-                                stopName = stop.stopName,
-                                currentLine = lineInfo.lineName
-                            )
-                            stop.copy(connections = connections)
-                        }
-
-                        // Charger les prochains départs
-                        val departures = parser.getNextDepartures(
-                            stopName = lineInfo.currentStationName,
-                            lineName = lineInfo.lineName,
-                            maxResults = 5
-                        )
-
-                        Pair(enrichedStops, departures)
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                        null
+            // Attendre que la ligne soit chargée dans le state
+            val lineLoaded = when (linesState) {
+                is TransportLinesUiState.Success -> {
+                    (linesState as TransportLinesUiState.Success).lines.any { 
+                        it.properties.ligne.equals(lineInfo.lineName, ignoreCase = true)
                     }
                 }
+                else -> false
             }
+            
+            android.util.Log.d("LineDetailsBottomSheet", "Line ${lineInfo.lineName} loaded: $lineLoaded")
 
-            if (result != null) {
-                lineStops = result.first
+            if (lineLoaded) {
+                // Récupérer les arrêts via l'API (déjà en cache avec correspondances)
+                withContext(Dispatchers.IO) {
+                    try {
+                        // Utiliser la nouvelle méthode du ViewModel qui récupère les arrêts depuis l'API
+                        val stops = viewModel.getStopsForLine(
+                            lineName = lineInfo.lineName,
+                            currentStopName = lineInfo.currentStationName
+                        )
+                        
+                        android.util.Log.d("LineDetailsBottomSheet", "Loaded ${stops.size} stops for line ${lineInfo.lineName} from API")
+                        lineStops = stops
+                    } catch (e: Exception) {
+                        android.util.Log.e("LineDetailsBottomSheet", "Error loading stops: ${e.message}")
+                        e.printStackTrace()
+                    }
+                }
             }
 
             isLoading = false
