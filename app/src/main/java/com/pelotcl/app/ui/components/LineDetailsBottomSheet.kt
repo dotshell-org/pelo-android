@@ -142,12 +142,15 @@ fun LineDetailsBottomSheet(
                     .padding(horizontal = 24.dp)
                     .padding(bottom = 32.dp)
             ) {
-                // Header avec bouton retour et nom de la ligne
+                // Header compact avec flèche retour, icône de ligne (petite) et nom de la station
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.Start,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Bouton retour
                     IconButton(onClick = onBackToStation) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -156,7 +159,9 @@ fun LineDetailsBottomSheet(
                         )
                     }
                     
-                    // Icône de la ligne
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    // Icône de la ligne (plus petite)
                     val drawableName = getDrawableNameForLine(lineInfo.lineName)
                     val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
                     
@@ -164,18 +169,35 @@ fun LineDetailsBottomSheet(
                         Image(
                             painter = painterResource(id = resourceId),
                             contentDescription = "Ligne ${lineInfo.lineName}",
-                            modifier = Modifier.size(80.dp)
+                            modifier = Modifier.size(50.dp)
                         )
                     } else {
-                        Text(
-                            text = "Ligne ${lineInfo.lineName}",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.Black
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(50.dp)
+                                .clip(CircleShape)
+                                .background(getLineColor(lineInfo.lineName)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = lineInfo.lineName,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
                     }
                     
-                    Spacer(modifier = Modifier.width(48.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    
+                    // Nom de la station
+                    Text(
+                        text = lineInfo.currentStationName,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
                 
                 Spacer(modifier = Modifier.height(16.dp))

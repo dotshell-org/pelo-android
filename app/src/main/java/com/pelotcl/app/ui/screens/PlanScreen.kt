@@ -109,6 +109,27 @@ fun PlanScreen(
         onSheetStateChanged(isSheetExpanded)
     }
     
+    // Monitor bottom sheet state changes to detect when user swipes down to dismiss
+    // BUT only allow dismissal for station sheet, not for line details sheet
+    LaunchedEffect(scaffoldSheetState.bottomSheetState.currentValue, showLineDetails) {
+        val isPartiallyExpanded = scaffoldSheetState.bottomSheetState.currentValue == 
+            androidx.compose.material3.SheetValue.PartiallyExpanded
+        val isHidden = scaffoldSheetState.bottomSheetState.currentValue == 
+            androidx.compose.material3.SheetValue.Hidden
+        
+        // Only allow dismissal by swiping for station sheet (not line details)
+        if ((isPartiallyExpanded || isHidden) && isSheetExpanded && !showLineDetails) {
+            // User has swiped down to dismiss the station sheet
+            isSheetExpanded = false
+        } else if (isHidden && isSheetExpanded && showLineDetails) {
+            // User tried to completely hide line details sheet - prevent by going to partial expand
+            scope.launch {
+                scaffoldSheetState.bottomSheetState.partialExpand()
+            }
+        }
+        // Note: PartiallyExpanded state is allowed for line details (to show compact header)
+    }
+    
     // Permission launcher - must be registered before STARTED lifecycle state
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -212,8 +233,14 @@ fun PlanScreen(
     // Calculate bottom padding (height of navbar + drag handle)
     val bottomPadding = contentPadding.calculateBottomPadding() + 40.dp
     
-    // Determine peek height: 0 when closed, bottomPadding when expanded (for line details)
-    val peekHeight = if (isSheetExpanded && showLineDetails) bottomPadding else 0.dp
+    // Determine peek height:
+    // - 0 when closed (station sheet not expanded)
+    // - Compact header height for line details (drag handle + header + padding)
+    val peekHeight = if (isSheetExpanded && showLineDetails) {
+        bottomPadding + 120.dp // Hauteur du header compact avec icône et nom de station
+    } else {
+        0.dp
+    }
     
     BottomSheetScaffold(
         scaffoldState = scaffoldSheetState,
@@ -252,6 +279,10 @@ fun PlanScreen(
                                 currentStationName = selectedStation?.nom ?: ""
                             )
                             showLineDetails = true
+                            // Expand the sheet when showing line details
+                            scope.launch {
+                                scaffoldSheetState.bottomSheetState.expand()
+                            }
                         }
                     )
                 }
