@@ -287,6 +287,22 @@ class TransportViewModel : ViewModel() {
      * @return Liste d'arrêts avec leurs correspondances, ordonnés selon le parcours de la ligne
      */
     fun getStopsForLine(lineName: String, currentStopName: String? = null): List<com.pelotcl.app.data.gtfs.LineStopInfo> {
+        // D'abord, essayer de récupérer depuis le cache (pour métros et trams)
+        val cachedStops = com.pelotcl.app.data.gtfs.LineStopsCache.getLineStops(lineName, currentStopName)
+        if (cachedStops != null) {
+            android.util.Log.d("TransportViewModel", "Found $lineName in cache with ${cachedStops.size} stops")
+            // Ajouter les correspondances pour chaque arrêt
+            return cachedStops.map { stop ->
+                val connections = getConnectionsForStop(stop.stopName, lineName)
+                val filteredConnections = connections.filter {
+                    it.transportType == TransportType.METRO ||
+                    it.transportType == TransportType.TRAM ||
+                    it.transportType == TransportType.FUNICULAR
+                }
+                stop.copy(connections = filteredConnections.map { it.lineName })
+            }
+        }
+        
         // Récupérer tous les arrêts depuis le cache
         val allStops = getCachedStopsSync()
         
