@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -37,6 +39,7 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.pelotcl.app.ui.components.LineDetailsBottomSheet
 import com.pelotcl.app.ui.components.LineInfo
+import com.pelotcl.app.ui.components.LinesBottomSheet
 import com.pelotcl.app.ui.components.MapLibreView
 import com.pelotcl.app.ui.components.StationBottomSheet
 import com.pelotcl.app.ui.components.StationInfo
@@ -93,7 +96,9 @@ fun PlanScreen(
             }
         }
     ),
-    onSheetStateChanged: (Boolean) -> Unit = {}
+    onSheetStateChanged: (Boolean) -> Unit = {},
+    showLinesSheet: Boolean = false,
+    onLinesSheetDismiss: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val stopsUiState by viewModel.stopsUiState.collectAsState()
@@ -435,6 +440,54 @@ fun PlanScreen(
     LaunchedEffect(shouldCenterOnUser) {
         if (shouldCenterOnUser) {
             shouldCenterOnUser = false
+        }
+    }
+    
+    // Afficher la LinesBottomSheet par-dessus tout quand elle est demandée
+    if (showLinesSheet) {
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = onLinesSheetDismiss,
+            containerColor = Color.White,
+            sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ) {
+            LinesBottomSheet(
+                allLines = viewModel.getAllAvailableLines(),
+                onDismiss = onLinesSheetDismiss,
+                onLineClick = { lineName ->
+                    // Fermer la sheet des lignes
+                    onLinesSheetDismiss()
+                    
+                    // Si la ligne n'est pas un métro/tram/funiculaire, la charger
+                    if (!isMetroTramOrFunicular(lineName)) {
+                        scope.launch {
+                            android.util.Log.d("PlanScreen", "Loading bus line from lines sheet: $lineName")
+                            viewModel.addLineToLoaded(lineName)
+                            // Attendre un peu que la ligne soit ajoutée au state
+                            kotlinx.coroutines.delay(100)
+                            
+                            // Ouvrir les détails de la ligne
+                            selectedLine = LineInfo(
+                                lineName = lineName,
+                                currentStationName = ""
+                            )
+                            showLineDetails = true
+                            isSheetExpanded = true
+                            scaffoldSheetState.bottomSheetState.expand()
+                        }
+                    } else {
+                        // Pour les métros/trams/funiculaires, ouvrir directement
+                        scope.launch {
+                            selectedLine = LineInfo(
+                                lineName = lineName,
+                                currentStationName = ""
+                            )
+                            showLineDetails = true
+                            isSheetExpanded = true
+                            scaffoldSheetState.bottomSheetState.expand()
+                        }
+                    }
+                }
+            )
         }
     }
 }

@@ -306,11 +306,9 @@ private fun StopItemWithLine(
                 modifier = Modifier
                     .size(16.dp)
                     .clip(CircleShape)
-                    .background(
-                        if (stop.isCurrentStop) lineColor else Color.White
-                    )
+                    .background(Color.White) // Toujours creux
                     .border(
-                        width = 3.dp,
+                        width = if (stop.isCurrentStop) 4.dp else 3.dp, // Plus épais pour l'arrêt actuel
                         color = lineColor,
                         shape = CircleShape
                     )

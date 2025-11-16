@@ -99,6 +99,7 @@ fun NavBar(modifier: Modifier = Modifier) {
     val startDestination = Destination.PLAN
     var selectedDestination by rememberSaveable { mutableIntStateOf(startDestination.ordinal) }
     var isBottomSheetOpen by remember { mutableStateOf(false) }
+    var showLinesSheet by remember { mutableStateOf(false) }
 
     Box(modifier = modifier) {
         Scaffold(
@@ -112,13 +113,18 @@ fun NavBar(modifier: Modifier = Modifier) {
                         NavigationBarItem(
                             selected = selectedDestination == index,
                             onClick = {
-                                if (selectedDestination != index) {
+                                // Cas spécial pour le bouton "Lignes" - ouvrir la sheet au lieu de naviguer
+                                if (destination == Destination.LIGNES) {
+                                    showLinesSheet = true
+                                    // Ne pas changer selectedDestination pour rester sur Plan
+                                } else if (selectedDestination != index) {
                                     navController.navigate(destination.route) {
                                         launchSingleTop = true
                                         popUpTo(navController.graph.startDestinationId) { saveState = true }
                                         restoreState = true
                                     }
                                     selectedDestination = index
+                                    showLinesSheet = false // Fermer la sheet si ouverte
                                 }
                             },
                             icon = {
@@ -147,13 +153,15 @@ fun NavBar(modifier: Modifier = Modifier) {
                 startDestination = startDestination,
                 contentPadding = contentPadding,
                 isBottomSheetOpen = isBottomSheetOpen,
+                showLinesSheet = showLinesSheet,
                 onBottomSheetStateChanged = { isOpen -> isBottomSheetOpen = isOpen },
+                onLinesSheetDismiss = { showLinesSheet = false },
                 modifier = if (shouldApplyPadding) Modifier.padding(contentPadding) else Modifier
             )
         }
         
-        // Barre de recherche au-dessus de tout uniquement sur l'écran Plan et quand le bottom sheet est fermé
-        if (selectedDestination == Destination.PLAN.ordinal && !isBottomSheetOpen) {
+        // Barre de recherche au-dessus de tout uniquement sur l'écran Plan et quand le bottom sheet ET la lines sheet sont fermés
+        if (selectedDestination == Destination.PLAN.ordinal && !isBottomSheetOpen && !showLinesSheet) {
             SimpleSearchBar(
                 searchResults = emptyList(),
                 onSearch = {},
@@ -171,7 +179,9 @@ private fun AppNavHost(
     startDestination: Destination,
     contentPadding: androidx.compose.foundation.layout.PaddingValues,
     isBottomSheetOpen: Boolean,
+    showLinesSheet: Boolean,
     onBottomSheetStateChanged: (Boolean) -> Unit,
+    onLinesSheetDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     NavHost(
@@ -182,7 +192,9 @@ private fun AppNavHost(
         composable(Destination.PLAN.route) {
             PlanScreen(
                 contentPadding = contentPadding,
-                onSheetStateChanged = onBottomSheetStateChanged
+                onSheetStateChanged = onBottomSheetStateChanged,
+                showLinesSheet = showLinesSheet,
+                onLinesSheetDismiss = onLinesSheetDismiss
             )
         }
         composable(Destination.LIGNES.route) {

@@ -57,29 +57,79 @@ data class StationInfo(
 )
 
 /**
- * Trie les lignes dans l'ordre : Métro (A,B,C,D), Funiculaire (F1,F2), Tram (T1-T7), Bus (par numéro)
+ * Trie les lignes pour l'affichage dans le bottom sheet.
+ * Ordre des familles:
+ *  1) Métro: A, B, C, D (ordre fixe)
+ *  2) Funiculaires: F1, F2 (puis F3+ si existait) triés numériquement
+ *  3) Tram: T1..Tn triés numériquement
+ *  4) Bus avec préfixe lettres (ex: C1, JD12, S3, ZI2...) triés par préfixe puis numéro
+ *  5) Bus purement numériques (ex: 2, 12, 79) triés numériquement
+ *  6) Autres/indéterminés: ordre lexicographique insensible à la casse
  */
 private fun sortLines(lines: List<String>): List<String> {
-    return lines.sortedWith(compareBy { line ->
+    data class Key(
+        val family: Int,
+        val subFamily: String = "",
+        val number: Int = Int.MAX_VALUE,
+        val raw: String = ""
+    )
+
+    fun keyFor(lineRaw: String): Key {
+        val line = lineRaw.trim()
+        val up = line.uppercase()
+
+        // 1) Métro A-D ordre fixe
+        when (up) {
+            "A" -> return Key(1000, number = 0, raw = up)
+            "B" -> return Key(1001, number = 0, raw = up)
+            "C" -> return Key(1002, number = 0, raw = up)
+            "D" -> return Key(1003, number = 0, raw = up)
+        }
+
+        // 2) Funiculaire F1..Fn
+        if (up.startsWith("F")) {
+            val num = up.drop(1).toIntOrNull()
+            if (num != null) return Key(2000, number = num, raw = up)
+        }
+
+        // 3) Tram T1..Tn
+        if (up.startsWith("T")) {
+            val num = up.drop(1).toIntOrNull()
+            if (num != null) return Key(3000, number = num, raw = up)
+        }
+
+        // 4) Bus avec préfixe lettres + nombre (C1, JD12, S3, etc.)
+        // Regex: lettres (au moins 1) + nombre (au moins 1) + éventuel suffixe lettres
+        val regex = Regex("^([A-Z]+)(\\d+)([A-Z]*)$")
+        val m = regex.matchEntire(up)
+        if (m != null) {
+            val prefix = m.groupValues[1]
+            val num = m.groupValues[2].toIntOrNull() ?: Int.MAX_VALUE
+            // Quelques ajustements pour garder un ordre cohérent des familles TCL fréquentes
+            // On force un sous-ordre pour certains préfixes connus afin d'éviter, par exemple, que JD passe avant C si désiré.
+            // Ici on se contente d'un tri alphabétique du préfixe, ce qui donne: C, JD, S, ...
+            return Key(4000, subFamily = prefix, number = num, raw = up)
+        }
+
+        // 5) Numérique pur
+        val pureNum = up.toIntOrNull()
+        if (pureNum != null) {
+            return Key(5000, number = pureNum, raw = up)
+        }
+
+        // 6) Fallback lexicographique
+        return Key(9000, subFamily = up, number = Int.MAX_VALUE, raw = up)
+    }
+
+    return lines.sortedWith(Comparator { a, b ->
+        val ka = keyFor(a)
+        val kb = keyFor(b)
+        // Compare by family, then prefix/subFamily, then numeric part, finally raw label
         when {
-            // Métro - ordre A, B, C, D
-            line.uppercase() == "A" -> 1000
-            line.uppercase() == "B" -> 1001
-            line.uppercase() == "C" -> 1002
-            line.uppercase() == "D" -> 1003
-            // Funiculaire - ordre F1, F2
-            line.uppercase() == "F1" -> 2000
-            line.uppercase() == "F2" -> 2001
-            // Tram - commence par T, trier par numéro
-            line.uppercase().startsWith("T") -> {
-                val num = line.substring(1).toIntOrNull() ?: 0
-                3000 + num
-            }
-            // Bus - trier par numéro
-            else -> {
-                val num = line.toIntOrNull() ?: 9999
-                10000 + num
-            }
+            ka.family != kb.family -> ka.family - kb.family
+            ka.subFamily != kb.subFamily -> ka.subFamily.compareTo(kb.subFamily)
+            ka.number != kb.number -> ka.number - kb.number
+            else -> ka.raw.compareTo(kb.raw)
         }
     })
 }

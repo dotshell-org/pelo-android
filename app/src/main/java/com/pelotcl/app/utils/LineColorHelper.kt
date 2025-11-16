@@ -46,6 +46,26 @@ object LineColorHelper {
     }
     
     /**
+     * Retourne la couleur appropriée pour une ligne à partir de son nom
+     * 
+     * @param lineName Le nom de la ligne (ex: "A", "B", "T1", "C3", etc.)
+     * @return La couleur en format android.graphics.Color
+     */
+    fun getColorForLineString(lineName: String): android.graphics.Color {
+        val upperLine = lineName.uppercase()
+        val hexColor = when {
+            upperLine == "A" -> METRO_A_COLOR
+            upperLine == "B" -> METRO_B_COLOR
+            upperLine == "C" -> METRO_C_COLOR
+            upperLine == "D" -> METRO_D_COLOR
+            upperLine == "F1" || upperLine == "F2" -> FUNICULAR_COLOR
+            upperLine.startsWith("T") && !upperLine.startsWith("TB") -> TRAM_COLOR
+            else -> BUS_COLOR
+        }
+        return android.graphics.Color.valueOf(android.graphics.Color.parseColor(hexColor))
+    }
+    
+    /**
      * Retourne une description du type de ligne
      */
     fun getLineTypeDescription(feature: Feature): String {

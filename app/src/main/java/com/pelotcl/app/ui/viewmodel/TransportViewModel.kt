@@ -465,6 +465,51 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
     
     /**
+     * Récupère la liste de toutes les lignes disponibles (noms uniquement)
+     * en extrayant les lignes depuis tous les arrêts chargés
+     */
+    fun getAllAvailableLines(): List<String> {
+        // D'abord, essayer d'extraire depuis les lignes chargées
+        val linesFromFeatures = when (val currentState = _uiState.value) {
+            is TransportLinesUiState.Success -> {
+                currentState.lines
+                    .map { it.properties.ligne }
+                    .distinct()
+            }
+            else -> emptyList()
+        }
+        
+        // Ensuite, extraire depuis tous les arrêts (pour avoir TOUTES les lignes, y compris les bus)
+        val linesFromStops = getCachedStopsSync()
+            .flatMap { stop ->
+                val desserte = stop.properties.desserte
+                desserte.split(',').map { it.split(':').first().trim() }
+            }
+            .distinct()
+        
+        // Combiner et trier
+        return (linesFromFeatures + linesFromStops)
+            .distinct()
+            .filter { it.isNotEmpty() } // Filtrer les lignes vides
+            .sortedWith(compareBy(
+                // Trier par type d'abord (Métro, Funiculaire, Tram, puis le reste)
+                { line ->
+                    when {
+                        line.uppercase() in setOf("A", "B", "C", "D") -> 0 // Métros en premier
+                        line.uppercase().startsWith("F") -> 1 // Funiculaires
+                        line.uppercase().startsWith("T") && !line.uppercase().startsWith("TB") -> 2 // Trams
+                        else -> 3 // Le reste (bus)
+                    }
+                },
+                // Puis par nom (numérique si possible, sinon alphabétique)
+                { line ->
+                    line.toIntOrNull() ?: Int.MAX_VALUE
+                },
+                { line -> line }
+            ))
+    }
+    
+    /**
      * Force le rechargement des données depuis l'API (ignore le cache)
      */
     fun refreshAllData() {

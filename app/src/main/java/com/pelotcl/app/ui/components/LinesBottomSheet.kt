@@ -1,0 +1,339 @@
+package com.pelotcl.app.ui.components
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.pelotcl.app.utils.LineColorHelper
+
+/**
+ * Bottom Sheet qui affiche toutes les lignes organisées par catégories
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun LinesBottomSheet(
+    allLines: List<String>,
+    onDismiss: () -> Unit,
+    onLineClick: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    
+    // Organiser les lignes par catégorie
+    val categorizedLines = remember(allLines) {
+        categorizeLines(allLines)
+    }
+    
+    // Filtrer les lignes selon la recherche
+    val filteredCategories = remember(categorizedLines, searchQuery) {
+        if (searchQuery.isEmpty()) {
+            categorizedLines
+        } else {
+            categorizedLines.mapValues { (_, lines) ->
+                lines.filter { it.contains(searchQuery, ignoreCase = true) }
+            }.filterValues { it.isNotEmpty() }
+        }
+    }
+    
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .fillMaxHeight(0.9f)
+            .background(Color.White, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+            .padding(16.dp)
+    ) {
+        // Poignée de drag
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(40.dp)
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Color.Gray.copy(alpha = 0.3f))
+            )
+        }
+        
+        // En-tête avec titre
+        Text(
+            text = "Toutes les lignes",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = Color.Black,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+        
+        // Barre de recherche
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            placeholder = { Text("Rechercher une ligne...") },
+            leadingIcon = {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = "Rechercher"
+                )
+            },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Effacer"
+                        )
+                    }
+                }
+            },
+            singleLine = true,
+            shape = RoundedCornerShape(24.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Color(0xFFE53935),
+                unfocusedBorderColor = Color.Gray.copy(alpha = 0.3f)
+            )
+        )
+        
+        // Liste des lignes par catégorie
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            filteredCategories.forEach { (category, lines) ->
+                item {
+                    CategorySection(
+                        category = category,
+                        // Les lignes sont déjà triées par categorizeLines() (tri "naturel" qui gère les nombres)
+                        // Ne pas re-trier ici pour éviter de revenir à un tri alphanumérique simple
+                        lines = lines,
+                        onLineClick = onLineClick
+                    )
+                }
+            }
+            
+            // Message si aucun résultat
+            if (filteredCategories.isEmpty() && searchQuery.isNotEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Aucune ligne trouvée",
+                            color = Color.Gray,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Section pour une catégorie de lignes
+ */
+@Composable
+private fun CategorySection(
+    category: String,
+    lines: List<String>,
+    onLineClick: (String) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        // Titre de la catégorie
+        Text(
+            text = category,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = Color.Black,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+        
+        // Grille de lignes avec 4 colonnes partout pour uniformiser la taille
+        val columns = 4
+        
+        lines.chunked(columns).forEach { rowLines ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                rowLines.forEach { line ->
+                    LineChip(
+                        lineName = line,
+                        onClick = { onLineClick(line) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                
+                // Ajouter des espaces vides pour compléter la ligne
+                repeat(columns - rowLines.size) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Chip pour afficher une ligne avec son icône TCL officielle
+ */
+@Composable
+private fun LineChip(
+    lineName: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    
+    // Obtenir l'ID de ressource de l'icône
+    val drawableId = remember(lineName) {
+        val resourceName = lineName.lowercase()
+            .replace("é", "e")
+            .replace("è", "e")
+            .replace("ê", "e")
+            .replace("-", "")
+            .replace(" ", "")
+            .let { if (it.first().isDigit()) "_$it" else it } // Préfixe _ si commence par un chiffre
+        
+        context.resources.getIdentifier(resourceName, "drawable", context.packageName)
+    }
+    
+    Box(
+        modifier = modifier
+            .height(36.dp) // Réduit de 48dp à 36dp
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(2.dp), // Réduit de 4dp à 2dp
+        contentAlignment = Alignment.Center
+    ) {
+        if (drawableId != 0) {
+            // Utiliser l'icône TCL officielle
+            Icon(
+                painter = painterResource(id = drawableId),
+                contentDescription = "Ligne $lineName",
+                modifier = Modifier.fillMaxSize(),
+                tint = Color.Unspecified // Garde les couleurs d'origine du SVG
+            )
+        } else {
+            // Fallback si l'icône n'existe pas
+            val androidColor = LineColorHelper.getColorForLineString(lineName)
+            val backgroundColor = Color(androidColor.toArgb())
+            val textColor = if (lineName.uppercase() == "T3") Color.Black else Color.White
+            
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(backgroundColor)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = lineName,
+                    color = textColor,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Organise les lignes par catégorie
+ */
+private fun categorizeLines(lines: List<String>): Map<String, List<String>> {
+    val metros = mutableListOf<String>()
+    val trams = mutableListOf<String>()
+    val funiculaires = mutableListOf<String>()
+    val navettes = mutableListOf<String>() // Lignes C
+    val pleineLune = mutableListOf<String>() // Lignes PL
+    val jd = mutableListOf<String>() // Lignes JD
+    val bus = mutableListOf<String>()
+    
+    lines.forEach { line ->
+        val upperLine = line.uppercase()
+        when {
+            upperLine in setOf("A", "B", "C", "D") -> metros.add(line)
+            upperLine.startsWith("F") && (upperLine == "F1" || upperLine == "F2") -> funiculaires.add(line)
+            // Trams : T + 1 chiffre (T1-T9), Tb (trambus), et RX (Rhônexpress)
+            upperLine.startsWith("TB") || upperLine == "RX" || upperLine.contains("RHON") -> trams.add(line)
+            upperLine.startsWith("T") && upperLine.length == 2 -> trams.add(line)
+            upperLine.startsWith("C") && upperLine.length >= 2 -> navettes.add(line) // C21, C22, etc.
+            upperLine.startsWith("PL") -> pleineLune.add(line) // PL1, PL2, etc.
+            upperLine.startsWith("JD") -> jd.add(line) // Lignes JD
+            else -> bus.add(line) // Bus normaux
+        }
+    }
+    
+    // Tri naturel qui gère correctement les nombres dans les chaînes
+    val naturalComparator = Comparator<String> { a, b ->
+        val partsA = a.split(Regex("(?<=\\D)(?=\\d)|(?<=\\d)(?=\\D)"))
+        val partsB = b.split(Regex("(?<=\\D)(?=\\d)|(?<=\\d)(?=\\D)"))
+        val maxParts = maxOf(partsA.size, partsB.size)
+
+        for (i in 0 until maxParts) {
+            val partA = partsA.getOrNull(i)
+            val partB = partsB.getOrNull(i)
+
+            if (partA == null) return@Comparator -1 // a est plus court
+            if (partB == null) return@Comparator 1  // b est plus court
+
+            val numA = partA.toIntOrNull()
+            val numB = partB.toIntOrNull()
+
+            if (numA != null && numB != null) {
+                val numCompare = numA.compareTo(numB)
+                if (numCompare != 0) return@Comparator numCompare
+            } else {
+                val strCompare = partA.compareTo(partB)
+                if (strCompare != 0) return@Comparator strCompare
+            }
+        }
+        return@Comparator 0
+    }
+
+    fun naturalSort(lines: List<String>): List<String> {
+        return lines.sortedWith(naturalComparator)
+    }
+    
+    val result = mutableMapOf<String, List<String>>()
+    
+    if (metros.isNotEmpty()) result["Métro"] = naturalSort(metros)
+    if (funiculaires.isNotEmpty()) result["Funiculaire"] = naturalSort(funiculaires)
+    if (trams.isNotEmpty()) result["Tramway"] = naturalSort(trams)
+    if (navettes.isNotEmpty()) result["Navettes"] = naturalSort(navettes)
+    if (pleineLune.isNotEmpty()) result["Pleine Lune"] = naturalSort(pleineLune)
+    if (bus.isNotEmpty()) result["Bus"] = naturalSort(bus)
+    if (jd.isNotEmpty()) result["Cars JD"] = naturalSort(jd)
+    
+    return result
+}
