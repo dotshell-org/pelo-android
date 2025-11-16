@@ -2,7 +2,7 @@ package com.pelotcl.app.data.gtfs
 
 /**
  * Cache statique des arrêts des lignes principales pour améliorer les performances
- * Évite de parser le fichier stop_times.txt (>50MB) à chaque fois
+ * Évite de parser le fichier stop_times.txt (>50MB) each time
  */
 object LineStopsCache {
     
@@ -45,18 +45,18 @@ object LineStopsCache {
             return true
         }
         
-        // Ensuite essayer avec les mots séparés pour gérer les abréviations
+        // Then try with separated words to handle abbreviations
         val words1 = normalizeWords(name1)
         val words2 = normalizeWords(name2)
         
-        // Si un des deux noms a moins de mots, c'est peut-être une version abrégée
+        // If one of the two names has fewer words, it might be an abbreviated version
         if (words1.size != words2.size) {
             val shorter = if (words1.size < words2.size) words1 else words2
             val longer = if (words1.size < words2.size) words2 else words1
             
-            // Vérifier si tous les mots de la version courte matchent avec la version longue
-            // Soit exactement, soit comme début de mot (pour les abréviations)
-            // Gère aussi les mots composés (ex: "partdieu" match "part" + "dieu")
+            // Check if all words from the short version match avec la version longue
+            // Either exactly or as beginning of word (for abbreviations)
+            // Also handles compound words (ex: "partdieu" match "part" + "dieu")
             var shorterIndex = 0
             var longerIndex = 0
             
@@ -70,7 +70,7 @@ object LineStopsCache {
                     longerIndex++
                 }
                 // Le mot long commence par le mot court (ex: "cat" match "cathedrale")
-                // Minimum 3 lettres pour éviter les faux positifs
+                // Minimum 3 letters to avoid false positives
                 else if (shortWord.length >= 3 && longWord.startsWith(shortWord)) {
                     shorterIndex++
                     longerIndex++
@@ -80,18 +80,18 @@ object LineStopsCache {
                     shorterIndex++
                     longerIndex++
                 }
-                // Le mot court pourrait être un mot composé (ex: "partdieu" match "part" + "dieu")
-                // Essayer de matcher le mot court avec plusieurs mots longs consécutifs
+                // Short word might be a compound word (ex: "partdieu" match "part" + "dieu")
+                // Try to match short word with multiple long words consecutive
                 else if (shortWord.length > longWord.length) {
                     var combinedWord = longWord
                     var tempIndex = longerIndex + 1
                     var matched = false
                     
-                    // Essayer de combiner des mots consécutifs pour voir si on obtient le mot court
+                    // Try to combine consecutive words pour voir si on obtient le mot court
                     while (tempIndex < longer.size && combinedWord.length < shortWord.length) {
                         combinedWord += longer[tempIndex]
                         if (combinedWord == shortWord) {
-                            // Match trouvé !
+                            // Match found !
                             longerIndex = tempIndex + 1
                             shorterIndex++
                             matched = true
@@ -105,17 +105,17 @@ object LineStopsCache {
                         longerIndex++
                     }
                 }
-                // Peut-être que le mot long n'a pas d'équivalent dans la version courte
+                // Maybe the long word has no equivalent dans la version courte
                 else {
                     longerIndex++
                 }
             }
             
-            // Si on a matché tous les mots de la version courte, c'est bon
+            // If we matched all words de la version courte, c'est bon
             return shorterIndex == shorter.size
         }
         
-        // Sinon, vérifier que tous les mots matchent dans l'ordre
+        // Otherwise, check that all words match in order
         if (words1.size == words2.size) {
             return words1.zip(words2).all { (w1, w2) ->
                 w1 == w2 || 

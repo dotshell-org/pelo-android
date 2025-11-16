@@ -69,7 +69,7 @@ private const val SECONDARY_STOPS_MIN_ZOOM = 15f
 private fun isMetroTramOrFunicular(lineName: String): Boolean {
     val upperName = lineName.uppercase()
     return when {
-        // Métros
+        // Metros
         upperName in setOf("A", "B", "C", "D") -> true
         // Funiculaires
         upperName in setOf("F1", "F2") -> true
@@ -86,7 +86,7 @@ private fun isMetroTramOrFunicular(lineName: String): Boolean {
  * chargés par défaut au démarrage de l'application.
  */
 private fun isTemporaryBus(lineName: String): Boolean {
-    // Les métros, trams et funiculaires sont toujours chargés, donc pas temporaires
+    // Metros, trams and funiculars are always loaded, donc pas temporaires
     return !isMetroTramOrFunicular(lineName)
 }
 
@@ -204,16 +204,16 @@ fun PlanScreen(
         }
     }
     
-    // Charger toutes les lignes et arrêts au démarrage
+    // Load all lines and stops at startup
     LaunchedEffect(Unit) {
         viewModel.loadAllLines()
-        viewModel.preloadStops() // Précharge les arrêts en arrière-plan pour le cache
+        viewModel.preloadStops() // Preload stops in background pour le cache
     }
     
     // Track which lines are currently displayed on the map
     var displayedLines by remember { mutableStateOf<Set<String>>(emptySet()) }
     
-    // Quand les données sont chargées et la carte est prête, mettre à jour les lignes
+    // When data is loaded and map is ready, update lines
     LaunchedEffect(uiState, mapInstance) {
         val map = mapInstance ?: return@LaunchedEffect
         
@@ -247,7 +247,7 @@ fun PlanScreen(
         }
     }
     
-    // Quand les arrêts sont chargés et la carte est prête, afficher les arrêts
+    // When stops are loaded and map is ready, display stops
     LaunchedEffect(stopsUiState, mapInstance) {
         val map = mapInstance ?: return@LaunchedEffect
         
@@ -293,11 +293,11 @@ fun PlanScreen(
                             if (!isMetroTramOrFunicular(lineName)) {
                                 android.util.Log.d("PlanScreen", "Pre-loading line: $lineName")
                                 viewModel.addLineToLoaded(lineName)
-                                // Ajouter aux lignes temporaires (tous les bus doivent être temporaires)
+                                // Add to temporary lines (all buses must be temporary)
                                 if (isTemporaryBus(lineName)) {
                                     temporaryLoadedBusLines = temporaryLoadedBusLines + lineName
                                 }
-                                // Attendre un peu que la ligne soit ajoutée au state
+                                // Wait a bit for line to be added au state
                                 kotlinx.coroutines.delay(100)
                             }
                             
@@ -317,18 +317,18 @@ fun PlanScreen(
         }
     }
     
-    // Charger une ligne de bus à la demande quand elle est sélectionnée
+    // Load a bus line on demand when selected
     LaunchedEffect(showLineDetails, selectedLine) {
         if (showLineDetails && selectedLine != null) {
             val lineName = selectedLine!!.lineName
             android.util.Log.d("PlanScreen", "showLineDetails=true, lineName=$lineName")
 
-            // Si c'est un bus (pas métro/tram/funiculaire), charger la ligne à la demande
+            // If it's a bus.*load line on demand
             if (!isMetroTramOrFunicular(lineName)) {
                 android.util.Log.d("PlanScreen", "Loading bus line: $lineName")
-                // Ajouter la ligne de bus aux lignes déjà chargées (sans remplacer)
+                // Add bus line to already loaded lines.*without replacing)
                 viewModel.addLineToLoaded(lineName)
-                // Ajouter aux lignes temporaires (tous les bus doivent être temporaires)
+                // Add to temporary lines (all buses must be temporary)
                 if (isTemporaryBus(lineName)) {
                     temporaryLoadedBusLines = temporaryLoadedBusLines + lineName
                     android.util.Log.d("PlanScreen", "Added to temporary bus lines: $lineName, total: ${temporaryLoadedBusLines.size}")
@@ -337,10 +337,10 @@ fun PlanScreen(
         }
     }
     
-    // Décharger TOUTES les lignes temporaires quand on ferme les détails
+    // Unload ALL temporary lines when closing details
     LaunchedEffect(showLineDetails) {
         if (!showLineDetails && temporaryLoadedBusLines.isNotEmpty()) {
-            // Quand on ferme les détails, retirer TOUTES les lignes de bus temporaires
+            // When closing details, remove ALL temporary bus lines
             android.util.Log.d("PlanScreen", "showLineDetails=false, clearing ${temporaryLoadedBusLines.size} temporary bus lines")
             temporaryLoadedBusLines.forEach { busLine ->
                 android.util.Log.d("PlanScreen", "Removing temporary bus line: $busLine")
@@ -350,9 +350,9 @@ fun PlanScreen(
         }
     }
     
-    // Décharger les lignes temporaires quand on ferme la sheet des lignes ET qu'aucun détail n'est ouvert
+    // Unload temporary lines when closing lines sheet AND no detail is open
     LaunchedEffect(showLinesSheet, showLineDetails) {
-        // Quand la sheet des lignes se ferme et qu'on n'est pas en train de voir les détails d'une ligne,
+        // When lines sheet closes and we're not viewing line details,
         // c'est qu'on a fait "retour" sans ouvrir de ligne : nettoyer toutes les lignes temporaires
         if (!showLinesSheet && !showLineDetails && temporaryLoadedBusLines.isNotEmpty()) {
             android.util.Log.d("PlanScreen", "LinesSheet closed without line details open, clearing ${temporaryLoadedBusLines.size} temporary bus lines")
@@ -364,16 +364,16 @@ fun PlanScreen(
         }
     }
     
-    // Filtrer les lignes visibles en fonction de la ligne sélectionnée
+    // Filter visible lines based on selected line
     LaunchedEffect(showLineDetails, selectedLine, uiState, mapInstance) {
         val map = mapInstance ?: return@LaunchedEffect
         
         when (val state = uiState) {
             is TransportLinesUiState.Success -> {
                 if (showLineDetails && selectedLine != null) {
-                    // Afficher uniquement la ligne sélectionnée
+                    // Display only selected line
                     filterMapLines(map, state.lines, selectedLine!!.lineName)
-                    // Zoomer sur la ligne sélectionnée
+                    // Zoom on selected line
                     zoomToLine(map, state.lines, selectedLine!!.lineName)
                 } else {
                     // Afficher toutes les lignes
@@ -409,12 +409,12 @@ fun PlanScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 if (showLineDetails && selectedLine != null) {
-                    // Afficher les détails de la ligne
+                    // Display line details
                     LineDetailsSheetContent(
                         lineInfo = selectedLine!!,
                         viewModel = viewModel,
                         onBackToStation = {
-                            // Simplement fermer les détails, le déchargement se fera dans le LaunchedEffect
+                            // Simply close details, unloading will happen in LaunchedEffect
                             showLineDetails = false
                         }
                     )
@@ -439,11 +439,11 @@ fun PlanScreen(
                                 android.util.Log.d("PlanScreen", "Pre-loading line from station sheet: $lineName")
                                 scope.launch {
                                     viewModel.addLineToLoaded(lineName)
-                                    // Ajouter aux lignes temporaires (tous les bus doivent être temporaires)
+                                    // Add to temporary lines (all buses must be temporary)
                                     if (isTemporaryBus(lineName)) {
                                         temporaryLoadedBusLines = temporaryLoadedBusLines + lineName
                                     }
-                                    // Attendre un peu que la ligne soit ajoutée au state
+                                    // Wait a bit for line to be added au state
                                     kotlinx.coroutines.delay(100)
                                     showLineDetails = true
                                     scaffoldSheetState.bottomSheetState.expand()
@@ -492,7 +492,7 @@ fun PlanScreen(
         }
     }
     
-    // Afficher la LinesBottomSheet par-dessus tout quand elle est demandée
+    // Display LinesBottomSheet on top of everything when requested
     if (showLinesSheet) {
         androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = onLinesSheetDismiss,
@@ -506,29 +506,29 @@ fun PlanScreen(
                     // Fermer la sheet des lignes
                     onLinesSheetDismiss()
                     
-                    // Si la ligne n'est pas un métro/tram/funiculaire, la charger
+                    // If line isn't metro.*load it
                     if (!isMetroTramOrFunicular(lineName)) {
                         scope.launch {
                             android.util.Log.d("PlanScreen", "Loading bus line from lines sheet: $lineName")
                             viewModel.addLineToLoaded(lineName)
-                            // Ajouter aux lignes temporaires (tous les bus doivent être temporaires)
+                            // Add to temporary lines (all buses must be temporary)
                             if (isTemporaryBus(lineName)) {
                                 temporaryLoadedBusLines = temporaryLoadedBusLines + lineName
                             }
-                            // Attendre un peu que la ligne soit ajoutée au state
+                            // Wait a bit for line to be added au state
                             kotlinx.coroutines.delay(100)
                             
-                            // Ouvrir les détails de la ligne
+                            // Open line details
                             selectedLine = LineInfo(
                                 lineName = lineName,
                                 currentStationName = ""
                             )
                             showLineDetails = true
                             isSheetExpanded = true
-                            scaffoldSheetState.bottomSheetState.partialExpand() // Ouvrir en mode replié
+                            scaffoldSheetState.bottomSheetState.partialExpand() // Open in collapsed mode
                         }
                     } else {
-                        // Pour les métros/trams/funiculaires, ouvrir directement
+                        // For metros.*open directly
                         scope.launch {
                             selectedLine = LineInfo(
                                 lineName = lineName,
@@ -536,7 +536,7 @@ fun PlanScreen(
                             )
                             showLineDetails = true
                             isSheetExpanded = true
-                            scaffoldSheetState.bottomSheetState.partialExpand() // Ouvrir en mode replié
+                            scaffoldSheetState.bottomSheetState.partialExpand() // Open in collapsed mode
                         }
                     }
                 }
@@ -594,7 +594,7 @@ private fun filterMapLines(
         allLines.forEach { feature ->
             val layerId = "layer-${feature.properties.ligne}-${feature.properties.codeTrace}"
             
-            // Afficher la couche si c'est la ligne sélectionnée, sinon la cacher
+            // Display layer if it's selected line, otherwise hide it
             style.getLayer(layerId)?.let { layer ->
                 if (feature.properties.ligne.equals(selectedLineName, ignoreCase = true)) {
                     layer.setProperties(PropertyFactory.visibility("visible"))
@@ -604,7 +604,7 @@ private fun filterMapLines(
             }
         }
         
-        // Filtrer également les arrêts pour n'afficher que ceux de la ligne sélectionnée
+        // Also filter stops to display only those of selected line
         filterMapStops(style, selectedLineName)
     }
 }
@@ -617,14 +617,14 @@ private fun zoomToLine(
     allLines: List<com.pelotcl.app.data.model.Feature>,
     selectedLineName: String
 ) {
-    // Trouver toutes les features de la ligne sélectionnée
+    // Find all features of selected line
     val lineFeatures = allLines.filter { 
         it.properties.ligne.equals(selectedLineName, ignoreCase = true) 
     }
     
     if (lineFeatures.isEmpty()) return
     
-    // Calculer les bounds de toutes les coordonnées de la ligne
+    // Calculate bounds of all line coordinates
     val boundsBuilder = LatLngBounds.Builder()
     var hasCoordinates = false
     
@@ -643,17 +643,17 @@ private fun zoomToLine(
     
     val bounds = boundsBuilder.build()
     
-    // Ajouter du padding asymétrique pour compenser la bottom sheet repliée en bas
-    // Plus de padding en bas (où se trouve la sheet), moins en haut
+    // Add asymmetric padding to compensate for bottom sheet collapsed at bottom
+    // More padding at bottom (where sheet is located), less at top
     val paddingLeft = 200
     val paddingTop = 100
     val paddingRight = 200
-    val paddingBottom = 600 // Augmenté pour monter encore plus la caméra
+    val paddingBottom = 600 // Increased to raise camera even more
     
-    // Animer la caméra vers ces bounds avec padding asymétrique
+    // Animate camera to these bounds with asymmetric padding
     map.animateCamera(
         CameraUpdateFactory.newLatLngBounds(bounds, paddingLeft, paddingTop, paddingRight, paddingBottom),
-        1000 // durée en ms
+        1000 // duration in ms
     )
 }
 
@@ -669,7 +669,7 @@ private fun filterMapStops(
     val priorityLayerPrefix = "transport-stops-layer-priority"
     val secondaryLayerPrefix = "transport-stops-layer-secondary"
     
-    // Créer le nom de la propriété pour cette ligne
+    // Create property name for this line
     val linePropertyName = "has_line_${selectedLineName.uppercase()}"
     
     (-25..25).forEach { idx ->
@@ -677,7 +677,7 @@ private fun filterMapStops(
         val secondaryLayerId = "$secondaryLayerPrefix-$idx"
         
         (style.getLayer(priorityLayerId) as? SymbolLayer)?.let { layer ->
-            // Filtrer pour n'afficher que les arrêts qui ont la propriété has_line_X = true
+            // Filter to display only stops that have property has_line_X = true
             layer.setFilter(
                 Expression.all(
                     Expression.eq(Expression.get("priority_stop"), true),
@@ -685,12 +685,12 @@ private fun filterMapStops(
                     Expression.eq(Expression.get(linePropertyName), true)
                 )
             )
-            // Garder le même minZoom que d'habitude (déjà à PRIORITY_STOPS_MIN_ZOOM)
+            // Keep same minZoom as usual (already at PRIORITY_STOPS_MIN_ZOOM)
         }
         
         (style.getLayer(secondaryLayerId) as? SymbolLayer)?.let { layer ->
-            // En mode filtré, afficher tous les arrêts de la ligne (y compris trams et correspondances métro)
-            // ET promouvoir leur zoom au niveau priority pour une meilleure visibilité
+            // In filtered mode, display all line stops (including trams and metro transfers)
+            // AND promote their zoom to priority level for better visibility
             layer.setFilter(
                 Expression.all(
                     Expression.eq(Expression.get("priority_stop"), false),
@@ -698,8 +698,8 @@ private fun filterMapStops(
                     Expression.eq(Expression.get(linePropertyName), true)
                 )
             )
-            // Réduire le minZoom pour TOUS les arrêts de la ligne en mode filtré
-            // (pas seulement les trams, pour voir aussi les correspondances métro)
+            // Reduce minZoom for ALL line stops in filtered mode
+            // (not only trams, to also see metro transfers)
             layer.setMinZoom(PRIORITY_STOPS_MIN_ZOOM)
         }
     }
@@ -722,7 +722,7 @@ private fun showAllMapLines(
             }
         }
         
-        // Réafficher tous les arrêts
+        // Redisplay all stops
         showAllMapStops(style)
     }
 }
@@ -736,7 +736,7 @@ private fun showAllMapStops(
     val priorityLayerPrefix = "transport-stops-layer-priority"
     val secondaryLayerPrefix = "transport-stops-layer-secondary"
     
-    // Restaurer les filtres originaux pour tous les arrêts
+    // Restore original filters for all stops
     (-25..25).forEach { idx ->
         (style.getLayer("$priorityLayerPrefix-$idx") as? SymbolLayer)?.let { layer ->
             layer.setFilter(
@@ -755,7 +755,7 @@ private fun showAllMapStops(
                     Expression.eq(Expression.get("slot"), idx)
                 )
             )
-            // Restaurer le minZoom original pour les arrêts secondaires
+            // Restore original minZoom for secondary stops
             layer.setMinZoom(SECONDARY_STOPS_MIN_ZOOM)
         }
     }
@@ -776,17 +776,17 @@ private fun addLineToMap(
         style.getLayer(layerId)?.let { style.removeLayer(it) }
         style.getSource(sourceId)?.let { style.removeSource(it) }
         
-        // Créer le GeoJSON pour la ligne
+        // Create GeoJSON for line
         val lineGeoJson = createGeoJsonFromFeature(feature)
         
-        // Ajouter la source de données pour la ligne
+        // Add data source for the line
         val lineSource = GeoJsonSource(sourceId, lineGeoJson)
         style.addSource(lineSource)
         
-        // Obtenir la couleur appropriée pour cette ligne
+        // Get appropriate color for this line
         val lineColor = LineColorHelper.getColorForLine(feature)
         
-        // Créer la couche de ligne avec la couleur appropriée
+        // Create line layer with appropriate color
         val lineLayer = LineLayer(layerId, sourceId).apply {
             setProperties(
                 PropertyFactory.lineColor(lineColor),
@@ -1020,11 +1020,11 @@ private fun createGeoJsonFromFeature(feature: com.pelotcl.app.data.model.Feature
     val geoJsonObject = JsonObject().apply {
         addProperty("type", "Feature")
         
-        // Ajouter la géométrie
+        // Add geometry
         val geometryObject = JsonObject().apply {
             addProperty("type", feature.geometry.type)
             
-            // Convertir les coordonnées
+            // Convert coordinates
             val coordinatesArray = JsonArray()
             feature.geometry.coordinates.forEach { lineString ->
                 val lineStringArray = JsonArray()
@@ -1041,7 +1041,7 @@ private fun createGeoJsonFromFeature(feature: com.pelotcl.app.data.model.Feature
         }
         add("geometry", geometryObject)
         
-        // Ajouter les propriétés
+        // Add properties
         val propertiesObject = JsonObject().apply {
             addProperty("ligne", feature.properties.ligne)
             addProperty("nom_trace", feature.properties.nomTrace)
@@ -1058,27 +1058,27 @@ private fun createGeoJsonFromFeature(feature: com.pelotcl.app.data.model.Feature
  * Fusionne UNIQUEMENT les arrêts M/F/T/Tb entre eux, les bus restent séparés
  */
 private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>): List<com.pelotcl.app.data.model.StopFeature> {
-    // Fonction pour vérifier si une ligne est M/F/T/Tb
+    // Function to check if a line is M/F/T/Tb
     fun isMetroTramFuni(line: String): Boolean {
         val upperLine = line.uppercase()
-        return upperLine in setOf("A", "B", "C", "D") || // Métro A, B, C, D
+        return upperLine in setOf("A", "B", "C", "D") || // Metro A, B, C, D
                upperLine.startsWith("F") || // Funiculaire (F1, F2)
                upperLine.startsWith("T") // Tram (T1-T7) et Trolleybus (Tb)
     }
     
-    // Fonction pour normaliser un nom d'arrêt (même logique que dans TransportViewModel)
+    // Function to normalize stop name (same logic as in TransportViewModel)
     fun normalizeStopName(name: String): String {
         return name.filter { it.isLetter() }.lowercase()
     }
     
-    // Séparer les arrêts en deux groupes :
-    // - Arrêts qui ne contiennent QUE des lignes M/F/T/Tb (pas de bus)
-    // - Tous les autres arrêts (bus purs ou mixtes bus+M/F/T/Tb)
+    // Separate stops into two groups:
+    // - Stops that contain ONLY M/F/T/Tb lines (no buses)
+    // - All other stops (pure buses or mixed bus+M/F/T/Tb)
     val (pureMetroTramFuni, otherStops) = stops.partition { stop ->
         val allLines = BusIconHelper.getAllLinesForStop(stop)
         val isPure = allLines.isNotEmpty() && allLines.all { isMetroTramFuni(it) }
         
-        // Debug log pour certains arrêts
+        // Debug log for certain stops
         if (stop.properties.nom.contains("Perrache", ignoreCase = true) || 
             stop.properties.nom.contains("Bellecour", ignoreCase = true)) {
             android.util.Log.d("MergeStops", "Arrêt: ${stop.properties.nom}, Lignes: $allLines, isPure: $isPure")
@@ -1087,7 +1087,7 @@ private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>
         isPure
     }
     
-    // Grouper les arrêts M/F/T/Tb purs par nom NORMALISÉ (sans espaces, ponctuation, etc.)
+    // Group pure M/F/T/Tb stops by NORMALIZED name (without spaces, punctuation, etc.)
     val stopsByName = pureMetroTramFuni.groupBy { normalizeStopName(it.properties.nom) }
     
     // Debug log pour les groupes
@@ -1101,10 +1101,10 @@ private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>
     
     val merged = stopsByName.map { (name, stopsGroup) ->
         if (stopsGroup.size == 1) {
-            // Un seul arrêt M/F/T/Tb : pas de fusion
+            // Single M/F/T/Tb stop: no merging
             stopsGroup.first()
         } else {
-            // Plusieurs arrêts M/F/T/Tb avec le même nom : fusionner
+            // Multiple M/F/T/Tb stops with same name: merge
             val mergedDesserte = stopsGroup
                 .flatMap { BusIconHelper.getAllLinesForStop(it) }
                 .distinct()
@@ -1114,7 +1114,7 @@ private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>
             val firstStop = stopsGroup.first()
             val isPmr = stopsGroup.any { it.properties.pmr }
             
-            // Retourner un seul arrêt fusionné
+            // Return single merged stop
             com.pelotcl.app.data.model.StopFeature(
                 type = firstStop.type,
                 id = firstStop.id,
@@ -1139,7 +1139,7 @@ private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>
         }
     }
     
-    // Retourner les arrêts fusionnés (M/F/T/Tb purs) + tous les autres arrêts (bus et mixtes)
+    // Return merged stops (pure M/F/T/Tb) + all other stops (buses and mixed)
     return merged + otherStops
 }
 
@@ -1152,7 +1152,7 @@ private fun createStopsGeoJsonFromStops(
 ): String {
     val features = JsonArray()
     
-    // Fusionner les arrêts qui ont le même nom (correspondances métro/tram/funiculaire)
+    // Merge stops with same name (metro/tram/funicular transfers)
     val mergedStops = mergeStopsByName(stops)
 
     mergedStops.forEach { stop ->
@@ -1171,7 +1171,7 @@ private fun createStopsGeoJsonFromStops(
         val lineNames = validPairs.map { it.first }
         val drawableNames = validPairs.map { it.second }
         
-        // Vérifier si l'arrêt dessert au moins un tram
+        // Check if stop serves at least one tram
         val hasTram = lineNames.any { it.uppercase().startsWith("T") }
 
         // Compute centered slot indices for N icons: -(n-1), -(n-3), ..., (n-1)
@@ -1179,10 +1179,10 @@ private fun createStopsGeoJsonFromStops(
         var slot = -(n - 1)
 
         drawableNames.forEachIndexed { index, iconName ->
-            // Déterminer la ligne correspondant à cette icône
+            // Determine line corresponding to this icon
             val lineName = lineNames[index].uppercase()
             
-            // isPriorityStop doit être basé sur l'ICÔNE actuelle, pas sur la ligne principale de l'arrêt
+            // isPriorityStop must be based on CURRENT ICON, not on stop's main line
             val isPriorityStop = ALWAYS_VISIBLE_LINES.contains(lineName)
             
             val pointFeature = JsonObject().apply {
@@ -1207,9 +1207,9 @@ private fun createStopsGeoJsonFromStops(
                     addProperty("icon", iconName)
                     addProperty("slot", slot)
                     
-                    // Ajouter TOUTES les lignes de l'arrêt comme propriétés booléennes
+                    // Add ALL stop lines as boolean properties
                     // (pas seulement celles qui ont un drawable)
-                    // Cela permet à toutes les features d'un arrêt d'avoir les mêmes propriétés has_line_*
+                    // This allows all features of a stop to have the same properties has_line_*
                     lineNamesAll.forEach { line ->
                         addProperty("has_line_${line.uppercase()}", true)
                     }

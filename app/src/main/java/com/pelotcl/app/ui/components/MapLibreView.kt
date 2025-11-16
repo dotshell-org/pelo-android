@@ -50,11 +50,11 @@ fun MapLibreView(
     val mapView = remember {
         MapView(context).apply {
             getMapAsync { map ->
-                // Désactiver la rotation de la carte
+                // Disable map rotation
                 map.uiSettings.isRotateGesturesEnabled = false
                 
                 map.setStyle(styleUrl) { style ->
-                    // Configuration de la position initiale de la caméra
+                    // Configuration of initial camera position
                     val targetPosition = if (centerOnUserLocation && userLocation != null) {
                         userLocation
                     } else {
@@ -128,7 +128,7 @@ fun MapLibreView(
         }
     }
 
-    // Gérer le cycle de vie du MapView
+    // Manage MapView lifecycle
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {

@@ -48,7 +48,7 @@ class GtfsParser(private val context: Context) {
      * Gère aussi les abréviations de mots : "Cat." match avec "Cathédrale"
      */
     private fun stationNamesMatch(name1: String, name2: String): Boolean {
-        // D'abord essayer la comparaison simple
+        // First try simple comparison
         val normalized1 = normalizeStationName(name1)
         val normalized2 = normalizeStationName(name2)
         
@@ -56,18 +56,18 @@ class GtfsParser(private val context: Context) {
             return true
         }
         
-        // Ensuite essayer avec les mots séparés pour gérer les abréviations
+        // Then try with separated words to handle abbreviations
         val words1 = normalizeWords(name1)
         val words2 = normalizeWords(name2)
         
-        // Si un des deux noms a moins de mots, c'est peut-être une version abrégée
+        // If one of the two names has fewer words, it might be an abbreviated version
         if (words1.size != words2.size) {
             val shorter = if (words1.size < words2.size) words1 else words2
             val longer = if (words1.size < words2.size) words2 else words1
             
-            // Vérifier si tous les mots de la version courte matchent avec la version longue
-            // Soit exactement, soit comme début de mot (pour les abréviations)
-            // Gère aussi les mots composés (ex: "partdieu" match "part" + "dieu")
+            // Check if all words from the short version match with the long version
+            // Either exactly or as beginning of word (for abbreviations)
+            // Also handles compound words (e.g. "partdieu" matches "part" + "dieu")
             var shorterIndex = 0
             var longerIndex = 0
             
@@ -75,34 +75,34 @@ class GtfsParser(private val context: Context) {
                 val shortWord = shorter[shorterIndex]
                 val longWord = longer[longerIndex]
                 
-                // Match exact
+                // Exact match
                 if (shortWord == longWord) {
                     shorterIndex++
                     longerIndex++
                 }
-                // Le mot long commence par le mot court (ex: "cat" match "cathedrale")
-                // Minimum 3 lettres pour éviter les faux positifs
+                // Long word starts with short word (e.g. "cat" matches "cathedrale")
+                // Minimum 3 letters to avoid false positives
                 else if (shortWord.length >= 3 && longWord.startsWith(shortWord)) {
                     shorterIndex++
                     longerIndex++
                 }
-                // Le mot court est une initiale du mot long (ex: "l" match "louis")
+                // Short word is an initial of long word (e.g. "l" matches "louis")
                 else if (shortWord.length == 1 && longWord.startsWith(shortWord)) {
                     shorterIndex++
                     longerIndex++
                 }
-                // Le mot court pourrait être un mot composé (ex: "partdieu" match "part" + "dieu")
-                // Essayer de matcher le mot court avec plusieurs mots longs consécutifs
+                // Short word might be a compound word (e.g. "partdieu" matches "part" + "dieu")
+                // Try to match short word with multiple consecutive long words
                 else if (shortWord.length > longWord.length) {
                     var combinedWord = longWord
                     var tempIndex = longerIndex + 1
                     var matched = false
                     
-                    // Essayer de combiner des mots consécutifs pour voir si on obtient le mot court
+                    // Try to combine consecutive words to see if we get the short word
                     while (tempIndex < longer.size && combinedWord.length < shortWord.length) {
                         combinedWord += longer[tempIndex]
                         if (combinedWord == shortWord) {
-                            // Match trouvé !
+                            // Match found!
                             longerIndex = tempIndex + 1
                             shorterIndex++
                             matched = true
@@ -112,21 +112,21 @@ class GtfsParser(private val context: Context) {
                     }
                     
                     if (!matched) {
-                        // Pas de match, avancer dans la version longue
+                        // No match, advance in long version
                         longerIndex++
                     }
                 }
-                // Peut-être que le mot long n'a pas d'équivalent dans la version courte
+                // Maybe the long word has no equivalent in the short version
                 else {
                     longerIndex++
                 }
             }
             
-            // Si on a matché tous les mots de la version courte, c'est bon
+            // If we matched all words from the short version, it's good
             return shorterIndex == shorter.size
         }
         
-        // Sinon, vérifier que tous les mots matchent dans l'ordre
+        // Otherwise, check that all words match in order
         if (words1.size == words2.size) {
             return words1.zip(words2).all { (w1, w2) ->
                 w1 == w2 || 
@@ -152,10 +152,10 @@ class GtfsParser(private val context: Context) {
             val inputStream = context.assets.open("data/gtfstcl/routes.txt")
             val reader = BufferedReader(InputStreamReader(inputStream))
             
-            // Lire l'en-tête
+            // Read header
             val header = reader.readLine()?.split(",") ?: return routesCache
             
-            // Lire les lignes
+            // Read lines
             reader.useLines { lines ->
                 lines.forEach { line ->
                     val values = parseCsvLine(line)
@@ -194,10 +194,10 @@ class GtfsParser(private val context: Context) {
             val inputStream = context.assets.open("data/gtfstcl/stops.txt")
             val reader = BufferedReader(InputStreamReader(inputStream))
             
-            // Lire l'en-tête
+            // Read header
             val header = reader.readLine()?.split(",") ?: return stopsCache
             
-            // Lire les lignes
+            // Read lines
             reader.useLines { lines ->
                 lines.forEach { line ->
                     val values = parseCsvLine(line)
@@ -248,7 +248,7 @@ class GtfsParser(private val context: Context) {
         lineName: String? = null,
         maxResults: Int = 10
     ): List<StopDeparture> {
-        // Pour le moment, retourner des données simulées car le parsing du fichier
+        // For now, return simulated data car le parsing du fichier
         // stop_times.txt (>50MB) est trop lent
         return generateMockDepartures(lineName, maxResults)
     }
@@ -265,7 +265,7 @@ class GtfsParser(private val context: Context) {
         val now = Calendar.getInstance()
         val departures = mutableListOf<StopDeparture>()
         
-        // Générer des horaires toutes les 5-10 minutes
+        // Generate schedules every 5-10 minutes
         val intervals = listOf(5, 8, 12, 15, 18)
         var minutesToAdd = 2
         
@@ -293,11 +293,11 @@ class GtfsParser(private val context: Context) {
     }
     
     /**
-     * Récupère tous les arrêts d'une ligne dans l'ordre
+     * Récupère tous les arrêts d'une ligne in order
      * @param lineName Nom de la ligne
      * @param direction Direction (0 ou 1)
      * @param currentStopName Nom de l'arrêt actuel (pour le marquer)
-     * @return Liste des arrêts dans l'ordre de passage
+     * @return Liste des arrêts in order de passage
      */
     fun getLineStops(
         lineName: String,
@@ -306,7 +306,7 @@ class GtfsParser(private val context: Context) {
     ): List<LineStopInfo> {
         android.util.Log.d("GtfsParser", "getLineStops called for line: $lineName, direction: $direction, currentStop: $currentStopName")
         
-        // D'abord, essayer de récupérer depuis le cache
+        // First, try to retrieve from cache
         val cachedStops = LineStopsCache.getLineStops(lineName, currentStopName)
         if (cachedStops != null) {
             android.util.Log.d("GtfsParser", "Found $lineName in cache with ${cachedStops.size} stops")
@@ -325,7 +325,7 @@ class GtfsParser(private val context: Context) {
         }
         android.util.Log.d("GtfsParser", "Found route: ${route.routeShortName} - ${route.routeLongName}")
         
-        // Trouver un trip de cette ligne avec la direction spécifiée
+        // Find a trip of this line with specified direction
         val tripId = findTripForRoute(route.routeId, direction)
         if (tripId == null) {
             android.util.Log.w("GtfsParser", "No trip found for route ${route.routeId} with direction $direction. Generating mock stops.")
@@ -334,19 +334,19 @@ class GtfsParser(private val context: Context) {
         android.util.Log.d("GtfsParser", "Found trip ID: $tripId")
         
         val lineStops = mutableListOf<LineStopInfo>()
-        val stopIds = mutableSetOf<String>() // Pour éviter les doublons
+        val stopIds = mutableSetOf<String>() // To avoid duplicates
         
         try {
             val inputStream = context.assets.open("data/gtfstcl/stop_times.txt")
             val reader = BufferedReader(InputStreamReader(inputStream))
             
-            // Lire l'en-tête
+            // Read header
             reader.readLine()
             
             var lineCount = 0
-            val maxLinesToRead = 500000 // Limiter la lecture pour éviter de bloquer trop longtemps
+            val maxLinesToRead = 500000 // Limit reading to avoid blocking trop longtemps
             
-            // Lire les lignes et collecter les arrêts pour ce trip
+            // Read lines and collect stops for this trip
             reader.useLines { lines ->
                 for (line in lines) {
                     if (lineCount++ > maxLinesToRead) break
@@ -355,7 +355,7 @@ class GtfsParser(private val context: Context) {
                     if (values.size >= 9 && values[0] == tripId) {
                         val stopId = values[3]
                         
-                        // Éviter les doublons
+                        // Avoid duplicates
                         if (stopIds.contains(stopId)) continue
                         stopIds.add(stopId)
                         
@@ -377,7 +377,7 @@ class GtfsParser(private val context: Context) {
             e.printStackTrace()
         }
         
-        // Si on n'a pas trouvé d'arrêts, utiliser des données simulées
+        // If no stops found, use simulated data
         if (lineStops.isEmpty()) {
             android.util.Log.w("GtfsParser", "No stops found in stop_times.txt for trip $tripId. Generating mock stops.")
             return generateMockLineStops(lineName, currentStopName)
@@ -397,7 +397,7 @@ class GtfsParser(private val context: Context) {
             return emptyList()
         }
         
-        // Extraire les arrêts depuis le nom long de la route
+        // Extract stops from long name de la route
         val routeParts = route.routeLongName.split(" - ")
         
         val mockStops = routeParts.mapIndexed { index, stopName ->
@@ -421,7 +421,7 @@ class GtfsParser(private val context: Context) {
             val inputStream = context.assets.open("data/gtfstcl/trips.txt")
             val reader = BufferedReader(InputStreamReader(inputStream))
             
-            // Lire l'en-tête
+            // Read header
             reader.readLine()
             
             reader.useLines { lines ->
@@ -447,7 +447,7 @@ class GtfsParser(private val context: Context) {
             val inputStream = context.assets.open("data/gtfstcl/trips.txt")
             val reader = BufferedReader(InputStreamReader(inputStream))
             
-            // Lire l'en-tête
+            // Read header
             reader.readLine()
             
             reader.useLines { lines ->
@@ -472,7 +472,7 @@ class GtfsParser(private val context: Context) {
             val inputStream = context.assets.open("data/gtfstcl/trips.txt")
             val reader = BufferedReader(InputStreamReader(inputStream))
             
-            // Lire l'en-tête
+            // Read header
             reader.readLine()
             
             reader.useLines { lines ->

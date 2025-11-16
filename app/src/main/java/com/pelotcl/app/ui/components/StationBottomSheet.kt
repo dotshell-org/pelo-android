@@ -53,7 +53,7 @@ data class StationInfo(
     val nom: String,
     val lignes: List<String>, // Liste des noms de lignes (ex: ["A", "D", "F1"])
     val isPmr: Boolean = false,
-    val desserte: String = "" // Chaîne de desserte complète pour référence
+    val desserte: String = "" // Complete service string for reference
 )
 
 /**
@@ -78,7 +78,7 @@ private fun sortLines(lines: List<String>): List<String> {
         val line = lineRaw.trim()
         val up = line.uppercase()
 
-        // 1) Métro A-D ordre fixe
+        // 1) Metro A-D fixed order
         when (up) {
             "A" -> return Key(1000, number = 0, raw = up)
             "B" -> return Key(1001, number = 0, raw = up)
@@ -98,20 +98,20 @@ private fun sortLines(lines: List<String>): List<String> {
             if (num != null) return Key(3000, number = num, raw = up)
         }
 
-        // 4) Bus avec préfixe lettres + nombre (C1, JD12, S3, etc.)
-        // Regex: lettres (au moins 1) + nombre (au moins 1) + éventuel suffixe lettres
+        // 4) Buses with letter prefix + number (C1, JD12, S3, etc.)
+        // Regex: letters (at least 1) + number (at least 1) + optional letter suffix
         val regex = Regex("^([A-Z]+)(\\d+)([A-Z]*)$")
         val m = regex.matchEntire(up)
         if (m != null) {
             val prefix = m.groupValues[1]
             val num = m.groupValues[2].toIntOrNull() ?: Int.MAX_VALUE
-            // Quelques ajustements pour garder un ordre cohérent des familles TCL fréquentes
-            // On force un sous-ordre pour certains préfixes connus afin d'éviter, par exemple, que JD passe avant C si désiré.
-            // Ici on se contente d'un tri alphabétique du préfixe, ce qui donne: C, JD, S, ...
+            // Some adjustments to keep consistent order of frequent TCL families
+            // Force sub-order for certain prefixes known to avoid, for example, JD passing before C if desired.
+            // Here we're satisfied with alphabetical sort of prefix, which gives: C, JD, S, ...
             return Key(4000, subFamily = prefix, number = num, raw = up)
         }
 
-        // 5) Numérique pur
+        // 5) Pure numeric
         val pureNum = up.toIntOrNull()
         if (pureNum != null) {
             return Key(5000, number = pureNum, raw = up)
@@ -202,7 +202,7 @@ fun StationBottomSheet(
                         modifier = Modifier.weight(1f)
                     )
                     
-                    // Icône PMR si la station est accessible
+                    // PMR icon if station is accessible
                     if (stationInfo.isPmr) {
                         Icon(
                             imageVector = Icons.Default.Accessible,
@@ -215,7 +215,7 @@ fun StationBottomSheet(
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                // Liste scrollable des lignes (triées)
+                // Scrollable list of lines (sorted)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -229,7 +229,7 @@ fun StationBottomSheet(
                             onClick = { onLineClick(ligne) }
                         )
                         
-                        // Divider entre les lignes, sauf après la dernière
+                        // Divider between lines, except after last
                         if (index < sortedLines.size - 1) {
                             HorizontalDivider(
                                 modifier = Modifier.padding(vertical = 4.dp),
@@ -277,7 +277,7 @@ private fun LineListItem(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Icône de la ligne à gauche
+        // Line icon on the left
         if (resourceId != 0) {
             Image(
                 painter = painterResource(id = resourceId),
@@ -285,7 +285,7 @@ private fun LineListItem(
                 modifier = Modifier.size(60.dp)
             )
         } else {
-            // Fallback si l'icône n'existe pas
+            // Fallback if icon doesn't exist
             Text(
                 text = lineName,
                 style = MaterialTheme.typography.titleMedium,
@@ -294,7 +294,7 @@ private fun LineListItem(
             )
         }
         
-        // Chevron à droite
+        // Chevron on the right
         Icon(
             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = "Voir la ligne $lineName",

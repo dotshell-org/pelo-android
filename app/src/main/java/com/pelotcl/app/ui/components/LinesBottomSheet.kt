@@ -51,7 +51,7 @@ fun LinesBottomSheet(
     val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
     
-    // Organiser les lignes par catégorie
+    // Organize lines by category
     val categorizedLines = remember(allLines) {
         categorizeLines(allLines, context)
     }
@@ -74,7 +74,7 @@ fun LinesBottomSheet(
             .background(Color.White, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
             .padding(16.dp)
     ) {
-        // Liste des lignes par catégorie
+        // List of lines by category
         LazyColumn(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(24.dp)
@@ -83,15 +83,15 @@ fun LinesBottomSheet(
                 item {
                     CategorySection(
                         category = category,
-                        // Les lignes sont déjà triées par categorizeLines() (tri "naturel" qui gère les nombres)
-                        // Ne pas re-trier ici pour éviter de revenir à un tri alphanumérique simple
+                        // Lines are already sorted by categorizeLines() ("natural" sort that handles numbers)
+                        // Don't re-sort here to avoid reverting to simple alphanumeric sort
                         lines = lines,
                         onLineClick = onLineClick
                     )
                 }
             }
             
-            // Message si aucun résultat
+            // Message if no results
             if (filteredCategories.isEmpty() && searchQuery.isNotEmpty()) {
                 item {
                     Box(
@@ -125,7 +125,7 @@ private fun CategorySection(
     Column(
         modifier = Modifier.fillMaxWidth()
     ) {
-        // Titre de la catégorie
+        // Category title
         Text(
             text = category,
             style = MaterialTheme.typography.titleMedium,
@@ -152,7 +152,7 @@ private fun CategorySection(
                     )
                 }
                 
-                // Ajouter des espaces vides pour compléter la ligne
+                // Add empty spaces to complete la ligne
                 repeat(columns - rowLines.size) {
                     Spacer(modifier = Modifier.weight(1f))
                 }
@@ -173,7 +173,7 @@ private fun LineChip(
 ) {
     val context = LocalContext.current
     
-    // Obtenir l'ID de ressource de l'icône
+    // Get icon resource ID
     val drawableId = remember(lineName) {
         val resourceName = lineName.lowercase()
             .replace("é", "e")
@@ -181,21 +181,21 @@ private fun LineChip(
             .replace("ê", "e")
             .replace("-", "")
             .replace(" ", "")
-            .let { if (it.first().isDigit()) "_$it" else it } // Préfixe _ si commence par un chiffre
+            .let { if (it.first().isDigit()) "_$it" else it } // Prefix _ if starts with digit
         
         context.resources.getIdentifier(resourceName, "drawable", context.packageName)
     }
     
     Box(
         modifier = modifier
-            .height(36.dp) // Réduit de 48dp à 36dp
+            .height(36.dp) // Reduced from 48dp to 36dp
             .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
-            .padding(2.dp), // Réduit de 4dp à 2dp
+            .padding(2.dp), // Reduced from 4dp to 2dp
         contentAlignment = Alignment.Center
     ) {
         if (drawableId != 0) {
-            // Utiliser l'icône TCL officielle
+            // Use official TCL icon
             Icon(
                 painter = painterResource(id = drawableId),
                 contentDescription = "Ligne $lineName",
@@ -203,7 +203,7 @@ private fun LineChip(
                 tint = Color.Unspecified // Garde les couleurs d'origine du SVG
             )
         } else {
-            // Fallback si l'icône n'existe pas
+            // Fallback if icon doesn't exist
             val androidColor = LineColorHelper.getColorForLineString(lineName)
             val backgroundColor = Color(androidColor.toArgb())
             val textColor = if (lineName.uppercase() == "T3") Color.Black else Color.White
@@ -247,7 +247,7 @@ private fun hasLineIcon(lineName: String, context: android.content.Context): Boo
  * Organise les lignes par catégorie et filtre celles qui n'ont pas d'icône
  */
 private fun categorizeLines(lines: List<String>, context: android.content.Context): Map<String, List<String>> {
-    // D'abord filtrer les lignes qui n'ont pas d'icône
+    // First filter lines that don't have icons
     val linesWithIcon = lines.filter { hasLineIcon(it, context) }
     
     val metros = mutableListOf<String>()
@@ -264,7 +264,7 @@ private fun categorizeLines(lines: List<String>, context: android.content.Contex
         when {
             upperLine in setOf("A", "B", "C", "D") -> metros.add(line)
             upperLine.startsWith("F") && (upperLine == "F1" || upperLine == "F2") -> funiculaires.add(line)
-            // Trams : T + 1 chiffre (T1-T9), Tb (trambus), et RX (Rhônexpress)
+            // Trams: T + 1 digit (T1-T9), Tb (trambus), and RX (Rhonexpress)
             upperLine.startsWith("TB") || upperLine == "RX" || upperLine.contains("RHON") -> trams.add(line)
             upperLine.startsWith("T") && upperLine.length == 2 -> trams.add(line)
             upperLine.startsWith("C") && upperLine.length >= 2 -> chrono.add(line) // C21, C22, etc.
@@ -275,7 +275,7 @@ private fun categorizeLines(lines: List<String>, context: android.content.Contex
         }
     }
     
-    // Tri naturel qui gère correctement les nombres dans les chaînes
+    // Natural sort that correctly handles numbers in strings
     val naturalComparator = Comparator<String> { a, b ->
         val partsA = a.split(Regex("(?<=\\D)(?=\\d)|(?<=\\d)(?=\\D)"))
         val partsB = b.split(Regex("(?<=\\D)(?=\\d)|(?<=\\d)(?=\\D)"))

@@ -7,7 +7,7 @@ import com.pelotcl.app.data.model.Feature
  */
 object LineColorHelper {
     
-    // Couleurs définies
+    // Defined colors
     private const val METRO_A_COLOR = "#EC4899"
     private const val METRO_B_COLOR = "#3B82F6"
     private const val METRO_C_COLOR = "#F59E0B"
@@ -28,13 +28,13 @@ object LineColorHelper {
         val nomTypeLigne = feature.properties.nomTypeLigne?.lowercase() ?: ""
         
         return when {
-            // Métros
+            // Metros
             ligne == "A" && familleTransport == "MET" -> METRO_A_COLOR
             ligne == "B" && familleTransport == "MET" -> METRO_B_COLOR
             ligne == "C" && familleTransport == "MET" -> METRO_C_COLOR
             ligne == "D" && familleTransport == "MET" -> METRO_D_COLOR
             
-            // Funiculaire (détection par nom de ligne ou type)
+            // Funicular.*detection by line name or type)
             ligne == "F1" || ligne == "F2" || nomTypeLigne.contains("funiculaire") -> FUNICULAR_COLOR
             
             // Trams (famille TRA ou TRAM)

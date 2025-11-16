@@ -40,7 +40,7 @@ data class LineInfo(
  */
 private fun getLineColor(lineName: String): Color {
     return when (lineName.uppercase()) {
-        // Métros
+        // Metros
         "A" -> Color(0xFFEC4899) // Rose
         "B" -> Color(0xFF3B82F6) // Bleu
         "C" -> Color(0xFFF59E0B) // Orange
@@ -57,7 +57,7 @@ private fun getLineColor(lineName: String): Color {
 
 /**
  * Bottom sheet affichant les détails d'une ligne de transport :
- * - Liste des arrêts dans l'ordre
+ * - Liste des arrêts in order
  * - Prochains horaires de passage à l'arrêt actuel
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -73,15 +73,15 @@ fun LineDetailsBottomSheet(
     var lineStops by remember { mutableStateOf<List<LineStopInfo>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     
-    // Observer le state des lignes pour attendre que la ligne soit chargée
+    // Observe lines state to wait for line to be loaded
     val linesState by viewModel.uiState.collectAsState()
 
-    // Charger les données quand lineInfo change ET que la ligne est dans le state
+    // Load data when lineInfo changes ET que la ligne est dans le state
     LaunchedEffect(lineInfo, linesState) {
         if (lineInfo != null) {
             isLoading = true
 
-            // Attendre que la ligne soit chargée dans le state
+            // Wait for line to be loaded dans le state
             val lineLoaded = when (linesState) {
                 is TransportLinesUiState.Success -> {
                     (linesState as TransportLinesUiState.Success).lines.any {
@@ -94,11 +94,11 @@ fun LineDetailsBottomSheet(
             android.util.Log.d("LineDetailsBottomSheet", "Line ${lineInfo.lineName} loaded: $lineLoaded")
 
             if (lineLoaded) {
-                // Récupérer les arrêts via l'API (déjà en cache avec correspondances)
+                // Get stops via API (already in cache with transfers)
                 withContext(Dispatchers.IO) {
                     try {
-                        // Utiliser la nouvelle méthode du ViewModel qui récupère les arrêts depuis l'API
-                        // Convertir chaîne vide en null pour éviter les faux positifs de matching
+                        // Use new ViewModel method which retrieves stops from API
+                        // Convert empty string to null to avoid false positive matches
                         val stops = viewModel.getStopsForLine(
                             lineName = lineInfo.lineName,
                             currentStopName = lineInfo.currentStationName.takeIf { it.isNotBlank() }
@@ -106,14 +106,14 @@ fun LineDetailsBottomSheet(
                         
                         android.util.Log.d("LineDetailsBottomSheet", "Loaded ${stops.size} stops for line ${lineInfo.lineName} from API")
                         
-                        // Si 0 stops trouvés, c'est probablement un problème de cache
-                        // Recharger le cache des arrêts sans affecter la carte
+                        // If 0 stops found, likely a cache problem
+                        // Reload stops cache without affecting map
                         if (stops.isEmpty()) {
                             android.util.Log.w("LineDetailsBottomSheet", "0 stops found for line ${lineInfo.lineName}, forcing cache reload...")
                             viewModel.reloadStopsCache() // Recharger uniquement le cache
-                            kotlinx.coroutines.delay(500) // Attendre que le cache soit mis à jour
+                            kotlinx.coroutines.delay(500) // Wait for cache to be updated
                             
-                            // Réessayer
+                            // Retry
                             val stopsRetry = viewModel.getStopsForLine(
                                 lineName = lineInfo.lineName,
                                 currentStopName = lineInfo.currentStationName.takeIf { it.isNotBlank() }
@@ -140,7 +140,7 @@ fun LineDetailsBottomSheet(
                 modifier = Modifier
                     .fillMaxSize()
             ) {
-                // Header compact avec flèche retour, icône de ligne (petite) et nom de la station
+                // Compact header with back arrow, line icon (small) and station name
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -159,7 +159,7 @@ fun LineDetailsBottomSheet(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    // Icône de la ligne (plus petite)
+                    // Line icon.*small)
                     val drawableName = getDrawableNameForLine(lineInfo.lineName)
                     val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
 
@@ -231,7 +231,7 @@ fun LineDetailsBottomSheet(
                             // Obtenir la couleur de la ligne
                             val lineColor = getLineColor(lineInfo.lineName)
 
-                            // Afficher tous les arrêts avec ligne verticale
+                            // Display all stops with vertical line
                             lineStops.forEachIndexed { index, stop ->
                                 StopItemWithLine(
                                     stop = stop,
@@ -307,7 +307,7 @@ private fun StopItemWithLine(
                 modifier = Modifier
                     .size(16.dp)
                     .clip(CircleShape)
-                    .background(if (stop.isCurrentStop) lineColor else Color.White) // Plein si arrêt actuel, creux sinon
+                    .background(if (stop.isCurrentStop) lineColor else Color.White) // Full if current stop, hollow otherwise
                     .border(
                         width = if (stop.isCurrentStop) 0.dp else 3.dp, // Pas de bordure si plein
                         color = lineColor,
@@ -356,7 +356,7 @@ private fun StopItemWithLine(
 private fun ConnectionBadge(lineName: String) {
     val context = LocalContext.current
 
-    // Convertir le nom de ligne en nom de drawable (même logique que pour la carte)
+    // Convert line name to drawable name (same logic as for map)
     val drawableName = getDrawableNameForLine(lineName)
     val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
 
@@ -368,7 +368,7 @@ private fun ConnectionBadge(lineName: String) {
             modifier = Modifier.size(40.dp)
         )
     } else {
-        // Fallback: cercle coloré si l'image n'existe pas
+        // Fallback: colored circle if image doesn't exist
         val backgroundColor = when (lineName) {
             "A" -> Color(0xFFEC4899) // Rose
             "B" -> Color(0xFF3B82F6) // Bleu

@@ -43,8 +43,8 @@ data class StopGeometry(
 data class StopProperties(
     val id: Int,
     val nom: String,
-    val desserte: String, // Lignes qui desservent cet arrêt (ex: "C:A", "M:A:B")
-    val pmr: Boolean, // Accessible aux personnes à mobilité réduite
+    val desserte: String, // Lines serving this stop (e.g. "C:A", "M:A:B")
+    val pmr: Boolean, // Accessible for people with reduced mobility
     val ascenseur: Boolean,
     val escalator: Boolean,
     val gid: Int,

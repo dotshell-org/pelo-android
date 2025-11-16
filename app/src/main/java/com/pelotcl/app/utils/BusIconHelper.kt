@@ -28,7 +28,7 @@ object BusIconHelper {
     }
 
     /**
-     * Retourne les noms des drawables pour toutes les lignes d'un arrêt, dans l'ordre
+     * Retourne les noms des drawables pour toutes les lignes d'un arrêt, in order
      */
     fun getAllDrawableNamesForStop(stopFeature: StopFeature): List<String> {
         return getAllLinesForStop(stopFeature).map { getDrawableNameForLine(it) }
@@ -48,7 +48,7 @@ object BusIconHelper {
     private fun parseDesserte(desserte: String): List<String> {
         if (desserte.isBlank()) return emptyList()
         
-        // Si la chaîne contient des virgules, chaque entrée représente une ligne avec un sens (ex: 5:A ou A:A)
+        // If string contains commas, each entry represents a line with direction (e.g.: 5:A or A:A)
         val entries = desserte.split(",")
         val rawLines: List<String> = if (entries.size > 1) {
             // Format avec virgules: "5:A,86:A" ou "A:A,D:A"
@@ -61,13 +61,13 @@ object BusIconHelper {
             }.filter { it.isNotEmpty() }
         } else {
             // Pas de virgule: format ancien ou simple
-            // Ex: "M:A:B" ou "C17:22:31" ou "A:A" (un seul arrêt)
+            // E.g.: "M:A:B" ou "C17:22:31" or "A:A" (single stop)
             val tokens = desserte.split(":")
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
             if (tokens.isEmpty()) return emptyList()
             
-            // Pour une seule entrée sans virgule comme "A:A" (métro A direction Aller),
+            // For a single entry without comma comme "A:A" (metro A outbound direction),
             // on ne prend que le premier token
             if (tokens.size == 2) {
                 val first = tokens[0]
@@ -76,7 +76,7 @@ object BusIconHelper {
                 if (second.uppercase() == "A" || second.uppercase() == "R") {
                     listOf(first)
                 } else {
-                    // Sinon c'est peut-être un format ancien avec plusieurs lignes
+                    // Otherwise it might be an old format avec plusieurs lignes
                     tokens
                 }
             } else if (tokens.size > 2) {
@@ -94,7 +94,7 @@ object BusIconHelper {
             }
         }
 
-        // Dédupliquer en conservant l'ordre, comparaison insensible à la casse
+        // Deduplicate while preserving order, case-insensitive comparison
         val seen = HashSet<String>()
         val unique = ArrayList<String>(rawLines.size)
         rawLines.forEach { line ->
@@ -118,11 +118,11 @@ object BusIconHelper {
             return ""
         }
         
-        // Vérifier si la ligne est composée uniquement de chiffres
+        // Check if line is composed only of digits
         val isNumericOnly = lineName.all { it.isDigit() }
         
         return if (isNumericOnly) {
-            // Préfixer par underscore pour les lignes numériques
+            // Prefix with underscore for numeric lines
             "_$lineName"
         } else {
             // Convertir en minuscules pour les autres lignes
@@ -142,8 +142,8 @@ object BusIconHelper {
             return false
         }
         
-        // Pour l'instant, on suppose que toutes les lignes ont une icône
-        // Cette logique peut être étendue selon les besoins
+        // For now, assume all lines have an icon
+        // This logic can be extended selon les besoins
         return true
     }
 }

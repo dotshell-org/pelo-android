@@ -12,8 +12,8 @@ import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.TimeUnit
 
 /**
- * Classe de cache en mémoire et sur disque pour les données de transport.
- * Permet d'éviter les appels API répétés et d'améliorer les performances.
+ * In-memory and disk cache class for transport data.
+ * Avoids repeated API calls and improves performance.
  */
 class TransportCache(private val context: Context) {
     
@@ -21,23 +21,23 @@ class TransportCache(private val context: Context) {
     private val prefs = context.getSharedPreferences("transport_cache", Context.MODE_PRIVATE)
     private val mutex = Mutex()
     
-    // Cache en mémoire pour un accès ultra-rapide
+    // In-memory cache for ultra-fast access
     private var metroLinesCache: List<Feature>? = null
     private var tramLinesCache: List<Feature>? = null
     private var busLinesCache: List<Feature>? = null
     private var stopsCache: List<StopFeature>? = null
     
-    // Timestamps pour la gestion de l'expiration
+    // Timestamps for expiration management
     private var metroLinesTimestamp: Long = 0
     private var tramLinesTimestamp: Long = 0
     private var busLinesTimestamp: Long = 0
     private var stopsTimestamp: Long = 0
     
     companion object {
-        // Durée de validité du cache : 24 heures
+        // Cache validity duration: 24 hours
         private val CACHE_VALIDITY_DURATION = TimeUnit.HOURS.toMillis(24)
         
-        // Clés pour SharedPreferences
+        // Keys for SharedPreferences
         private const val KEY_METRO_LINES = "metro_lines"
         private const val KEY_METRO_LINES_TIMESTAMP = "metro_lines_timestamp"
         private const val KEY_TRAM_LINES = "tram_lines"
@@ -58,20 +58,20 @@ class TransportCache(private val context: Context) {
     }
     
     /**
-     * Vérifie si un timestamp est encore valide
+     * Checks if a timestamp is still valid
      */
     private fun isTimestampValid(timestamp: Long): Boolean {
         return (System.currentTimeMillis() - timestamp) < CACHE_VALIDITY_DURATION
     }
     
     /**
-     * Sauvegarde les lignes de métro/funiculaire dans le cache
+     * Saves metro/funicular lines to cache
      */
     suspend fun saveMetroLines(lines: List<Feature>) = mutex.withLock {
         metroLinesCache = lines
         metroLinesTimestamp = System.currentTimeMillis()
         
-        // Sauvegarder sur disque
+        // Save to disk
         prefs.edit().apply {
             putString(KEY_METRO_LINES, gson.toJson(lines))
             putLong(KEY_METRO_LINES_TIMESTAMP, metroLinesTimestamp)
@@ -80,15 +80,15 @@ class TransportCache(private val context: Context) {
     }
     
     /**
-     * Récupère les lignes de métro/funiculaire depuis le cache
+     * Retrieves metro/funicular lines from cache
      */
     suspend fun getMetroLines(): List<Feature>? = mutex.withLock {
-        // Vérifier d'abord le cache mémoire
+        // Check memory cache first
         if (metroLinesCache != null && isTimestampValid(metroLinesTimestamp)) {
             return@withLock metroLinesCache
         }
         
-        // Sinon, charger depuis le disque
+        // Otherwise, load from disk
         val timestamp = prefs.getLong(KEY_METRO_LINES_TIMESTAMP, 0)
         if (isTimestampValid(timestamp)) {
             val json = prefs.getString(KEY_METRO_LINES, null)
@@ -109,13 +109,13 @@ class TransportCache(private val context: Context) {
     }
     
     /**
-     * Sauvegarde les lignes de tram dans le cache
+     * Saves tram lines to cache
      */
     suspend fun saveTramLines(lines: List<Feature>) = mutex.withLock {
         tramLinesCache = lines
         tramLinesTimestamp = System.currentTimeMillis()
         
-        // Sauvegarder sur disque
+        // Save to disk
         prefs.edit().apply {
             putString(KEY_TRAM_LINES, gson.toJson(lines))
             putLong(KEY_TRAM_LINES_TIMESTAMP, tramLinesTimestamp)
@@ -124,15 +124,15 @@ class TransportCache(private val context: Context) {
     }
     
     /**
-     * Récupère les lignes de tram depuis le cache
+     * Retrieves tram lines from cache
      */
     suspend fun getTramLines(): List<Feature>? = mutex.withLock {
-        // Vérifier d'abord le cache mémoire
+        // Check memory cache first
         if (tramLinesCache != null && isTimestampValid(tramLinesTimestamp)) {
             return@withLock tramLinesCache
         }
         
-        // Sinon, charger depuis le disque
+        // Otherwise, load from disk
         val timestamp = prefs.getLong(KEY_TRAM_LINES_TIMESTAMP, 0)
         if (isTimestampValid(timestamp)) {
             val json = prefs.getString(KEY_TRAM_LINES, null)
@@ -153,42 +153,42 @@ class TransportCache(private val context: Context) {
     }
     
     /**
-     * Sauvegarde les lignes de bus dans le cache (MÉMOIRE UNIQUEMENT)
-     * Les lignes de bus sont trop volumineuses pour SharedPreferences
+     * Saves bus lines to cache (MEMORY ONLY)
+     * Bus lines are too large for SharedPreferences
      */
     suspend fun saveBusLines(lines: List<Feature>) = mutex.withLock {
         busLinesCache = lines
         busLinesTimestamp = System.currentTimeMillis()
         
-        // NE PAS sauvegarder sur disque - trop volumineux
+        // DO NOT save to disk - too large
         android.util.Log.d("TransportCache", "Bus lines cached in memory only (${lines.size} lines)")
     }
     
     /**
-     * Récupère les lignes de bus depuis le cache (MÉMOIRE UNIQUEMENT)
-     * Les bus ne sont pas persistés sur disque car trop volumineux
+     * Retrieves bus lines from cache (MEMORY ONLY)
+     * Buses are not persisted to disk because they're too large
      */
     suspend fun getBusLines(): List<Feature>? = mutex.withLock {
-        // Vérifier uniquement le cache mémoire
+        // Check memory cache only
         if (busLinesCache != null && isTimestampValid(busLinesTimestamp)) {
             android.util.Log.d("TransportCache", "Bus lines found in memory cache")
             return@withLock busLinesCache
         }
         
-        // Les bus ne sont pas cachés sur disque
+        // Buses are not cached on disk
         android.util.Log.d("TransportCache", "Bus lines not in cache")
         null
     }
     
     /**
-     * Sauvegarde les arrêts dans le cache
-     * ATTENTION : Les arrêts sont volumineux, on garde tous les arrêts (y compris bus) sur disque
+     * Saves stops to cache
+     * WARNING: Stops are large, we keep all stops (including buses) on disk
      */
     suspend fun saveStops(stops: List<StopFeature>) = mutex.withLock {
         stopsCache = stops
         stopsTimestamp = System.currentTimeMillis()
         
-        // Sauvegarder tous les arrêts sur disque (y compris les bus)
+        // Save all stops to disk (including buses)
         try {
             prefs.edit().apply {
                 putString(KEY_STOPS, gson.toJson(stops))
@@ -198,20 +198,20 @@ class TransportCache(private val context: Context) {
             android.util.Log.d("TransportCache", "Saved ${stops.size} stops to disk and memory")
         } catch (e: Exception) {
             android.util.Log.e("TransportCache", "Failed to save stops to disk, keeping memory cache only", e)
-            // En cas d'erreur, on garde quand même le cache mémoire
+            // In case of error, we still keep the memory cache
         }
     }
     
     /**
-     * Récupère les arrêts depuis le cache
+     * Retrieves stops from cache
      */
     suspend fun getStops(): List<StopFeature>? = mutex.withLock {
-        // Vérifier d'abord le cache mémoire
+        // Check memory cache first
         if (stopsCache != null && isTimestampValid(stopsTimestamp)) {
             return@withLock stopsCache
         }
         
-        // Sinon, charger depuis le disque
+        // Otherwise, load from disk
         val timestamp = prefs.getLong(KEY_STOPS_TIMESTAMP, 0)
         if (isTimestampValid(timestamp)) {
             val json = prefs.getString(KEY_STOPS, null)
@@ -232,7 +232,7 @@ class TransportCache(private val context: Context) {
     }
     
     /**
-     * Vide tout le cache (mémoire et disque)
+     * Clears all cache (memory and disk)
      */
     suspend fun clearAll() = mutex.withLock {
         metroLinesCache = null
@@ -249,7 +249,7 @@ class TransportCache(private val context: Context) {
     }
     
     /**
-     * Vide uniquement le cache des lignes
+     * Clears only the lines cache
      */
     suspend fun clearLines() = mutex.withLock {
         metroLinesCache = null
@@ -272,7 +272,7 @@ class TransportCache(private val context: Context) {
     }
     
     /**
-     * Vide uniquement le cache des arrêts
+     * Clears only the stops cache
      */
     suspend fun clearStops() = mutex.withLock {
         stopsCache = null
@@ -286,7 +286,7 @@ class TransportCache(private val context: Context) {
     }
     
     /**
-     * Vérifie si le cache est valide pour un type de données
+     * Checks if the cache is valid for a data type
      */
     fun isCacheValid(type: CacheType): Boolean {
         return when (type) {
@@ -299,7 +299,7 @@ class TransportCache(private val context: Context) {
 }
 
 /**
- * Types de cache disponibles
+ * Available cache types
  */
 enum class CacheType {
     METRO_LINES,

@@ -8,7 +8,7 @@ import com.pelotcl.app.data.model.FeatureCollection
 import com.pelotcl.app.data.model.StopCollection
 
 /**
- * Repository pour gérer les données des lignes de transport
+ * Repository for managing transport line data
  */
 class TransportRepository(context: Context? = null) {
     
@@ -16,14 +16,14 @@ class TransportRepository(context: Context? = null) {
     private val cache = context?.let { TransportCache.getInstance(it) }
     
     /**
-     * Récupère toutes les lignes de transport (métro, funiculaire et tram UNIQUEMENT)
-     * Les lignes de BUS ne sont PAS chargées par défaut pour éviter de surcharger le téléphone
-     * Pour charger une ligne de bus spécifique, utiliser getLineByName()
-     * Utilise le cache pour améliorer les performances
+     * Fetches all transport lines (metro, funicular and tram ONLY)
+     * Bus lines are NOT loaded by default to avoid overloading the phone
+     * To load a specific bus line, use getLineByName()
+     * Uses cache to improve performance
      */
     suspend fun getAllLines(): Result<FeatureCollection> {
         return try {
-            // Essayer de charger depuis le cache
+            // Try to load from cache
             val cachedMetro = cache?.getMetroLines()
             val cachedTram = cache?.getTramLines()
             
@@ -31,7 +31,7 @@ class TransportRepository(context: Context? = null) {
             val trams: FeatureCollection
             
             if (cachedMetro != null && cachedTram != null) {
-                // Cache hit : utiliser les données en cache
+                // Cache hit: use cached data
                 android.util.Log.d("TransportRepository", "Cache HIT: Loading lines from cache")
                 metroFuniculaire = FeatureCollection(
                     type = "FeatureCollection",
@@ -48,17 +48,17 @@ class TransportRepository(context: Context? = null) {
                     numberReturned = cachedTram.size
                 )
             } else {
-                // Cache miss : charger depuis l'API
+                // Cache miss: load from API
                 android.util.Log.d("TransportRepository", "Cache MISS: Loading lines from API")
                 metroFuniculaire = api.getTransportLines()
                 trams = api.getTramLines()
                 
-                // Sauvegarder dans le cache
+                // Save to cache
                 cache?.saveMetroLines(metroFuniculaire.features)
                 cache?.saveTramLines(trams.features)
             }
 
-            // Fusionner uniquement métro/funiculaire et trams (PAS les bus)
+            // Merge only metro/funicular and trams (NOT buses)
             val allFeatures = (metroFuniculaire.features + trams.features)
 
             // Log des lignes de tram avant grouping
@@ -66,14 +66,14 @@ class TransportRepository(context: Context? = null) {
             android.util.Log.d("TransportRepository", "Tram lines from API: $tramLines")
             android.util.Log.d("TransportRepository", "Total tram features before grouping: ${trams.features.size}")
             
-            // Log des code_trace pour T1
+            // Log code_trace for T1
             val t1Features = trams.features.filter { it.properties.ligne.equals("T1", ignoreCase = true) }
             android.util.Log.d("TransportRepository", "T1 features count: ${t1Features.size}")
             t1Features.forEach { feature ->
                 android.util.Log.d("TransportRepository", "T1 code_trace: ${feature.properties.codeTrace}, sens: ${feature.properties.sens}")
             }
 
-            // Grouper par code_trace et ne garder que le premier de chaque groupe (sens aller)
+            // Group by code_trace and keep only the first of each group (outbound direction)
             val uniqueLines = allFeatures
                 .groupBy { it.properties.codeTrace }
                 .map { (_, features) -> features.first() }
@@ -85,7 +85,7 @@ class TransportRepository(context: Context? = null) {
                 numberMatched = (metroFuniculaire.numberMatched ?: 0) + (trams.numberMatched ?: 0)
             )
 
-            // Log des lignes chargées
+            // Log loaded lines
             val lineNames = uniqueLines.map { it.properties.ligne }.sorted()
             android.util.Log.d("TransportRepository", "Loaded lines: $lineNames")
             android.util.Log.d("TransportRepository", "Metro/Funicular count: ${metroFuniculaire.features.size}")
@@ -99,58 +99,58 @@ class TransportRepository(context: Context? = null) {
     }
     
     /**
-     * Récupère une ligne spécifique par son nom (sens aller uniquement)
-     * Cherche d'abord dans métro/funiculaire/tram, puis dans les bus si non trouvé
-     * Cela permet de charger les lignes de bus uniquement à la demande
-     * Utilise le cache pour améliorer les performances
+     * Fetches a specific line by name (outbound direction only)
+     * Searches first in metro/funicular/tram, then in buses if not found
+     * This allows loading bus lines only on demand
+     * Uses cache to improve performance
      */
     suspend fun getLineByName(lineName: String): Result<Feature?> {
         return try {
-            // Essayer de charger depuis le cache
+            // Try to load from cache
             val cachedMetro = cache?.getMetroLines()
             val cachedTram = cache?.getTramLines()
             
             val priorityFeatures: List<Feature>
             
             if (cachedMetro != null && cachedTram != null) {
-                // Cache hit : utiliser les données en cache
+                // Cache hit: use cached data
                 android.util.Log.d("TransportRepository", "Cache HIT: Loading line $lineName from cache")
                 priorityFeatures = cachedMetro + cachedTram
             } else {
-                // Cache miss : charger depuis l'API
+                // Cache miss: load from API
                 android.util.Log.d("TransportRepository", "Cache MISS: Loading line $lineName from API")
                 val metroFuniculaire = api.getTransportLines()
                 val trams = api.getTramLines()
                 priorityFeatures = metroFuniculaire.features + trams.features
                 
-                // Sauvegarder dans le cache
+                // Save to cache
                 cache?.saveMetroLines(metroFuniculaire.features)
                 cache?.saveTramLines(trams.features)
             }
 
-            // Chercher d'abord dans métro/funiculaire/tram
+            // Search first in metro/funicular/tram
             val line = priorityFeatures
                 .filter { it.properties.ligne.equals(lineName, ignoreCase = true) }
                 .firstOrNull()
             
-            // Si trouvé, retourner
+            // If found, return it
             if (line != null) {
                 return Result.success(line)
             }
             
-            // Sinon, chercher dans les bus (chargement à la demande)
+            // Otherwise, search in buses (on-demand loading)
             val cachedBus = cache?.getBusLines()
             val busLine = if (cachedBus != null) {
-                // Cache hit pour les bus
+                // Cache hit for buses
                 android.util.Log.d("TransportRepository", "Cache HIT: Loading bus line $lineName from cache")
                 cachedBus.filter { it.properties.ligne.equals(lineName, ignoreCase = true) }
                     .firstOrNull()
             } else {
-                // Cache miss : charger tous les bus depuis l'API
+                // Cache miss: load all buses from API
                 android.util.Log.d("TransportRepository", "Cache MISS: Loading all bus lines from API")
                 try {
                     val bus = api.getBusLines()
-                    // Sauvegarder dans le cache (mémoire uniquement, pas sur disque)
+                    // Save to cache (memory only, not on disk)
                     cache?.saveBusLines(bus.features)
                     
                     bus.features
@@ -158,7 +158,7 @@ class TransportRepository(context: Context? = null) {
                         .firstOrNull()
                 } catch (e: OutOfMemoryError) {
                     android.util.Log.e("TransportRepository", "OutOfMemoryError loading bus lines, trying to find line without caching", e)
-                    // En cas d'OutOfMemoryError, charger juste la ligne demandée sans tout cacher
+                    // In case of OutOfMemoryError, just load the requested line without caching everything
                     val bus = api.getBusLines()
                     bus.features
                         .filter { it.properties.ligne.equals(lineName, ignoreCase = true) }
@@ -173,22 +173,22 @@ class TransportRepository(context: Context? = null) {
     }
     
     /**
-     * Récupère tous les arrêts de transport
-     * Filtre les doublons pour les métros et funiculaires (ne garde qu'un arrêt par station)
-     * Les stations de correspondance (plusieurs lignes) s'affichent empilées comme les bus
-     * Filtre intelligemment les arrêts de tram : garde les arrêts aller, mais aussi les arrêts
-     * retour qui n'ont pas d'équivalent aller (certains terminus)
-     * Utilise le cache pour améliorer les performances
+     * Fetches all transport stops
+     * Filters duplicates for metros and funiculars (keeps only one stop per station)
+     * Transfer stations (multiple lines) are displayed stacked like buses
+     * Intelligently filters tram stops: keeps outbound stops, but also inbound stops
+     * that don't have an outbound equivalent (certain terminals)
+     * Uses cache to improve performance
      */
     suspend fun getAllStops(): Result<StopCollection> {
         return try {
-            // Essayer de charger depuis le cache
+            // Try to load from cache
             val cachedStops = cache?.getStops()
             
             val response: StopCollection
             
             if (cachedStops != null) {
-                // Cache hit : utiliser les données en cache
+                // Cache hit: use cached data
                 android.util.Log.d("TransportRepository", "Cache HIT: Loading stops from cache (${cachedStops.size} stops)")
                 response = StopCollection(
                     type = "FeatureCollection",
@@ -198,19 +198,19 @@ class TransportRepository(context: Context? = null) {
                     numberReturned = cachedStops.size
                 )
             } else {
-                // Cache miss : charger depuis l'API
+                // Cache miss: load from API
                 android.util.Log.d("TransportRepository", "Cache MISS: Loading stops from API")
                 response = api.getTransportStops()
             }
             
-            // Filtrer intelligemment les arrêts de tram : 
-            // Grouper par nom et ligne de tram, puis garder :A en priorité, sinon :R
+            // Intelligently filter tram stops:
+            // Group by name and tram line, then keep :A priority, otherwise :R
             val tramStopsGrouped = response.features
                 .filter { stop -> 
                     stop.properties.desserte.matches(Regex(".*\\bT\\d+:[AR]\\b.*"))
                 }
                 .groupBy { stop ->
-                    // Grouper par nom d'arrêt et numéro de ligne de tram
+                    // Group by stop name and tram line number
                     val tramLineMatch = Regex("\\bT(\\d+):[AR]\\b").find(stop.properties.desserte)
                     if (tramLineMatch != null) {
                         "${stop.properties.nom}_T${tramLineMatch.groupValues[1]}"
@@ -219,55 +219,55 @@ class TransportRepository(context: Context? = null) {
                     }
                 }
             
-            // Pour chaque groupe, garder :A en priorité, sinon :R
+            // For each group, keep :A priority, otherwise :R
             val dedupedTramStops = tramStopsGrouped.values.map { stops ->
                 stops.firstOrNull { it.properties.desserte.contains(":A") } 
                     ?: stops.first()
             }
             
-            // Garder tous les arrêts non-tram
+            // Keep all non-tram stops
             val nonTramStops = response.features.filter { stop ->
                 !stop.properties.desserte.matches(Regex(".*\\bT\\d+:[AR]\\b.*"))
             }
             
-            // Combiner les arrêts de tram dédupliqués avec les autres arrêts
+            // Combine deduplicated tram stops with other stops
             val stopsWithoutTramRetour = dedupedTramStops + nonTramStops
             
-            // Filtrer les arrêts de métro et funiculaire pour éviter les doublons par quai
-            // Pour les correspondances, on fusionne toutes les dessertes en une seule
+            // Filter metro and funicular stops to avoid duplicates by platform
+            // For transfers, we merge all services into one
             val filteredStops = stopsWithoutTramRetour.groupBy { stop ->
                 val desserte = stop.properties.desserte
                 
-                // Détection stricte métro: desserte commence par A:, B:, C: ou D:
-                // Détection stricte funiculaire: desserte commence par F1: ou F2:
-                // Cela exclut les bus qui ont ces lignes plus tard dans leur desserte
+                // Strict metro detection: service starts with A:, B:, C: or D:
+                // Strict funicular detection: service starts with F1: or F2:
+                // This excludes buses that have these lines later in their service
                 val isMetro = desserte.matches(Regex("^[ABCD]:.*"))
                 val isFunicular = desserte.matches(Regex("^F[12]:.*"))
                 
                 if (isMetro || isFunicular) {
-                    // Grouper uniquement par nom de station pour que toutes les lignes
-                    // d'une même station (correspondances) s'affichent empilées au même endroit
+                    // Group only by station name so that all lines
+                    // at the same station (transfers) are displayed stacked at the same place
                     stop.properties.nom
                 } else {
-                    // Pour les autres (bus, tram), garder chaque arrêt unique
+                    // For others (bus, tram), keep each stop unique
                     stop.id
                 }
             }.map { (_, stops) ->
                 if (stops.size == 1) {
-                    // Un seul arrêt pour ce groupe, le retourner tel quel
+                    // Single stop for this group, return as is
                     stops.first()
                 } else {
-                    // Plusieurs arrêts (correspondance): fusionner les dessertes
+                    // Multiple stops (transfer): merge services
                     val baseStop = stops.firstOrNull { it.properties.desserte.contains(":A") } ?: stops.first()
                     
-                    // Collecter toutes les lignes uniques de tous les arrêts de cette station
+                    // Collect all unique lines from all stops at this station
                     val allDessertes = stops.map { it.properties.desserte }.toSet()
                     
-                    // Fusionner les dessertes en une seule chaîne avec virgules
+                    // Merge services into a single string with commas
                     // Ex: "A:A" + "D:A" -> "A:A,D:A"
                     val mergedDesserte = allDessertes.joinToString(",")
                     
-                    // Créer un nouvel arrêt avec la desserte fusionnée
+                    // Create a new stop with the merged service
                     baseStop.copy(
                         properties = baseStop.properties.copy(
                             desserte = mergedDesserte
@@ -281,13 +281,13 @@ class TransportRepository(context: Context? = null) {
                 numberReturned = filteredStops.size
             )
             
-            // Sauvegarder dans le cache seulement si ce n'était pas déjà en cache
+            // Save to cache only if it wasn't already cached
             if (cachedStops == null) {
                 try {
                     cache?.saveStops(filteredCollection.features)
                 } catch (e: OutOfMemoryError) {
                     android.util.Log.e("TransportRepository", "OutOfMemoryError saving stops to cache, continuing without cache", e)
-                    // Continuer sans cache en cas d'erreur mémoire
+                    // Continue without cache in case of memory error
                 }
             }
             
@@ -298,7 +298,7 @@ class TransportRepository(context: Context? = null) {
     }
     
     /**
-     * Force le rechargement des arrêts depuis l'API et met à jour le cache
+     * Forces reloading of stops from the API and updates the cache
      */
     suspend fun refreshStops(): Result<StopCollection> {
         return try {
@@ -311,7 +311,7 @@ class TransportRepository(context: Context? = null) {
     }
     
     /**
-     * Force le rechargement des lignes depuis l'API et met à jour le cache
+     * Forces reloading of lines from the API and updates the cache
      */
     suspend fun refreshLines(): Result<FeatureCollection> {
         return try {
@@ -324,7 +324,7 @@ class TransportRepository(context: Context? = null) {
     }
     
     /**
-     * Vide tout le cache
+     * Clears the entire cache
      */
     suspend fun clearCache() {
         cache?.clearAll()

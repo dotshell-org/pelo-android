@@ -113,10 +113,10 @@ fun NavBar(modifier: Modifier = Modifier) {
                         NavigationBarItem(
                             selected = selectedDestination == index,
                             onClick = {
-                                // Cas spécial pour le bouton "Lignes" - ouvrir la sheet au lieu de naviguer
+                                // Special case for "Lines" button - open sheet instead of navigating
                                 if (destination == Destination.LIGNES) {
                                     showLinesSheet = true
-                                    // Ne pas changer selectedDestination pour rester sur Plan
+                                    // Don't change selectedDestination to stay on Plan
                                 } else if (selectedDestination != index) {
                                     navController.navigate(destination.route) {
                                         launchSingleTop = true
@@ -146,7 +146,7 @@ fun NavBar(modifier: Modifier = Modifier) {
                 }
             }
         ) { contentPadding ->
-            // Ne pas appliquer le padding pour l'écran Plan (plein écran)
+            // Don't apply padding for the Plan screen (full screen)
             val shouldApplyPadding = selectedDestination != Destination.PLAN.ordinal
             AppNavHost(
                 navController = navController, 
@@ -160,7 +160,7 @@ fun NavBar(modifier: Modifier = Modifier) {
             )
         }
         
-        // Barre de recherche au-dessus de tout uniquement sur l'écran Plan et quand le bottom sheet ET la lines sheet sont fermés
+        // Search bar on top of everything only on the Plan screen and when the bottom sheet AND lines sheet are closed
         if (selectedDestination == Destination.PLAN.ordinal && !isBottomSheetOpen && !showLinesSheet) {
             SimpleSearchBar(
                 searchResults = emptyList(),

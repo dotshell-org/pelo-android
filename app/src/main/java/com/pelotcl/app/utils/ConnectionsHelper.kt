@@ -15,8 +15,8 @@ fun getTransportType(lineName: String): TransportType {
         lineName.matches(Regex("T[1-7]")) -> TransportType.TRAM
         lineName in listOf("A", "B", "C", "D") -> TransportType.METRO
         lineName in listOf("F1", "F2") -> TransportType.FUNICULAR
-        // Les lignes de bus peuvent être des numéros, des "C" suivis de numéros, ou d'autres lettres.
-        // C'est plus simple de considérer tout le reste comme un bus par défaut.
+        // Bus lines can be numbers, "C" followed by numbers, or other letters.
+        // It's simpler to consider everything else as a bus by default.
         else -> TransportType.BUS
     }
 }
@@ -63,11 +63,11 @@ object ConnectionsHelper {
             return true
         }
         
-        // Ensuite essayer avec les mots séparés pour gérer les abréviations
+        // Then try with separated words to handle abbreviations
         val words1 = normalizeWords(name1)
         val words2 = normalizeWords(name2)
         
-        // Si un des deux noms a moins de mots, c'est peut-être une version abrégée
+        // If one of the two names has fewer words, it might be an abbreviated version
         if (words1.size != words2.size) {
             val shorter = if (words1.size < words2.size) words1 else words2
             val longer = if (words1.size < words2.size) words2 else words1
@@ -119,7 +119,7 @@ object ConnectionsHelper {
             return shorterIndex == shorter.size
         }
         
-        // Vérifier que tous les mots matchent dans l'ordre
+        // Check that all words match in order
         if (words1.size == words2.size) {
             return words1.zip(words2).all { (w1, w2) ->
                 w1 == w2 || 
@@ -154,7 +154,7 @@ object ConnectionsHelper {
         
         if (desserte.isBlank()) return emptyList()
         
-        // Si la chaîne contient des virgules, chaque entrée représente une ligne avec un sens
+        // If string contains commas, each entry represents a line with direction
         val entries = desserte.split(",")
         
         for (entry in entries) {
@@ -164,23 +164,23 @@ object ConnectionsHelper {
             // Extraire la ligne (avant le premier ":")
             val lineName = trimmed.substringBefore(":").trim()
             
-            // Vérifier si c'est une ligne de métro (A, B, C, D)
+            // Check if it's a metro line (A, B, C, D)
             if (lineName in listOf("A", "B", "C", "D")) {
                 connections.add(lineName)
             }
             
-            // Vérifier si c'est une ligne de funiculaire (F1, F2)
+            // Check if it's a funicular line (F1, F2)
             if (lineName in listOf("F1", "F2")) {
                 connections.add(lineName)
             }
             
-            // Vérifier si c'est une ligne de tram (T1 à T7)
+            // Check if it's a tram line (T1 to T7)
             if (lineName.matches(Regex("T[1-7]"))) {
                 connections.add(lineName)
             }
         }
         
-        // Trier pour avoir un ordre cohérent : A, B, C, D, F1, F2, T1-T7
+        // Sort for consistent order : A, B, C, D, F1, F2, T1-T7
         return connections.sortedWith(compareBy { line ->
             when {
                 line in listOf("A", "B", "C", "D") -> line[0].code
@@ -237,7 +237,7 @@ object ConnectionsHelper {
         currentLine: String,
         allStops: List<StopFeature>
     ): List<String> {
-        // Chercher les arrêts qui correspondent au nom
+        // Search for stops matching the name
         val matchingStops = allStops.filter { stop ->
             stationNamesMatch(stop.properties.nom, stopName)
         }
@@ -252,7 +252,7 @@ object ConnectionsHelper {
         // Enlever la ligne actuelle de la liste des correspondances
         allConnections.remove(currentLine)
         
-        // Trier pour avoir un ordre cohérent
+        // Sort for consistent order
         return allConnections.sortedWith(compareBy { line ->
             when (line) {
                 "A" -> 1
