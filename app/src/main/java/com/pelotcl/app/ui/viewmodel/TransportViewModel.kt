@@ -1,6 +1,7 @@
 package com.pelotcl.app.ui.viewmodel
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.pelotcl.app.data.model.Feature
 import com.pelotcl.app.data.model.StopFeature
@@ -36,9 +37,9 @@ sealed class TransportStopsUiState {
 /**
  * ViewModel pour gérer les données des lignes de transport
  */
-class TransportViewModel : ViewModel() {
+class TransportViewModel(application: Application) : AndroidViewModel(application) {
     
-    private val repository = TransportRepository()
+    private val repository = TransportRepository(application.applicationContext)
     
     private val _uiState = MutableStateFlow<TransportLinesUiState>(TransportLinesUiState.Loading)
     val uiState: StateFlow<TransportLinesUiState> = _uiState.asStateFlow()
@@ -453,6 +454,43 @@ class TransportViewModel : ViewModel() {
             _stopsUiState.value = TransportStopsUiState.Loading
             repository.getAllStops()
                 .onSuccess { stopCollection ->
+                    _stopsUiState.value = TransportStopsUiState.Success(stopCollection.features)
+                }
+                .onFailure { exception ->
+                    _stopsUiState.value = TransportStopsUiState.Error(
+                        exception.message ?: "Une erreur est survenue lors du chargement des arrêts"
+                    )
+                }
+        }
+    }
+    
+    /**
+     * Force le rechargement des données depuis l'API (ignore le cache)
+     */
+    fun refreshAllData() {
+        viewModelScope.launch {
+            _uiState.value = TransportLinesUiState.Loading
+            _stopsUiState.value = TransportStopsUiState.Loading
+            
+            // Vider le cache et recharger
+            repository.clearCache()
+            
+            // Recharger les lignes
+            repository.getAllLines()
+                .onSuccess { featureCollection ->
+                    _uiState.value = TransportLinesUiState.Success(featureCollection.features)
+                }
+                .onFailure { exception ->
+                    _uiState.value = TransportLinesUiState.Error(
+                        exception.message ?: "Une erreur est survenue"
+                    )
+                }
+            
+            // Recharger les arrêts
+            repository.getAllStops()
+                .onSuccess { stopCollection ->
+                    cachedStops = stopCollection.features
+                    buildConnectionsIndex(stopCollection.features)
                     _stopsUiState.value = TransportStopsUiState.Success(stopCollection.features)
                 }
                 .onFailure { exception ->

@@ -28,6 +28,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.CreationExtras
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
@@ -78,7 +80,19 @@ private fun isMetroTramOrFunicular(lineName: String): Boolean {
 fun PlanScreen(
     modifier: Modifier = Modifier,
     contentPadding: androidx.compose.foundation.layout.PaddingValues = androidx.compose.foundation.layout.PaddingValues(0.dp),
-    viewModel: TransportViewModel = viewModel(),
+    viewModel: TransportViewModel = viewModel(
+        factory = object : ViewModelProvider.Factory {
+            override fun <T : androidx.lifecycle.ViewModel> create(
+                modelClass: Class<T>,
+                extras: CreationExtras
+            ): T {
+                val application = extras[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY]
+                    ?: throw IllegalStateException("Application not found in CreationExtras")
+                @Suppress("UNCHECKED_CAST")
+                return TransportViewModel(application) as T
+            }
+        }
+    ),
     onSheetStateChanged: (Boolean) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
