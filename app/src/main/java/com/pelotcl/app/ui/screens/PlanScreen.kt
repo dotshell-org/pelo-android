@@ -80,6 +80,16 @@ private fun isMetroTramOrFunicular(lineName: String): Boolean {
     }
 }
 
+/**
+ * Vérifie si une ligne est un bus qui doit être déchargé quand on quitte la vue des détails.
+ * Tous les bus (y compris C, PL, JD, NAVI) doivent être déchargés car ils ne sont pas
+ * chargés par défaut au démarrage de l'application.
+ */
+private fun isTemporaryBus(lineName: String): Boolean {
+    // Les métros, trams et funiculaires sont toujours chargés, donc pas temporaires
+    return !isMetroTramOrFunicular(lineName)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlanScreen(
@@ -116,6 +126,9 @@ fun PlanScreen(
     val scaffoldSheetState = rememberBottomSheetScaffoldState()
     var selectedStation by remember { mutableStateOf<StationInfo?>(null) }
     var selectedLine by remember { mutableStateOf<LineInfo?>(null) }
+    
+    // Track temporarily loaded bus lines (to unload them when exiting line details)
+    var temporaryLoadedBusLines by remember { mutableStateOf<Set<String>>(emptySet()) }
     
     // Determine which content to show: station info or line details
     var showLineDetails by remember { mutableStateOf(false) }
@@ -280,6 +293,10 @@ fun PlanScreen(
                             if (!isMetroTramOrFunicular(lineName)) {
                                 android.util.Log.d("PlanScreen", "Pre-loading line: $lineName")
                                 viewModel.addLineToLoaded(lineName)
+                                // Ajouter aux lignes temporaires (tous les bus doivent être temporaires)
+                                if (isTemporaryBus(lineName)) {
+                                    temporaryLoadedBusLines = temporaryLoadedBusLines + lineName
+                                }
                                 // Attendre un peu que la ligne soit ajoutée au state
                                 kotlinx.coroutines.delay(100)
                             }
@@ -301,7 +318,6 @@ fun PlanScreen(
     }
     
     // Charger une ligne de bus à la demande quand elle est sélectionnée
-    // Et la retirer quand on ferme les détails
     LaunchedEffect(showLineDetails, selectedLine) {
         if (showLineDetails && selectedLine != null) {
             val lineName = selectedLine!!.lineName
@@ -312,15 +328,39 @@ fun PlanScreen(
                 android.util.Log.d("PlanScreen", "Loading bus line: $lineName")
                 // Ajouter la ligne de bus aux lignes déjà chargées (sans remplacer)
                 viewModel.addLineToLoaded(lineName)
+                // Ajouter aux lignes temporaires (tous les bus doivent être temporaires)
+                if (isTemporaryBus(lineName)) {
+                    temporaryLoadedBusLines = temporaryLoadedBusLines + lineName
+                    android.util.Log.d("PlanScreen", "Added to temporary bus lines: $lineName, total: ${temporaryLoadedBusLines.size}")
+                }
             }
-        } else if (!showLineDetails && selectedLine != null) {
-            // Quand on ferme les détails, retirer la ligne de bus si c'en était une
-            val lineName = selectedLine!!.lineName
-            android.util.Log.d("PlanScreen", "showLineDetails=false, lineName=$lineName")
-            if (!isMetroTramOrFunicular(lineName)) {
-                android.util.Log.d("PlanScreen", "Removing bus line: $lineName")
-                viewModel.removeLineFromLoaded(lineName)
+        }
+    }
+    
+    // Décharger TOUTES les lignes temporaires quand on ferme les détails
+    LaunchedEffect(showLineDetails) {
+        if (!showLineDetails && temporaryLoadedBusLines.isNotEmpty()) {
+            // Quand on ferme les détails, retirer TOUTES les lignes de bus temporaires
+            android.util.Log.d("PlanScreen", "showLineDetails=false, clearing ${temporaryLoadedBusLines.size} temporary bus lines")
+            temporaryLoadedBusLines.forEach { busLine ->
+                android.util.Log.d("PlanScreen", "Removing temporary bus line: $busLine")
+                viewModel.removeLineFromLoaded(busLine)
             }
+            temporaryLoadedBusLines = emptySet()
+        }
+    }
+    
+    // Décharger les lignes temporaires quand on ferme la sheet des lignes ET qu'aucun détail n'est ouvert
+    LaunchedEffect(showLinesSheet, showLineDetails) {
+        // Quand la sheet des lignes se ferme et qu'on n'est pas en train de voir les détails d'une ligne,
+        // c'est qu'on a fait "retour" sans ouvrir de ligne : nettoyer toutes les lignes temporaires
+        if (!showLinesSheet && !showLineDetails && temporaryLoadedBusLines.isNotEmpty()) {
+            android.util.Log.d("PlanScreen", "LinesSheet closed without line details open, clearing ${temporaryLoadedBusLines.size} temporary bus lines")
+            temporaryLoadedBusLines.forEach { busLine ->
+                android.util.Log.d("PlanScreen", "Removing temporary bus line from lines sheet: $busLine")
+                viewModel.removeLineFromLoaded(busLine)
+            }
+            temporaryLoadedBusLines = emptySet()
         }
     }
     
@@ -374,6 +414,7 @@ fun PlanScreen(
                         lineInfo = selectedLine!!,
                         viewModel = viewModel,
                         onBackToStation = {
+                            // Simplement fermer les détails, le déchargement se fera dans le LaunchedEffect
                             showLineDetails = false
                         }
                     )
@@ -398,6 +439,10 @@ fun PlanScreen(
                                 android.util.Log.d("PlanScreen", "Pre-loading line from station sheet: $lineName")
                                 scope.launch {
                                     viewModel.addLineToLoaded(lineName)
+                                    // Ajouter aux lignes temporaires (tous les bus doivent être temporaires)
+                                    if (isTemporaryBus(lineName)) {
+                                        temporaryLoadedBusLines = temporaryLoadedBusLines + lineName
+                                    }
                                     // Attendre un peu que la ligne soit ajoutée au state
                                     kotlinx.coroutines.delay(100)
                                     showLineDetails = true
@@ -466,6 +511,10 @@ fun PlanScreen(
                         scope.launch {
                             android.util.Log.d("PlanScreen", "Loading bus line from lines sheet: $lineName")
                             viewModel.addLineToLoaded(lineName)
+                            // Ajouter aux lignes temporaires (tous les bus doivent être temporaires)
+                            if (isTemporaryBus(lineName)) {
+                                temporaryLoadedBusLines = temporaryLoadedBusLines + lineName
+                            }
                             // Attendre un peu que la ligne soit ajoutée au state
                             kotlinx.coroutines.delay(100)
                             
