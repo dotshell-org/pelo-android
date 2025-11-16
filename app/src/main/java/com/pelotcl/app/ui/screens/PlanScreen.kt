@@ -238,15 +238,24 @@ fun PlanScreen(
                     scope.launch {
                         // If line details are open, simulate clicking back arrow first
                         if (showLineDetails) {
-                            // Step 1: Close line details (back to station view)
+                            // Step 1: Remove the line from loaded lines if it's a bus
+                            selectedLine?.let { lineInfo ->
+                                val lineName = lineInfo.lineName
+                                if (!isMetroTramOrFunicular(lineName)) {
+                                    android.util.Log.d("PlanScreen", "Removing bus line when clicking another stop: $lineName")
+                                    viewModel.removeLineFromLoaded(lineName)
+                                }
+                            }
+                            
+                            // Step 2: Close line details (back to station view)
                             selectedLine = null
                             showLineDetails = false
                             
-                            // Step 2: Close the sheet completely
+                            // Step 3: Close the sheet completely
                             scaffoldSheetState.bottomSheetState.partialExpand()
                             isSheetExpanded = false
                             
-                            // Step 3: Wait a bit for the animation
+                            // Step 4: Wait a bit for the animation
                             kotlinx.coroutines.delay(300)
                         }
                         
