@@ -50,6 +50,8 @@ import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LineColorHelper
 import kotlinx.coroutines.launch
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
+import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.LineLayer
@@ -331,6 +333,8 @@ fun PlanScreen(
                 if (showLineDetails && selectedLine != null) {
                     // Afficher uniquement la ligne sélectionnée
                     filterMapLines(map, state.lines, selectedLine!!.lineName)
+                    // Zoomer sur la ligne sélectionnée
+                    zoomToLine(map, state.lines, selectedLine!!.lineName)
                 } else {
                     // Afficher toutes les lignes
                     showAllMapLines(map, state.lines)
@@ -554,6 +558,54 @@ private fun filterMapLines(
         // Filtrer également les arrêts pour n'afficher que ceux de la ligne sélectionnée
         filterMapStops(style, selectedLineName)
     }
+}
+
+/**
+ * Zoome la caméra pour afficher toute la ligne sélectionnée
+ */
+private fun zoomToLine(
+    map: MapLibreMap,
+    allLines: List<com.pelotcl.app.data.model.Feature>,
+    selectedLineName: String
+) {
+    // Trouver toutes les features de la ligne sélectionnée
+    val lineFeatures = allLines.filter { 
+        it.properties.ligne.equals(selectedLineName, ignoreCase = true) 
+    }
+    
+    if (lineFeatures.isEmpty()) return
+    
+    // Calculer les bounds de toutes les coordonnées de la ligne
+    val boundsBuilder = LatLngBounds.Builder()
+    var hasCoordinates = false
+    
+    lineFeatures.forEach { feature ->
+        // Chaque feature a un MultiLineString avec plusieurs segments
+        feature.geometry.coordinates.forEach { lineString ->
+            lineString.forEach { coord ->
+                // coord[1] = latitude, coord[0] = longitude
+                boundsBuilder.include(LatLng(coord[1], coord[0]))
+                hasCoordinates = true
+            }
+        }
+    }
+    
+    if (!hasCoordinates) return
+    
+    val bounds = boundsBuilder.build()
+    
+    // Ajouter du padding asymétrique pour compenser la bottom sheet repliée en bas
+    // Plus de padding en bas (où se trouve la sheet), moins en haut
+    val paddingLeft = 200
+    val paddingTop = 100
+    val paddingRight = 200
+    val paddingBottom = 600 // Augmenté pour monter encore plus la caméra
+    
+    // Animer la caméra vers ces bounds avec padding asymétrique
+    map.animateCamera(
+        CameraUpdateFactory.newLatLngBounds(bounds, paddingLeft, paddingTop, paddingRight, paddingBottom),
+        1000 // durée en ms
+    )
 }
 
 /**
