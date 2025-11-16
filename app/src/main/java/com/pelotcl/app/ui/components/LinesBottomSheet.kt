@@ -253,7 +253,7 @@ private fun categorizeLines(lines: List<String>, context: android.content.Contex
     val metros = mutableListOf<String>()
     val trams = mutableListOf<String>()
     val funiculaires = mutableListOf<String>()
-    val navettes = mutableListOf<String>() // Lignes C
+    val chrono = mutableListOf<String>() // Lignes C
     val pleineLune = mutableListOf<String>() // Lignes PL
     val jd = mutableListOf<String>() // Lignes JD
     val navigone = mutableListOf<String>() // Ligne NAVI1
@@ -267,7 +267,7 @@ private fun categorizeLines(lines: List<String>, context: android.content.Contex
             // Trams : T + 1 chiffre (T1-T9), Tb (trambus), et RX (Rhônexpress)
             upperLine.startsWith("TB") || upperLine == "RX" || upperLine.contains("RHON") -> trams.add(line)
             upperLine.startsWith("T") && upperLine.length == 2 -> trams.add(line)
-            upperLine.startsWith("C") && upperLine.length >= 2 -> navettes.add(line) // C21, C22, etc.
+            upperLine.startsWith("C") && upperLine.length >= 2 -> chrono.add(line) // C21, C22, etc.
             upperLine.startsWith("PL") -> pleineLune.add(line) // PL1, PL2, etc.
             upperLine.startsWith("JD") -> jd.add(line) // Lignes JD
             upperLine.startsWith("NAVI") -> navigone.add(line) // NAVI1
@@ -311,11 +311,11 @@ private fun categorizeLines(lines: List<String>, context: android.content.Contex
     if (metros.isNotEmpty()) result["Métro"] = naturalSort(metros)
     if (funiculaires.isNotEmpty()) result["Funiculaire"] = naturalSort(funiculaires)
     if (trams.isNotEmpty()) result["Tramway"] = naturalSort(trams)
-    if (navettes.isNotEmpty()) result["Navettes"] = naturalSort(navettes)
+    if (chrono.isNotEmpty()) result["Chrono"] = naturalSort(chrono)
     if (navigone.isNotEmpty()) result["Navigône"] = naturalSort(navigone)
     if (pleineLune.isNotEmpty()) result["Pleine Lune"] = naturalSort(pleineLune)
     if (bus.isNotEmpty()) result["Bus"] = naturalSort(bus)
-    if (jd.isNotEmpty()) result["Cars JD"] = naturalSort(jd)
+    if (jd.isNotEmpty()) result["Junior Direct"] = naturalSort(jd)
     
     return result
 }
