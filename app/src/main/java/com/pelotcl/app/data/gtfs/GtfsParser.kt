@@ -7,7 +7,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 /**
- * Parser pour les fichiers GTFS stockés dans les assets
+ * Parser for GTFS files stored in assets
  */
 class GtfsParser(private val context: Context) {
     
@@ -17,18 +17,18 @@ class GtfsParser(private val context: Context) {
     private var stopsCacheLoaded = false
     
     /**
-     * Normalise un nom de station pour la comparaison
-     * Garde uniquement les lettres et convertit en minuscules
-     * Ex: "Saxe - Gambetta" devient "saxegambetta"
+     * Normalizes a station name for comparison
+     * Keeps only letters and converts to lowercase
+     * Ex: "Saxe - Gambetta" becomes "saxegambetta"
      */
     private fun normalizeStationName(name: String): String {
         return name.filter { it.isLetter() }.lowercase()
     }
     
     /**
-     * Normalise les mots d'un nom de station en gérant les abréviations
-     * Ex: "L." devient "l", "Louis" devient "louis"
-     * Filtre aussi les mots génériques comme "gare" qui peuvent être omis
+     * Normalizes the words of a station name handling abbreviations
+     * Ex: "L." becomes "l", "Louis" becomes "louis"
+     * Also filters generic words like "gare" which can be omitted
      */
     private fun normalizeWords(name: String): List<String> {
         val ignoredWords = setOf("gare", "station", "arret")
@@ -36,16 +36,16 @@ class GtfsParser(private val context: Context) {
         return name.split(Regex("[\\s\\-,.]+"))
             .filter { it.isNotEmpty() }
             .map { word -> 
-                // Retirer les points et garder uniquement les lettres
+                // Remove dots and keep only letters
                 word.filter { it.isLetter() }.lowercase()
             }
             .filter { it.isNotEmpty() && it !in ignoredWords }
     }
     
     /**
-     * Compare deux noms de station de manière flexible
-     * Gère les abréviations : "L. Pradel" match avec "Louis Pradel"
-     * Gère aussi les abréviations de mots : "Cat." match avec "Cathédrale"
+     * Compares two station names flexibly
+     * Handles abbreviations: "L. Pradel" matches "Louis Pradel"
+     * Also handles word abbreviations: "Cat." matches "Cathédrale"
      */
     private fun stationNamesMatch(name1: String, name2: String): Boolean {
         // First try simple comparison

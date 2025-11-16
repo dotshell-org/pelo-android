@@ -61,7 +61,7 @@ class TransportRepository(context: Context? = null) {
             // Merge only metro/funicular and trams (NOT buses)
             val allFeatures = (metroFuniculaire.features + trams.features)
 
-            // Log des lignes de tram avant grouping
+            // Log tram lines before grouping
             val tramLines = trams.features.map { it.properties.ligne }.distinct().sorted()
             android.util.Log.d("TransportRepository", "Tram lines from API: $tramLines")
             android.util.Log.d("TransportRepository", "Total tram features before grouping: ${trams.features.size}")

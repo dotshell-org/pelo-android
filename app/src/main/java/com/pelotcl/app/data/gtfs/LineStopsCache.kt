@@ -1,23 +1,23 @@
 package com.pelotcl.app.data.gtfs
 
 /**
- * Cache statique des arrêts des lignes principales pour améliorer les performances
- * Évite de parser le fichier stop_times.txt (>50MB) each time
+ * Static cache of main line stops to improve performance
+ * Avoids parsing the stop_times.txt file (>50MB) each time
  */
 object LineStopsCache {
     
     /**
-     * Normalise un nom de station pour la comparaison
-     * Garde uniquement les lettres et convertit en minuscules
+     * Normalizes a station name for comparison
+     * Keeps only letters and converts to lowercase
      */
     private fun normalizeStationName(name: String): String {
         return name.filter { it.isLetter() }.lowercase()
     }
     
     /**
-     * Normalise les mots d'un nom de station en gérant les abréviations
-     * Ex: "L." devient "l", "Louis" devient "louis"
-     * Filtre aussi les mots génériques comme "gare" qui peuvent être omis
+     * Normalizes the words of a station name handling abbreviations
+     * Ex: "L." becomes "l", "Louis" becomes "louis"
+     * Also filters generic words like "gare" which can be omitted
      */
     private fun normalizeWords(name: String): List<String> {
         val ignoredWords = setOf("gare", "station", "arret")
@@ -25,19 +25,19 @@ object LineStopsCache {
         return name.split(Regex("[\\s\\-,.]+"))
             .filter { it.isNotEmpty() }
             .map { word -> 
-                // Retirer les points et garder uniquement les lettres
+                // Remove dots and keep only letters
                 word.filter { it.isLetter() }.lowercase()
             }
             .filter { it.isNotEmpty() && it !in ignoredWords }
     }
     
     /**
-     * Compare deux noms de station de manière flexible
-     * Gère les abréviations : "L. Pradel" match avec "Louis Pradel"
-     * Gère aussi les abréviations de mots : "Cat." match avec "Cathédrale"
+     * Compares two station names flexibly
+     * Handles abbreviations: "L. Pradel" matches "Louis Pradel"
+     * Also handles word abbreviations: "Cat." matches "Cathédrale"
      */
     private fun stationNamesMatch(name1: String, name2: String): Boolean {
-        // D'abord essayer la comparaison simple
+        // First try simple comparison
         val normalized1 = normalizeStationName(name1)
         val normalized2 = normalizeStationName(name2)
         
@@ -54,9 +54,9 @@ object LineStopsCache {
             val shorter = if (words1.size < words2.size) words1 else words2
             val longer = if (words1.size < words2.size) words2 else words1
             
-            // Check if all words from the short version match avec la version longue
+            // Check if all words from the short version match with the long version
             // Either exactly or as beginning of word (for abbreviations)
-            // Also handles compound words (ex: "partdieu" match "part" + "dieu")
+            // Also handles compound words (ex: "partdieu" matches "part" + "dieu")
             var shorterIndex = 0
             var longerIndex = 0
             
@@ -64,34 +64,34 @@ object LineStopsCache {
                 val shortWord = shorter[shorterIndex]
                 val longWord = longer[longerIndex]
                 
-                // Match exact
+                // Exact match
                 if (shortWord == longWord) {
                     shorterIndex++
                     longerIndex++
                 }
-                // Le mot long commence par le mot court (ex: "cat" match "cathedrale")
+                // The long word starts with the short word (ex: "cat" matches "cathedrale")
                 // Minimum 3 letters to avoid false positives
                 else if (shortWord.length >= 3 && longWord.startsWith(shortWord)) {
                     shorterIndex++
                     longerIndex++
                 }
-                // Le mot court est une initiale du mot long (ex: "l" match "louis")
+                // The short word is an initial of the long word (ex: "l" matches "louis")
                 else if (shortWord.length == 1 && longWord.startsWith(shortWord)) {
                     shorterIndex++
                     longerIndex++
                 }
-                // Short word might be a compound word (ex: "partdieu" match "part" + "dieu")
-                // Try to match short word with multiple long words consecutive
+                // Short word might be a compound word (ex: "partdieu" matches "part" + "dieu")
+                // Try to match short word with multiple consecutive long words
                 else if (shortWord.length > longWord.length) {
                     var combinedWord = longWord
                     var tempIndex = longerIndex + 1
                     var matched = false
                     
-                    // Try to combine consecutive words pour voir si on obtient le mot court
+                    // Try to combine consecutive words to see if we get the short word
                     while (tempIndex < longer.size && combinedWord.length < shortWord.length) {
                         combinedWord += longer[tempIndex]
                         if (combinedWord == shortWord) {
-                            // Match found !
+                            // Match found!
                             longerIndex = tempIndex + 1
                             shorterIndex++
                             matched = true
@@ -101,17 +101,17 @@ object LineStopsCache {
                     }
                     
                     if (!matched) {
-                        // Pas de match, avancer dans la version longue
+                        // No match, advance in the long version
                         longerIndex++
                     }
                 }
-                // Maybe the long word has no equivalent dans la version courte
+                // Maybe the long word has no equivalent in the short version
                 else {
                     longerIndex++
                 }
             }
             
-            // If we matched all words de la version courte, c'est bon
+            // If we matched all words from the short version, it's good
             return shorterIndex == shorter.size
         }
         
@@ -130,7 +130,7 @@ object LineStopsCache {
     }
     
     /**
-     * Arrêts pré-définis pour les lignes de métro
+     * Predefined stops for metro lines
      */
     private val metroStops = mapOf(
         "A" to listOf(
@@ -164,7 +164,7 @@ object LineStopsCache {
     )
     
     /**
-     * Arrêts pré-définis pour les lignes de tram principales
+     * Predefined stops for main tram lines
      */
     private val tramStops = mapOf(
         "T1" to listOf(
@@ -216,8 +216,8 @@ object LineStopsCache {
     )
     
     /**
-     * Récupère les arrêts d'une lgigne depuis le cache
-     * @return Liste d'arrêts ou null si la ligne n'est pas dans le cache
+     * Retrieves stops for a line from the cache
+     * @return List of stops or null if the line is not in the cache
      */
     fun getLineStops(lineName: String, currentStopName: String?): List<LineStopInfo>? {
         val normalizedLineName = lineName.trim().uppercase()
@@ -234,7 +234,7 @@ object LineStopsCache {
     }
     
     /**
-     * Vérifie si une ligne est dans le cache
+     * Checks if a line is in the cache
      */
     fun hasLineInCache(lineName: String): Boolean {
         return metroStops.containsKey(lineName.uppercase()) || 

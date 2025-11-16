@@ -3,15 +3,15 @@ package com.pelotcl.app.utils
 import com.pelotcl.app.data.model.StopFeature
 
 /**
- * Utilitaire pour déterminer les icônes appropriées pour les arrêts de bus
+ * Utility to determine appropriate icons for bus stops
  */
 object BusIconHelper {
     
     /**
-     * Extrait la première ligne de bus d'un arrêt et retourne le nom du drawable correspondant
+     * Extracts the first bus line from a stop and returns the corresponding drawable name
      * 
-     * @param stopFeature L'arrêt de transport
-     * @return Le nom du drawable (sans l'extension .xml) ou null si aucune ligne trouvée
+     * @param stopFeature The transport stop
+     * @return The drawable name (without the .xml extension) or null if no line found
      */
     fun getIconNameForStop(stopFeature: StopFeature): String? {
         val lines = getAllLinesForStop(stopFeature)
@@ -21,29 +21,29 @@ object BusIconHelper {
     }
     
     /**
-     * Retourne toutes les lignes qui desservent un arrêt (noms des lignes)
+     * Returns all lines serving a stop (line names)
      */
     fun getAllLinesForStop(stopFeature: StopFeature): List<String> {
         return parseDesserte(stopFeature.properties.desserte)
     }
 
     /**
-     * Retourne les noms des drawables pour toutes les lignes d'un arrêt, in order
+     * Returns the drawable names for all lines at a stop, in order
      */
     fun getAllDrawableNamesForStop(stopFeature: StopFeature): List<String> {
         return getAllLinesForStop(stopFeature).map { getDrawableNameForLine(it) }
     }
     
     /**
-     * Parse la chaîne desserte pour extraire la liste des lignes.
-     * Cas gérés:
-     *  - "5:A,86:A,JD844:R" -> ["5", "86", "JD844"] (bus avec directions)
-     *  - "A:A,D:A" -> ["A", "D"] (métro A et D, :A = direction Aller)
-     *  - "F1:A,F2:A" -> ["F1", "F2"] (funiculaires)
-     *  - "M:A:B" -> ["M", "B"] (bus M avec plusieurs destinations, ignorer :A/:R)
-     *  - "C17:22:31" (ancien format) -> ["C17", "22", "31"]
+     * Parses the desserte string to extract the list of lines.
+     * Handled cases:
+     *  - "5:A,86:A,JD844:R" -> ["5", "86", "JD844"] (buses with directions)
+     *  - "A:A,D:A" -> ["A", "D"] (metros A and D, :A = outbound direction)
+     *  - "F1:A,F2:A" -> ["F1", "F2"] (funiculars)
+     *  - "M:A:B" -> ["M", "B"] (bus M with multiple destinations, ignore :A/:R)
+     *  - "C17:22:31" (old format) -> ["C17", "22", "31"]
      * 
-     * IMPORTANT: Ne pas confondre ":A" (direction Aller) avec la ligne de métro A
+     * IMPORTANT: Don't confuse ":A" (outbound direction) with metro line A
      */
     private fun parseDesserte(desserte: String): List<String> {
         if (desserte.isBlank()) return emptyList()
@@ -51,45 +51,45 @@ object BusIconHelper {
         // If string contains commas, each entry represents a line with direction (e.g.: 5:A or A:A)
         val entries = desserte.split(",")
         val rawLines: List<String> = if (entries.size > 1) {
-            // Format avec virgules: "5:A,86:A" ou "A:A,D:A"
+            // Format with commas: "5:A,86:A" or "A:A,D:A"
             entries.mapNotNull { part ->
                 val trimmed = part.trim()
                 if (trimmed.isEmpty()) null else {
-                    // Extraire la ligne (avant le premier ":")
+                    // Extract the line (before the first ":")
                     trimmed.substringBefore(":").trim()
                 }
             }.filter { it.isNotEmpty() }
         } else {
-            // Pas de virgule: format ancien ou simple
-            // E.g.: "M:A:B" ou "C17:22:31" or "A:A" (single stop)
+            // No comma: old or simple format
+            // E.g.: "M:A:B" or "C17:22:31" or "A:A" (single stop)
             val tokens = desserte.split(":")
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
             if (tokens.isEmpty()) return emptyList()
             
-            // For a single entry without comma comme "A:A" (metro A outbound direction),
-            // on ne prend que le premier token
+            // For a single entry without comma like "A:A" (metro A outbound direction),
+            // we only keep the first token
             if (tokens.size == 2) {
                 val first = tokens[0]
                 val second = tokens[1]
-                // Si le second token est "A" ou "R" (direction), on ne garde que le premier
+                // If the second token is "A" or "R" (direction), keep only the first
                 if (second.uppercase() == "A" || second.uppercase() == "R") {
                     listOf(first)
                 } else {
-                    // Otherwise it might be an old format avec plusieurs lignes
+                    // Otherwise it might be an old format with multiple lines
                     tokens
                 }
             } else if (tokens.size > 2) {
-                // Format du type "M:A:B" -> garder M et B, ignorer A/R qui sont des directions
+                // Format like "M:A:B" -> keep M and B, ignore A/R which are directions
                 val first = tokens.first()
                 val rest = tokens.drop(1).filter { t ->
                     val up = t.uppercase()
-                    // Ne pas garder les directions Aller/Retour seules
+                    // Don't keep outbound/return directions alone
                     up != "A" && up != "R"
                 }
                 listOf(first) + rest
             } else {
-                // Un seul token, pas de ":", on le garde tel quel
+                // Single token, no ":", keep as is
                 tokens
             }
         }
@@ -107,11 +107,11 @@ object BusIconHelper {
     }
     
     /**
-     * Convertit un nom de ligne en nom de drawable
-     * Les lignes composées uniquement de chiffres sont préfixées par un underscore
+     * Converts a line name to a drawable name
+     * Lines composed only of digits are prefixed with an underscore
      * 
-     * @param lineName Le nom de la ligne (ex: "212", "C17", "A")
-     * @return Le nom du drawable correspondant (ex: "_212", "c17", "a")
+     * @param lineName The line name (ex: "212", "C17", "A")
+     * @return The corresponding drawable name (ex: "_212", "c17", "a")
      */
     private fun getDrawableNameForLine(lineName: String): String {
         if (lineName.isBlank()) {
@@ -125,17 +125,17 @@ object BusIconHelper {
             // Prefix with underscore for numeric lines
             "_$lineName"
         } else {
-            // Convertir en minuscules pour les autres lignes
+            // Convert to lowercase for other lines
             lineName.lowercase()
         }
     }
     
     /**
-     * Vérifie si un drawable existe pour une ligne donnée
-     * Note: Cette fonction devrait être étendue pour vérifier l'existence réelle du fichier
+     * Checks if a drawable exists for a given line
+     * Note: This function should be extended to check for actual file existence
      * 
-     * @param lineName Le nom de la ligne
-     * @return true si un drawable devrait exister, false sinon
+     * @param lineName The line name
+     * @return true if a drawable should exist, false otherwise
      */
     fun hasIconForLine(lineName: String): Boolean {
         if (lineName.isBlank()) {
@@ -143,7 +143,7 @@ object BusIconHelper {
         }
         
         // For now, assume all lines have an icon
-        // This logic can be extended selon les besoins
+        // This logic can be extended as needed
         return true
     }
 }

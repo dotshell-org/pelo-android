@@ -24,20 +24,20 @@ fun getTransportType(lineName: String): TransportType {
 data class Connection(val lineName: String, val transportType: TransportType)
 
 /**
- * Utilitaire pour gérer les correspondances de transport
+ * Utility to manage transport transfers
  */
 object ConnectionsHelper {
     
     /**
-     * Normalise un nom de station pour la comparaison
-     * Garde uniquement les lettres et convertit en minuscules
+     * Normalizes a station name for comparison
+     * Keeps only letters and converts to lowercase
      */
     private fun normalizeStationName(name: String): String {
         return name.filter { it.isLetter() }.lowercase()
     }
     
     /**
-     * Normalise les mots d'un nom de station en gérant les abréviations
+     * Normalizes words of a station name handling abbreviations
      */
     private fun normalizeWords(name: String): List<String> {
         val ignoredWords = setOf("gare", "station", "arret")
@@ -51,11 +51,11 @@ object ConnectionsHelper {
     }
     
     /**
-     * Compare deux noms de station de manière flexible
-     * Gère les abréviations : "L. Pradel" match avec "Louis Pradel"
+     * Compares two station names flexibly
+     * Handles abbreviations: "L. Pradel" matches "Louis Pradel"
      */
     private fun stationNamesMatch(name1: String, name2: String): Boolean {
-        // D'abord essayer la comparaison simple
+        // First try simple comparison
         val normalized1 = normalizeStationName(name1)
         val normalized2 = normalizeStationName(name2)
         
@@ -134,20 +134,20 @@ object ConnectionsHelper {
     }
     
     /**
-     * Parse le champ desserte et extrait les lignes de métro (A, B, C, D),
-     * de funiculaire (F1, F2) et de tram (T1-T7)
+     * Parses the desserte field and extracts metro lines (A, B, C, D),
+     * funicular (F1, F2) and tram (T1-T7)
      * 
-     * Format du champ desserte :
-     * - "A:A" = Métro A en direction Aller (le :A est la direction, pas la ligne!)
-     * - "5:A,86:A" = Bus 5 et 86 en direction Aller
-     * - "A:A,D:A" = Métros A et D
-     * - "F1:A,F2:A" = Funiculaires F1 et F2
-     * - "T1:A,T2:A" = Trams T1 et T2
+     * Desserte field format:
+     * - "A:A" = Metro A outbound direction (:A is the direction, not the line!)
+     * - "5:A,86:A" = Buses 5 and 86 outbound direction
+     * - "A:A,D:A" = Metros A and D
+     * - "F1:A,F2:A" = Funiculars F1 and F2
+     * - "T1:A,T2:A" = Trams T1 and T2
      * 
-     * IMPORTANT: Ne pas confondre ":A" (direction Aller) avec la ligne de métro A
+     * IMPORTANT: Don't confuse ":A" (outbound direction) with metro line A
      * 
-     * @param desserte Le champ desserte de l'arrêt
-     * @return Liste des lignes de métro, funiculaire et tram
+     * @param desserte The stop's desserte field
+     * @return List of metro, funicular and tram lines
      */
     fun parseMetroFunicularAndTramConnections(desserte: String): List<String> {
         val connections = mutableSetOf<String>()
@@ -161,7 +161,7 @@ object ConnectionsHelper {
             val trimmed = entry.trim()
             if (trimmed.isEmpty()) continue
             
-            // Extraire la ligne (avant le premier ":")
+            // Extract the line (before the first ":")
             val lineName = trimmed.substringBefore(":").trim()
             
             // Check if it's a metro line (A, B, C, D)
@@ -180,7 +180,7 @@ object ConnectionsHelper {
             }
         }
         
-        // Sort for consistent order : A, B, C, D, F1, F2, T1-T7
+        // Sort for consistent order: A, B, C, D, F1, F2, T1-T7
         return connections.sortedWith(compareBy { line ->
             when {
                 line in listOf("A", "B", "C", "D") -> line[0].code
@@ -192,19 +192,19 @@ object ConnectionsHelper {
     }
     
     /**
-     * Parse le champ desserte et extrait toutes les lignes (y compris les lignes de bus)
+     * Parses the desserte field and extracts all lines (including bus lines)
      * 
-     * Format du champ desserte :
-     * - "A:A" = Métro A en direction Aller (le :A est la direction, pas la ligne!)
-     * - "5:A,86:A" = Bus 5 et 86 en direction Aller
-     * - "A:A,D:A" = Métros A et D
-     * - "F1:A,F2:A" = Funiculaires F1 et F2
-     * - "T1:A,T2:A" = Trams T1 et T2
+     * Desserte field format:
+     * - "A:A" = Metro A outbound direction (:A is the direction, not the line!)
+     * - "5:A,86:A" = Buses 5 and 86 outbound direction
+     * - "A:A,D:A" = Metros A and D
+     * - "F1:A,F2:A" = Funiculars F1 and F2
+     * - "T1:A,T2:A" = Trams T1 and T2
      * 
-     * IMPORTANT: Ne pas confondre ":A" (direction Aller) avec la ligne de métro A
+     * IMPORTANT: Don't confuse ":A" (outbound direction) with metro line A
      * 
-     * @param desserte Le champ desserte de l'arrêt
-     * @return Liste de toutes les lignes présentes dans la desserte
+     * @param desserte The stop's desserte field
+     * @return List of all lines present in the desserte
      */
     fun parseAllConnections(desserte: String): List<Connection> {
         val connections = mutableListOf<Connection>()
@@ -224,13 +224,13 @@ object ConnectionsHelper {
     }
 
     /**
-     * Trouve les correspondances de métro et funiculaire pour un arrêt donné
-     * en cherchant dans la liste de tous les arrêts
+     * Finds metro and funicular transfers for a given stop
+     * by searching in the list of all stops
      * 
-     * @param stopName Nom de l'arrêt à rechercher
-     * @param currentLine Ligne actuelle (à exclure des correspondances)
-     * @param allStops Liste de tous les arrêts disponibles
-     * @return Liste des lignes de métro et funiculaire en correspondance
+     * @param stopName Name of the stop to search for
+     * @param currentLine Current line (to exclude from transfers)
+     * @param allStops List of all available stops
+     * @return List of metro and funicular lines in transfer
      */
     fun findConnectionsForStop(
         stopName: String,
@@ -242,14 +242,14 @@ object ConnectionsHelper {
             stationNamesMatch(stop.properties.nom, stopName)
         }
         
-        // Extraire toutes les connexions depuis les dessertes
+        // Extract all connections from dessertes
         val allConnections = mutableSetOf<String>()
         for (stop in matchingStops) {
             val connections = parseMetroFunicularAndTramConnections(stop.properties.desserte)
             allConnections.addAll(connections)
         }
         
-        // Enlever la ligne actuelle de la liste des correspondances
+        // Remove the current line from the transfers list
         allConnections.remove(currentLine)
         
         // Sort for consistent order

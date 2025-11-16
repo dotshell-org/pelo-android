@@ -47,24 +47,24 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Données d'une station pour l'affichage dans le bottom sheet
+ * Station data for display in the bottom sheet
  */
 data class StationInfo(
     val nom: String,
-    val lignes: List<String>, // Liste des noms de lignes (ex: ["A", "D", "F1"])
+    val lignes: List<String>, // List of line names (ex: ["A", "D", "F1"])
     val isPmr: Boolean = false,
     val desserte: String = "" // Complete service string for reference
 )
 
 /**
- * Trie les lignes pour l'affichage dans le bottom sheet.
- * Ordre des familles:
- *  1) Métro: A, B, C, D (ordre fixe)
- *  2) Funiculaires: F1, F2 (puis F3+ si existait) triés numériquement
- *  3) Tram: T1..Tn triés numériquement
- *  4) Bus avec préfixe lettres (ex: C1, JD12, S3, ZI2...) triés par préfixe puis numéro
- *  5) Bus purement numériques (ex: 2, 12, 79) triés numériquement
- *  6) Autres/indéterminés: ordre lexicographique insensible à la casse
+ * Sorts lines for display in the bottom sheet.
+ * Family order:
+ *  1) Metro: A, B, C, D (fixed order)
+ *  2) Funiculars: F1, F2 (then F3+ if existed) sorted numerically
+ *  3) Tram: T1..Tn sorted numerically
+ *  4) Buses with letter prefix (ex: C1, JD12, S3, ZI2...) sorted by prefix then number
+ *  5) Purely numeric buses (ex: 2, 12, 79) sorted numerically
+ *  6) Others/undetermined: case-insensitive lexicographic order
  */
 private fun sortLines(lines: List<String>): List<String> {
     data class Key(
@@ -257,7 +257,7 @@ fun StationBottomSheet(
 }
 
 /**
- * Item de liste pour une ligne de transport avec les prochains horaires
+ * List item for a transport line with next departure times
  */
 @Composable
 private fun LineListItem(

@@ -6,22 +6,22 @@ import retrofit2.http.GET
 import retrofit2.http.Query
 
 /**
- * Interface Retrofit pour l'API WFS de Grand Lyon
+ * Retrofit interface for Grand Lyon's WFS API
  */
 interface GrandLyonApi {
     
     /**
-     * Récupère les lignes de métro/funiculaire TCL depuis l'API WFS de Grand Lyon
+     * Retrieves TCL metro/funicular lines from Grand Lyon's WFS API
      * 
-     * @param service Type de service (WFS)
-     * @param version Version du protocole WFS (2.0.0)
-     * @param request Type de requête (GetFeature)
-     * @param typename Nom de la couche de données
-     * @param outputFormat Format de sortie (application/json)
-     * @param srsName Système de référence spatiale (EPSG:4171)
-     * @param startIndex Index de départ pour la pagination
-     * @param sortBy Champ de tri
-     * @param count Nombre de résultats à retourner
+     * @param service Service type (WFS)
+     * @param version WFS protocol version (2.0.0)
+     * @param request Request type (GetFeature)
+     * @param typename Data layer name
+     * @param outputFormat Output format (application/json)
+     * @param srsName Spatial reference system (EPSG:4171)
+     * @param startIndex Start index for pagination
+     * @param sortBy Sort field
+     * @param count Number of results to return
      */
     @GET("geoserver/sytral/ows")
     suspend fun getTransportLines(
@@ -37,7 +37,7 @@ interface GrandLyonApi {
     ): FeatureCollection
 
     /**
-     * Récupère les lignes de tram TCL depuis l'API WFS de Grand Lyon
+     * Retrieves TCL tram lines from Grand Lyon's WFS API
      */
     @GET("geoserver/sytral/ows")
     suspend fun getTramLines(
@@ -53,8 +53,8 @@ interface GrandLyonApi {
     ): FeatureCollection
 
     /**
-     * Récupère les lignes de bus TCL depuis l'API WFS de Grand Lyon
-     * Les lignes sont triées par gid pour garantir l'ordre correct
+     * Retrieves TCL bus lines from Grand Lyon's WFS API
+     * Lines are sorted by gid to guarantee correct order
      */
     @GET("geoserver/sytral/ows")
     suspend fun getBusLines(
@@ -70,17 +70,17 @@ interface GrandLyonApi {
     ): FeatureCollection
     
     /**
-     * Récupère les arrêts de transport TCL depuis l'API WFS de Grand Lyon
+     * Retrieves TCL transport stops from Grand Lyon's WFS API
      * 
-     * @param service Type de service (WFS)
-     * @param version Version du protocole WFS (2.0.0)
-     * @param request Type de requête (GetFeature)
-     * @param typename Nom de la couche de données des arrêts
-     * @param outputFormat Format de sortie (application/json)
-     * @param srsName Système de référence spatiale (EPSG:4171)
-     * @param startIndex Index de départ pour la pagination
-     * @param sortBy Champ de tri
-     * @param count Nombre de résultats à retourner
+     * @param service Service type (WFS)
+     * @param version WFS protocol version (2.0.0)
+     * @param request Request type (GetFeature)
+     * @param typename Stops data layer name
+     * @param outputFormat Output format (application/json)
+     * @param srsName Spatial reference system (EPSG:4171)
+     * @param startIndex Start index for pagination
+     * @param sortBy Sort field
+     * @param count Number of results to return
      */
     @GET("geoserver/sytral/ows")
     suspend fun getTransportStops(

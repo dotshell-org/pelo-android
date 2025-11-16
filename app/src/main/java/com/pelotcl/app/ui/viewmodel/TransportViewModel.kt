@@ -17,7 +17,7 @@ import kotlin.math.pow
 import kotlin.math.sqrt
 
 /**
- * État de l'UI pour les lignes de transport
+ * UI state for transport lines
  */
 sealed class TransportLinesUiState {
     object Loading : TransportLinesUiState()
@@ -26,7 +26,7 @@ sealed class TransportLinesUiState {
 }
 
 /**
- * État de l'UI pour les arrêts de transport
+ * UI state for transport stops
  */
 sealed class TransportStopsUiState {
     object Loading : TransportStopsUiState()
@@ -35,7 +35,7 @@ sealed class TransportStopsUiState {
 }
 
 /**
- * ViewModel pour gérer les données des lignes de transport
+ * ViewModel to manage transport line data
  */
 class TransportViewModel(application: Application) : AndroidViewModel(application) {
     
@@ -52,39 +52,39 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     private var stopsLoadingJob: kotlinx.coroutines.Job? = null
     
     // Pre-calculated transfers index by stop name
-    // Key = normalized stop name, Value = list des lignes en correspondance
+    // Key = normalized stop name, Value = list of transfer lines
     private var connectionsIndex: Map<String, List<com.pelotcl.app.utils.Connection>> = emptyMap()
 
     /**
-     * Normalise un nom de station pour l'utiliser comme clé d'index
+     * Normalizes a station name to use it as an index key
      */
     private fun normalizeStopName(name: String): String {
         return name.filter { it.isLetter() }.lowercase()
     }
     
     /**
-     * Récupère les correspondances pour un arrêt donné depuis l'index pré-calculé
-     * Méthode ultra-rapide (O(1))
+     * Retrieves transfers for a given stop from the pre-calculated index
+     * Ultra-fast method (O(1))
      */
     fun getConnectionsForStop(stopName: String, currentLine: String): List<com.pelotcl.app.utils.Connection> {
         val normalized = normalizeStopName(stopName)
         val connections = connectionsIndex[normalized] ?: emptyList()
-        // Exclure la ligne actuelle
+        // Exclude the current line
         return connections.filter { it.lineName != currentLine }
     }
 
     /**
-     * Récupère tous les arrêts (depuis le cache si disponible, sinon charge)
-     * Méthode synchrone qui retourne immédiatement le cache ou une liste vide
+     * Retrieves all stops (from cache if available, otherwise loads)
+     * Synchronous method that immediately returns the cache or an empty list
      */
     fun getCachedStopsSync(): List<StopFeature> {
         return cachedStops ?: emptyList()
     }
     
     /**
-     * Charge tous les arrêts en arrière-plan et les met en cache
-     * Démarre le chargement si pas déjà en cours
-     * Construit également l'index des correspondances pour un accès ultra-rapide
+     * Loads all stops in the background and caches them
+     * Starts loading if not already in progress
+     * Also builds the transfers index for ultra-fast access
      */
     fun preloadStops() {
         if (cachedStops != null || stopsLoadingJob?.isActive == true) {
@@ -110,8 +110,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
     
     /**
-     * Force le rechargement du cache des arrêts
-     * Utile quand on détecte des données incorrectes
+     * Forces reload of the stops cache
+     * Useful when incorrect data is detected
      */
     suspend fun reloadStopsCache() {
         repository.getAllStops()
@@ -126,11 +126,11 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
     
     /**
-     * Construit un index des correspondances pour chaque arrêt
-     * Permet un accès O(1) au lieu de parcourir tous les arrêts each time
+     * Builds a transfers index for each stop
+     * Allows O(1) access instead of scanning all stops each time
      */
     private fun buildConnectionsIndex(allStops: List<StopFeature>) {
-        // Step 1: Group stops by approximate name pour trouver un nom "canonique"
+        // Step 1: Group stops by approximate name to find a "canonical" name
         val stopGroups = mutableMapOf<String, MutableList<StopFeature>>()
         val canonicalNames = mutableMapOf<String, String>()
 
@@ -168,7 +168,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
-     * Charge toutes les lignes de transport
+     * Loads all transport lines
      */
     fun loadAllLines() {
         viewModelScope.launch {
@@ -186,7 +186,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
     
     /**
-     * Charge une ligne spécifique par son nom
+     * Loads a specific line by its name
      */
     fun loadLineByName(lineName: String) {
         viewModelScope.launch {
@@ -208,8 +208,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
     
     /**
-     * Ajoute une ligne spécifique aux lignes déjà chargées (pour les lignes de bus à la demande)
-     * Ne modifie pas l'état si la ligne est déjà présente
+     * Adds a specific line to already loaded lines (for on-demand bus lines)
+     * Does not modify state if the line is already present
      */
     fun addLineToLoaded(lineName: String) {
         android.util.Log.d("TransportViewModel", "addLineToLoaded called for: $lineName")
@@ -235,12 +235,12 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             
             android.util.Log.d("TransportViewModel", "Loading line $lineName from API...")
             
-            // Charger la ligne depuis l'API
+            // Load the line from the API
             repository.getLineByName(lineName)
                 .onSuccess { feature ->
                     if (feature != null) {
                         android.util.Log.d("TransportViewModel", "Successfully loaded line $lineName, adding to map")
-                        // Ajouter la nouvelle ligne aux lignes existantes
+                        // Add the new line to existing lines
                         val updatedLines = currentState.lines + feature
                         _uiState.value = TransportLinesUiState.Success(updatedLines)
                     } else {
@@ -248,14 +248,14 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     }
                 }
                 .onFailure { exception ->
-                    // In case of error, don't change state (garder les lignes actuelles)
+                    // In case of error, don't change state (keep current lines)
                     android.util.Log.e("TransportViewModel", "Erreur lors du chargement de la ligne $lineName: ${exception.message}")
                 }
         }
     }
     
     /**
-     * Retire une ligne spécifique des lignes chargées (pour nettoyer les lignes de bus temporaires)
+     * Removes a specific line from loaded lines (to clean up temporary bus lines)
      */
     fun removeLineFromLoaded(lineName: String) {
         android.util.Log.d("TransportViewModel", "removeLineFromLoaded called for: $lineName")
@@ -270,7 +270,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         
         val beforeCount = currentState.lines.size
         
-        // Filtrer pour retirer la ligne
+        // Filter to remove the line
         val updatedLines = currentState.lines.filter { 
             !it.properties.ligne.equals(lineName, ignoreCase = true)
         }
@@ -282,10 +282,10 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
     
     /**
-     * Récupère les arrêts desservis par une ligne spécifique, ordonnés selon le tracé de la ligne
-     * @param lineName Nom de la ligne (ex: "86", "A", "T1")
-     * @param currentStopName Nom de l'arrêt actuel pour le marquer (optionnel)
-     * @return Liste d'arrêts avec leurs correspondances, ordonnés selon le parcours de la ligne
+     * Retrieves stops served by a specific line, ordered according to the line's path
+     * @param lineName Line name (ex: "86", "A", "T1")
+     * @param currentStopName Current stop name to mark it (optional)
+     * @return List of stops with their transfers, ordered according to the line's route
      */
     fun getStopsForLine(lineName: String, currentStopName: String? = null): List<com.pelotcl.app.data.gtfs.LineStopInfo> {
         // First, try to retrieve from cache (for metros and trams)
@@ -309,7 +309,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         
         android.util.Log.d("TransportViewModel", "getStopsForLine: line=$lineName, total stops=${allStops.size}")
         
-        // Filter stops that are served par cette ligne
+        // Filter stops that are served by this line
         val lineStops = allStops.filter { stop ->
             val desserte = stop.properties.desserte
             desserte.split(',').any { part ->
@@ -336,7 +336,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 }
                 
                 if (mainTrace != null) {
-                    // The trace is a MultiLineString avec plusieurs segments
+                    // The trace is a MultiLineString with multiple segments
                     // Find the longest segment (main trace)
                     val longestSegment = mainTrace.geometry.coordinates.maxByOrNull { segment ->
                         segment.size
@@ -345,7 +345,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     android.util.Log.d("TransportViewModel", "Main trace has ${mainTrace.geometry.coordinates.size} segments")
                     android.util.Log.d("TransportViewModel", "Longest segment (${mainTrace.properties.sens}) has ${longestSegment.size} points")
                     
-                    // Determine main trace direction et le convertir en lettre (A ou R)
+                    // Determine main trace direction and convert it to letter (A or R)
                     val mainDirection = when (mainTrace.properties.sens.uppercase()) {
                         "ALLER" -> "A"
                         "RETOUR" -> "R"
@@ -354,15 +354,15 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     
                     android.util.Log.d("TransportViewModel", "Filtering stops for direction code: $mainDirection")
                     
-                    // Afficher quelques exemples de desserte pour debug
+                    // Display a few desserte examples for debug
                     lineStops.take(5).forEach { stop ->
                         android.util.Log.d("TransportViewModel", "  Stop '${stop.properties.nom}': desserte='${stop.properties.desserte}'")
                     }
                     
-                    // Filter stops to keep only those that match au sens principal
+                    // Filter stops to keep only those that match the main direction
                     val directionStops = lineStops.filter { stop ->
                         val desserte = stop.properties.desserte
-                        // Chercher "86:A" ou "86:R" dans la desserte
+                        // Look for "86:A" or "86:R" in the desserte
                         val matches = desserte.split(",").any { line ->
                             val trimmed = line.trim()
                             val result = trimmed.equals("$lineName:$mainDirection", ignoreCase = true)
@@ -376,11 +376,11 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     
                     android.util.Log.d("TransportViewModel", "Found ${directionStops.size} stops for direction $mainDirection")
                     
-                    // For each stop, find its position sur le segment principal
+                    // For each stop, find its position on the main segment
                     val stopsWithPosition = directionStops.map { stop ->
                         val stopCoords = stop.geometry.coordinates
                         
-                        // Trouver le point le plus proche du segment et son index
+                        // Find the closest point on the segment and its index
                         val closestPointIndex = longestSegment.withIndex().minByOrNull { (_, coord) ->
                             sqrt(
                                 (coord[0] - stopCoords[0]).pow(2.0) +
@@ -398,7 +398,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     
                     android.util.Log.d("TransportViewModel", "Ordered stops by trace position: ${orderedStops.map { it.properties.nom }}")
                     
-                    // Convertir en LineStopInfo
+                    // Convert to LineStopInfo
                     return orderedStops.mapIndexed { index, stop ->
                         val connections = getConnectionsForStop(stop.properties.nom, lineName)
                         val filteredConnections = connections.filter {
@@ -420,7 +420,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
         
-        // Fallback: if no trace found, supprimer au moins les doublons
+        // Fallback: if no trace found, at least remove duplicates
         val uniqueStops = lineStops.distinctBy { stop ->
             normalizeStopName(stop.properties.nom)
         }
@@ -447,7 +447,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
-     * Charge tous les arrêts de transport
+     * Loads all transport stops
      */
     fun loadAllStops() {
         viewModelScope.launch {
@@ -465,8 +465,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
     
     /**
-     * Récupère la liste de toutes les lignes disponibles (noms uniquement)
-     * en extrayant les lignes depuis tous les arrêts chargés
+     * Retrieves the list of all available lines (names only)
+     * by extracting lines from all loaded stops
      */
     fun getAllAvailableLines(): List<String> {
         // First, try to extract from loaded lines
@@ -479,7 +479,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             else -> emptyList()
         }
         
-        // Then, extract from all stops (pour avoir TOUTES les lignes, y compris les bus)
+        // Then, extract from all stops (to get ALL lines, including buses)
         val linesFromStops = getCachedStopsSync()
             .flatMap { stop ->
                 val desserte = stop.properties.desserte
@@ -487,18 +487,18 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             }
             .distinct()
         
-        // Combiner et trier
+        // Combine and sort
         return (linesFromFeatures + linesFromStops)
             .distinct()
-            .filter { it.isNotEmpty() } // Filtrer les lignes vides
+            .filter { it.isNotEmpty() } // Filter empty lines
             .sortedWith(compareBy(
                 // Sort by type first (Metro, Funicular, Tram, then the rest)
                 { line ->
                     when {
                         line.uppercase() in setOf("A", "B", "C", "D") -> 0 // Metros first
-                        line.uppercase().startsWith("F") -> 1 // Funiculaires
+                        line.uppercase().startsWith("F") -> 1 // Funiculars
                         line.uppercase().startsWith("T") && !line.uppercase().startsWith("TB") -> 2 // Trams
-                        else -> 3 // Le reste (bus)
+                        else -> 3 // The rest (buses)
                     }
                 },
                 // Then by name (numeric if possible, otherwise alphabetical)
@@ -510,17 +510,17 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
     
     /**
-     * Force le rechargement des données depuis l'API (ignore le cache)
+     * Forces data reload from the API (ignores cache)
      */
     fun refreshAllData() {
         viewModelScope.launch {
             _uiState.value = TransportLinesUiState.Loading
             _stopsUiState.value = TransportStopsUiState.Loading
             
-            // Vider le cache et recharger
+            // Clear cache and reload
             repository.clearCache()
             
-            // Recharger les lignes
+            // Reload lines
             repository.getAllLines()
                 .onSuccess { featureCollection ->
                     _uiState.value = TransportLinesUiState.Success(featureCollection.features)

@@ -28,7 +28,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Informations d'une ligne pour l'affichage dans le bottom sheet
+ * Line information for display in the bottom sheet
  */
 data class LineInfo(
     val lineName: String,
@@ -36,29 +36,29 @@ data class LineInfo(
 )
 
 /**
- * Retourne la couleur d'une ligne selon son nom et type
+ * Returns a line's color based on its name and type
  */
 private fun getLineColor(lineName: String): Color {
     return when (lineName.uppercase()) {
         // Metros
-        "A" -> Color(0xFFEC4899) // Rose
-        "B" -> Color(0xFF3B82F6) // Bleu
+        "A" -> Color(0xFFEC4899) // Pink
+        "B" -> Color(0xFF3B82F6) // Blue
         "C" -> Color(0xFFF59E0B) // Orange
-        "D" -> Color(0xFF22C55E) // Vert
-        // Funiculaires
-        "F1", "F2" -> Color(0xFF84CC16) // Vert lime
-        // Trams (commence par T)
+        "D" -> Color(0xFF22C55E) // Green
+        // Funiculars
+        "F1", "F2" -> Color(0xFF84CC16) // Lime green
+        // Trams (starts with T)
         else -> when {
-            lineName.uppercase().startsWith("T") -> Color(0xFFA855F7) // Violet
-            else -> Color(0xFFEF4444) // Rouge (Bus)
+            lineName.uppercase().startsWith("T") -> Color(0xFFA855F7) // Purple
+            else -> Color(0xFFEF4444) // Red (Bus)
         }
     }
 }
 
 /**
- * Bottom sheet affichant les détails d'une ligne de transport :
- * - Liste des arrêts in order
- * - Prochains horaires de passage à l'arrêt actuel
+ * Bottom sheet displaying transport line details:
+ * - List of stops in order
+ * - Next departure times at current stop
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,12 +76,12 @@ fun LineDetailsBottomSheet(
     // Observe lines state to wait for line to be loaded
     val linesState by viewModel.uiState.collectAsState()
 
-    // Load data when lineInfo changes ET que la ligne est dans le state
+    // Load data when lineInfo changes AND line is in state
     LaunchedEffect(lineInfo, linesState) {
         if (lineInfo != null) {
             isLoading = true
 
-            // Wait for line to be loaded dans le state
+            // Wait for line to be loaded in state
             val lineLoaded = when (linesState) {
                 is TransportLinesUiState.Success -> {
                     (linesState as TransportLinesUiState.Success).lines.any {
@@ -309,14 +309,14 @@ private fun StopItemWithLine(
                     .clip(CircleShape)
                     .background(if (stop.isCurrentStop) lineColor else Color.White) // Full if current stop, hollow otherwise
                     .border(
-                        width = if (stop.isCurrentStop) 0.dp else 3.dp, // Pas de bordure si plein
+                        width = if (stop.isCurrentStop) 0.dp else 3.dp, // No border if full
                         color = lineColor,
                         shape = CircleShape
                     )
             )
         }
 
-        // Partie droite : texte + correspondances
+        // Right part: text + transfers
         Row(
             modifier = Modifier
                 .weight(1f)
@@ -349,8 +349,8 @@ private fun StopItemWithLine(
 }
 
 /**
- * Badge affichant une ligne de correspondance (métro ou funiculaire)
- * Utilise les images TCL comme sur la carte
+ * Badge displaying a transfer line (metro or funicular)
+ * Uses TCL images like on the map
  */
 @Composable
 private fun ConnectionBadge(lineName: String) {
@@ -361,7 +361,7 @@ private fun ConnectionBadge(lineName: String) {
     val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
 
     if (resourceId != 0) {
-        // Afficher l'image TCL
+        // Display TCL image
         Image(
             painter = painterResource(id = resourceId),
             contentDescription = "Ligne $lineName",
@@ -370,11 +370,11 @@ private fun ConnectionBadge(lineName: String) {
     } else {
         // Fallback: colored circle if image doesn't exist
         val backgroundColor = when (lineName) {
-            "A" -> Color(0xFFEC4899) // Rose
-            "B" -> Color(0xFF3B82F6) // Bleu
+            "A" -> Color(0xFFEC4899) // Pink
+            "B" -> Color(0xFF3B82F6) // Blue
             "C" -> Color(0xFFF59E0B) // Orange
-            "D" -> Color(0xFF22C55E) // Vert
-            "F1", "F2" -> Color(0xFF84CC16) // Vert lime
+            "D" -> Color(0xFF22C55E) // Green
+            "F1", "F2" -> Color(0xFF84CC16) // Lime green
             else -> Color.Gray
         }
 
