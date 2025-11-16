@@ -98,9 +98,10 @@ fun LineDetailsBottomSheet(
                 withContext(Dispatchers.IO) {
                     try {
                         // Utiliser la nouvelle méthode du ViewModel qui récupère les arrêts depuis l'API
+                        // Convertir chaîne vide en null pour éviter les faux positifs de matching
                         val stops = viewModel.getStopsForLine(
                             lineName = lineInfo.lineName,
-                            currentStopName = lineInfo.currentStationName
+                            currentStopName = lineInfo.currentStationName.takeIf { it.isNotBlank() }
                         )
                         
                         android.util.Log.d("LineDetailsBottomSheet", "Loaded ${stops.size} stops for line ${lineInfo.lineName} from API")
@@ -115,7 +116,7 @@ fun LineDetailsBottomSheet(
                             // Réessayer
                             val stopsRetry = viewModel.getStopsForLine(
                                 lineName = lineInfo.lineName,
-                                currentStopName = lineInfo.currentStationName
+                                currentStopName = lineInfo.currentStationName.takeIf { it.isNotBlank() }
                             )
                             android.util.Log.d("LineDetailsBottomSheet", "Retry: Loaded ${stopsRetry.size} stops for line ${lineInfo.lineName}")
                             lineStops = stopsRetry
@@ -306,9 +307,9 @@ private fun StopItemWithLine(
                 modifier = Modifier
                     .size(16.dp)
                     .clip(CircleShape)
-                    .background(Color.White) // Toujours creux
+                    .background(if (stop.isCurrentStop) lineColor else Color.White) // Plein si arrêt actuel, creux sinon
                     .border(
-                        width = if (stop.isCurrentStop) 4.dp else 3.dp, // Plus épais pour l'arrêt actuel
+                        width = if (stop.isCurrentStop) 0.dp else 3.dp, // Pas de bordure si plein
                         color = lineColor,
                         shape = CircleShape
                     )

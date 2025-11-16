@@ -472,7 +472,7 @@ fun PlanScreen(
                             )
                             showLineDetails = true
                             isSheetExpanded = true
-                            scaffoldSheetState.bottomSheetState.expand()
+                            scaffoldSheetState.bottomSheetState.partialExpand() // Ouvrir en mode replié
                         }
                     } else {
                         // Pour les métros/trams/funiculaires, ouvrir directement
@@ -483,7 +483,7 @@ fun PlanScreen(
                             )
                             showLineDetails = true
                             isSheetExpanded = true
-                            scaffoldSheetState.bottomSheetState.expand()
+                            scaffoldSheetState.bottomSheetState.partialExpand() // Ouvrir en mode replié
                         }
                     }
                 }

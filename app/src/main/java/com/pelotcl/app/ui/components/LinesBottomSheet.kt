@@ -34,11 +34,12 @@ fun LinesBottomSheet(
     onLineClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
     
     // Organiser les lignes par catégorie
     val categorizedLines = remember(allLines) {
-        categorizeLines(allLines)
+        categorizeLines(allLines, context)
     }
     
     // Filtrer les lignes selon la recherche
@@ -59,63 +60,6 @@ fun LinesBottomSheet(
             .background(Color.White, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
             .padding(16.dp)
     ) {
-        // Poignée de drag
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                modifier = Modifier
-                    .width(40.dp)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(Color.Gray.copy(alpha = 0.3f))
-            )
-        }
-        
-        // En-tête avec titre
-        Text(
-            text = "Toutes les lignes",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = Color.Black,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-        
-        // Barre de recherche
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp),
-            placeholder = { Text("Rechercher une ligne...") },
-            leadingIcon = {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = "Rechercher"
-                )
-            },
-            trailingIcon = {
-                if (searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { searchQuery = "" }) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Effacer"
-                        )
-                    }
-                }
-            },
-            singleLine = true,
-            shape = RoundedCornerShape(24.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Color(0xFFE53935),
-                unfocusedBorderColor = Color.Gray.copy(alpha = 0.3f)
-            )
-        )
-        
         // Liste des lignes par catégorie
         LazyColumn(
             modifier = Modifier.fillMaxWidth(),
@@ -268,18 +212,38 @@ private fun LineChip(
 }
 
 /**
- * Organise les lignes par catégorie
+ * Vérifie si une ligne a une icône SVG disponible
  */
-private fun categorizeLines(lines: List<String>): Map<String, List<String>> {
+private fun hasLineIcon(lineName: String, context: android.content.Context): Boolean {
+    val resourceName = lineName.lowercase()
+        .replace("é", "e")
+        .replace("è", "e")
+        .replace("ê", "e")
+        .replace("-", "")
+        .replace(" ", "")
+        .let { if (it.firstOrNull()?.isDigit() == true) "_$it" else it }
+    
+    val drawableId = context.resources.getIdentifier(resourceName, "drawable", context.packageName)
+    return drawableId != 0
+}
+
+/**
+ * Organise les lignes par catégorie et filtre celles qui n'ont pas d'icône
+ */
+private fun categorizeLines(lines: List<String>, context: android.content.Context): Map<String, List<String>> {
+    // D'abord filtrer les lignes qui n'ont pas d'icône
+    val linesWithIcon = lines.filter { hasLineIcon(it, context) }
+    
     val metros = mutableListOf<String>()
     val trams = mutableListOf<String>()
     val funiculaires = mutableListOf<String>()
     val navettes = mutableListOf<String>() // Lignes C
     val pleineLune = mutableListOf<String>() // Lignes PL
     val jd = mutableListOf<String>() // Lignes JD
+    val navigone = mutableListOf<String>() // Ligne NAVI1
     val bus = mutableListOf<String>()
     
-    lines.forEach { line ->
+    linesWithIcon.forEach { line ->
         val upperLine = line.uppercase()
         when {
             upperLine in setOf("A", "B", "C", "D") -> metros.add(line)
@@ -290,6 +254,7 @@ private fun categorizeLines(lines: List<String>): Map<String, List<String>> {
             upperLine.startsWith("C") && upperLine.length >= 2 -> navettes.add(line) // C21, C22, etc.
             upperLine.startsWith("PL") -> pleineLune.add(line) // PL1, PL2, etc.
             upperLine.startsWith("JD") -> jd.add(line) // Lignes JD
+            upperLine.startsWith("NAVI") -> navigone.add(line) // NAVI1
             else -> bus.add(line) // Bus normaux
         }
     }
@@ -331,6 +296,7 @@ private fun categorizeLines(lines: List<String>): Map<String, List<String>> {
     if (funiculaires.isNotEmpty()) result["Funiculaire"] = naturalSort(funiculaires)
     if (trams.isNotEmpty()) result["Tramway"] = naturalSort(trams)
     if (navettes.isNotEmpty()) result["Navettes"] = naturalSort(navettes)
+    if (navigone.isNotEmpty()) result["Navigône"] = naturalSort(navigone)
     if (pleineLune.isNotEmpty()) result["Pleine Lune"] = naturalSort(pleineLune)
     if (bus.isNotEmpty()) result["Bus"] = naturalSort(bus)
     if (jd.isNotEmpty()) result["Cars JD"] = naturalSort(jd)
