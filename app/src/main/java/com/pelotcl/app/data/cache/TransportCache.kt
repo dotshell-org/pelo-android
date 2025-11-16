@@ -182,34 +182,20 @@ class TransportCache(private val context: Context) {
     
     /**
      * Sauvegarde les arrêts dans le cache
-     * ATTENTION : Les arrêts sont volumineux, on ne garde que l'essentiel sur disque
+     * ATTENTION : Les arrêts sont volumineux, on garde tous les arrêts (y compris bus) sur disque
      */
     suspend fun saveStops(stops: List<StopFeature>) = mutex.withLock {
         stopsCache = stops
         stopsTimestamp = System.currentTimeMillis()
         
-        // Sauvegarder sur disque uniquement si pas trop volumineux
-        // Limite : environ 500 arrêts pour éviter les OutOfMemoryError
-        val stopsToSave = if (stops.size > 500) {
-            android.util.Log.w("TransportCache", "Too many stops (${stops.size}), only caching ${stops.size} in memory, limited disk cache")
-            // Sur disque, ne garder que les arrêts principaux (métro, tram, funiculaire)
-            stops.filter { stop ->
-                val desserte = stop.properties.desserte
-                desserte.matches(Regex("^[ABCD]:.*")) || // Métro
-                desserte.matches(Regex("^F[12]:.*")) || // Funiculaire
-                desserte.matches(Regex(".*\\bT\\d+:[AR]\\b.*")) // Tram
-            }
-        } else {
-            stops
-        }
-        
+        // Sauvegarder tous les arrêts sur disque (y compris les bus)
         try {
             prefs.edit().apply {
-                putString(KEY_STOPS, gson.toJson(stopsToSave))
+                putString(KEY_STOPS, gson.toJson(stops))
                 putLong(KEY_STOPS_TIMESTAMP, stopsTimestamp)
                 apply()
             }
-            android.util.Log.d("TransportCache", "Saved ${stopsToSave.size} stops to disk (${stops.size} in memory)")
+            android.util.Log.d("TransportCache", "Saved ${stops.size} stops to disk and memory")
         } catch (e: Exception) {
             android.util.Log.e("TransportCache", "Failed to save stops to disk, keeping memory cache only", e)
             // En cas d'erreur, on garde quand même le cache mémoire
