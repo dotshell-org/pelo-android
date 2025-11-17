@@ -7,6 +7,7 @@ enum class TransportType {
     METRO,
     TRAM,
     FUNICULAR,
+    NAVIGONE,
     UNKNOWN
 }
 
@@ -15,6 +16,7 @@ fun getTransportType(lineName: String): TransportType {
         lineName.matches(Regex("T[1-7]")) -> TransportType.TRAM
         lineName in listOf("A", "B", "C", "D") -> TransportType.METRO
         lineName in listOf("F1", "F2") -> TransportType.FUNICULAR
+        lineName.uppercase().startsWith("NAV") -> TransportType.NAVIGONE
         // Bus lines can be numbers, "C" followed by numbers, or other letters.
         // It's simpler to consider everything else as a bus by default.
         else -> TransportType.BUS
@@ -135,7 +137,7 @@ object ConnectionsHelper {
     
     /**
      * Parses the desserte field and extracts metro lines (A, B, C, D),
-     * funicular (F1, F2) and tram (T1-T7)
+     * funicular (F1, F2), tram (T1-T7) and navigone (NAVI1)
      * 
      * Desserte field format:
      * - "A:A" = Metro A outbound direction (:A is the direction, not the line!)
@@ -143,11 +145,12 @@ object ConnectionsHelper {
      * - "A:A,D:A" = Metros A and D
      * - "F1:A,F2:A" = Funiculars F1 and F2
      * - "T1:A,T2:A" = Trams T1 and T2
+     * - "NAVI1:A" = Navigone NAVI1
      * 
      * IMPORTANT: Don't confuse ":A" (outbound direction) with metro line A
      * 
      * @param desserte The stop's desserte field
-     * @return List of metro, funicular and tram lines
+     * @return List of metro, funicular, tram and navigone lines
      */
     fun parseMetroFunicularAndTramConnections(desserte: String): List<String> {
         val connections = mutableSetOf<String>()
@@ -178,14 +181,20 @@ object ConnectionsHelper {
             if (lineName.matches(Regex("T[1-7]"))) {
                 connections.add(lineName)
             }
+            
+            // Check if it's a navigone line (NAV1, NAV2, etc.)
+            if (lineName.uppercase().startsWith("NAV")) {
+                connections.add(lineName.uppercase())
+            }
         }
         
-        // Sort for consistent order: A, B, C, D, F1, F2, T1-T7
+        // Sort for consistent order: A, B, C, D, F1, F2, T1-T7, NAV1+
         return connections.sortedWith(compareBy { line ->
             when {
                 line in listOf("A", "B", "C", "D") -> line[0].code
                 line.startsWith("F") -> 100 + line.substring(1).toIntOrNull()!! 
                 line.startsWith("T") -> 200 + line.substring(1).toIntOrNull()!!
+                line.uppercase().startsWith("NAV") -> 300 + (line.substring(3).toIntOrNull() ?: 0)
                 else -> 9999
             }
         })

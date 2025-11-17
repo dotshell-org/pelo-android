@@ -16,7 +16,7 @@ class TransportRepository(context: Context? = null) {
     private val cache = context?.let { TransportCache.getInstance(it) }
     
     /**
-     * Fetches all transport lines (metro, funicular and tram ONLY)
+     * Fetches all transport lines (metro, funicular, tram, and navigone ONLY)
      * Bus lines are NOT loaded by default to avoid overloading the phone
      * To load a specific bus line, use getLineByName()
      * Uses cache to improve performance
@@ -29,6 +29,7 @@ class TransportRepository(context: Context? = null) {
             
             val metroFuniculaire: FeatureCollection
             val trams: FeatureCollection
+            var navigone: FeatureCollection
             
             if (cachedMetro != null && cachedTram != null) {
                 // Cache hit: use cached data
@@ -58,8 +59,23 @@ class TransportRepository(context: Context? = null) {
                 cache?.saveTramLines(trams.features)
             }
 
-            // Merge only metro/funicular and trams (NOT buses)
-            val allFeatures = (metroFuniculaire.features + trams.features)
+            // Load navigone lines (NAVI1 - always loaded like metro/tram)
+            try {
+                navigone = api.getNavigoneLines()
+                android.util.Log.d("TransportRepository", "Loaded ${navigone.features.size} navigone lines")
+            } catch (e: Exception) {
+                android.util.Log.w("TransportRepository", "Failed to load navigone lines: ${e.message}")
+                navigone = FeatureCollection(
+                    type = "FeatureCollection",
+                    features = emptyList(),
+                    totalFeatures = 0,
+                    numberMatched = 0,
+                    numberReturned = 0
+                )
+            }
+
+            // Merge metro/funicular, trams, and navigone (NOT buses)
+            val allFeatures = (metroFuniculaire.features + trams.features + navigone.features)
 
             // Log tram lines before grouping
             val tramLines = trams.features.map { it.properties.ligne }.distinct().sorted()
@@ -81,8 +97,8 @@ class TransportRepository(context: Context? = null) {
             val filteredCollection = metroFuniculaire.copy(
                 features = uniqueLines,
                 numberReturned = uniqueLines.size,
-                totalFeatures = (metroFuniculaire.totalFeatures ?: 0) + (trams.totalFeatures ?: 0),
-                numberMatched = (metroFuniculaire.numberMatched ?: 0) + (trams.numberMatched ?: 0)
+                totalFeatures = (metroFuniculaire.totalFeatures ?: 0) + (trams.totalFeatures ?: 0) + (navigone.totalFeatures ?: 0),
+                numberMatched = (metroFuniculaire.numberMatched ?: 0) + (trams.numberMatched ?: 0) + (navigone.numberMatched ?: 0)
             )
 
             // Log loaded lines
@@ -90,6 +106,7 @@ class TransportRepository(context: Context? = null) {
             android.util.Log.d("TransportRepository", "Loaded lines: $lineNames")
             android.util.Log.d("TransportRepository", "Metro/Funicular count: ${metroFuniculaire.features.size}")
             android.util.Log.d("TransportRepository", "Tram count: ${trams.features.size}")
+            android.util.Log.d("TransportRepository", "Navigone count: ${navigone.features.size}")
             android.util.Log.d("TransportRepository", "Total unique lines: ${uniqueLines.size}")
 
             Result.success(filteredCollection)
@@ -100,7 +117,7 @@ class TransportRepository(context: Context? = null) {
     
     /**
      * Fetches a specific line by name (outbound direction only)
-     * Searches first in metro/funicular/tram, then in buses if not found
+     * Searches first in metro/funicular/tram/navigone, then in buses if not found
      * This allows loading bus lines only on demand
      * Uses cache to improve performance
      */
@@ -128,8 +145,17 @@ class TransportRepository(context: Context? = null) {
                 cache?.saveTramLines(trams.features)
             }
 
-            // Search first in metro/funicular/tram
-            val line = priorityFeatures
+            // Try navigone lines too (NAVI1)
+            val navigoneFeatures: List<Feature> = try {
+                val navigone = api.getNavigoneLines()
+                navigone.features
+            } catch (e: Exception) {
+                android.util.Log.w("TransportRepository", "Failed to load navigone lines: ${e.message}")
+                emptyList()
+            }
+
+            // Search first in metro/funicular/tram/navigone
+            val line = (priorityFeatures + navigoneFeatures)
                 .filter { it.properties.ligne.equals(lineName, ignoreCase = true) }
                 .firstOrNull()
             

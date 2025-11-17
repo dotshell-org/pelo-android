@@ -14,6 +14,7 @@ object LineColorHelper {
     private const val METRO_D_COLOR = "#22C55E"
     private const val TRAM_COLOR = "#A855F7"
     private const val FUNICULAR_COLOR = "#84CC16"
+    private const val NAVIGONE_COLOR = "#14b8a6" // Teal for water shuttle
     private const val BUS_COLOR = "#EF4444"
     
     /**
@@ -34,8 +35,11 @@ object LineColorHelper {
             ligne == "C" && familleTransport == "MET" -> METRO_C_COLOR
             ligne == "D" && familleTransport == "MET" -> METRO_D_COLOR
             
-            // Funicular.*detection by line name or type)
+            // Funicular (detection by line name or type)
             ligne == "F1" || ligne == "F2" || nomTypeLigne.contains("funiculaire") -> FUNICULAR_COLOR
+            
+            // Navigone (water shuttle) - famille_transport = "BAT" (bateau)
+            familleTransport == "BAT" || ligne.uppercase().startsWith("NAV") || nomTypeLigne.contains("fluvial") -> NAVIGONE_COLOR
             
             // Trams (famille TRA ou TRAM)
             familleTransport == "TRA" || familleTransport == "TRAM" -> TRAM_COLOR
@@ -59,6 +63,7 @@ object LineColorHelper {
             upperLine == "C" -> METRO_C_COLOR
             upperLine == "D" -> METRO_D_COLOR
             upperLine == "F1" || upperLine == "F2" -> FUNICULAR_COLOR
+            upperLine.startsWith("NAV") -> NAVIGONE_COLOR
             upperLine.startsWith("T") && !upperLine.startsWith("TB") -> TRAM_COLOR
             else -> BUS_COLOR
         }
@@ -76,6 +81,7 @@ object LineColorHelper {
         return when {
             familleTransport == "MET" -> "Métro $ligne"
             ligne == "F1" || ligne == "F2" || nomTypeLigne.contains("funiculaire") -> "Funiculaire $ligne"
+            familleTransport == "BAT" || ligne.uppercase().startsWith("NAV") -> "Navigône $ligne"
             familleTransport == "TRA" || familleTransport == "TRAM" -> "Tram $ligne"
             else -> "Bus $ligne"
         }

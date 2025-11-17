@@ -60,13 +60,13 @@ import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
 
-private val ALWAYS_VISIBLE_LINES = setOf("F1", "F2", "A", "B", "C", "D")
+private val ALWAYS_VISIBLE_LINES = setOf("F1", "F2", "A", "B", "C", "D", "NAV1")
 private const val PRIORITY_STOPS_MIN_ZOOM = 12.5f
 private const val SECONDARY_STOPS_MIN_ZOOM = 15f
 private const val SELECTED_STOP_MIN_ZOOM = 9.0f // Zoom minimum when a specific stop is selected (much more permissive)
 
 /**
- * Détermine si une ligne est un métro, tram ou funiculaire (pas un bus)
+ * Détermine si une ligne est un métro, tram, funiculaire ou navigone (pas un bus)
  */
 private fun isMetroTramOrFunicular(lineName: String): Boolean {
     val upperName = lineName.uppercase()
@@ -75,6 +75,8 @@ private fun isMetroTramOrFunicular(lineName: String): Boolean {
         upperName in setOf("A", "B", "C", "D") -> true
         // Funiculaires
         upperName in setOf("F1", "F2") -> true
+        // Navigone
+        upperName.startsWith("NAV") -> true
         // Trams (commence par T)
         upperName.startsWith("T") -> true
         // Sinon c'est un bus
@@ -84,11 +86,12 @@ private fun isMetroTramOrFunicular(lineName: String): Boolean {
 
 /**
  * Vérifie si une ligne est un bus qui doit être déchargé quand on quitte la vue des détails.
- * Tous les bus (y compris C, PL, JD, NAVI) doivent être déchargés car ils ne sont pas
+ * Tous les bus (y compris C, PL, JD) doivent être déchargés car ils ne sont pas
  * chargés par défaut au démarrage de l'application.
+ * Les lignes fortes (métro, tram, funiculaire, navigone) sont toujours chargées.
  */
 private fun isTemporaryBus(lineName: String): Boolean {
-    // Metros, trams and funiculars are always loaded, donc pas temporaires
+    // Metros, trams, funiculars and navigone are always loaded, donc pas temporaires
     return !isMetroTramOrFunicular(lineName)
 }
 
@@ -1031,11 +1034,21 @@ private fun addLineToMap(
         // Get appropriate color for this line
         val lineColor = LineColorHelper.getColorForLine(feature)
         
+        // Determine line width based on transport type
+        val lineWidth = when {
+            // Navigone: very thin line (1f)
+            feature.properties.familleTransport == "BAT" || feature.properties.ligne.uppercase().startsWith("NAV") -> 2f
+            // Trams: thin lines (2f)
+            feature.properties.familleTransport == "TRA" || feature.properties.familleTransport == "TRAM" -> 2f
+            // Others (metro, funicular, bus): thicker lines (4f)
+            else -> 4f
+        }
+        
         // Create line layer with appropriate color
         val lineLayer = LineLayer(layerId, sourceId).apply {
             setProperties(
                 PropertyFactory.lineColor(lineColor),
-                PropertyFactory.lineWidth(if (feature.properties.familleTransport == "TRA" || feature.properties.familleTransport == "TRAM") 2f else 4f),
+                PropertyFactory.lineWidth(lineWidth),
                 PropertyFactory.lineOpacity(0.8f),
                 PropertyFactory.lineCap("round"),
                 PropertyFactory.lineJoin("round")
@@ -1343,15 +1356,16 @@ private fun createGeoJsonFromFeature(feature: com.pelotcl.app.data.model.Feature
 }
 
 /**
- * Fusionne les arrêts qui ont le même nom (correspondances métro/tram/funiculaire)
- * Fusionne UNIQUEMENT les arrêts M/F/T/Tb entre eux, les bus restent séparés
+ * Fusionne les arrêts qui ont le même nom (correspondances métro/tram/funiculaire/navigone)
+ * Fusionne UNIQUEMENT les arrêts M/F/T/Tb/NAVI entre eux, les bus restent séparés
  */
 private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>): List<com.pelotcl.app.data.model.StopFeature> {
-    // Function to check if a line is M/F/T/Tb
-    fun isMetroTramFuni(line: String): Boolean {
+    // Function to check if a line is M/F/T/Tb/NAVI
+    fun isMetroTramFuniNavi(line: String): Boolean {
         val upperLine = line.uppercase()
         return upperLine in setOf("A", "B", "C", "D") || // Metro A, B, C, D
                upperLine.startsWith("F") || // Funiculaire (F1, F2)
+               upperLine.startsWith("NAV") || // Navigone (NAV1, etc.)
                upperLine.startsWith("T") // Tram (T1-T7) et Trolleybus (Tb)
     }
     
@@ -1361,11 +1375,11 @@ private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>
     }
     
     // Separate stops into two groups:
-    // - Stops that contain ONLY M/F/T/Tb lines (no buses)
-    // - All other stops (pure buses or mixed bus+M/F/T/Tb)
-    val (pureMetroTramFuni, otherStops) = stops.partition { stop ->
+    // - Stops that contain ONLY M/F/T/Tb/NAVI lines (no buses)
+    // - All other stops (pure buses or mixed bus+M/F/T/Tb/NAVI)
+    val (pureMetroTramFuniNavi, otherStops) = stops.partition { stop ->
         val allLines = BusIconHelper.getAllLinesForStop(stop)
-        val isPure = allLines.isNotEmpty() && allLines.all { isMetroTramFuni(it) }
+        val isPure = allLines.isNotEmpty() && allLines.all { isMetroTramFuniNavi(it) }
         
         // Debug log for certain stops
         if (stop.properties.nom.contains("Perrache", ignoreCase = true) || 
@@ -1376,8 +1390,8 @@ private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>
         isPure
     }
     
-    // Group pure M/F/T/Tb stops by NORMALIZED name (without spaces, punctuation, etc.)
-    val stopsByName = pureMetroTramFuni.groupBy { normalizeStopName(it.properties.nom) }
+    // Group pure M/F/T/Tb/NAVI stops by NORMALIZED name (without spaces, punctuation, etc.)
+    val stopsByName = pureMetroTramFuniNavi.groupBy { normalizeStopName(it.properties.nom) }
     
     // Debug log pour les groupes
     stopsByName.forEach { (normalizedName, group) ->
@@ -1390,10 +1404,10 @@ private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>
     
     val merged = stopsByName.map { (name, stopsGroup) ->
         if (stopsGroup.size == 1) {
-            // Single M/F/T/Tb stop: no merging
+            // Single M/F/T/Tb/NAVI stop: no merging
             stopsGroup.first()
         } else {
-            // Multiple M/F/T/Tb stops with same name: merge
+            // Multiple M/F/T/Tb/NAVI stops with same name: merge
             val mergedDesserte = stopsGroup
                 .flatMap { BusIconHelper.getAllLinesForStop(it) }
                 .distinct()
@@ -1428,7 +1442,7 @@ private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>
         }
     }
     
-    // Return merged stops (pure M/F/T/Tb) + all other stops (buses and mixed)
+    // Return merged stops (pure M/F/T/Tb/NAVI) + all other stops (buses and mixed)
     return merged + otherStops
 }
 

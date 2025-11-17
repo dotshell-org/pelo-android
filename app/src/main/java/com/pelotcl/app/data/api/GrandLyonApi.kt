@@ -68,6 +68,23 @@ interface GrandLyonApi {
         @Query("sortby") sortBy: String = "gid",
         @Query("count") count: Int = 10000
     ): FeatureCollection
+
+    /**
+     * Retrieves TCL navigone (river shuttle) lines from Grand Lyon's WFS API
+     * This includes the NAVI1 line (Confluence-Île Barbe)
+     */
+    @GET("geoserver/sytral/ows")
+    suspend fun getNavigoneLines(
+        @Query("SERVICE") service: String = "WFS",
+        @Query("VERSION") version: String = "2.0.0",
+        @Query("request") request: String = "GetFeature",
+        @Query("typename") typename: String = "sytral:tcl_sytral.tcllignefluv",
+        @Query("outputFormat") outputFormat: String = "application/json",
+        @Query("SRSNAME") srsName: String = "EPSG:4171",
+        @Query("startIndex") startIndex: Int = 0,
+        @Query("sortby") sortBy: String = "gid",
+        @Query("count") count: Int = 1000
+    ): FeatureCollection
     
     /**
      * Retrieves TCL transport stops from Grand Lyon's WFS API

@@ -48,8 +48,11 @@ private fun getLineColor(lineName: String): Color {
         "D" -> Color(0xFF22C55E) // Green
         // Funiculars
         "F1", "F2" -> Color(0xFF84CC16) // Lime green
+        // Navigone
+        "NAV1" -> Color(0xFF14b8a6) // Teal for water shuttle
         // Trams (starts with T)
         else -> when {
+            lineName.uppercase().startsWith("NAV") -> Color(0xFF14b8a6) // Teal for navigone
             lineName.uppercase().startsWith("T") -> Color(0xFFA855F7) // Purple
             else -> Color(0xFFEF4444) // Red (Bus)
         }

@@ -298,7 +298,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 val filteredConnections = connections.filter {
                     it.transportType == TransportType.METRO ||
                     it.transportType == TransportType.TRAM ||
-                    it.transportType == TransportType.FUNICULAR
+                    it.transportType == TransportType.FUNICULAR ||
+                    it.transportType == TransportType.NAVIGONE
                 }
                 stop.copy(connections = filteredConnections.map { it.lineName })
             }
@@ -404,7 +405,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                         val filteredConnections = connections.filter {
                             it.transportType == TransportType.METRO ||
                             it.transportType == TransportType.TRAM ||
-                            it.transportType == TransportType.FUNICULAR
+                            it.transportType == TransportType.FUNICULAR ||
+                            it.transportType == TransportType.NAVIGONE
                         }
                         com.pelotcl.app.data.gtfs.LineStopInfo(
                             stopId = stop.properties.id.toString(),
@@ -432,7 +434,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             val filteredConnections = connections.filter {
                 it.transportType == TransportType.METRO ||
                 it.transportType == TransportType.TRAM ||
-                it.transportType == TransportType.FUNICULAR
+                it.transportType == TransportType.FUNICULAR ||
+                it.transportType == TransportType.NAVIGONE
             }
             com.pelotcl.app.data.gtfs.LineStopInfo(
                 stopId = stop.properties.id.toString(),
@@ -492,13 +495,14 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             .distinct()
             .filter { it.isNotEmpty() } // Filter empty lines
             .sortedWith(compareBy(
-                // Sort by type first (Metro, Funicular, Tram, then the rest)
+                // Sort by type first (Metro, Funicular, Navigone, Tram, then the rest)
                 { line ->
                     when {
                         line.uppercase() in setOf("A", "B", "C", "D") -> 0 // Metros first
                         line.uppercase().startsWith("F") -> 1 // Funiculars
-                        line.uppercase().startsWith("T") && !line.uppercase().startsWith("TB") -> 2 // Trams
-                        else -> 3 // The rest (buses)
+                        line.uppercase().startsWith("NAV") -> 2 // Navigone
+                        line.uppercase().startsWith("T") && !line.uppercase().startsWith("TB") -> 3 // Trams
+                        else -> 4 // The rest (buses)
                     }
                 },
                 // Then by name (numeric if possible, otherwise alphabetical)

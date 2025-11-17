@@ -270,7 +270,7 @@ private fun categorizeLines(lines: List<String>, context: android.content.Contex
             upperLine.startsWith("C") && upperLine.length >= 2 -> chrono.add(line) // C21, C22, etc.
             upperLine.startsWith("PL") -> pleineLune.add(line) // PL1, PL2, etc.
             upperLine.startsWith("JD") -> jd.add(line) // Lignes JD
-            upperLine.startsWith("NAVI") -> navigone.add(line) // NAVI1
+            upperLine.startsWith("NAV") -> navigone.add(line) // NAV1
             else -> bus.add(line) // Bus normaux
         }
     }
