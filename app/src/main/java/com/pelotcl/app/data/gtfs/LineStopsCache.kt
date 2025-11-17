@@ -143,14 +143,14 @@ object LineStopsCache {
             "Charpennes Charles Hernu", "Brotteaux", "Gare Part-Dieu V.Merle",
             "Place Guichard Bourse du Travail", "Saxe Gambetta", "Jean Macé",
             "Place Jean Jaurès", "Debourg", "Stade de Gerland", "Gare d'Oullins",
-            "Oullins Centre", "St-Genis-Laval Hôpital Sud"
+            "Oullins Centre", "St-Genis-Laval Hôp. Sud"
         ),
         "C" to listOf(
             "Hôtel de Ville L. Pradel", "Croix-Paquet", "Croix-Rousse",
             "Hénon", "Cuire"
         ),
         "D" to listOf(
-            "Gare de Vaise", "Valmy", "Gorge de Loup", "Vieux Lyon Cat. St Jean",
+            "Gare de Vaise-G.Collomb", "Valmy", "Gorge de Loup", "Vieux Lyon Cat. St Jean",
             "Bellecour", "Guillotière Gabriel Péri", "Saxe Gambetta", "Garibaldi",
             "Sans Souci", "Monplaisir Lumière", "Grange Blanche", "Laennec",
             "Mermoz Pinel", "Parilly", "Gare de Vénissieux"

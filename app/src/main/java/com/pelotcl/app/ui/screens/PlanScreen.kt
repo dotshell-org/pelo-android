@@ -445,6 +445,10 @@ fun PlanScreen(
                                 lineName = selectedLine!!.lineName,
                                 currentStationName = stopName
                             )
+                            // Collapse the sheet to show the map with the selected stop
+                            scope.launch {
+                                scaffoldSheetState.bottomSheetState.partialExpand()
+                            }
                         }
                     )
                 } else if (selectedStation != null) {
@@ -700,10 +704,26 @@ private fun zoomToStop(
     
     val normalizedStopName = normalizeStopName(stopName)
     
-    // Find the stop
-    val stop = allStops.find { 
-        normalizeStopName(it.properties.nom) == normalizedStopName 
-    } ?: return
+    android.util.Log.d("PlanScreen", "zoomToStop - Looking for stop: '$stopName', normalized: '$normalizedStopName'")
+    
+    // Find the stop - try exact match first, then normalized
+    var stop = allStops.find { 
+        it.properties.nom.equals(stopName, ignoreCase = true)
+    }
+    
+    // If not found, try normalized comparison
+    if (stop == null) {
+        stop = allStops.find { 
+            normalizeStopName(it.properties.nom) == normalizedStopName 
+        }
+    }
+    
+    if (stop == null) {
+        android.util.Log.w("PlanScreen", "zoomToStop - Stop not found: '$stopName'. Available stops (first 10): ${allStops.take(10).map { it.properties.nom }}")
+        return
+    }
+    
+    android.util.Log.d("PlanScreen", "zoomToStop - Found stop: '${stop.properties.nom}' at [${stop.geometry.coordinates[1]}, ${stop.geometry.coordinates[0]}]")
     
     // Get stop coordinates
     val lat = stop.geometry.coordinates[1]
