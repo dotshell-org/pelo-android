@@ -54,6 +54,7 @@ import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.style.expressions.Expression
+import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
@@ -365,7 +366,7 @@ fun PlanScreen(
     }
     
     // Filter visible lines based on selected line
-    LaunchedEffect(showLineDetails, selectedLine, uiState, mapInstance) {
+    LaunchedEffect(showLineDetails, selectedLine, uiState, mapInstance, stopsUiState) {
         val map = mapInstance ?: return@LaunchedEffect
         
         when (val state = uiState) {
@@ -375,6 +376,21 @@ fun PlanScreen(
                     filterMapLines(map, state.lines, selectedLine!!.lineName)
                     // Zoom on selected line
                     zoomToLine(map, state.lines, selectedLine!!.lineName)
+                    
+                    // Filter stops: display selected stop with icons, others as circles
+                    val selectedStopName = selectedLine!!.currentStationName.takeIf { it.isNotBlank() }
+                    when (val stopsState = stopsUiState) {
+                        is TransportStopsUiState.Success -> {
+                            filterMapStopsWithSelectedStop(
+                                map, 
+                                selectedLine!!.lineName, 
+                                selectedStopName,
+                                stopsState.stops,
+                                state.lines
+                            )
+                        }
+                        else -> {}
+                    }
                 } else {
                     // Afficher toutes les lignes
                     showAllMapLines(map, state.lines)
@@ -612,9 +628,6 @@ private fun filterMapLines(
                 }
             }
         }
-        
-        // Also filter stops to display only those of selected line
-        filterMapStops(style, selectedLineName)
     }
 }
 
@@ -715,6 +728,163 @@ private fun filterMapStops(
 }
 
 /**
+ * Filtre les arrêts avec support pour un arrêt sélectionné spécifique
+ * - L'arrêt sélectionné est affiché avec ses icônes normales
+ * - Les autres arrêts de la ligne sont affichés comme des cercles de couleur
+ */
+private fun filterMapStopsWithSelectedStop(
+    map: MapLibreMap,
+    selectedLineName: String,
+    selectedStopName: String?,
+    allStops: List<com.pelotcl.app.data.model.StopFeature>,
+    allLines: List<com.pelotcl.app.data.model.Feature>
+) {
+    map.getStyle { style ->
+        // If no specific stop is selected, use default filtering (show all icons)
+        if (selectedStopName.isNullOrBlank()) {
+            filterMapStops(style, selectedLineName)
+            // Remove circle layers if they exist
+            style.getLayer("line-stops-circles")?.let { style.removeLayer(it) }
+            style.getSource("line-stops-circles-source")?.let { style.removeSource(it) }
+            return@getStyle
+        }
+        
+        // Normalize stop name for comparison
+        fun normalizeStopName(name: String): String {
+            return name.filter { it.isLetter() }.lowercase()
+        }
+        
+        val normalizedSelectedStop = normalizeStopName(selectedStopName)
+        val priorityLayerPrefix = "transport-stops-layer-priority"
+        val secondaryLayerPrefix = "transport-stops-layer-secondary"
+        val linePropertyName = "has_line_${selectedLineName.uppercase()}"
+        
+        // Filter icon layers to show ONLY the selected stop
+        (-25..25).forEach { idx ->
+            val priorityLayerId = "$priorityLayerPrefix-$idx"
+            val secondaryLayerId = "$secondaryLayerPrefix-$idx"
+            
+            (style.getLayer(priorityLayerId) as? SymbolLayer)?.let { layer ->
+                layer.setFilter(
+                    Expression.all(
+                        Expression.eq(Expression.get("priority_stop"), true),
+                        Expression.eq(Expression.get("slot"), idx),
+                        Expression.eq(Expression.get(linePropertyName), true),
+                        Expression.eq(Expression.get("normalized_nom"), normalizedSelectedStop)
+                    )
+                )
+            }
+            
+            (style.getLayer(secondaryLayerId) as? SymbolLayer)?.let { layer ->
+                layer.setFilter(
+                    Expression.all(
+                        Expression.eq(Expression.get("priority_stop"), false),
+                        Expression.eq(Expression.get("slot"), idx),
+                        Expression.eq(Expression.get(linePropertyName), true),
+                        Expression.eq(Expression.get("normalized_nom"), normalizedSelectedStop)
+                    )
+                )
+                layer.setMinZoom(PRIORITY_STOPS_MIN_ZOOM)
+            }
+        }
+        
+        // Create circle layer for non-selected stops
+        addCircleLayerForLineStops(
+            style, 
+            selectedLineName, 
+            selectedStopName,
+            allStops,
+            allLines
+        )
+    }
+}
+
+/**
+ * Ajoute une couche de cercles pour représenter les arrêts non-sélectionnés d'une ligne
+ */
+private fun addCircleLayerForLineStops(
+    style: org.maplibre.android.maps.Style,
+    selectedLineName: String,
+    selectedStopName: String,
+    allStops: List<com.pelotcl.app.data.model.StopFeature>,
+    allLines: List<com.pelotcl.app.data.model.Feature>
+) {
+    // Remove existing circle layers
+    style.getLayer("line-stops-circles")?.let { style.removeLayer(it) }
+    style.getSource("line-stops-circles-source")?.let { style.removeSource(it) }
+    
+    // Normalize stop name for comparison
+    fun normalizeStopName(name: String): String {
+        return name.filter { it.isLetter() }.lowercase()
+    }
+    
+    val normalizedSelectedStop = normalizeStopName(selectedStopName)
+    
+    // Get line color
+    val lineColor = allLines
+        .find { it.properties.ligne.equals(selectedLineName, ignoreCase = true) }
+        ?.let { LineColorHelper.getColorForLine(it) }
+        ?: "#EF4444" // Default red
+    
+    // Filter stops that belong to the selected line but are NOT the selected stop
+    val lineStops = allStops.filter { stop ->
+        val lines = BusIconHelper.getAllLinesForStop(stop)
+        val hasLine = lines.any { it.equals(selectedLineName, ignoreCase = true) }
+        val isNotSelected = normalizeStopName(stop.properties.nom) != normalizedSelectedStop
+        hasLine && isNotSelected
+    }
+    
+    // Create GeoJSON for circle stops
+    val circlesGeoJson = JsonObject().apply {
+        addProperty("type", "FeatureCollection")
+        val features = JsonArray()
+        
+        lineStops.forEach { stop ->
+            val pointFeature = JsonObject().apply {
+                addProperty("type", "Feature")
+                
+                val pointGeometry = JsonObject().apply {
+                    addProperty("type", "Point")
+                    val coordinatesArray = JsonArray()
+                    coordinatesArray.add(stop.geometry.coordinates[0])
+                    coordinatesArray.add(stop.geometry.coordinates[1])
+                    add("coordinates", coordinatesArray)
+                }
+                add("geometry", pointGeometry)
+                
+                val properties = JsonObject().apply {
+                    addProperty("nom", stop.properties.nom)
+                    addProperty("desserte", stop.properties.desserte)
+                    addProperty("pmr", stop.properties.pmr)
+                }
+                add("properties", properties)
+            }
+            features.add(pointFeature)
+        }
+        
+        add("features", features)
+    }
+    
+    // Add source for circles
+    val circlesSource = GeoJsonSource("line-stops-circles-source", circlesGeoJson.toString())
+    style.addSource(circlesSource)
+    
+    // Add circle layer with inverted colors (white fill, colored border)
+    val circlesLayer = org.maplibre.android.style.layers.CircleLayer("line-stops-circles", "line-stops-circles-source").apply {
+        setProperties(
+            PropertyFactory.circleRadius(6f),
+            PropertyFactory.circleColor("#FFFFFF"),
+            PropertyFactory.circleStrokeWidth(4.5f),
+            PropertyFactory.circleStrokeColor(lineColor),
+            PropertyFactory.circleOpacity(1.0f),
+            PropertyFactory.circleStrokeOpacity(1.0f)
+        )
+        setMinZoom(PRIORITY_STOPS_MIN_ZOOM)
+    }
+    style.addLayer(circlesLayer)
+}
+
+/**
  * Affiche toutes les lignes sur la carte
  */
 private fun showAllMapLines(
@@ -733,6 +903,10 @@ private fun showAllMapLines(
         
         // Redisplay all stops
         showAllMapStops(style)
+        
+        // Remove circle layers if they exist
+        style.getLayer("line-stops-circles")?.let { style.removeLayer(it) }
+        style.getSource("line-stops-circles-source")?.let { style.removeSource(it) }
     }
 }
 
@@ -959,11 +1133,55 @@ private fun addStopsToMap(
             style.addLayer(secondaryLayer)
         }
         
-        // Add click listener for all stop layers
+        // Add click listener for all stop layers (including circle layer)
         map.addOnMapClickListener { point ->
             val pixel = map.projection.toScreenLocation(point)
             
-            // Check all layers for clicked features
+            // Check circle layer first
+            val circleFeatures = map.queryRenderedFeatures(pixel, "line-stops-circles")
+            if (circleFeatures.isNotEmpty()) {
+                val feature = circleFeatures.first()
+                val stationName = feature.getStringProperty("nom") ?: ""
+                val desserte = feature.getStringProperty("desserte") ?: ""
+                val isPmr = feature.getBooleanProperty("pmr") ?: false
+                
+                // Parse all lines from desserte
+                val lines = BusIconHelper.getAllLinesForStop(
+                    com.pelotcl.app.data.model.StopFeature(
+                        type = "Feature",
+                        id = "",
+                        geometry = com.pelotcl.app.data.model.StopGeometry("Point", listOf(0.0, 0.0)),
+                        properties = com.pelotcl.app.data.model.StopProperties(
+                            id = 0,
+                            nom = stationName,
+                            desserte = desserte,
+                            pmr = isPmr,
+                            ascenseur = false,
+                            escalator = false,
+                            gid = 0,
+                            lastUpdate = "",
+                            lastUpdateFme = "",
+                            adresse = "",
+                            localiseFaceAAdresse = false,
+                            commune = "",
+                            insee = "",
+                            zone = ""
+                        )
+                    )
+                )
+                
+                val stationInfo = StationInfo(
+                    nom = stationName,
+                    lignes = lines,
+                    isPmr = isPmr,
+                    desserte = desserte
+                )
+                
+                onStationClick(stationInfo)
+                return@addOnMapClickListener true // Consume the click event
+            }
+            
+            // Check all icon layers for clicked features
             val allLayerIds = usedSlots.flatMap { idx ->
                 listOf(
                     "$priorityLayerPrefix-$idx",
@@ -1215,6 +1433,10 @@ private fun createStopsGeoJsonFromStops(
                     addProperty("has_tram", hasTram)
                     addProperty("icon", iconName)
                     addProperty("slot", slot)
+                    
+                    // Add normalized name for filtering by selected stop
+                    val normalizedNom = stop.properties.nom.filter { it.isLetter() }.lowercase()
+                    addProperty("normalized_nom", normalizedNom)
                     
                     // Add ALL stop lines as boolean properties
                     // (pas seulement celles qui ont un drawable)
