@@ -416,6 +416,13 @@ fun PlanScreen(
                         onBackToStation = {
                             // Simply close details, unloading will happen in LaunchedEffect
                             showLineDetails = false
+                        },
+                        onStopClick = { stopName ->
+                            // Update the selected line with the new stop
+                            selectedLine = LineInfo(
+                                lineName = selectedLine!!.lineName,
+                                currentStationName = stopName
+                            )
                         }
                     )
                 } else if (selectedStation != null) {
@@ -571,14 +578,16 @@ private fun StationSheetContent(
 private fun LineDetailsSheetContent(
     lineInfo: LineInfo,
     viewModel: TransportViewModel,
-    onBackToStation: () -> Unit
+    onBackToStation: () -> Unit,
+    onStopClick: (String) -> Unit = {}
 ) {
     LineDetailsBottomSheet(
         lineInfo = lineInfo,
         sheetState = null,
         viewModel = viewModel,
         onDismiss = {},
-        onBackToStation = onBackToStation
+        onBackToStation = onBackToStation,
+        onStopClick = onStopClick
     )
 }
 

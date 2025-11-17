@@ -3,6 +3,7 @@ package com.pelotcl.app.ui.components
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -67,7 +68,8 @@ fun LineDetailsBottomSheet(
     lineInfo: LineInfo?,
     sheetState: SheetState?,
     onDismiss: () -> Unit,
-    onBackToStation: () -> Unit
+    onBackToStation: () -> Unit,
+    onStopClick: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     var lineStops by remember { mutableStateOf<List<LineStopInfo>>(emptyList()) }
@@ -237,7 +239,8 @@ fun LineDetailsBottomSheet(
                                     stop = stop,
                                     lineColor = lineColor,
                                     isFirst = index == 0,
-                                    isLast = index == lineStops.size - 1
+                                    isLast = index == lineStops.size - 1,
+                                    onStopClick = { onStopClick(stop.stopName) }
                                 )
                             }
                         }
@@ -266,13 +269,15 @@ private fun StopItemWithLine(
     stop: LineStopInfo,
     lineColor: Color,
     isFirst: Boolean,
-    isLast: Boolean
+    isLast: Boolean,
+    onStopClick: () -> Unit = {}
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
-            .height(IntrinsicSize.Min),
+            .height(IntrinsicSize.Min)
+            .clickable { onStopClick() },
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
