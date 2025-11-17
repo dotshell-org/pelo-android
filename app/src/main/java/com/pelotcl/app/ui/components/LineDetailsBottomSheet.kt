@@ -25,6 +25,7 @@ import com.pelotcl.app.data.gtfs.LineStopInfo
 import com.pelotcl.app.ui.theme.Gray700
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.ui.viewmodel.TransportLinesUiState
+import com.pelotcl.app.utils.BusIconHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -80,21 +81,26 @@ fun LineDetailsBottomSheet(
     
     // Observe lines state to wait for line to be loaded
     val linesState by viewModel.uiState.collectAsState()
+    
+    // Extract only the line names to avoid infinite recomposition
+    val loadedLineNames = remember(linesState) {
+        when (linesState) {
+            is TransportLinesUiState.Success -> {
+                (linesState as TransportLinesUiState.Success).lines.map { 
+                    it.properties.ligne.uppercase() 
+                }.toSet()
+            }
+            else -> emptySet()
+        }
+    }
 
     // Load data when lineInfo changes AND line is in state
-    LaunchedEffect(lineInfo, linesState) {
+    LaunchedEffect(lineInfo?.lineName, loadedLineNames) {
         if (lineInfo != null) {
             isLoading = true
 
             // Wait for line to be loaded in state
-            val lineLoaded = when (linesState) {
-                is TransportLinesUiState.Success -> {
-                    (linesState as TransportLinesUiState.Success).lines.any {
-                        it.properties.ligne.equals(lineInfo.lineName, ignoreCase = true)
-                    }
-                }
-                else -> false
-            }
+            val lineLoaded = lineInfo.lineName.uppercase() in loadedLineNames
             
             android.util.Log.d("LineDetailsBottomSheet", "Line ${lineInfo.lineName} loaded: $lineLoaded")
 
@@ -164,8 +170,8 @@ fun LineDetailsBottomSheet(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    // Line icon.*small)
-                    val drawableName = getDrawableNameForLine(lineInfo.lineName)
+                    // Line icon (small)
+                    val drawableName = BusIconHelper.getDrawableNameForLineName(lineInfo.lineName)
                     val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
 
                     if (resourceId != 0) {
@@ -364,8 +370,8 @@ private fun StopItemWithLine(
 private fun ConnectionBadge(lineName: String) {
     val context = LocalContext.current
 
-    // Convert line name to drawable name (same logic as for map)
-    val drawableName = getDrawableNameForLine(lineName)
+    // Convert line name to drawable name using BusIconHelper for consistency
+    val drawableName = BusIconHelper.getDrawableNameForLineName(lineName)
     val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
 
     if (resourceId != 0) {
@@ -401,22 +407,5 @@ private fun ConnectionBadge(lineName: String) {
                 fontSize = if (lineName.length > 1) 9.sp else 11.sp
             )
         }
-    }
-}
-
-/**
- * Convertit un nom de ligne en nom de drawable
- */
-private fun getDrawableNameForLine(lineName: String): String {
-    if (lineName.isBlank()) {
-        return ""
-    }
-
-    val isNumericOnly = lineName.all { it.isDigit() }
-
-    return if (isNumericOnly) {
-        "_$lineName"
-    } else {
-        lineName.lowercase()
     }
 }

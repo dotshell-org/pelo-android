@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.pelotcl.app.data.model.Feature
 import com.pelotcl.app.data.model.StopFeature
 import com.pelotcl.app.data.repository.TransportRepository
+import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.Connection
 import com.pelotcl.app.utils.ConnectionsHelper
 import com.pelotcl.app.utils.TransportType
@@ -63,14 +64,25 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
     
     /**
+     * Normalizes a line name for comparison (handles NAVI1 -> NAV1)
+     */
+    private fun normalizeLineName(lineName: String): String {
+        return when (lineName.uppercase()) {
+            "NAVI1" -> "NAV1"
+            else -> lineName.uppercase()
+        }
+    }
+    
+    /**
      * Retrieves transfers for a given stop from the pre-calculated index
      * Ultra-fast method (O(1))
      */
     fun getConnectionsForStop(stopName: String, currentLine: String): List<com.pelotcl.app.utils.Connection> {
         val normalized = normalizeStopName(stopName)
         val connections = connectionsIndex[normalized] ?: emptyList()
-        // Exclude the current line
-        return connections.filter { it.lineName != currentLine }
+        // Exclude the current line (with normalization to handle NAVI1 vs NAV1)
+        val normalizedCurrentLine = normalizeLineName(currentLine)
+        return connections.filter { normalizeLineName(it.lineName) != normalizedCurrentLine }
     }
 
     /**
@@ -310,11 +322,19 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         
         android.util.Log.d("TransportViewModel", "getStopsForLine: line=$lineName, total stops=${allStops.size}")
         
+        // API uses NAVI1 but we display NAV1, so we need to search for both
+        val searchNames = if (lineName.equals("NAV1", ignoreCase = true)) {
+            listOf("NAV1", "NAVI1")
+        } else {
+            listOf(lineName)
+        }
+        
         // Filter stops that are served by this line
         val lineStops = allStops.filter { stop ->
             val desserte = stop.properties.desserte
             desserte.split(',').any { part ->
-                part.split(':').first().trim().equals(lineName, ignoreCase = true)
+                val lineCode = part.split(':').first().trim()
+                searchNames.any { searchName -> lineCode.equals(searchName, ignoreCase = true) }
             }
         }
         
@@ -363,10 +383,13 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     // Filter stops to keep only those that match the main direction
                     val directionStops = lineStops.filter { stop ->
                         val desserte = stop.properties.desserte
-                        // Look for "86:A" or "86:R" in the desserte
+                        // Look for "86:A" or "86:R" (or "NAVI1:A" for NAV1) in the desserte
                         val matches = desserte.split(",").any { line ->
                             val trimmed = line.trim()
-                            val result = trimmed.equals("$lineName:$mainDirection", ignoreCase = true)
+                            // Check all search names with the direction
+                            val result = searchNames.any { searchName ->
+                                trimmed.equals("$searchName:$mainDirection", ignoreCase = true)
+                            }
                             if (result) {
                                 android.util.Log.d("TransportViewModel", "  ✓ Stop '${stop.properties.nom}' matches (found '$trimmed')")
                             }

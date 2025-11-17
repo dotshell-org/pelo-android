@@ -46,6 +46,18 @@ object BusIconHelper {
     }
     
     /**
+     * Converts a line name to a drawable name (public version)
+     * Normalizes line names and converts to drawable format
+     * 
+     * @param lineName The line name (ex: "212", "C17", "A", "NAVI1")
+     * @return The corresponding drawable name (ex: "_212", "c17", "a", "nav1")
+     */
+    fun getDrawableNameForLineName(lineName: String): String {
+        val normalized = normalizeLineName(lineName)
+        return getDrawableNameForLine(normalized)
+    }
+    
+    /**
      * Parses the desserte string to extract the list of lines.
      * Handled cases:
      *  - "5:A,86:A,JD844:R" -> ["5", "86", "JD844"] (buses with directions)
