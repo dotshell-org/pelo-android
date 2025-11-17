@@ -95,7 +95,7 @@ fun LineDetailsBottomSheet(
     }
 
     // Load data when lineInfo changes AND line is in state
-    LaunchedEffect(lineInfo?.lineName, loadedLineNames) {
+    LaunchedEffect(lineInfo?.lineName, lineInfo?.currentStationName, loadedLineNames) {
         if (lineInfo != null) {
             isLoading = true
 
