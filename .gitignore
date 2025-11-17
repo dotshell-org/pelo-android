@@ -16,6 +16,7 @@ local.properties
 .idea
 
 # GTFS data files (too large for git)
-app/src/main/java/com/pelotcl/data/gtfstcl/*.txt
-app/src/main/assets/data/gtfstcl/*.txt
-app/src/main/java/com/pelotcl/app/data/gtfstcl/*.txt
+app/src/main/java/com/pelotcl/data/gtfstcl/
+app/src/main/assets/data/gtfstcl/
+app/src/main/assets/data/gtfstcl_processed/
+app/src/main/java/com/pelotcl/app/data/gtfstcl/
