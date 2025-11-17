@@ -63,6 +63,7 @@ import org.maplibre.android.style.sources.GeoJsonSource
 private val ALWAYS_VISIBLE_LINES = setOf("F1", "F2", "A", "B", "C", "D")
 private const val PRIORITY_STOPS_MIN_ZOOM = 12.5f
 private const val SECONDARY_STOPS_MIN_ZOOM = 15f
+private const val SELECTED_STOP_MIN_ZOOM = 9.0f // Zoom minimum when a specific stop is selected (much more permissive)
 
 /**
  * Détermine si une ligne est un métro, tram ou funiculaire (pas un bus)
@@ -374,8 +375,6 @@ fun PlanScreen(
                 if (showLineDetails && selectedLine != null) {
                     // Display only selected line
                     filterMapLines(map, state.lines, selectedLine!!.lineName)
-                    // Zoom on selected line
-                    zoomToLine(map, state.lines, selectedLine!!.lineName)
                     
                     // Filter stops: display selected stop with icons, others as circles
                     val selectedStopName = selectedLine!!.currentStationName.takeIf { it.isNotBlank() }
@@ -388,6 +387,13 @@ fun PlanScreen(
                                 stopsState.stops,
                                 state.lines
                             )
+                            
+                            // Zoom: if a specific stop is selected, zoom to stop; otherwise zoom to line
+                            if (selectedStopName != null) {
+                                zoomToStop(map, selectedStopName, stopsState.stops)
+                            } else {
+                                zoomToLine(map, state.lines, selectedLine!!.lineName)
+                            }
                         }
                         else -> {}
                     }
@@ -680,6 +686,38 @@ private fun zoomToLine(
 }
 
 /**
+ * Zoome sur un arrêt spécifique
+ */
+private fun zoomToStop(
+    map: MapLibreMap,
+    stopName: String,
+    allStops: List<com.pelotcl.app.data.model.StopFeature>
+) {
+    // Normalize stop name for comparison
+    fun normalizeStopName(name: String): String {
+        return name.filter { it.isLetter() }.lowercase()
+    }
+    
+    val normalizedStopName = normalizeStopName(stopName)
+    
+    // Find the stop
+    val stop = allStops.find { 
+        normalizeStopName(it.properties.nom) == normalizedStopName 
+    } ?: return
+    
+    // Get stop coordinates
+    val lat = stop.geometry.coordinates[1]
+    val lon = stop.geometry.coordinates[0]
+    val stopLocation = LatLng(lat, lon)
+    
+    // Zoom to stop with appropriate zoom level
+    map.animateCamera(
+        CameraUpdateFactory.newLatLngZoom(stopLocation, 15.0),
+        1000 // duration in ms
+    )
+}
+
+/**
  * Filtre les arrêts pour n'afficher que ceux de la ligne sélectionnée
  * Sur ces arrêts, affiche toutes les icônes de correspondances métro/tram/funiculaire empilées
  * En mode filtré, les trams sont au même niveau que métro/funiculaire (priority stops)
@@ -773,6 +811,8 @@ private fun filterMapStopsWithSelectedStop(
                         Expression.eq(Expression.get("normalized_nom"), normalizedSelectedStop)
                     )
                 )
+                // More permissive minZoom when a stop is selected
+                layer.setMinZoom(SELECTED_STOP_MIN_ZOOM)
             }
             
             (style.getLayer(secondaryLayerId) as? SymbolLayer)?.let { layer ->
@@ -784,7 +824,8 @@ private fun filterMapStopsWithSelectedStop(
                         Expression.eq(Expression.get("normalized_nom"), normalizedSelectedStop)
                     )
                 )
-                layer.setMinZoom(PRIORITY_STOPS_MIN_ZOOM)
+                // More permissive minZoom when a stop is selected
+                layer.setMinZoom(SELECTED_STOP_MIN_ZOOM)
             }
         }
         
@@ -870,6 +911,7 @@ private fun addCircleLayerForLineStops(
     style.addSource(circlesSource)
     
     // Add circle layer with inverted colors (white fill, colored border)
+    // More permissive minZoom when a stop is selected
     val circlesLayer = org.maplibre.android.style.layers.CircleLayer("line-stops-circles", "line-stops-circles-source").apply {
         setProperties(
             PropertyFactory.circleRadius(6f),
@@ -879,7 +921,7 @@ private fun addCircleLayerForLineStops(
             PropertyFactory.circleOpacity(1.0f),
             PropertyFactory.circleStrokeOpacity(1.0f)
         )
-        setMinZoom(PRIORITY_STOPS_MIN_ZOOM)
+        setMinZoom(SELECTED_STOP_MIN_ZOOM)
     }
     style.addLayer(circlesLayer)
 }
