@@ -227,11 +227,25 @@ class TransportRepository(context: Context? = null) {
                 // Cache miss: load from API
                 android.util.Log.d("TransportRepository", "Cache MISS: Loading stops from API")
                 response = api.getTransportStops()
+                
+                // Debug: check if any stops serve NAV1
+                val navStops = response.features.filter { 
+                    it.properties.desserte.contains("NAV", ignoreCase = true) 
+                }
+                android.util.Log.d("TransportRepository", "Found ${navStops.size} stops with NAV in desserte")
+                navStops.take(5).forEach { stop ->
+                    android.util.Log.d("TransportRepository", "NAV stop: ${stop.properties.nom}, desserte: ${stop.properties.desserte}")
+                }
             }
+            
+            // No need to load navigone stops separately - they are in the main API with code NAVI1
+            // (which will be normalized to NAV1 in BusIconHelper)
+            
+            val allStopsFeatures = response.features
             
             // Intelligently filter tram stops:
             // Group by name and tram line, then keep :A priority, otherwise :R
-            val tramStopsGrouped = response.features
+            val tramStopsGrouped = allStopsFeatures
                 .filter { stop -> 
                     stop.properties.desserte.matches(Regex(".*\\bT\\d+:[AR]\\b.*"))
                 }
@@ -251,8 +265,8 @@ class TransportRepository(context: Context? = null) {
                     ?: stops.first()
             }
             
-            // Keep all non-tram stops
-            val nonTramStops = response.features.filter { stop ->
+            // Keep all non-tram stops (including navigone stops)
+            val nonTramStops = allStopsFeatures.filter { stop ->
                 !stop.properties.desserte.matches(Regex(".*\\bT\\d+:[AR]\\b.*"))
             }
             

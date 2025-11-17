@@ -376,6 +376,12 @@ fun PlanScreen(
         when (val state = uiState) {
             is TransportLinesUiState.Success -> {
                 if (showLineDetails && selectedLine != null) {
+                    android.util.Log.d("PlanScreen", "LaunchedEffect: showLineDetails=true, selectedLine=${selectedLine!!.lineName}")
+                    android.util.Log.d("PlanScreen", "LaunchedEffect: state.lines.size=${state.lines.size}")
+                    state.lines.filter { it.properties.ligne.equals(selectedLine!!.lineName, ignoreCase = true) }.forEach {
+                        android.util.Log.d("PlanScreen", "LaunchedEffect: Found matching feature: ligne=${it.properties.ligne}, codeTrace=${it.properties.codeTrace}")
+                    }
+                    
                     // Display only selected line
                     filterMapLines(map, state.lines, selectedLine!!.lineName)
                     
@@ -542,7 +548,7 @@ fun PlanScreen(
                     // Fermer la sheet des lignes
                     onLinesSheetDismiss()
                     
-                    // If line isn't metro.*load it
+                    // If line isn't metro/tram/funicular/navigone, load it
                     if (!isMetroTramOrFunicular(lineName)) {
                         scope.launch {
                             android.util.Log.d("PlanScreen", "Loading bus line from lines sheet: $lineName")
@@ -564,8 +570,23 @@ fun PlanScreen(
                             scaffoldSheetState.bottomSheetState.partialExpand() // Open in collapsed mode
                         }
                     } else {
-                        // For metros.*open directly
+                        // For metros/trams/funiculars/navigone, they should already be loaded
+                        // But let's verify and add if missing (safety check for navigone)
                         scope.launch {
+                            // Check if line is already loaded
+                            val currentState = uiState
+                            val isLoaded = if (currentState is TransportLinesUiState.Success) {
+                                currentState.lines.any { it.properties.ligne.equals(lineName, ignoreCase = true) }
+                            } else {
+                                false
+                            }
+                            
+                            if (!isLoaded) {
+                                android.util.Log.w("PlanScreen", "Line $lineName should be loaded but isn't! Loading now...")
+                                viewModel.addLineToLoaded(lineName)
+                                kotlinx.coroutines.delay(100)
+                            }
+                            
                             selectedLine = LineInfo(
                                 lineName = lineName,
                                 currentStationName = ""
@@ -629,18 +650,42 @@ private fun filterMapLines(
     selectedLineName: String
 ) {
     map.getStyle { style ->
+        android.util.Log.d("PlanScreen", "filterMapLines: selectedLineName=$selectedLineName, allLines.size=${allLines.size}")
+        
+        var foundCount = 0
+        var notFoundCount = 0
+        var madeVisibleCount = 0
+        
         allLines.forEach { feature ->
             val layerId = "layer-${feature.properties.ligne}-${feature.properties.codeTrace}"
+            val isSelectedLine = feature.properties.ligne.equals(selectedLineName, ignoreCase = true)
             
-            // Display layer if it's selected line, otherwise hide it
-            style.getLayer(layerId)?.let { layer ->
-                if (feature.properties.ligne.equals(selectedLineName, ignoreCase = true)) {
-                    layer.setProperties(PropertyFactory.visibility("visible"))
+            // Try to get existing layer
+            val existingLayer = style.getLayer(layerId)
+            
+            if (existingLayer != null) {
+                // Layer exists, just change visibility
+                foundCount++
+                if (isSelectedLine) {
+                    existingLayer.setProperties(PropertyFactory.visibility("visible"))
+                    madeVisibleCount++
+                    android.util.Log.d("PlanScreen", "filterMapLines: Made visible: $layerId")
                 } else {
-                    layer.setProperties(PropertyFactory.visibility("none"))
+                    existingLayer.setProperties(PropertyFactory.visibility("none"))
+                }
+            } else {
+                // Layer doesn't exist
+                notFoundCount++
+                if (isSelectedLine) {
+                    android.util.Log.w("PlanScreen", "filterMapLines: Selected line layer NOT found, recreating: $layerId (ligne=${feature.properties.ligne})")
+                    // Recreate the layer for the selected line
+                    addLineToMap(map, feature)
+                    madeVisibleCount++
                 }
             }
         }
+        
+        android.util.Log.d("PlanScreen", "filterMapLines: Found $foundCount layers, $notFoundCount not found, made $madeVisibleCount visible")
     }
 }
 
@@ -754,6 +799,8 @@ private fun filterMapStops(
     
     // Create property name for this line
     val linePropertyName = "has_line_${selectedLineName.uppercase()}"
+    
+    android.util.Log.d("PlanScreen", "filterMapStops: filtering for line $selectedLineName, property: $linePropertyName")
     
     (-25..25).forEach { idx ->
         val priorityLayerId = "$priorityLayerPrefix-$idx"
@@ -1461,6 +1508,12 @@ private fun createStopsGeoJsonFromStops(
     mergedStops.forEach { stop ->
         val lineNamesAll = BusIconHelper.getAllLinesForStop(stop)
         if (lineNamesAll.isEmpty()) return@forEach
+        
+        // Debug: log stops that serve NAV1
+        if (lineNamesAll.any { it.equals("NAV1", ignoreCase = true) }) {
+            android.util.Log.d("PlanScreen", "createStopsGeoJson: Stop '${stop.properties.nom}' serves NAV1, all lines: $lineNamesAll")
+        }
+        
         val drawableNamesAll = BusIconHelper.getAllDrawableNamesForStop(stop)
         
         // Filter to only available icons AND keep lineNames synchronized

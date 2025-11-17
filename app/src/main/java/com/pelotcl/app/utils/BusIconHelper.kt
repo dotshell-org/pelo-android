@@ -24,7 +24,18 @@ object BusIconHelper {
      * Returns all lines serving a stop (line names)
      */
     fun getAllLinesForStop(stopFeature: StopFeature): List<String> {
-        return parseDesserte(stopFeature.properties.desserte)
+        return parseDesserte(stopFeature.properties.desserte).map { normalizeLineName(it) }
+    }
+    
+    /**
+     * Normalizes line names to match icon names
+     * NAVI1 -> NAV1
+     */
+    private fun normalizeLineName(lineName: String): String {
+        return when (lineName.uppercase()) {
+            "NAVI1" -> "NAV1"
+            else -> lineName
+        }
     }
 
     /**

@@ -85,7 +85,24 @@ interface GrandLyonApi {
         @Query("sortby") sortBy: String = "gid",
         @Query("count") count: Int = 1000
     ): FeatureCollection
-    
+
+    /**
+     * Retrieves TCL navigone (river shuttle) stops from Grand Lyon's WFS API
+     * This includes stops for the NAV1 line
+     */
+    @GET("geoserver/sytral/ows")
+    suspend fun getNavigoneStops(
+        @Query("SERVICE") service: String = "WFS",
+        @Query("VERSION") version: String = "2.0.0",
+        @Query("request") request: String = "GetFeature",
+        @Query("typename") typename: String = "sytral:tcl_sytral.tclarretfluv",
+        @Query("outputFormat") outputFormat: String = "application/json",
+        @Query("SRSNAME") srsName: String = "EPSG:4171",
+        @Query("startIndex") startIndex: Int = 0,
+        @Query("sortby") sortBy: String = "gid",
+        @Query("count") count: Int = 1000
+    ): com.pelotcl.app.data.model.StopCollection
+
     /**
      * Retrieves TCL transport stops from Grand Lyon's WFS API
      * 
