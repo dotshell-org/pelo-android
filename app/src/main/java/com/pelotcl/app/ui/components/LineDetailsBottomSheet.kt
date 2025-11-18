@@ -1,6 +1,8 @@
 package com.pelotcl.app.ui.components
 
+import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -64,6 +66,8 @@ import com.pelotcl.app.utils.BusIconHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import java.time.LocalTime
+import java.time.temporal.ChronoUnit
 
 data class LineInfo(
     val lineName: String,
@@ -86,6 +90,42 @@ private fun getLineColor(lineName: String): Color {
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.O)
+private fun getScheduleColorBasedOnTime(scheduleTime: String): Color {
+    try {
+        val now = LocalTime.now()
+        val cleanTime = if (scheduleTime.count { it == ':' } == 2) {
+            scheduleTime.substringBeforeLast(":")
+        } else {
+            scheduleTime
+        }
+
+        val parts = cleanTime.split(":")
+        if (parts.size < 2) return Green500
+
+        val hour = parts[0].toInt()
+        val minute = parts[1].toInt()
+        val schedule = LocalTime.of(hour, minute)
+
+        var diffMinutes = ChronoUnit.MINUTES.between(now, schedule)
+
+        if (diffMinutes < -720) {
+            diffMinutes += 1440
+        } else if (diffMinutes < 0) {
+            return Red500
+        }
+
+        return when {
+            diffMinutes < 2 -> Red500
+            diffMinutes < 15 -> Orange500
+            else -> Green500
+        }
+    } catch (_: Exception) {
+        return Green500
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LineDetailsBottomSheet(
@@ -257,6 +297,7 @@ fun LineDetailsBottomSheet(
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 private fun NextSchedulesSection(
     viewModel: TransportViewModel,
@@ -355,21 +396,16 @@ private fun NextSchedulesSection(
             // Common style for all schedules
             val timeStyle = MaterialTheme.typography.titleMedium
 
-            // 1st Schedule (Red)
-            if (nextSchedules.isNotEmpty()) {
-                Text(text = nextSchedules[0], style = timeStyle, color = Red500)
-            }
-
-            // 2nd Schedule (Orange)
-            if (nextSchedules.size > 1) {
-                Spacer(modifier = Modifier.width(16.dp))
-                Text(text = nextSchedules[1], style = timeStyle, color = Orange500)
-            }
-
-            // 3rd Schedule (Green)
-            if (nextSchedules.size > 2) {
-                Spacer(modifier = Modifier.width(16.dp))
-                Text(text = nextSchedules[2], style = timeStyle, color = Green500)
+            // Loop through up to 3 next schedules
+            nextSchedules.take(3).forEachIndexed { index, schedule ->
+                if (index > 0) {
+                    Spacer(modifier = Modifier.width(16.dp))
+                }
+                Text(
+                    text = schedule,
+                    style = timeStyle,
+                    color = getScheduleColorBasedOnTime(schedule)
+                )
             }
 
             Spacer(modifier = Modifier.weight(1f))
@@ -398,7 +434,7 @@ private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Bool
                     .border(width = if (stop.isCurrentStop) 0.dp else 3.dp, color = lineColor, shape = CircleShape)
             )
         }
-        // Completed the cut-off code here
+
         Row(
             modifier = Modifier.weight(1f).padding(start = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
