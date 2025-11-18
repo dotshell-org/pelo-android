@@ -95,11 +95,13 @@ fun LineDetailsBottomSheet(
     onDismiss: () -> Unit,
     onBackToStation: () -> Unit,
     onStopClick: (String) -> Unit = {},
-    onShowAllSchedules: (lineName: String, directionName: String, schedules: List<String>) -> Unit // Added this parameter
+    onShowAllSchedules: (lineName: String, directionName: String, schedules: List<String>) -> Unit
 ) {
     val context = LocalContext.current
     var lineStops by remember { mutableStateOf<List<LineStopInfo>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+
+    var selectedDirection by remember { mutableStateOf(0) }
 
     val linesState by viewModel.uiState.collectAsState()
 
@@ -140,8 +142,12 @@ fun LineDetailsBottomSheet(
         }
     }
 
+    val displayedStops = remember(lineStops, selectedDirection) {
+        if (selectedDirection == 1) lineStops.reversed() else lineStops
+    }
+
     if (lineInfo != null) {
-        val content = @Composable { // This lambda now correctly captures 'onShowAllSchedules' from the outer scope
+        val content = @Composable {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Fixed Header
                 Row(
@@ -185,12 +191,14 @@ fun LineDetailsBottomSheet(
                         .verticalScroll(rememberScrollState())
                 ) {
 
-                    // Part 1: Next Schedules (Now inside the scrollable column)
+                    // Part 1: Next Schedules
                     if (lineInfo.currentStationName.isNotBlank()) {
                         NextSchedulesSection(
-                            viewModel = viewModel, 
+                            viewModel = viewModel,
                             lineInfo = lineInfo,
-                            onShowAllSchedules = onShowAllSchedules // This should now be resolved
+                            selectedDirection = selectedDirection,
+                            onDirectionChange = { newDirection -> selectedDirection = newDirection },
+                            onShowAllSchedules = onShowAllSchedules
                         )
                         Spacer(modifier = Modifier.height(20.dp))
                     }
@@ -200,7 +208,7 @@ fun LineDetailsBottomSheet(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(200.dp), // Give it some height to look good
+                                .height(200.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             CircularProgressIndicator()
@@ -212,23 +220,23 @@ fun LineDetailsBottomSheet(
                                 .padding(horizontal = 24.dp)
                                 .padding(top = 10.dp, bottom = 40.dp)
                         ) {
-                            if (lineStops.isEmpty()) {
+                            if (displayedStops.isEmpty()) {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(200.dp), // Give it some height to look good
+                                        .height(200.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     CircularProgressIndicator()
                                 }
                             } else {
                                 val lineColor = getLineColor(lineInfo.lineName)
-                                lineStops.forEachIndexed { index, stop ->
+                                displayedStops.forEachIndexed { index, stop ->
                                     StopItemWithLine(
                                         stop = stop,
                                         lineColor = lineColor,
                                         isFirst = index == 0,
-                                        isLast = index == lineStops.size - 1,
+                                        isLast = index == displayedStops.size - 1,
                                         onStopClick = { onStopClick(stop.stopName) }
                                     )
                                 }
@@ -251,15 +259,15 @@ fun LineDetailsBottomSheet(
 
 @Composable
 private fun NextSchedulesSection(
-    viewModel: TransportViewModel, 
+    viewModel: TransportViewModel,
     lineInfo: LineInfo,
+    selectedDirection: Int,
+    onDirectionChange: (Int) -> Unit,
     onShowAllSchedules: (lineName: String, directionName: String, schedules: List<String>) -> Unit
 ) {
     val headsigns by viewModel.headsigns.collectAsState()
     val allSchedules by viewModel.allSchedules.collectAsState()
     val nextSchedules by viewModel.nextSchedules.collectAsState()
-
-    var selectedDirection by remember { mutableStateOf(0) }
 
     LaunchedEffect(lineInfo.lineName) {
         viewModel.loadHeadsigns(lineInfo.lineName)
@@ -270,7 +278,7 @@ private fun NextSchedulesSection(
             lineName = lineInfo.lineName,
             stopName = lineInfo.currentStationName,
             directionId = selectedDirection,
-            isHoliday = false // Always false for now, as per user request
+            isHoliday = false
         )
     }
 
@@ -302,7 +310,7 @@ private fun NextSchedulesSection(
                     val headsign = headsigns[directionId] ?: "Direction ${directionId + 1}"
 
                     Button(
-                        onClick = { selectedDirection = directionId },
+                        onClick = { onDirectionChange(directionId) },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (selectedDirection == directionId) lineColor else Color.LightGray,
                             contentColor = if (selectedDirection == directionId) Color.White else Color.DarkGray
@@ -342,7 +350,7 @@ private fun NextSchedulesSection(
                         onShowAllSchedules(lineInfo.lineName, directionName, allSchedules)
                     }
                 }
-                .padding(16.dp), // "Big line" thanks to padding
+                .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Common style for all schedules
@@ -355,7 +363,7 @@ private fun NextSchedulesSection(
 
             // 2nd Schedule (Orange)
             if (nextSchedules.size > 1) {
-                Spacer(modifier = Modifier.width(16.dp)) // Space between times
+                Spacer(modifier = Modifier.width(16.dp))
                 Text(text = nextSchedules[1], style = timeStyle, color = Orange500)
             }
 
@@ -365,15 +373,9 @@ private fun NextSchedulesSection(
                 Text(text = nextSchedules[2], style = timeStyle, color = Green500)
             }
 
-            // Push the chevron all the way to the right
             Spacer(modifier = Modifier.weight(1f))
 
-            // Chevron in Gray
-            Icon(
-                imageVector = Icons.Default.ChevronRight,
-                contentDescription = null,
-                tint = Color.Gray
-            )
+            Icon(imageVector = Icons.Default.ChevronRight, contentDescription = "See all", tint = Gray700)
         }
     }
 }
