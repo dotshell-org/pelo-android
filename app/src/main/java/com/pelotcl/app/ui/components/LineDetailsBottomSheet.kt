@@ -288,18 +288,17 @@ private fun NextSchedulesSection(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = "Direction",
-            textAlign = TextAlign.Left,
-            fontSize = 22.sp,
-            color = Color.Black,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 12.dp, bottom = 26.dp)
-        )
-
         if (headsigns.isNotEmpty()) {
+            Text(
+                text = "Direction",
+                textAlign = TextAlign.Left,
+                fontSize = 22.sp,
+                color = Color.Black,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 12.dp, bottom = 26.dp)
+            )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
