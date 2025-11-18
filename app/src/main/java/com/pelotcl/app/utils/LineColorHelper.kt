@@ -55,7 +55,7 @@ object LineColorHelper {
      * @param lineName Le nom de la ligne (ex: "A", "B", "T1", "C3", etc.)
      * @return La couleur en format android.graphics.Color
      */
-    fun getColorForLineString(lineName: String): android.graphics.Color {
+    fun getColorForLineString(lineName: String): Int {
         val upperLine = lineName.uppercase()
         val hexColor = when {
             upperLine == "A" -> METRO_A_COLOR
@@ -67,7 +67,7 @@ object LineColorHelper {
             upperLine.startsWith("T") && !upperLine.startsWith("TB") -> TRAM_COLOR
             else -> BUS_COLOR
         }
-        return android.graphics.Color.valueOf(android.graphics.Color.parseColor(hexColor))
+        return android.graphics.Color.parseColor(hexColor)
     }
     
     /**

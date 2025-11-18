@@ -38,7 +38,6 @@ import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
-import com.pelotcl.app.ui.components.AllSchedulesBottomSheet
 import com.pelotcl.app.ui.components.LineDetailsBottomSheet
 import com.pelotcl.app.ui.components.LineInfo
 import com.pelotcl.app.ui.components.LinesBottomSheet
@@ -555,23 +554,7 @@ fun PlanScreen(
             shouldCenterOnUser = false
         }
     }
-    
-    // Display AllSchedulesBottomSheet when its info is set
-    if (allSchedulesInfo != null) {
-        AllSchedulesBottomSheet(
-            lineName = allSchedulesInfo!!.lineName,
-            directionName = allSchedulesInfo!!.directionName,
-            schedules = allSchedulesInfo!!.schedules,
-            sheetState = allSchedulesSheetState,
-            onDismiss = {
-                scope.launch {
-                    allSchedulesSheetState.hide()
-                    allSchedulesInfo = null
-                }
-            }
-        )
-    }
-    
+
     // Display LinesBottomSheet on top of everything when requested
     if (showLinesSheet) {
         androidx.compose.material3.ModalBottomSheet(
@@ -1443,7 +1426,7 @@ private fun createGeoJsonFromFeature(feature: com.pelotcl.app.data.model.Feature
 }
 
 /**
- * Fusionne les arrêts qui ont le même nom (correspondances métro/tram/funiculaire/navigone)
+ * Fusionne les arrêts qui ont le même nom (correspondances métro/tram/funicular/navigone)
  * Fusionne UNIQUEMENT les arrêts M/F/T/Tb/NAVI entre eux, les bus restent séparés
  */
 private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>): List<com.pelotcl.app.data.model.StopFeature> {

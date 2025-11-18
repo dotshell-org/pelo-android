@@ -1,10 +1,12 @@
 package com.pelotcl.app
 
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -44,6 +46,7 @@ import com.pelotcl.app.ui.theme.PeloTheme
 import com.pelotcl.app.ui.theme.Red500
 
 class MainActivity : ComponentActivity() {
+    @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
@@ -93,6 +96,7 @@ private enum class Destination(
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun NavBar(modifier: Modifier = Modifier) {
     val navController = rememberNavController()
@@ -173,6 +177,7 @@ fun NavBar(modifier: Modifier = Modifier) {
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 private fun AppNavHost(
     navController: androidx.navigation.NavHostController,

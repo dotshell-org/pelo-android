@@ -204,8 +204,7 @@ private fun LineChip(
             )
         } else {
             // Fallback if icon doesn't exist
-            val androidColor = LineColorHelper.getColorForLineString(lineName)
-            val backgroundColor = Color(androidColor.toArgb())
+            val backgroundColor = Color(LineColorHelper.getColorForLineString(lineName))
             val textColor = if (lineName.uppercase() == "T3") Color.Black else Color.White
             
             Box(
