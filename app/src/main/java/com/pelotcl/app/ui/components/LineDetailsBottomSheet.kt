@@ -1,5 +1,6 @@
 package com.pelotcl.app.ui.components
 
+import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -34,6 +35,7 @@ import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.ui.viewmodel.TransportLinesUiState
 import com.pelotcl.app.utils.BusIconHelper
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 data class LineInfo(
@@ -65,7 +67,8 @@ fun LineDetailsBottomSheet(
     sheetState: SheetState?,
     onDismiss: () -> Unit,
     onBackToStation: () -> Unit,
-    onStopClick: (String) -> Unit = {}
+    onStopClick: (String) -> Unit = {},
+    onShowAllSchedules: (lineName: String, directionName: String, schedules: List<String>) -> Unit // Added this parameter
 ) {
     val context = LocalContext.current
     var lineStops by remember { mutableStateOf<List<LineStopInfo>>(emptyList()) }
@@ -93,7 +96,7 @@ fun LineDetailsBottomSheet(
                         )
                         if (stops.isEmpty()) {
                             viewModel.reloadStopsCache()
-                            kotlinx.coroutines.delay(500)
+                            delay(500)
                             lineStops = viewModel.getStopsForLine(
                                 lineName = lineInfo.lineName,
                                 currentStopName = lineInfo.currentStationName.takeIf { it.isNotBlank() }
@@ -102,7 +105,7 @@ fun LineDetailsBottomSheet(
                             lineStops = stops
                         }
                     } catch (e: Exception) {
-                        android.util.Log.e("LineDetailsBottomSheet", "Error loading stops: ${e.message}", e)
+                        Log.e("LineDetailsBottomSheet", "Error loading stops: ${e.message}", e)
                     }
                 }
             }
@@ -111,7 +114,7 @@ fun LineDetailsBottomSheet(
     }
 
     if (lineInfo != null) {
-        val content = @Composable {
+        val content = @Composable { // This lambda now correctly captures 'onShowAllSchedules' from the outer scope
             Column(modifier = Modifier.fillMaxSize()) {
                 // Fixed Header
                 Row(
@@ -157,7 +160,11 @@ fun LineDetailsBottomSheet(
 
                     // Part 1: Next Schedules (Now inside the scrollable column)
                     if (lineInfo.currentStationName.isNotBlank()) {
-                        NextSchedulesSection(viewModel = viewModel, lineInfo = lineInfo)
+                        NextSchedulesSection(
+                            viewModel = viewModel, 
+                            lineInfo = lineInfo,
+                            onShowAllSchedules = onShowAllSchedules // This should now be resolved
+                        )
                         Spacer(modifier = Modifier.height(20.dp))
                     }
 
@@ -216,13 +223,16 @@ fun LineDetailsBottomSheet(
 }
 
 @Composable
-private fun NextSchedulesSection(viewModel: TransportViewModel, lineInfo: LineInfo) {
+private fun NextSchedulesSection(
+    viewModel: TransportViewModel, 
+    lineInfo: LineInfo,
+    onShowAllSchedules: (lineName: String, directionName: String, schedules: List<String>) -> Unit
+) {
     val headsigns by viewModel.headsigns.collectAsState()
     val allSchedules by viewModel.allSchedules.collectAsState()
     val nextSchedules by viewModel.nextSchedules.collectAsState()
 
     var selectedDirection by remember { mutableStateOf(0) }
-    var showAllSchedulesDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(lineInfo.lineName) {
         viewModel.loadHeadsigns(lineInfo.lineName)
@@ -268,7 +278,12 @@ private fun NextSchedulesSection(viewModel: TransportViewModel, lineInfo: LineIn
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { if (allSchedules.isNotEmpty()) showAllSchedulesDialog = true }
+                .clickable {
+                    if (allSchedules.isNotEmpty()) {
+                        val directionName = headsigns[selectedDirection] ?: ""
+                        onShowAllSchedules(lineInfo.lineName, directionName, allSchedules)
+                    }
+                }
                 .padding(16.dp), // "Big line" thanks to padding
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -302,25 +317,6 @@ private fun NextSchedulesSection(viewModel: TransportViewModel, lineInfo: LineIn
                 tint = Color.Gray
             )
         }
-    }
-
-    if (showAllSchedulesDialog) {
-        AlertDialog(
-            onDismissRequest = { showAllSchedulesDialog = false },
-            title = { Text("All Schedules for ${headsigns[selectedDirection] ?: ""}") },
-            text = {
-                LazyColumn {
-                    items(allSchedules) { time ->
-                        Text(time, modifier = Modifier.padding(vertical = 4.dp).fillMaxWidth(), textAlign = TextAlign.Center, fontSize = 18.sp)
-                    }
-                }
-            },
-            confirmButton = {
-                Button(onClick = { showAllSchedulesDialog = false }) {
-                    Text("Close")
-                }
-            }
-        )
     }
 }
 

@@ -2,8 +2,10 @@ package com.pelotcl.app.ui.screens
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -29,14 +30,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.CreationExtras
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import com.pelotcl.app.ui.components.AllSchedulesBottomSheet
 import com.pelotcl.app.ui.components.LineDetailsBottomSheet
 import com.pelotcl.app.ui.components.LineInfo
 import com.pelotcl.app.ui.components.LinesBottomSheet
@@ -49,12 +51,11 @@ import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LineColorHelper
 import kotlinx.coroutines.launch
+import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
-import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.style.expressions.Expression
-import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
@@ -95,6 +96,13 @@ private fun isTemporaryBus(lineName: String): Boolean {
     return !isMetroTramOrFunicular(lineName)
 }
 
+data class AllSchedulesInfo(
+    val lineName: String,
+    val directionName: String,
+    val schedules: List<String>
+)
+
+@RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlanScreen(
@@ -131,6 +139,10 @@ fun PlanScreen(
     val scaffoldSheetState = rememberBottomSheetScaffoldState()
     var selectedStation by remember { mutableStateOf<StationInfo?>(null) }
     var selectedLine by remember { mutableStateOf<LineInfo?>(null) }
+    
+    // State for the new AllSchedulesBottomSheet
+    var allSchedulesInfo by remember { mutableStateOf<AllSchedulesInfo?>(null) }
+    val allSchedulesSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     
     // Track temporarily loaded bus lines (to unload them when exiting line details)
     var temporaryLoadedBusLines by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -458,6 +470,16 @@ fun PlanScreen(
                             scope.launch {
                                 scaffoldSheetState.bottomSheetState.partialExpand()
                             }
+                        },
+                        onShowAllSchedules = { lineName, directionName, schedules ->
+                            scope.launch {
+                                // First, collapse the current sheet and reset its state
+                                scaffoldSheetState.bottomSheetState.partialExpand()
+                                isSheetExpanded = false
+                                showLineDetails = false
+                                // Then, set the data for the new sheet and show it
+                                allSchedulesInfo = AllSchedulesInfo(lineName, directionName, schedules)
+                            }
                         }
                     )
                 } else if (selectedStation != null) {
@@ -532,6 +554,22 @@ fun PlanScreen(
         if (shouldCenterOnUser) {
             shouldCenterOnUser = false
         }
+    }
+    
+    // Display AllSchedulesBottomSheet when its info is set
+    if (allSchedulesInfo != null) {
+        AllSchedulesBottomSheet(
+            lineName = allSchedulesInfo!!.lineName,
+            directionName = allSchedulesInfo!!.directionName,
+            schedules = allSchedulesInfo!!.schedules,
+            sheetState = allSchedulesSheetState,
+            onDismiss = {
+                scope.launch {
+                    allSchedulesSheetState.hide()
+                    allSchedulesInfo = null
+                }
+            }
+        )
     }
     
     // Display LinesBottomSheet on top of everything when requested
@@ -629,7 +667,8 @@ private fun LineDetailsSheetContent(
     lineInfo: LineInfo,
     viewModel: TransportViewModel,
     onBackToStation: () -> Unit,
-    onStopClick: (String) -> Unit = {}
+    onStopClick: (String) -> Unit = {},
+    onShowAllSchedules: (lineName: String, directionName: String, schedules: List<String>) -> Unit
 ) {
     LineDetailsBottomSheet(
         lineInfo = lineInfo,
@@ -637,7 +676,8 @@ private fun LineDetailsSheetContent(
         viewModel = viewModel,
         onDismiss = {},
         onBackToStation = onBackToStation,
-        onStopClick = onStopClick
+        onStopClick = onStopClick,
+        onShowAllSchedules = onShowAllSchedules
     )
 }
 
@@ -1619,4 +1659,3 @@ private fun getLocation(
         // Location permission not granted
     }
 }
-
