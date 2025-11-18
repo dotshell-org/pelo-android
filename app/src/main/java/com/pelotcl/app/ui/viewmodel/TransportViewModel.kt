@@ -47,6 +47,60 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     
     private val _stopsUiState = MutableStateFlow<TransportStopsUiState>(TransportStopsUiState.Loading)
     val stopsUiState: StateFlow<TransportStopsUiState> = _stopsUiState.asStateFlow()
+
+    private val schedulesRepository = com.pelotcl.app.data.gtfs.SchedulesRepository(application.applicationContext)
+
+    private val _headsigns = MutableStateFlow<Map<Int, String>>(emptyMap())
+    val headsigns: StateFlow<Map<Int, String>> = _headsigns.asStateFlow()
+
+    private val _allSchedules = MutableStateFlow<List<String>>(emptyList())
+    val allSchedules: StateFlow<List<String>> = _allSchedules.asStateFlow()
+
+    private val _nextSchedules = MutableStateFlow<List<String>>(emptyList())
+    val nextSchedules: StateFlow<List<String>> = _nextSchedules.asStateFlow()
+
+    fun loadHeadsigns(routeName: String) {
+        viewModelScope.launch {
+            _headsigns.value = schedulesRepository.getHeadsigns(routeName)
+        }
+    }
+
+    /**
+     * Loads all schedules for a given direction and holiday preference, then updates the schedule states.
+     */
+    fun loadSchedulesForDirection(lineName: String, stopName: String, directionId: Int, isHoliday: Boolean) {
+        viewModelScope.launch {
+            _allSchedules.value = emptyList()
+            _nextSchedules.value = emptyList()
+
+            val allSchedulesForDay = schedulesRepository.getSchedules(lineName, stopName, directionId, isHoliday)
+            _allSchedules.value = allSchedulesForDay
+
+            if (allSchedulesForDay.isEmpty()) {
+                return@launch
+            }
+
+            try {
+                val now = java.util.Calendar.getInstance()
+                val currentHour = now.get(java.util.Calendar.HOUR_OF_DAY)
+                val currentMinute = now.get(java.util.Calendar.MINUTE)
+
+                val nextThree = allSchedulesForDay.filter { time ->
+                    val parts = time.split(":")
+                    if (parts.size == 2) {
+                        val hour = parts[0].toInt()
+                        val minute = parts[1].toInt()
+                        hour > currentHour || (hour == currentHour && minute >= currentMinute)
+                    } else {
+                        false
+                    }
+                }.take(3)
+                _nextSchedules.value = nextThree
+            } catch (e: Exception) {
+                android.util.Log.e("TransportViewModel", "Error filtering next schedules: ${e.message}")
+            }
+        }
+    }
     
     // Stops cache to avoid reloading them each time
     private var cachedStops: List<StopFeature>? = null

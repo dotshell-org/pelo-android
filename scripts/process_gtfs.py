@@ -4,69 +4,13 @@ import argparse
 import tempfile
 import os
 import shutil
-
-def sanitize_filename(name):
-    """
-    Sanitizes a string to be used as a valid filename.
-    """
-    return "".join(c for c in name if c.isalnum() or c in (' ', '.', '_')).rstrip()
-
-def create_service_pattern_map(calendar_df):
-    """
-    Analyzes calendar_df to create a map from service_id to a readable and
-    distinct pattern name, using heuristics for holiday services.
-    """
-    service_id_to_pattern = {}
-    
-    patterns = {
-        "weekday": (calendar_df['monday'] == 1) & (calendar_df['tuesday'] == 1) & 
-                   (calendar_df['wednesday'] == 1) & (calendar_df['thursday'] == 1) & 
-                   (calendar_df['friday'] == 1) & (calendar_df['saturday'] == 0) & 
-                   (calendar_df['sunday'] == 0),
-        "saturday": (calendar_df['saturday'] == 1) & (calendar_df['sunday'] == 0),
-        "sunday": (calendar_df['sunday'] == 1) & (calendar_df['saturday'] == 0),
-    }
-
-    processed_ids = set()
-
-    for pattern_name, pattern_filter in patterns.items():
-        service_ids = sorted(list(calendar_df[pattern_filter]['service_id'].unique()))
-        
-        # Heuristic for "weekday" vs "weekday_holiday"
-        if pattern_name == "weekday" and len(service_ids) > 1:
-            holiday_ids = [sid for sid in service_ids if "AV" in sid]
-            regular_ids = [sid for sid in service_ids if "AV" not in sid]
-
-            # If the heuristic successfully separates the IDs, use semantic names
-            if holiday_ids and regular_ids:
-                for sid in holiday_ids:
-                    service_id_to_pattern[sid] = "weekday_holiday"
-                for sid in regular_ids:
-                    service_id_to_pattern[sid] = "weekday"
-                processed_ids.update(service_ids)
-                continue # Skip to next pattern
-
-        # Fallback logic for all other cases (including saturday, sunday, and weekday if heuristic fails)
-        if len(service_ids) == 1 and service_ids:
-            service_id_to_pattern[service_ids[0]] = pattern_name
-        else:
-            for i, service_id in enumerate(service_ids):
-                service_id_to_pattern[service_id] = f"{pattern_name}_{i+1}"
-        processed_ids.update(service_ids)
-
-    # Handle 'other' services
-    other_service_ids = set(calendar_df['service_id'].unique()) - processed_ids
-    for i, service_id in enumerate(sorted(list(other_service_ids))):
-        service_id_to_pattern[service_id] = f"other_{i+1}"
-        
-    return service_id_to_pattern
+import sqlite3
 
 def process_gtfs_schedules(zip_path, output_dir):
-    if os.path.exists(output_dir):
-        print(f"Output directory '{output_dir}' already exists. Cleaning up...")
-        shutil.rmtree(output_dir)
-    os.makedirs(output_dir)
-    print(f"Output directory '{output_dir}' created.")
+    db_path = os.path.join(output_dir, 'schedules.db')
+    if os.path.exists(db_path):
+        print(f"Database '{db_path}' already exists. Deleting it...")
+        os.remove(db_path)
 
     with tempfile.TemporaryDirectory() as temp_dir:
         print(f"Unzipping '{zip_path}' to temporary directory...")
@@ -81,9 +25,6 @@ def process_gtfs_schedules(zip_path, output_dir):
         stops_df = pd.read_csv(os.path.join(temp_dir, 'stops.txt'), dtype=id_cols_dtype)
         calendar_df = pd.read_csv(os.path.join(temp_dir, 'calendar.txt'), dtype=id_cols_dtype)
 
-        print("Analyzing service types (weekday, holidays, etc.)...")
-        service_id_to_pattern = create_service_pattern_map(calendar_df)
-
         print("Processing stop hierarchy (parent_station)...")
         stop_id_to_name = stops_df.set_index('stop_id')['stop_name'].to_dict()
         child_to_parent = stops_df.dropna(subset=['parent_station']).set_index('stop_id')['parent_station'].to_dict()
@@ -94,37 +35,62 @@ def process_gtfs_schedules(zip_path, output_dir):
         
         merged_df['station_id'] = merged_df['stop_id'].map(child_to_parent).fillna(merged_df['stop_id'])
         merged_df['station_name'] = merged_df['station_id'].map(stop_id_to_name)
-        merged_df['service_pattern'] = merged_df['service_id'].map(service_id_to_pattern)
 
-        schedule_data = merged_df.dropna(subset=['station_name', 'arrival_time', 'service_pattern', 'direction_id'])
-        schedule_data = schedule_data[schedule_data['station_name'].str.strip() != '']
-        schedule_data = schedule_data[schedule_data['arrival_time'].str.match(r'^\d+:\d{2}:\d{2}$', na=False)]
-        schedule_data['direction_id'] = schedule_data['direction_id'].astype(int)
+        # Clean up data before inserting into database
+        final_df = merged_df.dropna(subset=['station_name', 'arrival_time', 'service_id', 'direction_id'])
+        final_df = final_df[final_df['station_name'].str.strip() != '']
+        final_df = final_df[final_df['arrival_time'].str.match(r'^\d+:\d{2}:\d{2}$', na=False)]
+        final_df['direction_id'] = final_df['direction_id'].astype(int)
 
-        print("Creating schedule files by service type and direction...")
-        for (route_name, station_name), station_group in schedule_data.groupby(['route_short_name', 'station_name']):
-            
-            sanitized_route_name = sanitize_filename(str(route_name))
-            sanitized_station_name = sanitize_filename(station_name)
-            
-            station_dir = os.path.join(output_dir, sanitized_route_name, sanitized_station_name)
-            os.makedirs(station_dir, exist_ok=True)
+        # --- Database Insertion Logic ---
+        print(f"Creating and populating SQLite database at '{db_path}'...")
+        conn = sqlite3.connect(db_path)
 
-            for (service_pattern, direction_id), final_group in station_group.groupby(['service_pattern', 'direction_id']):
-                file_name = f"{service_pattern}_direction_{direction_id}.txt"
-                file_path = os.path.join(station_dir, file_name)
-                
-                sorted_times = final_group['arrival_time'].apply(lambda x: x[:-3]).sort_values().unique()
-                
-                with open(file_path, 'w') as f:
-                    f.write('\n'.join(sorted_times))
+        # --- Create 'schedules' table ---
+        schedules_to_insert = final_df[['route_short_name', 'station_name', 'direction_id', 'arrival_time', 'service_id']].copy()
+        schedules_to_insert.rename(columns={'route_short_name': 'route_name'}, inplace=True)
+        schedules_to_insert['arrival_time'] = schedules_to_insert['arrival_time'].str[:-3]
+        schedules_to_insert.drop_duplicates(inplace=True)
+        
+        schedules_to_insert.to_sql(
+            'schedules', conn, if_exists='replace', index=False,
+            dtype={'route_name': 'TEXT', 'station_name': 'TEXT', 'direction_id': 'INTEGER', 'arrival_time': 'TEXT', 'service_id': 'TEXT'}
+        )
+        print("Creating index on 'schedules' table...")
+        conn.execute("CREATE INDEX idx_schedules ON schedules (route_name, station_name, direction_id, service_id)")
+
+        # --- Create 'directions' table ---
+        print("Extracting direction headsigns...")
+        directions_df = final_df[['route_short_name', 'direction_id', 'trip_headsign']].copy()
+        directions_df.rename(columns={'route_short_name': 'route_name'}, inplace=True)
+        directions_df.dropna(subset=['trip_headsign'], inplace=True)
+        directions_df = directions_df.groupby(['route_name', 'direction_id']).agg(
+            trip_headsign=('trip_headsign', lambda x: x.value_counts().index[0] if not x.value_counts().empty else '')
+        ).reset_index()
+
+        directions_df.to_sql(
+            'directions', conn, if_exists='replace', index=False,
+            dtype={'route_name': 'TEXT', 'direction_id': 'INTEGER', 'trip_headsign': 'TEXT'}
+        )
+        print("Creating index on 'directions' table...")
+        conn.execute("CREATE INDEX idx_directions ON directions (route_name)")
+
+        # --- Create 'calendar' table ---
+        print("Copying calendar data to database...")
+        calendar_df.to_sql(
+            'calendar', conn, if_exists='replace', index=False
+        )
+        conn.execute("CREATE INDEX idx_calendar ON calendar (service_id)")
+        
+        conn.commit()
+        conn.close()
     
-    print(f"Done! Schedule files have been generated in '{output_dir}'.")
+    print(f"Done! Database '{db_path}' has been generated with 'schedules', 'directions', and 'calendar' tables.")
 
 def main():
-    parser = argparse.ArgumentParser(description="Process a GTFS ZIP file to create schedule files per stop and per line.")
+    parser = argparse.ArgumentParser(description="Process a GTFS ZIP file to create a schedules.db SQLite database.")
     parser.add_argument("zip_file", help="Path to the GTFS ZIP file.")
-    parser.add_argument("--output", default="gtfs_processed", help="Output directory for the generated files (default: 'gtfs_processed').")
+    parser.add_argument("--output_dir", default="app/src/main/assets/databases", help="Output directory for the database file (default: 'app/src/main/assets/databases').")
     
     args = parser.parse_args()
     
@@ -132,7 +98,8 @@ def main():
         print(f"Error: File '{args.zip_file}' not found.")
         return
         
-    process_gtfs_schedules(args.zip_file, args.output)
+    os.makedirs(args.output_dir, exist_ok=True)
+    process_gtfs_schedules(args.zip_file, args.output_dir)
 
 if __name__ == "__main__":
     main()

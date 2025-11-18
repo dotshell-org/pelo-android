@@ -5,11 +5,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,52 +22,41 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pelotcl.app.data.gtfs.LineStopInfo
 import com.pelotcl.app.ui.theme.Gray700
+import com.pelotcl.app.ui.theme.Green500
+import com.pelotcl.app.ui.theme.Orange500
+import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.ui.viewmodel.TransportLinesUiState
 import com.pelotcl.app.utils.BusIconHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/**
- * Line information for display in the bottom sheet
- */
 data class LineInfo(
     val lineName: String,
     val currentStationName: String
 )
 
-/**
- * Returns a line's color based on its name and type
- */
 private fun getLineColor(lineName: String): Color {
     return when (lineName.uppercase()) {
-        // Metros
-        "A" -> Color(0xFFEC4899) // Pink
-        "B" -> Color(0xFF3B82F6) // Blue
-        "C" -> Color(0xFFF59E0B) // Orange
-        "D" -> Color(0xFF22C55E) // Green
-        // Funiculars
-        "F1", "F2" -> Color(0xFF84CC16) // Lime green
-        // Navigone
-        "NAV1" -> Color(0xFF14b8a6) // Teal for water shuttle
-        // Trams (starts with T)
+        "A" -> Color(0xFFEC4899)
+        "B" -> Color(0xFF3B82F6)
+        "C" -> Color(0xFFF59E0B)
+        "D" -> Color(0xFF22C55E)
+        "F1", "F2" -> Color(0xFF84CC16)
+        "NAV1" -> Color(0xFF14b8a6)
         else -> when {
-            lineName.uppercase().startsWith("NAV") -> Color(0xFF14b8a6) // Teal for navigone
-            lineName.uppercase().startsWith("T") -> Color(0xFFA855F7) // Purple
-            else -> Color(0xFFEF4444) // Red (Bus)
+            lineName.uppercase().startsWith("NAV") -> Color(0xFF14b8a6)
+            lineName.uppercase().startsWith("T") -> Color(0xFFA855F7)
+            else -> Color(0xFFEF4444)
         }
     }
 }
 
-/**
- * Bottom sheet displaying transport line details:
- * - List of stops in order
- * - Next departure times at current stop
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LineDetailsBottomSheet(
@@ -78,128 +70,72 @@ fun LineDetailsBottomSheet(
     val context = LocalContext.current
     var lineStops by remember { mutableStateOf<List<LineStopInfo>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
-    
-    // Observe lines state to wait for line to be loaded
+
     val linesState by viewModel.uiState.collectAsState()
-    
-    // Extract only the line names to avoid infinite recomposition
+
     val loadedLineNames = remember(linesState) {
         when (linesState) {
-            is TransportLinesUiState.Success -> {
-                (linesState as TransportLinesUiState.Success).lines.map { 
-                    it.properties.ligne.uppercase() 
-                }.toSet()
-            }
+            is TransportLinesUiState.Success -> (linesState as TransportLinesUiState.Success).lines.map { it.properties.ligne.uppercase() }.toSet()
             else -> emptySet()
         }
     }
 
-    // Load data when lineInfo changes AND line is in state
     LaunchedEffect(lineInfo?.lineName, lineInfo?.currentStationName, loadedLineNames) {
         if (lineInfo != null) {
             isLoading = true
-
-            // Wait for line to be loaded in state
             val lineLoaded = lineInfo.lineName.uppercase() in loadedLineNames
-            
-            android.util.Log.d("LineDetailsBottomSheet", "Line ${lineInfo.lineName} loaded: $lineLoaded")
-
             if (lineLoaded) {
-                // Get stops via API (already in cache with transfers)
                 withContext(Dispatchers.IO) {
                     try {
-                        // Use new ViewModel method which retrieves stops from API
-                        // Convert empty string to null to avoid false positive matches
                         val stops = viewModel.getStopsForLine(
                             lineName = lineInfo.lineName,
                             currentStopName = lineInfo.currentStationName.takeIf { it.isNotBlank() }
                         )
-                        
-                        android.util.Log.d("LineDetailsBottomSheet", "Loaded ${stops.size} stops for line ${lineInfo.lineName} from API")
-                        
-                        // If 0 stops found, likely a cache problem
-                        // Reload stops cache without affecting map
                         if (stops.isEmpty()) {
-                            android.util.Log.w("LineDetailsBottomSheet", "0 stops found for line ${lineInfo.lineName}, forcing cache reload...")
-                            viewModel.reloadStopsCache() // Recharger uniquement le cache
-                            kotlinx.coroutines.delay(500) // Wait for cache to be updated
-                            
-                            // Retry
-                            val stopsRetry = viewModel.getStopsForLine(
+                            viewModel.reloadStopsCache()
+                            kotlinx.coroutines.delay(500)
+                            lineStops = viewModel.getStopsForLine(
                                 lineName = lineInfo.lineName,
                                 currentStopName = lineInfo.currentStationName.takeIf { it.isNotBlank() }
                             )
-                            android.util.Log.d("LineDetailsBottomSheet", "Retry: Loaded ${stopsRetry.size} stops for line ${lineInfo.lineName}")
-                            lineStops = stopsRetry
                         } else {
                             lineStops = stops
                         }
                     } catch (e: Exception) {
-                        android.util.Log.e("LineDetailsBottomSheet", "Error loading stops: ${e.message}")
-                        e.printStackTrace()
+                        android.util.Log.e("LineDetailsBottomSheet", "Error loading stops: ${e.message}", e)
                     }
                 }
             }
-
             isLoading = false
         }
     }
 
     if (lineInfo != null) {
         val content = @Composable {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-            ) {
-                // Compact header with back arrow, line icon (small) and station name
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Fixed Header
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.Start,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Bouton retour
                     IconButton(onClick = onBackToStation) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Retour à la station",
-                            tint = Gray700
-                        )
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to station", tint = Gray700)
                     }
-
                     Spacer(modifier = Modifier.width(8.dp))
-
-                    // Line icon (small)
                     val drawableName = BusIconHelper.getDrawableNameForLineName(lineInfo.lineName)
                     val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
-
                     if (resourceId != 0) {
-                        Image(
-                            painter = painterResource(id = resourceId),
-                            contentDescription = "Ligne ${lineInfo.lineName}",
-                            modifier = Modifier.size(50.dp)
-                        )
+                        Image(painter = painterResource(id = resourceId), contentDescription = "Line ${lineInfo.lineName}", modifier = Modifier.size(50.dp))
                     } else {
                         Box(
-                            modifier = Modifier
-                                .size(50.dp)
-                                .clip(CircleShape)
-                                .background(getLineColor(lineInfo.lineName)),
+                            modifier = Modifier.size(50.dp).clip(CircleShape).background(getLineColor(lineInfo.lineName)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = lineInfo.lineName,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
+                            Text(text = lineInfo.lineName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
                         }
                     }
-
                     Spacer(modifier = Modifier.width(12.dp))
-
-                    // Nom de la station
                     Text(
                         text = lineInfo.currentStationName,
                         style = MaterialTheme.typography.titleLarge,
@@ -209,48 +145,59 @@ fun LineDetailsBottomSheet(
                     )
                 }
 
-                if (isLoading) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
+                Spacer(modifier = Modifier.height(36.dp))
+
+                // Scrollable Content (Schedules + Stops)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                ) {
+
+                    // Part 1: Next Schedules (Now inside the scrollable column)
+                    if (lineInfo.currentStationName.isNotBlank()) {
+                        NextSchedulesSection(viewModel = viewModel, lineInfo = lineInfo)
+                        Spacer(modifier = Modifier.height(20.dp))
                     }
-                } else {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .verticalScroll(rememberScrollState())
-                            .padding(horizontal = 24.dp)
-                            .padding(top = 10.dp, bottom = 40.dp)
-                    ) {
-                        Spacer(modifier = Modifier.height(24.dp))
 
-                        if (lineStops.isEmpty()) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .weight(1f),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator()
-                            }
-                        } else {
-                            // Obtenir la couleur de la ligne
-                            val lineColor = getLineColor(lineInfo.lineName)
-
-                            // Display all stops with vertical line
-                            lineStops.forEachIndexed { index, stop ->
-                                StopItemWithLine(
-                                    stop = stop,
-                                    lineColor = lineColor,
-                                    isFirst = index == 0,
-                                    isLast = index == lineStops.size - 1,
-                                    onStopClick = { onStopClick(stop.stopName) }
-                                )
+                    // Part 2: Stops or Loader
+                    if (isLoading) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(200.dp), // Give it some height to look good
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp)
+                                .padding(top = 10.dp, bottom = 40.dp)
+                        ) {
+                            if (lineStops.isEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(200.dp), // Give it some height to look good
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator()
+                                }
+                            } else {
+                                val lineColor = getLineColor(lineInfo.lineName)
+                                lineStops.forEachIndexed { index, stop ->
+                                    StopItemWithLine(
+                                        stop = stop,
+                                        lineColor = lineColor,
+                                        isFirst = index == 0,
+                                        isLast = index == lineStops.size - 1,
+                                        onStopClick = { onStopClick(stop.stopName) }
+                                    )
+                                }
                             }
                         }
                     }
@@ -258,13 +205,8 @@ fun LineDetailsBottomSheet(
             }
         }
 
-        // If sheetState is provided, wrap in ModalBottomSheet, otherwise show content directly
         if (sheetState != null) {
-            ModalBottomSheet(
-                onDismissRequest = onDismiss,
-                sheetState = sheetState,
-                containerColor = Color.White
-            ) {
+            ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = Color.White) {
                 content()
             }
         } else {
@@ -274,137 +216,144 @@ fun LineDetailsBottomSheet(
 }
 
 @Composable
-private fun StopItemWithLine(
-    stop: LineStopInfo,
-    lineColor: Color,
-    isFirst: Boolean,
-    isLast: Boolean,
-    onStopClick: () -> Unit = {}
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .height(IntrinsicSize.Min)
-            .clickable { onStopClick() },
-        verticalAlignment = Alignment.CenterVertically
+private fun NextSchedulesSection(viewModel: TransportViewModel, lineInfo: LineInfo) {
+    val headsigns by viewModel.headsigns.collectAsState()
+    val allSchedules by viewModel.allSchedules.collectAsState()
+    val nextSchedules by viewModel.nextSchedules.collectAsState()
+
+    var selectedDirection by remember { mutableStateOf(0) }
+    var showAllSchedulesDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(lineInfo.lineName) {
+        viewModel.loadHeadsigns(lineInfo.lineName)
+    }
+
+    LaunchedEffect(selectedDirection, lineInfo.currentStationName) {
+        viewModel.loadSchedulesForDirection(
+            lineName = lineInfo.lineName,
+            stopName = lineInfo.currentStationName,
+            directionId = selectedDirection,
+            isHoliday = false // Always false for now, as per user request
+        )
+    }
+
+    val lineColor = getLineColor(lineInfo.lineName)
+
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(
-            modifier = Modifier
-                .width(40.dp)
-                .fillMaxHeight(),
-            contentAlignment = Alignment.Center
-        ) {
-            if (!isFirst) {
-                Box(
-                    modifier = Modifier
-                        .width(4.dp)
-                        .height(30.dp)
-                        .offset(y = (-16).dp)
-                        .background(lineColor)
-                        .align(Alignment.Center)
-                )
-            }
-
-            if (!isLast) {
-                Box(
-                    modifier = Modifier
-                        .width(4.dp)
-                        .height(30.dp)
-                        .offset(y = (16).dp)
-                        .background(lineColor)
-                        .align(Alignment.Center)
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .size(16.dp)
-                    .clip(CircleShape)
-                    .background(if (stop.isCurrentStop) lineColor else Color.White) // Full if current stop, hollow otherwise
-                    .border(
-                        width = if (stop.isCurrentStop) 0.dp else 3.dp, // No border if full
-                        color = lineColor,
-                        shape = CircleShape
-                    )
-            )
-        }
-
-        // Right part: text + transfers
-        Row(
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-
-            Text(
-                text = stop.stopName,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = if (stop.isCurrentStop) FontWeight.Bold else FontWeight.Normal,
-                color = if (stop.isCurrentStop) lineColor else Color.Black,
-                modifier = Modifier.weight(1f, fill = false)
-            )
-
-            if (stop.connections.isNotEmpty()) {
-                Spacer(modifier = Modifier.width(8.dp))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    stop.connections.forEach { connectionLine ->
-                        ConnectionBadge(lineName = connectionLine)
+        if (headsigns.isNotEmpty()) {
+            Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                headsigns.keys.sorted().forEach { directionId ->
+                    val headsign = headsigns[directionId] ?: "Direction ${directionId + 1}"
+                    Button(
+                        onClick = { selectedDirection = directionId },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (selectedDirection == directionId) lineColor else Color.LightGray,
+                            contentColor = if (selectedDirection == directionId) Color.White else Color.DarkGray
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(headsign, maxLines = 1)
+                    }
+                    if (directionId != headsigns.keys.maxOrNull()) {
+                        Spacer(modifier = Modifier.height(4.dp))
                     }
                 }
             }
+            Spacer(modifier = Modifier.height(16.dp))
         }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { if (allSchedules.isNotEmpty()) showAllSchedulesDialog = true }
+                .padding(16.dp), // "Big line" thanks to padding
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Common style for all schedules
+            val timeStyle = MaterialTheme.typography.titleMedium
+
+            // 1st Schedule (Red)
+            if (nextSchedules.isNotEmpty()) {
+                Text(text = nextSchedules[0], style = timeStyle, color = Red500)
+            }
+
+            // 2nd Schedule (Orange)
+            if (nextSchedules.size > 1) {
+                Spacer(modifier = Modifier.width(16.dp)) // Space between times
+                Text(text = nextSchedules[1], style = timeStyle, color = Orange500)
+            }
+
+            // 3rd Schedule (Green)
+            if (nextSchedules.size > 2) {
+                Spacer(modifier = Modifier.width(16.dp))
+                Text(text = nextSchedules[2], style = timeStyle, color = Green500)
+            }
+
+            // Push the chevron all the way to the right
+            Spacer(modifier = Modifier.weight(1f))
+
+            // Chevron in Gray
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = Color.Gray
+            )
+        }
+    }
+
+    if (showAllSchedulesDialog) {
+        AlertDialog(
+            onDismissRequest = { showAllSchedulesDialog = false },
+            title = { Text("All Schedules for ${headsigns[selectedDirection] ?: ""}") },
+            text = {
+                LazyColumn {
+                    items(allSchedules) { time ->
+                        Text(time, modifier = Modifier.padding(vertical = 4.dp).fillMaxWidth(), textAlign = TextAlign.Center, fontSize = 18.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showAllSchedulesDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
     }
 }
 
-/**
- * Badge displaying a transfer line (metro or funicular)
- * Uses TCL images like on the map
- */
 @Composable
-private fun ConnectionBadge(lineName: String) {
-    val context = LocalContext.current
-
-    // Convert line name to drawable name using BusIconHelper for consistency
-    val drawableName = BusIconHelper.getDrawableNameForLineName(lineName)
-    val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
-
-    if (resourceId != 0) {
-        // Display TCL image
-        Image(
-            painter = painterResource(id = resourceId),
-            contentDescription = "Ligne $lineName",
-            modifier = Modifier.size(40.dp)
-        )
-    } else {
-        // Fallback: colored circle if image doesn't exist
-        val backgroundColor = when (lineName) {
-            "A" -> Color(0xFFEC4899) // Pink
-            "B" -> Color(0xFF3B82F6) // Blue
-            "C" -> Color(0xFFF59E0B) // Orange
-            "D" -> Color(0xFF22C55E) // Green
-            "F1", "F2" -> Color(0xFF84CC16) // Lime green
-            else -> Color.Gray
+private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Boolean, isLast: Boolean, onStopClick: () -> Unit = {}) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).height(IntrinsicSize.Min).clickable { onStopClick() },
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(modifier = Modifier.width(40.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
+            if (!isFirst) {
+                Box(modifier = Modifier.width(4.dp).height(30.dp).offset(y = (-16).dp).background(lineColor).align(Alignment.Center))
+            }
+            if (!isLast) {
+                Box(modifier = Modifier.width(4.dp).height(30.dp).offset(y = (16).dp).background(lineColor).align(Alignment.Center))
+            }
+            Box(
+                modifier = Modifier.size(16.dp).clip(CircleShape)
+                    .background(if (stop.isCurrentStop) lineColor else Color.White)
+                    .border(width = if (stop.isCurrentStop) 0.dp else 3.dp, color = lineColor, shape = CircleShape)
+            )
         }
-
-        Box(
-            modifier = Modifier
-                .size(24.dp)
-                .clip(CircleShape)
-                .background(backgroundColor),
-            contentAlignment = Alignment.Center
+        // Completed the cut-off code here
+        Row(
+            modifier = Modifier.weight(1f).padding(start = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = lineName,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                fontSize = if (lineName.length > 1) 9.sp else 11.sp
+                text = stop.stopName,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (stop.isCurrentStop) lineColor else Color.Black,
+                fontWeight = if (stop.isCurrentStop) FontWeight.Bold else FontWeight.Normal
             )
         }
     }
