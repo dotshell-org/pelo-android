@@ -16,7 +16,7 @@ def process_gtfs_schedules(zip_path, output_dir):
         print(f"Unzipping '{zip_path}' to temporary directory...")
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(temp_dir)
-        
+
         print("Reading GTFS files...")
         id_cols_dtype = {'route_id': str, 'trip_id': str, 'stop_id': str, 'parent_station': str, 'service_id': str}
         routes_df = pd.read_csv(os.path.join(temp_dir, 'routes.txt'), dtype=id_cols_dtype)
@@ -32,14 +32,34 @@ def process_gtfs_schedules(zip_path, output_dir):
         print("Processing data and joining tables...")
         merged_df = pd.merge(stop_times_df, trips_df, on='trip_id')
         merged_df = pd.merge(merged_df, routes_df, on='route_id')
-        
+
         merged_df['station_id'] = merged_df['stop_id'].map(child_to_parent).fillna(merged_df['stop_id'])
         merged_df['station_name'] = merged_df['station_id'].map(stop_id_to_name)
 
         # Clean up data before inserting into database
         final_df = merged_df.dropna(subset=['station_name', 'arrival_time', 'service_id', 'direction_id'])
         final_df = final_df[final_df['station_name'].str.strip() != '']
+
+        # Filter format valid
         final_df = final_df[final_df['arrival_time'].str.match(r'^\d+:\d{2}:\d{2}$', na=False)]
+
+        # --- MODIFICATION START: Conversion des heures >= 24h ---
+        print("Normalizing times (converting 24h+ to 00h+)...")
+        def normalize_gtfs_time(time_str):
+            try:
+                parts = time_str.split(':')
+                hour = int(parts[0])
+                if hour >= 24:
+                    hour = hour % 24
+                    # Reconstruit la chaine en format HH:MM:SS avec zero-padding
+                    return f"{hour:02d}:{parts[1]}:{parts[2]}"
+                return time_str
+            except:
+                return time_str
+
+        final_df['arrival_time'] = final_df['arrival_time'].apply(normalize_gtfs_time)
+        # --- MODIFICATION END ---
+
         final_df['direction_id'] = final_df['direction_id'].astype(int)
 
         # --- Database Insertion Logic ---
@@ -49,9 +69,10 @@ def process_gtfs_schedules(zip_path, output_dir):
         # --- Create 'schedules' table ---
         schedules_to_insert = final_df[['route_short_name', 'station_name', 'direction_id', 'arrival_time', 'service_id']].copy()
         schedules_to_insert.rename(columns={'route_short_name': 'route_name'}, inplace=True)
+        # Remove seconds just before insertion, now that hours are normalized
         schedules_to_insert['arrival_time'] = schedules_to_insert['arrival_time'].str[:-3]
         schedules_to_insert.drop_duplicates(inplace=True)
-        
+
         schedules_to_insert.to_sql(
             'schedules', conn, if_exists='replace', index=False,
             dtype={'route_name': 'TEXT', 'station_name': 'TEXT', 'direction_id': 'INTEGER', 'arrival_time': 'TEXT', 'service_id': 'TEXT'}
@@ -81,13 +102,13 @@ def process_gtfs_schedules(zip_path, output_dir):
             'calendar', conn, if_exists='replace', index=False
         )
         conn.execute("CREATE INDEX idx_calendar ON calendar (service_id)")
-        
+
         print("Injecting hardcoded NAVI1 schedules...")
         inject_hardcoded_navigone_schedules(conn)
 
         conn.commit()
         conn.close()
-    
+
     print(f"Done! Database '{db_path}' has been generated with 'schedules', 'directions', and 'calendar' tables.")
 
 def inject_hardcoded_navigone_schedules(conn):
@@ -106,7 +127,7 @@ def inject_hardcoded_navigone_schedules(conn):
         # Service for S/D/Fêtes
         ('NAVI1_WEEKEND', 0, 0, 0, 0, 0, 1, 1, '20250101', '20251231')
     ]
-    
+
     # --- 2. Define Headsigns for Directions table ---
     navigone_directions = [
         ('NAVI1', 0, 'Confluence'),
@@ -117,7 +138,7 @@ def inject_hardcoded_navigone_schedules(conn):
     # Direction 0: Vaise -> Confluence
     # Direction 1: Confluence -> Vaise
     schedules = []
-    
+
     # Service: Lundi, mardi, jeudi et vendredi (Weekday)
     # Direction 0 (to Confluence)
     schedules.extend([('NAVI1', "VAISE - INDUSTRIE", 0, time, 'NAVI1_WEEKDAY') for time in ['07:00', '07:30', '08:00', '08:30', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00', '21:00']])
@@ -144,25 +165,25 @@ def inject_hardcoded_navigone_schedules(conn):
     print("  - Deleting existing NAVI1 data...")
     cursor.execute("DELETE FROM schedules WHERE route_name = 'NAVI1'")
     cursor.execute("DELETE FROM directions WHERE route_name = 'NAVI1'")
-    
+
     print("  - Inserting new NAVI1 calendar, directions, and schedules...")
     cursor.executemany("INSERT OR IGNORE INTO calendar (service_id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", navigone_calendar)
     cursor.executemany("INSERT OR REPLACE INTO directions (route_name, direction_id, trip_headsign) VALUES (?, ?, ?)", navigone_directions)
     cursor.executemany("INSERT INTO schedules (route_name, station_name, direction_id, arrival_time, service_id) VALUES (?, ?, ?, ?, ?)", schedules)
-    
+
     print(f"  - Injected {len(schedules)} new schedule entries for NAVI1.")
 
 def main():
     parser = argparse.ArgumentParser(description="Process a GTFS ZIP file to create a schedules.db SQLite database.")
     parser.add_argument("zip_file", help="Path to the GTFS ZIP file.")
     parser.add_argument("--output_dir", default="app/src/main/assets/databases", help="Output directory for the database file (default: 'app/src/main/assets/databases').")
-    
+
     args = parser.parse_args()
-    
+
     if not os.path.exists(args.zip_file):
         print(f"Error: File '{args.zip_file}' not found.")
         return
-        
+
     os.makedirs(args.output_dir, exist_ok=True)
     process_gtfs_schedules(args.zip_file, args.output_dir)
 
