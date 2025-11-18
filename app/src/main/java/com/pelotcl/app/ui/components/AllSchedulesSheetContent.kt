@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -23,6 +26,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,6 +55,7 @@ private fun getLineColor(lineName: String): Color {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AllSchedulesSheetContent(
     allSchedulesInfo: AllSchedulesInfo,
@@ -58,6 +63,14 @@ fun AllSchedulesSheetContent(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+
+    val groupedSchedules = remember(allSchedulesInfo.schedules) {
+        allSchedulesInfo.schedules
+            .map { it.split(":") }
+            .filter { it.size == 2 }
+            .groupBy({ it[0] }, { it[1] })
+            .toSortedMap()
+    }
 
     Column(
         modifier = Modifier
@@ -98,18 +111,50 @@ fun AllSchedulesSheetContent(
 
         Spacer(modifier = Modifier.height(36.dp))
 
+        val list = groupedSchedules.entries.toList()
+
         LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier
+                .fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
-            items(allSchedulesInfo.schedules) { schedule ->
-                Text(
-                    text = schedule,
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(vertical = 8.dp),
-                    color = Color.Black
-                )
-                HorizontalDivider()
+            itemsIndexed(list) { index, (hour, minutesList) ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Text(
+                        text = "${hour}h",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = getLineColor(allSchedulesInfo.lineName),
+                        modifier = Modifier.width(50.dp)
+                    )
+
+                    FlowRow(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        minutesList.forEach { minute ->
+                            Text(
+                                text = minute,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color.Black,
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
+                        }
+                    }
+                }
+                if (index < list.lastIndex) {
+                    HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f))
+                }
+                else
+                {
+                    Spacer(modifier = Modifier.height(32.dp))
+                }
             }
         }
     }

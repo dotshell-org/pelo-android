@@ -330,7 +330,7 @@ private fun NextSchedulesSection(
         }
 
         Text(
-            text = "Prochains horaires",
+            text = "Prochains départs",
             textAlign = TextAlign.Left,
             fontSize = 22.sp,
             color = Color.Black,
