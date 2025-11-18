@@ -38,6 +38,7 @@ import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import com.pelotcl.app.ui.components.AllSchedulesSheetContent
 import com.pelotcl.app.ui.components.LineDetailsBottomSheet
 import com.pelotcl.app.ui.components.LineInfo
 import com.pelotcl.app.ui.components.LinesBottomSheet
@@ -101,6 +102,12 @@ data class AllSchedulesInfo(
     val schedules: List<String>
 )
 
+enum class SheetContentState {
+    STATION,
+    LINE_DETAILS,
+    ALL_SCHEDULES
+}
+
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -141,41 +148,32 @@ fun PlanScreen(
     
     // State for the new AllSchedulesBottomSheet
     var allSchedulesInfo by remember { mutableStateOf<AllSchedulesInfo?>(null) }
-    val allSchedulesSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     
     // Track temporarily loaded bus lines (to unload them when exiting line details)
     var temporaryLoadedBusLines by remember { mutableStateOf<Set<String>>(emptySet()) }
     
     // Determine which content to show: station info or line details
-    var showLineDetails by remember { mutableStateOf(false) }
+    var sheetContentState by remember { mutableStateOf<SheetContentState?>(null) }
     
-    // Track if the sheet is expanded (to hide search bar)
-    var isSheetExpanded by remember { mutableStateOf(false) }
+
+
     
     // Notify parent when sheet state changes
-    LaunchedEffect(isSheetExpanded) {
-        onSheetStateChanged(isSheetExpanded)
+    LaunchedEffect(sheetContentState) {
+        onSheetStateChanged(sheetContentState != null)
     }
+
+
     
     // Monitor bottom sheet state changes to detect when user swipes down to dismiss
     // BUT only allow dismissal for station sheet, not for line details sheet
-    LaunchedEffect(scaffoldSheetState.bottomSheetState.currentValue, showLineDetails) {
-        val isPartiallyExpanded = scaffoldSheetState.bottomSheetState.currentValue == 
-            androidx.compose.material3.SheetValue.PartiallyExpanded
+    LaunchedEffect(scaffoldSheetState.bottomSheetState.currentValue, sheetContentState) {
         val isHidden = scaffoldSheetState.bottomSheetState.currentValue == 
             androidx.compose.material3.SheetValue.Hidden
         
-        // Only allow dismissal by swiping for station sheet (not line details)
-        if ((isPartiallyExpanded || isHidden) && isSheetExpanded && !showLineDetails) {
-            // User has swiped down to dismiss the station sheet
-            isSheetExpanded = false
-        } else if (isHidden && isSheetExpanded && showLineDetails) {
-            // User tried to completely hide line details sheet - prevent by going to partial expand
-            scope.launch {
-                scaffoldSheetState.bottomSheetState.partialExpand()
-            }
+        if (isHidden) {
+            sheetContentState = null
         }
-        // Note: PartiallyExpanded state is allowed for line details (to show compact header)
     }
     
     // Permission launcher - must be registered before STARTED lifecycle state
@@ -273,7 +271,7 @@ fun PlanScreen(
                     // Callback when a station is clicked
                     scope.launch {
                         // If line details are open, simulate clicking back arrow first
-                        if (showLineDetails) {
+                        if (sheetContentState == SheetContentState.LINE_DETAILS || sheetContentState == SheetContentState.ALL_SCHEDULES) {
                             // Step 1: Remove the line from loaded lines if it's a bus
                             selectedLine?.let { lineInfo ->
                                 val lineName = lineInfo.lineName
@@ -285,11 +283,10 @@ fun PlanScreen(
                             
                             // Step 2: Close line details (back to station view)
                             selectedLine = null
-                            showLineDetails = false
+                            sheetContentState = null
                             
                             // Step 3: Close the sheet completely
                             scaffoldSheetState.bottomSheetState.partialExpand()
-                            isSheetExpanded = false
                             
                             // Step 4: Wait a bit for the animation
                             kotlinx.coroutines.delay(300)
@@ -317,13 +314,12 @@ fun PlanScreen(
                                 kotlinx.coroutines.delay(100)
                             }
                             
-                            showLineDetails = true
-                            isSheetExpanded = true
+                            sheetContentState = SheetContentState.LINE_DETAILS
                             scaffoldSheetState.bottomSheetState.expand()
                         } else {
                             // Open the station sheet showing all lines
                             selectedStation = clickedStationInfo
-                            isSheetExpanded = true
+                            sheetContentState = SheetContentState.STATION
                             scaffoldSheetState.bottomSheetState.expand()
                         }
                     }
@@ -334,10 +330,10 @@ fun PlanScreen(
     }
     
     // Load a bus line on demand when selected
-    LaunchedEffect(showLineDetails, selectedLine) {
-        if (showLineDetails && selectedLine != null) {
+    LaunchedEffect(sheetContentState, selectedLine) {
+        if (sheetContentState == SheetContentState.LINE_DETAILS && selectedLine != null) {
             val lineName = selectedLine!!.lineName
-            android.util.Log.d("PlanScreen", "showLineDetails=true, lineName=$lineName")
+            android.util.Log.d("PlanScreen", "sheetContentState=LINE_DETAILS, lineName=$lineName")
 
             // If it's a bus.*load line on demand
             if (!isMetroTramOrFunicular(lineName)) {
@@ -354,10 +350,10 @@ fun PlanScreen(
     }
     
     // Unload ALL temporary lines when closing details
-    LaunchedEffect(showLineDetails) {
-        if (!showLineDetails && temporaryLoadedBusLines.isNotEmpty()) {
+    LaunchedEffect(sheetContentState) {
+        if (sheetContentState != SheetContentState.LINE_DETAILS && sheetContentState != SheetContentState.ALL_SCHEDULES && temporaryLoadedBusLines.isNotEmpty()) {
             // When closing details, remove ALL temporary bus lines
-            android.util.Log.d("PlanScreen", "showLineDetails=false, clearing ${temporaryLoadedBusLines.size} temporary bus lines")
+            android.util.Log.d("PlanScreen", "sheetContentState changed, clearing ${temporaryLoadedBusLines.size} temporary bus lines")
             temporaryLoadedBusLines.forEach { busLine ->
                 android.util.Log.d("PlanScreen", "Removing temporary bus line: $busLine")
                 viewModel.removeLineFromLoaded(busLine)
@@ -367,10 +363,10 @@ fun PlanScreen(
     }
     
     // Unload temporary lines when closing lines sheet AND no detail is open
-    LaunchedEffect(showLinesSheet, showLineDetails) {
+    LaunchedEffect(showLinesSheet, sheetContentState) {
         // When lines sheet closes and we're not viewing line details,
         // c'est qu'on a fait "retour" sans ouvrir de ligne : nettoyer toutes les lignes temporaires
-        if (!showLinesSheet && !showLineDetails && temporaryLoadedBusLines.isNotEmpty()) {
+        if (!showLinesSheet && sheetContentState != SheetContentState.LINE_DETAILS && sheetContentState != SheetContentState.ALL_SCHEDULES && temporaryLoadedBusLines.isNotEmpty()) {
             android.util.Log.d("PlanScreen", "LinesSheet closed without line details open, clearing ${temporaryLoadedBusLines.size} temporary bus lines")
             temporaryLoadedBusLines.forEach { busLine ->
                 android.util.Log.d("PlanScreen", "Removing temporary bus line from lines sheet: $busLine")
@@ -381,13 +377,13 @@ fun PlanScreen(
     }
     
     // Filter visible lines based on selected line
-    LaunchedEffect(showLineDetails, selectedLine, uiState, mapInstance, stopsUiState) {
+    LaunchedEffect(sheetContentState, selectedLine, uiState, mapInstance, stopsUiState) {
         val map = mapInstance ?: return@LaunchedEffect
         
         when (val state = uiState) {
             is TransportLinesUiState.Success -> {
-                if (showLineDetails && selectedLine != null) {
-                    android.util.Log.d("PlanScreen", "LaunchedEffect: showLineDetails=true, selectedLine=${selectedLine!!.lineName}")
+                if ((sheetContentState == SheetContentState.LINE_DETAILS || sheetContentState == SheetContentState.ALL_SCHEDULES) && selectedLine != null) {
+                    android.util.Log.d("PlanScreen", "LaunchedEffect: sheetContentState is LINE_DETAILS or ALL_SCHEDULES, selectedLine=${selectedLine!!.lineName}")
                     android.util.Log.d("PlanScreen", "LaunchedEffect: state.lines.size=${state.lines.size}")
                     state.lines.filter { it.properties.ligne.equals(selectedLine!!.lineName, ignoreCase = true) }.forEach {
                         android.util.Log.d("PlanScreen", "LaunchedEffect: Found matching feature: ligne=${it.properties.ligne}, codeTrace=${it.properties.codeTrace}")
@@ -432,10 +428,10 @@ fun PlanScreen(
     // Determine peek height:
     // - 0 when closed (station sheet not expanded)
     // - Compact header height for line details (drag handle + header + padding)
-    val peekHeight = if (isSheetExpanded && showLineDetails) {
-        bottomPadding + 150.dp;
-    } else {
-        0.dp
+    val peekHeight = when(sheetContentState) {
+        SheetContentState.LINE_DETAILS, SheetContentState.ALL_SCHEDULES -> bottomPadding + 150.dp
+        SheetContentState.STATION -> 0.dp // Make it fully disappear when in STATION state
+        else -> 0.dp
     }
     
     BottomSheetScaffold(
@@ -450,76 +446,91 @@ fun PlanScreen(
                     .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                if (showLineDetails && selectedLine != null) {
-                    // Display line details
-                    LineDetailsSheetContent(
-                        lineInfo = selectedLine!!,
-                        viewModel = viewModel,
-                        onBackToStation = {
-                            // Simply close details, unloading will happen in LaunchedEffect
-                            showLineDetails = false
-                        },
-                        onStopClick = { stopName ->
-                            // Update the selected line with the new stop
-                            selectedLine = LineInfo(
-                                lineName = selectedLine!!.lineName,
-                                currentStationName = stopName
-                            )
-                            // Collapse the sheet to show the map with the selected stop
-                            scope.launch {
-                                scaffoldSheetState.bottomSheetState.partialExpand()
-                            }
-                        },
-                        onShowAllSchedules = { lineName, directionName, schedules ->
-                            scope.launch {
-                                // First, collapse the current sheet and reset its state
-                                scaffoldSheetState.bottomSheetState.partialExpand()
-                                isSheetExpanded = false
-                                showLineDetails = false
-                                // Then, set the data for the new sheet and show it
-                                allSchedulesInfo = AllSchedulesInfo(lineName, directionName, schedules)
-                            }
-                        }
-                    )
-                } else if (selectedStation != null) {
-                    // Afficher les informations de la station
-                    StationSheetContent(
-                        stationInfo = selectedStation!!,
-                        onDismiss = {
-                            scope.launch { 
-                                scaffoldSheetState.bottomSheetState.partialExpand()
-                                isSheetExpanded = false
-                            }
-                        },
-                        onLineClick = { lineName ->
-                            selectedLine = LineInfo(
-                                lineName = lineName,
-                                currentStationName = selectedStation?.nom ?: ""
-                            )
-                            
-                            // Si c'est un bus ou T1, charger la ligne avant d'ouvrir le bottom sheet
-                            if (!isMetroTramOrFunicular(lineName)) {
-                                android.util.Log.d("PlanScreen", "Pre-loading line from station sheet: $lineName")
-                                scope.launch {
-                                    viewModel.addLineToLoaded(lineName)
-                                    // Add to temporary lines (all buses must be temporary)
-                                    if (isTemporaryBus(lineName)) {
-                                        temporaryLoadedBusLines = temporaryLoadedBusLines + lineName
+                when(sheetContentState) {
+                    SheetContentState.LINE_DETAILS -> {
+                        if (selectedLine != null) {
+                            // Display line details
+                            LineDetailsSheetContent(
+                                lineInfo = selectedLine!!,
+                                viewModel = viewModel,
+                                onBackToStation = {
+                                    // Simply close details, unloading will happen in LaunchedEffect
+                                    sheetContentState = SheetContentState.STATION
+                                },
+                                onStopClick = { stopName ->
+                                    // Update the selected line with the new stop
+                                    selectedLine = LineInfo(
+                                        lineName = selectedLine!!.lineName,
+                                        currentStationName = stopName
+                                    )
+                                    // Collapse the sheet to show the map with the selected stop
+                                    scope.launch {
+                                        scaffoldSheetState.bottomSheetState.partialExpand()
                                     }
-                                    // Wait a bit for line to be added au state
-                                    kotlinx.coroutines.delay(100)
-                                    showLineDetails = true
-                                    scaffoldSheetState.bottomSheetState.expand()
+                                },
+                                onShowAllSchedules = { lineName, directionName, schedules ->
+                                    allSchedulesInfo = AllSchedulesInfo(lineName, directionName, schedules)
+                                    sheetContentState = SheetContentState.ALL_SCHEDULES
                                 }
-                            } else {
-                                showLineDetails = true
-                                // Expand the sheet when showing line details
-                                scope.launch {
-                                    scaffoldSheetState.bottomSheetState.expand()
-                                }
-                            }
+                            )
                         }
-                    )
+                    }
+                    SheetContentState.STATION -> {
+                        if (selectedStation != null) {
+                            // Afficher les informations de la station
+                            StationSheetContent(
+                                stationInfo = selectedStation!!,
+                                onDismiss = {
+                                    scope.launch {
+                                        scaffoldSheetState.bottomSheetState.hide()
+                                    }
+                                    sheetContentState = null
+                                },
+                                onLineClick = { lineName ->
+                                    selectedLine = LineInfo(
+                                        lineName = lineName,
+                                        currentStationName = selectedStation?.nom ?: ""
+                                    )
+                                    
+                                    // Si c'est un bus ou T1, charger la ligne avant d'ouvrir le bottom sheet
+                                    if (!isMetroTramOrFunicular(lineName)) {
+                                        android.util.Log.d("PlanScreen", "Pre-loading line from station sheet: $lineName")
+                                        scope.launch {
+                                            viewModel.addLineToLoaded(lineName)
+                                            // Add to temporary lines (all buses must be temporary)
+                                            if (isTemporaryBus(lineName)) {
+                                                temporaryLoadedBusLines = temporaryLoadedBusLines + lineName
+                                            }
+                                            // Wait a bit for line to be added au state
+                                            kotlinx.coroutines.delay(100)
+                                            sheetContentState = SheetContentState.LINE_DETAILS
+                                            scaffoldSheetState.bottomSheetState.expand()
+                                        }
+                                    } else {
+                                        sheetContentState = SheetContentState.LINE_DETAILS
+                                        // Expand the sheet when showing line details
+                                        scope.launch {
+                                            scaffoldSheetState.bottomSheetState.expand()
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    }
+                    SheetContentState.ALL_SCHEDULES -> {
+                        if (allSchedulesInfo != null) {
+                            AllSchedulesSheetContent(
+                                allSchedulesInfo = allSchedulesInfo!!,
+                                lineInfo = selectedLine!!,
+                                onBack = {
+                                    sheetContentState = SheetContentState.LINE_DETAILS
+                                }
+                            )
+                        }
+                    }
+                    null -> {
+                        // Empty content when sheet is hidden
+                    }
                 }
             }
         }
@@ -557,10 +568,19 @@ fun PlanScreen(
 
     // Display LinesBottomSheet on top of everything when requested
     if (showLinesSheet) {
+        val modalBottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        
+        // LaunchedEffect to hide the sheet when showLinesSheet becomes false
+        LaunchedEffect(showLinesSheet) {
+            if (!showLinesSheet) {
+                modalBottomSheetState.hide()
+            }
+        }
+
         androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = onLinesSheetDismiss,
             containerColor = Color.White,
-            sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            sheetState = modalBottomSheetState // Use the local state
         ) {
             LinesBottomSheet(
                 allLines = viewModel.getAllAvailableLines(),
@@ -586,8 +606,7 @@ fun PlanScreen(
                                 lineName = lineName,
                                 currentStationName = ""
                             )
-                            showLineDetails = true
-                            isSheetExpanded = true
+                            sheetContentState = SheetContentState.LINE_DETAILS
                             scaffoldSheetState.bottomSheetState.partialExpand() // Open in collapsed mode
                         }
                     } else {
@@ -612,8 +631,7 @@ fun PlanScreen(
                                 lineName = lineName,
                                 currentStationName = ""
                             )
-                            showLineDetails = true
-                            isSheetExpanded = true
+                            sheetContentState = SheetContentState.LINE_DETAILS
                             scaffoldSheetState.bottomSheetState.partialExpand() // Open in collapsed mode
                         }
                     }
