@@ -73,7 +73,14 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             _allSchedules.value = emptyList()
             _nextSchedules.value = emptyList()
 
-            val allSchedulesForDay = schedulesRepository.getSchedules(lineName, stopName, directionId, isHoliday)
+            android.util.Log.d("NavigoneDebug", "loadSchedulesForDirection called with lineName: '$lineName'")
+
+            // The GTFS data uses NAVI1 for the Navigone, but the app displays NAV1
+            val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
+
+            android.util.Log.d("NavigoneDebug", "Translated lineName to gtfsLineName: '$gtfsLineName'")
+
+            val allSchedulesForDay = schedulesRepository.getSchedules(gtfsLineName, stopName, directionId, isHoliday)
             _allSchedules.value = allSchedulesForDay
 
             if (allSchedulesForDay.isEmpty()) {

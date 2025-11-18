@@ -82,10 +82,75 @@ def process_gtfs_schedules(zip_path, output_dir):
         )
         conn.execute("CREATE INDEX idx_calendar ON calendar (service_id)")
         
+        print("Injecting hardcoded NAVI1 schedules...")
+        inject_hardcoded_navigone_schedules(conn)
+
         conn.commit()
         conn.close()
     
     print(f"Done! Database '{db_path}' has been generated with 'schedules', 'directions', and 'calendar' tables.")
+
+def inject_hardcoded_navigone_schedules(conn):
+    """
+    Injects hardcoded schedules for the NAVI1 line.
+    This is a workaround for missing data in the GTFS file.
+    """
+    cursor = conn.cursor()
+
+    # --- 1. Define Service IDs and Calendar Entries ---
+    # The app logic uses 'monday' for all weekdays and 'sunday' for weekends/holidays.
+    # We will create two services to match this.
+    navigone_calendar = [
+        # Service for L/M/M/J/V (merging all weekday variants)
+        ('NAVI1_WEEKDAY', 1, 1, 1, 1, 1, 0, 0, '20250101', '20251231'),
+        # Service for S/D/Fêtes
+        ('NAVI1_WEEKEND', 0, 0, 0, 0, 0, 1, 1, '20250101', '20251231')
+    ]
+    
+    # --- 2. Define Headsigns for Directions table ---
+    navigone_directions = [
+        ('NAVI1', 0, 'Confluence'),
+        ('NAVI1', 1, 'Vaise - Industrie')
+    ]
+
+    # --- 3. Define Schedules ---
+    # Direction 0: Vaise -> Confluence
+    # Direction 1: Confluence -> Vaise
+    schedules = []
+    
+    # Service: Lundi, mardi, jeudi et vendredi (Weekday)
+    # Direction 0 (to Confluence)
+    schedules.extend([('NAVI1', "VAISE - INDUSTRIE", 0, time, 'NAVI1_WEEKDAY') for time in ['07:00', '07:30', '08:00', '08:30', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00', '21:00']])
+    schedules.extend([('NAVI1', "SUBSISTANCES", 0, time, 'NAVI1_WEEKDAY') for time in ['07:15', '07:45', '08:15', '08:45', '09:15', '10:15', '11:15', '12:15', '13:15', '14:15', '15:15', '16:15', '16:45', '17:15', '17:45', '18:15', '18:45', '19:15', '19:45', '20:15', '21:15']])
+    schedules.extend([('NAVI1', "TERRASSES PRESQU'ÎLE", 0, time, 'NAVI1_WEEKDAY') for time in ['07:24', '07:54', '08:24', '08:54', '09:24', '10:24', '11:24', '12:24', '13:24', '14:24', '15:24', '16:24', '16:54', '17:24', '17:54', '18:24', '18:54', '19:24', '19:54', '20:24', '21:24']])
+    # Direction 1 (to Vaise)
+    schedules.extend([('NAVI1', "TERRASSES PRESQU'ÎLE", 1, time, 'NAVI1_WEEKDAY') for time in ['07:01', '07:31', '08:01', '08:31', '09:01', '10:01', '11:01', '12:01', '13:01', '14:01', '15:01', '16:01', '16:31', '17:01', '17:31', '18:01', '18:31', '19:01', '19:31', '20:01', '21:01']])
+    schedules.extend([('NAVI1', "SUBSISTANCES", 1, time, 'NAVI1_WEEKDAY') for time in ['07:11', '07:41', '08:11', '08:41', '09:11', '10:11', '11:11', '12:11', '13:11', '14:11', '15:11', '16:11', '16:41', '17:11', '17:41', '18:11', '18:41', '19:11', '19:41', '20:11', '21:11']])
+    schedules.extend([('NAVI1', "VAISE - INDUSTRIE", 1, time, 'NAVI1_WEEKDAY') for time in ['07:24', '07:54', '08:24', '08:54', '09:24', '10:24', '11:24', '12:24', '13:24', '14:24', '15:24', '16:24', '16:54', '17:24', '17:54', '18:24', '18:54', '19:24', '19:54', '20:24', '21:24']])
+
+    # Service: Samedi, Dimanche et fêtes (Weekend)
+    # Direction 0 (to Confluence)
+    schedules.extend([('NAVI1', "VAISE - INDUSTRIE", 0, time, 'NAVI1_WEEKEND') for time in ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00']])
+    schedules.extend([('NAVI1', "SUBSISTANCES", 0, time, 'NAVI1_WEEKEND') for time in ['09:15', '10:15', '11:15', '12:15', '13:15', '14:15', '15:15', '16:15', '17:15', '18:15', '19:15', '20:15', '21:15']])
+    schedules.extend([('NAVI1', "TERRASSES PRESQU'ÎLE", 0, time, 'NAVI1_WEEKEND') for time in ['09:26', '10:26', '11:26', '12:26', '13:26', '14:26', '15:26', '16:26', '17:26', '18:26', '19:26', '20:26', '21:26']])
+    schedules.extend([('NAVI1', "CONFLUENCE", 0, time, 'NAVI1_WEEKEND') for time in ['09:40', '10:40', '11:40', '12:40', '13:40', '14:40', '15:40', '16:40', '17:40', '18:40', '19:40', '20:40', '21:40']])
+    # Direction 1 (to Vaise)
+    schedules.extend([('NAVI1', "CONFLUENCE", 1, time, 'NAVI1_WEEKEND') for time in ['08:43', '09:43', '10:43', '11:43', '12:43', '13:43', '14:43', '15:43', '16:43', '17:43', '18:43', '19:43', '20:43']])
+    schedules.extend([('NAVI1', "TERRASSES PRESQU'ÎLE", 1, time, 'NAVI1_WEEKEND') for time in ['09:01', '10:01', '11:01', '12:01', '13:01', '14:01', '15:01', '16:01', '17:01', '18:01', '19:01', '20:01', '21:01']])
+    schedules.extend([('NAVI1', "SUBSISTANCES", 1, time, 'NAVI1_WEEKEND') for time in ['09:11', '10:11', '11:11', '12:11', '13:11', '14:11', '15:11', '16:11', '17:11', '18:11', '19:11', '20:11', '21:11']])
+    schedules.extend([('NAVI1', "VAISE - INDUSTRIE", 1, time, 'NAVI1_WEEKEND') for time in ['09:24', '10:24', '11:24', '12:24', '13:24', '14:24', '15:24', '16:24', '17:24', '18:24', '19:24', '20:24', '21:24']])
+
+    # --- 4. Database Operations ---
+    print("  - Deleting existing NAVI1 data...")
+    cursor.execute("DELETE FROM schedules WHERE route_name = 'NAVI1'")
+    cursor.execute("DELETE FROM directions WHERE route_name = 'NAVI1'")
+    
+    print("  - Inserting new NAVI1 calendar, directions, and schedules...")
+    cursor.executemany("INSERT OR IGNORE INTO calendar (service_id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", navigone_calendar)
+    cursor.executemany("INSERT OR REPLACE INTO directions (route_name, direction_id, trip_headsign) VALUES (?, ?, ?)", navigone_directions)
+    cursor.executemany("INSERT INTO schedules (route_name, station_name, direction_id, arrival_time, service_id) VALUES (?, ?, ?, ?, ?)", schedules)
+    
+    print(f"  - Injected {len(schedules)} new schedule entries for NAVI1.")
 
 def main():
     parser = argparse.ArgumentParser(description="Process a GTFS ZIP file to create a schedules.db SQLite database.")

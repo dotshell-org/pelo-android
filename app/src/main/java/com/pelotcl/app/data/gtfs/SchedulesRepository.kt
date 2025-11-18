@@ -3,6 +3,7 @@ package com.pelotcl.app.data.gtfs
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import android.util.Log
 import java.io.FileOutputStream
 import java.io.IOException
 
@@ -31,6 +32,7 @@ class SchedulesRepository(private val context: Context) {
     }
 
     fun getSchedules(lineName: String, stopName: String, directionId: Int, isHoliday: Boolean): List<String> {
+        Log.d("NavigoneDebug", "getSchedules: line='$lineName', stop='$stopName', direction=$directionId, isHoliday=$isHoliday")
         val result = mutableListOf<String>()
         try {
             val db = dbHelper.readableDatabase
@@ -38,7 +40,8 @@ class SchedulesRepository(private val context: Context) {
             // Determine which day column to check in calendar table
             // isHoliday=true -> sunday, isHoliday=false -> monday (representing weekdays)
             val dayColumn = if (isHoliday) "sunday" else "monday"
-            
+            Log.d("NavigoneDebug", "Querying with dayColumn: '$dayColumn'")
+
             // Try exact match first
             var cursor = db.rawQuery(
                 """
@@ -58,9 +61,11 @@ class SchedulesRepository(private val context: Context) {
                 result.add(cursor.getString(0))
             }
             cursor.close()
+            Log.d("NavigoneDebug", "Found ${result.size} schedules after exact match query.")
             
             // If no results, try partial match (LIKE)
             if (result.isEmpty()) {
+                Log.d("NavigoneDebug", "Exact match failed, trying LIKE query.")
                 cursor = db.rawQuery(
                     """
                     SELECT DISTINCT s.arrival_time 
@@ -79,11 +84,14 @@ class SchedulesRepository(private val context: Context) {
                     result.add(cursor.getString(0))
                 }
                 cursor.close()
+                Log.d("NavigoneDebug", "Found ${result.size} schedules after LIKE query.")
             }
             
         } catch (e: Exception) {
+            Log.e("NavigoneDebug", "Error in getSchedules: ${e.message}", e)
             e.printStackTrace()
         }
+        Log.d("NavigoneDebug", "Returning ${result.distinct().size} unique schedules.")
         return result.distinct().sorted()
     }
 
