@@ -352,5 +352,74 @@ private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Bool
                 fontWeight = if (stop.isCurrentStop) FontWeight.Bold else FontWeight.Normal
             )
         }
+
+        val filteredConnections = stop.connections.filter { connection ->
+            val upperCaseConnection = connection.uppercase()
+            val isTram = upperCaseConnection.startsWith("T") && upperCaseConnection.length == 2 && upperCaseConnection.substring(1).toIntOrNull() != null
+
+            upperCaseConnection in listOf("A", "B", "C", "D") ||
+                    isTram ||
+                    upperCaseConnection in listOf("F1", "F2")
+        }
+
+        if (filteredConnections.isNotEmpty()) {
+            Spacer(modifier = Modifier.width(8.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                filteredConnections.forEach { connectionLine ->
+                    ConnectionBadge(lineName = connectionLine)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Badge displaying a transfer line (metro or funicular)
+ * Uses TCL images like on the map
+ */
+@Composable
+private fun ConnectionBadge(lineName: String) {
+    val context = LocalContext.current
+
+    // Convert line name to drawable name using BusIconHelper for consistency
+    val drawableName = BusIconHelper.getDrawableNameForLineName(lineName)
+    val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
+
+    if (resourceId != 0) {
+        // Display TCL image
+        Image(
+            painter = painterResource(id = resourceId),
+            contentDescription = "Ligne $lineName",
+            modifier = Modifier.size(40.dp)
+        )
+    } else {
+        // Fallback: colored circle if image doesn't exist
+        val backgroundColor = when (lineName) {
+            "A" -> Color(0xFFEC4899) // Pink
+            "B" -> Color(0xFF3B82F6) // Blue
+            "C" -> Color(0xFFF59E0B) // Orange
+            "D" -> Color(0xFF22C55E) // Green
+            "F1", "F2" -> Color(0xFF84CC16) // Lime green
+            else -> Color.Gray
+        }
+
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(CircleShape)
+                .background(backgroundColor),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = lineName,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                fontSize = if (lineName.length > 1) 9.sp else 11.sp
+            )
+        }
     }
 }

@@ -361,13 +361,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             // Add transfers for each stop
             return cachedStops.map { stop ->
                 val connections = getConnectionsForStop(stop.stopName, lineName)
-                val filteredConnections = connections.filter {
-                    it.transportType == TransportType.METRO ||
-                    it.transportType == TransportType.TRAM ||
-                    it.transportType == TransportType.FUNICULAR ||
-                    it.transportType == TransportType.NAVIGONE
-                }
-                stop.copy(connections = filteredConnections.map { it.lineName })
+                stop.copy(connections = connections.map { it.lineName })
             }
         }
         
@@ -479,12 +473,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     // Convert to LineStopInfo
                     return orderedStops.mapIndexed { index, stop ->
                         val connections = getConnectionsForStop(stop.properties.nom, lineName)
-                        val filteredConnections = connections.filter {
-                            it.transportType == TransportType.METRO ||
-                            it.transportType == TransportType.TRAM ||
-                            it.transportType == TransportType.FUNICULAR ||
-                            it.transportType == TransportType.NAVIGONE
-                        }
                         com.pelotcl.app.data.gtfs.LineStopInfo(
                             stopId = stop.properties.id.toString(),
                             stopName = stop.properties.nom,
@@ -492,7 +480,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                             isCurrentStop = currentStopName?.let {
                                 normalizeStopName(stop.properties.nom) == normalizeStopName(it)
                             } ?: false,
-                            connections = filteredConnections.map { it.lineName }
+                            connections = connections.map { it.lineName }
                         )
                     }
                 }
@@ -508,12 +496,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         
         return uniqueStops.mapIndexed { index, stop ->
             val connections = getConnectionsForStop(stop.properties.nom, lineName)
-            val filteredConnections = connections.filter {
-                it.transportType == TransportType.METRO ||
-                it.transportType == TransportType.TRAM ||
-                it.transportType == TransportType.FUNICULAR ||
-                it.transportType == TransportType.NAVIGONE
-            }
             com.pelotcl.app.data.gtfs.LineStopInfo(
                 stopId = stop.properties.id.toString(),
                 stopName = stop.properties.nom,
@@ -521,7 +503,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 isCurrentStop = currentStopName?.let {
                     normalizeStopName(stop.properties.nom) == normalizeStopName(it)
                 } ?: false,
-                connections = filteredConnections.map { it.lineName }
+                connections = connections.map { it.lineName }
             )
         }
     }
