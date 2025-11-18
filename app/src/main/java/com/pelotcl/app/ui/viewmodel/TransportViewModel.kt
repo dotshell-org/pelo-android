@@ -92,7 +92,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 val currentHour = now.get(java.util.Calendar.HOUR_OF_DAY)
                 val currentMinute = now.get(java.util.Calendar.MINUTE)
 
-                val nextThree = allSchedulesForDay.filter { time ->
+                val remainingToday = allSchedulesForDay.filter { time ->
                     val parts = time.split(":")
                     if (parts.size == 2) {
                         val hour = parts[0].toInt()
@@ -101,8 +101,12 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     } else {
                         false
                     }
-                }.take(3)
+                }
+
+                val nextThree = (remainingToday + allSchedulesForDay).take(3)
+
                 _nextSchedules.value = nextThree
+
             } catch (e: Exception) {
                 android.util.Log.e("TransportViewModel", "Error filtering next schedules: ${e.message}")
             }

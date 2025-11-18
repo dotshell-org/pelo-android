@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -36,11 +35,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.pelotcl.app.data.gtfs.GtfsParser
 import com.pelotcl.app.data.gtfs.StopDeparture
 import com.pelotcl.app.ui.theme.Gray200
-import com.pelotcl.app.ui.theme.Gray500
 import com.pelotcl.app.ui.theme.Gray700
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
