@@ -119,12 +119,14 @@ def inject_hardcoded_navigone_schedules(conn):
     cursor = conn.cursor()
 
     # --- 1. Define Service IDs and Calendar Entries ---
-    # The app logic uses 'monday' for all weekdays and 'sunday' for weekends/holidays.
-    # We will create two services to match this.
+    # Cas particulier NAVI1: Confluence est desservi à horaires réduits le mercredi (période scolaire).
+    # On sépare donc les services: L/M/J/V, Mercredi, et Week-end/Jours fériés.
     navigone_calendar = [
-        # Service for L/M/M/J/V (merging all weekday variants)
-        ('NAVI1_WEEKDAY', 1, 1, 1, 1, 1, 0, 0, '20250101', '20251231'),
-        # Service for S/D/Fêtes
+        # Service Lundi/Mardi/Jeudi/Vendredi (mercredi exclu)
+        ('NAVI1_WEEKDAY_MTTF', 1, 1, 0, 1, 1, 0, 0, '20250101', '20251231'),
+        # Service Mercredi uniquement
+        ('NAVI1_WEDNESDAY', 0, 0, 1, 0, 0, 0, 0, '20250101', '20251231'),
+        # Service Samedi/Dimanche & Fêtes
         ('NAVI1_WEEKEND', 0, 0, 0, 0, 0, 1, 1, '20250101', '20251231')
     ]
 
@@ -139,15 +141,56 @@ def inject_hardcoded_navigone_schedules(conn):
     # Direction 1: Confluence -> Vaise
     schedules = []
 
-    # Service: Lundi, mardi, jeudi et vendredi (Weekday)
+    # Small helpers to offset HH:MM by N minutes
+    def add_minutes(time_str, minutes):
+        try:
+            h, m = map(int, time_str.split(":"))
+            total = h * 60 + m + minutes
+            total %= (24 * 60)
+            return f"{total // 60:02d}:{total % 60:02d}"
+        except Exception:
+            return time_str
+
+    # Service: Lundi, mardi, jeudi et vendredi (Weekday MTTF)
     # Direction 0 (to Confluence)
-    schedules.extend([('NAVI1', "VAISE - INDUSTRIE", 0, time, 'NAVI1_WEEKDAY') for time in ['07:00', '07:30', '08:00', '08:30', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00', '21:00']])
-    schedules.extend([('NAVI1', "SUBSISTANCES", 0, time, 'NAVI1_WEEKDAY') for time in ['07:15', '07:45', '08:15', '08:45', '09:15', '10:15', '11:15', '12:15', '13:15', '14:15', '15:15', '16:15', '16:45', '17:15', '17:45', '18:15', '18:45', '19:15', '19:45', '20:15', '21:15']])
-    schedules.extend([('NAVI1', "TERRASSES PRESQU'ÎLE", 0, time, 'NAVI1_WEEKDAY') for time in ['07:24', '07:54', '08:24', '08:54', '09:24', '10:24', '11:24', '12:24', '13:24', '14:24', '15:24', '16:24', '16:54', '17:24', '17:54', '18:24', '18:54', '19:24', '19:54', '20:24', '21:24']])
+    vaise_wd = ['07:00', '07:30', '08:00', '08:30', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00', '21:00']
+    subs_wd = ['07:15', '07:45', '08:15', '08:45', '09:15', '10:15', '11:15', '12:15', '13:15', '14:15', '15:15', '16:15', '16:45', '17:15', '17:45', '18:15', '18:45', '19:15', '19:45', '20:15', '21:15']
+    terr_wd = ['07:24', '07:54', '08:24', '08:54', '09:24', '10:24', '11:24', '12:24', '13:24', '14:24', '15:24', '16:24', '16:54', '17:24', '17:54', '18:24', '18:54', '19:24', '19:54', '20:24', '21:24']
+
+    # MTTF: horaires complets, y compris Confluence toute la journée
+    schedules.extend([('NAVI1', "VAISE - INDUSTRIE", 0, t, 'NAVI1_WEEKDAY_MTTF') for t in vaise_wd])
+    schedules.extend([('NAVI1', "SUBSISTANCES", 0, t, 'NAVI1_WEEKDAY_MTTF') for t in subs_wd])
+    schedules.extend([('NAVI1', "TERRASSES PRESQU'ÎLE", 0, t, 'NAVI1_WEEKDAY_MTTF') for t in terr_wd])
+    confl_mttf_dir0 = [add_minutes(t, 16) for t in terr_wd]
+    schedules.extend([('NAVI1', "CONFLUENCE", 0, t, 'NAVI1_WEEKDAY_MTTF') for t in confl_mttf_dir0])
     # Direction 1 (to Vaise)
-    schedules.extend([('NAVI1', "TERRASSES PRESQU'ÎLE", 1, time, 'NAVI1_WEEKDAY') for time in ['07:01', '07:31', '08:01', '08:31', '09:01', '10:01', '11:01', '12:01', '13:01', '14:01', '15:01', '16:01', '16:31', '17:01', '17:31', '18:01', '18:31', '19:01', '19:31', '20:01', '21:01']])
-    schedules.extend([('NAVI1', "SUBSISTANCES", 1, time, 'NAVI1_WEEKDAY') for time in ['07:11', '07:41', '08:11', '08:41', '09:11', '10:11', '11:11', '12:11', '13:11', '14:11', '15:11', '16:11', '16:41', '17:11', '17:41', '18:11', '18:41', '19:11', '19:41', '20:11', '21:11']])
-    schedules.extend([('NAVI1', "VAISE - INDUSTRIE", 1, time, 'NAVI1_WEEKDAY') for time in ['07:24', '07:54', '08:24', '08:54', '09:24', '10:24', '11:24', '12:24', '13:24', '14:24', '15:24', '16:24', '16:54', '17:24', '17:54', '18:24', '18:54', '19:24', '19:54', '20:24', '21:24']])
+    terr_wd_dir1 = ['07:01', '07:31', '08:01', '08:31', '09:01', '10:01', '11:01', '12:01', '13:01', '14:01', '15:01', '16:01', '16:31', '17:01', '17:31', '18:01', '18:31', '19:01', '19:31', '20:01', '21:01']
+    subs_wd_dir1 = ['07:11', '07:41', '08:11', '08:41', '09:11', '10:11', '11:11', '12:11', '13:11', '14:11', '15:11', '16:11', '16:41', '17:11', '17:41', '18:11', '18:41', '19:11', '19:41', '20:11', '21:11']
+    vaise_wd_dir1 = ['07:24', '07:54', '08:24', '08:54', '09:24', '10:24', '11:24', '12:24', '13:24', '14:24', '15:24', '16:24', '16:54', '17:24', '17:54', '18:24', '18:54', '19:24', '19:54', '20:24', '21:24']
+
+    # MTTF: horaires complets, y compris Confluence toute la journée
+    schedules.extend([('NAVI1', "TERRASSES PRESQU'ÎLE", 1, t, 'NAVI1_WEEKDAY_MTTF') for t in terr_wd_dir1])
+    confl_mttf_dir1 = [add_minutes(t, -18) for t in terr_wd_dir1]
+    schedules.extend([('NAVI1', "CONFLUENCE", 1, t, 'NAVI1_WEEKDAY_MTTF') for t in confl_mttf_dir1])
+    schedules.extend([('NAVI1', "SUBSISTANCES", 1, t, 'NAVI1_WEEKDAY_MTTF') for t in subs_wd_dir1])
+    schedules.extend([('NAVI1', "VAISE - INDUSTRIE", 1, t, 'NAVI1_WEEKDAY_MTTF') for t in vaise_wd_dir1])
+
+    # Service: Mercredi (réduit à Confluence)
+    # On conserve les mêmes horaires pour Vaise/Subsistances/Terrasses que MTTF,
+    # mais Confluence n'est desservi que de 11:40 à 15:40 (dir 0) et 11:43 à 15:43 (dir 1).
+    schedules.extend([('NAVI1', "VAISE - INDUSTRIE", 0, t, 'NAVI1_WEDNESDAY') for t in vaise_wd])
+    schedules.extend([('NAVI1', "SUBSISTANCES", 0, t, 'NAVI1_WEDNESDAY') for t in subs_wd])
+    schedules.extend([('NAVI1', "TERRASSES PRESQU'ÎLE", 0, t, 'NAVI1_WEDNESDAY') for t in terr_wd])
+    # Confluence mercredi (dir 0): 11:40..15:40 toutes les heures
+    confl_wed_dir0 = ['11:40', '12:40', '13:40', '14:40', '15:40']
+    schedules.extend([('NAVI1', "CONFLUENCE", 0, t, 'NAVI1_WEDNESDAY') for t in confl_wed_dir0])
+
+    schedules.extend([('NAVI1', "TERRASSES PRESQU'ÎLE", 1, t, 'NAVI1_WEDNESDAY') for t in terr_wd_dir1])
+    schedules.extend([('NAVI1', "SUBSISTANCES", 1, t, 'NAVI1_WEDNESDAY') for t in subs_wd_dir1])
+    schedules.extend([('NAVI1', "VAISE - INDUSTRIE", 1, t, 'NAVI1_WEDNESDAY') for t in vaise_wd_dir1])
+    # Confluence mercredi (dir 1): 11:43..15:43 toutes les heures
+    confl_wed_dir1 = ['11:43', '12:43', '13:43', '14:43', '15:43']
+    schedules.extend([('NAVI1', "CONFLUENCE", 1, t, 'NAVI1_WEDNESDAY') for t in confl_wed_dir1])
 
     # Service: Samedi, Dimanche et fêtes (Weekend)
     # Direction 0 (to Confluence)

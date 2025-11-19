@@ -85,7 +85,8 @@ class SchedulesRepository(private val context: Context) {
             val isWeekday = dayColumn in setOf("monday", "tuesday", "wednesday", "thursday", "friday")
             var appliedAmAvFilter = false
             var serviceIdFilter = ""
-            if (lineType != LineType.METRO && lineType != LineType.FUNICULAR && isWeekday) {
+            // N'applique pas le filtre AM/AV au Navigone: ses service_id sont spécifiques (ex: NAVI1_WEEKDAY/WEEKEND)
+            if (lineType != LineType.METRO && lineType != LineType.FUNICULAR && lineType != LineType.NAVIGONE && isWeekday) {
                 appliedAmAvFilter = true
                 serviceIdFilter = if (effectiveIsHoliday) {
                     "AND s.service_id LIKE '%AV%'"
@@ -105,7 +106,7 @@ class SchedulesRepository(private val context: Context) {
                 AND s.direction_id = ?
                 AND c.$dayColumn = 1
                 $serviceIdFilter
-                AND s.station_name = ?
+                AND s.station_name = ? COLLATE NOCASE
                 ORDER BY s.arrival_time
                 """,
                 arrayOf(lineName, directionId.toString(), stopName)
@@ -137,7 +138,7 @@ class SchedulesRepository(private val context: Context) {
                     AND s.direction_id = ?
                     AND c.$dayColumn = 1
                     $serviceIdFilter
-                    AND s.station_name = ?
+                    AND s.station_name = ? COLLATE NOCASE
                     ORDER BY s.arrival_time
                     """,
                     arrayOf(lineName, directionId.toString(), stopName)
