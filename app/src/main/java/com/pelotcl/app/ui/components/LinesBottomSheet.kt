@@ -53,7 +53,8 @@ fun LinesBottomSheet(
     
     // Organize lines by category
     val categorizedLines = remember(allLines) {
-        categorizeLines(allLines, context)
+        // Map<String, List<String>> but we will iterate deterministically by turning to list
+        categorizeLines(allLines, context).toList()
     }
     
     // Filtrer les lignes selon la recherche
@@ -61,9 +62,10 @@ fun LinesBottomSheet(
         if (searchQuery.isEmpty()) {
             categorizedLines
         } else {
-            categorizedLines.mapValues { (_, lines) ->
-                lines.filter { it.contains(searchQuery, ignoreCase = true) }
-            }.filterValues { it.isNotEmpty() }
+            categorizedLines.mapNotNull { (category, lines) ->
+                val filtered = lines.filter { it.contains(searchQuery, ignoreCase = true) }
+                if (filtered.isNotEmpty()) category to filtered else null
+            }
         }
     }
     
@@ -77,17 +79,47 @@ fun LinesBottomSheet(
         // List of lines by category
         LazyColumn(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // We lazily compose rows per category to avoid inflating hundreds of chips at once
             filteredCategories.forEach { (category, lines) ->
-                item {
-                    CategorySection(
-                        category = category,
-                        // Lines are already sorted by categorizeLines() ("natural" sort that handles numbers)
-                        // Don't re-sort here to avoid reverting to simple alphanumeric sort
-                        lines = lines,
-                        onLineClick = onLineClick
+                val chunks = lines.chunked(4)
+
+                // Category header
+                item(key = "header_$" + category) {
+                    Text(
+                        text = category,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp, bottom = 8.dp)
                     )
+                }
+
+                // One lazy item per row
+                items(count = chunks.size, key = { rowIndex -> "${category}_row_$rowIndex" }) { rowIndex ->
+                    val rowLines = chunks[rowIndex]
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Up to 4 chips per row
+                        rowLines.forEach { line ->
+                            LineChip(
+                                lineName = line,
+                                onClick = { onLineClick(line) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        // Fill remaining columns for alignment consistency
+                        repeat(4 - rowLines.size) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
                 }
             }
             
@@ -115,51 +147,7 @@ fun LinesBottomSheet(
 /**
  * Section pour une catégorie de lignes
  */
-@RequiresApi(Build.VERSION_CODES.O)
-@Composable
-private fun CategorySection(
-    category: String,
-    lines: List<String>,
-    onLineClick: (String) -> Unit
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        // Category title
-        Text(
-            text = category,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color.Black,
-            modifier = Modifier.padding(bottom = 12.dp)
-        )
-        
-        // Grille de lignes avec 4 colonnes partout pour uniformiser la taille
-        val columns = 4
-        
-        lines.chunked(columns).forEach { rowLines ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                rowLines.forEach { line ->
-                    LineChip(
-                        lineName = line,
-                        onClick = { onLineClick(line) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                
-                // Add empty spaces to complete la ligne
-                repeat(columns - rowLines.size) {
-                    Spacer(modifier = Modifier.weight(1f))
-                }
-            }
-        }
-    }
-}
+// CategorySection removed in favor of a fully lazy layout within LazyColumn to avoid initial lag
 
 /**
  * Chip pour afficher une ligne avec son icône TCL officielle

@@ -62,6 +62,17 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     private val _nextSchedules = MutableStateFlow<List<String>>(emptyList())
     val nextSchedules: StateFlow<List<String>> = _nextSchedules.asStateFlow()
 
+    // Préchargement au démarrage pour éviter les lags à l'ouverture des groupes (Bus / JD)
+    // On utilise des drapeaux pour éviter les rechargements multiples.
+    private var isPreloading: Boolean = false
+    private var hasPreloaded: Boolean = false
+
+    init {
+        // Démarre un préchargement non bloquant dès la création du ViewModel
+        // afin d'avoir les lignes, arrêts et index de correspondances prêts.
+        preloadAllData()
+    }
+
     fun loadHeadsigns(routeName: String) {
         viewModelScope.launch {
             _headsigns.value = schedulesRepository.getHeadsigns(routeName)
@@ -127,6 +138,51 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     // Pre-calculated transfers index by stop name
     // Key = normalized stop name, Value = list of transfer lines
     private var connectionsIndex: Map<String, List<com.pelotcl.app.utils.Connection>> = emptyMap()
+
+    /**
+     * Précharge les lignes et les arrêts au lancement, construit l'index des correspondances,
+     * et peuple les StateFlow si possible. Ne bloque pas l'UI.
+     */
+    private fun preloadAllData() {
+        if (hasPreloaded || isPreloading) return
+        isPreloading = true
+
+        viewModelScope.launch {
+            try {
+                // 1) Charger les lignes si non déjà chargées
+                if (_uiState.value !is TransportLinesUiState.Success) {
+                    repository.getAllLines()
+                        .onSuccess { featureCollection ->
+                            _uiState.value = TransportLinesUiState.Success(featureCollection.features)
+                        }
+                        .onFailure { e ->
+                            android.util.Log.w("TransportViewModel", "Préchargement: échec chargement lignes: ${e.message}")
+                        }
+                }
+
+                // 2) Charger tous les arrêts, mettre en cache et construire l'index des correspondances
+                if (cachedStops == null || connectionsIndex.isEmpty()) {
+                    repository.getAllStops()
+                        .onSuccess { stopCollection ->
+                            cachedStops = stopCollection.features
+                            buildConnectionsIndex(stopCollection.features)
+                            // Publier l'état arrêts uniquement si aucun succès actuel
+                            if (_stopsUiState.value !is TransportStopsUiState.Success) {
+                                _stopsUiState.value = TransportStopsUiState.Success(stopCollection.features)
+                            }
+                        }
+                        .onFailure { e ->
+                            android.util.Log.w("TransportViewModel", "Préchargement: échec chargement arrêts: ${e.message}")
+                        }
+                }
+            } catch (t: Throwable) {
+                android.util.Log.e("TransportViewModel", "Préchargement: exception inattendue: ${t.message}")
+            } finally {
+                hasPreloaded = true
+                isPreloading = false
+            }
+        }
+    }
 
     /**
      * Normalizes a station name to use it as an index key
