@@ -318,8 +318,7 @@ private fun NextSchedulesSection(
         viewModel.loadSchedulesForDirection(
             lineName = lineInfo.lineName,
             stopName = lineInfo.currentStationName,
-            directionId = selectedDirection,
-            isHoliday = false
+            directionId = selectedDirection
         )
     }
 

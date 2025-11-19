@@ -10,6 +10,8 @@ import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.Connection
 import com.pelotcl.app.utils.ConnectionsHelper
 import com.pelotcl.app.utils.TransportType
+import com.pelotcl.app.utils.HolidayDetector
+import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -49,6 +51,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     val stopsUiState: StateFlow<TransportStopsUiState> = _stopsUiState.asStateFlow()
 
     private val schedulesRepository = com.pelotcl.app.data.gtfs.SchedulesRepository(application.applicationContext)
+    private val holidayDetector = HolidayDetector(application.applicationContext)
 
     private val _headsigns = MutableStateFlow<Map<Int, String>>(emptyMap())
     val headsigns: StateFlow<Map<Int, String>> = _headsigns.asStateFlow()
@@ -66,21 +69,25 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
-     * Loads all schedules for a given direction and holiday preference, then updates the schedule states.
+     * Loads all schedules for a given direction, then updates the schedule states.
      */
-    fun loadSchedulesForDirection(lineName: String, stopName: String, directionId: Int, isHoliday: Boolean) {
+    fun loadSchedulesForDirection(lineName: String, stopName: String, directionId: Int) {
         viewModelScope.launch {
             _allSchedules.value = emptyList()
             _nextSchedules.value = emptyList()
 
             android.util.Log.d("NavigoneDebug", "loadSchedulesForDirection called with lineName: '$lineName'")
 
+            // Determine if today is a school holiday
+            val isTodayHoliday = holidayDetector.isSchoolHoliday(LocalDate.now())
+            android.util.Log.d("NavigoneDebug", "Is today a school holiday? $isTodayHoliday")
+
             // The GTFS data uses NAVI1 for the Navigone, but the app displays NAV1
             val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
 
             android.util.Log.d("NavigoneDebug", "Translated lineName to gtfsLineName: '$gtfsLineName'")
 
-            val allSchedulesForDay = schedulesRepository.getSchedules(gtfsLineName, stopName, directionId, isHoliday)
+            val allSchedulesForDay = schedulesRepository.getSchedules(gtfsLineName, stopName, directionId, isTodayHoliday)
             _allSchedules.value = allSchedulesForDay
 
             if (allSchedulesForDay.isEmpty()) {

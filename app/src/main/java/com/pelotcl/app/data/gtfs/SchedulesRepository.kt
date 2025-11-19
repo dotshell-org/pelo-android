@@ -7,9 +7,24 @@ import android.util.Log
 import java.io.FileOutputStream
 import java.io.IOException
 
+enum class LineType {
+    METRO, FUNICULAR, NAVIGONE, TRAM, BUS, CHRONO, OTHER
+}
+
 class SchedulesRepository(private val context: Context) {
 
     private val dbHelper = SchedulesDatabaseHelper(context)
+
+    private fun getLineType(lineName: String): LineType {
+        return when {
+            lineName.uppercase() in setOf("A", "B", "C", "D") -> LineType.METRO
+            lineName.uppercase().startsWith("F") -> LineType.FUNICULAR
+            lineName.uppercase().startsWith("NAV") -> LineType.NAVIGONE
+            lineName.uppercase().startsWith("T") && !lineName.uppercase().startsWith("TB") -> LineType.TRAM
+            lineName.uppercase().startsWith("C") && lineName.substring(1).toIntOrNull() != null -> LineType.CHRONO
+            else -> LineType.BUS // Default to bus for all other lines
+        }
+    }
 
     fun getHeadsigns(routeName: String): Map<Int, String> {
         val result = mutableMapOf<Int, String>()
@@ -37,10 +52,26 @@ class SchedulesRepository(private val context: Context) {
         try {
             val db = dbHelper.readableDatabase
             
+            val lineType = getLineType(lineName)
+            val effectiveIsHoliday = if (lineType == LineType.METRO || lineType == LineType.FUNICULAR) {
+                false // Metros and Funiculars always use normal weekday schedules
+            } else {
+                isHoliday // Other lines use the determined holiday status
+            }
+
             // Determine which day column to check in calendar table
-            // isHoliday=true -> sunday, isHoliday=false -> monday (representing weekdays)
-            val dayColumn = if (isHoliday) "sunday" else "monday"
-            Log.d("NavigoneDebug", "Querying with dayColumn: '$dayColumn'")
+            val dayColumn = if (effectiveIsHoliday) "sunday" else "monday"
+            
+            val serviceIdFilter = if (lineType == LineType.BUS) {
+                if (effectiveIsHoliday) {
+                    "AND s.service_id LIKE '%028AV%'" // Bus holiday services
+                } else {
+                    "AND s.service_id LIKE '%040AM%'" // Bus normal weekday services
+                }
+            } else {
+                "" // No specific service_id filter for other line types
+            }
+            Log.d("NavigoneDebug", "Querying with dayColumn: '$dayColumn', effectiveIsHoliday: $effectiveIsHoliday, lineType: $lineType, serviceIdFilter: '$serviceIdFilter'")
 
             // Try exact match first
             var cursor = db.rawQuery(
@@ -51,12 +82,12 @@ class SchedulesRepository(private val context: Context) {
                 WHERE s.route_name = ? 
                 AND s.direction_id = ?
                 AND c.$dayColumn = 1
+                $serviceIdFilter
                 AND s.station_name = ?
                 ORDER BY s.arrival_time
                 """,
                 arrayOf(lineName, directionId.toString(), stopName)
             )
-            
             while (cursor.moveToNext()) {
                 result.add(cursor.getString(0))
             }
@@ -74,6 +105,7 @@ class SchedulesRepository(private val context: Context) {
                     WHERE s.route_name = ? 
                     AND s.direction_id = ?
                     AND c.$dayColumn = 1
+                    $serviceIdFilter
                     AND s.station_name LIKE ?
                     ORDER BY s.arrival_time
                     """,
