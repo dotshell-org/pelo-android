@@ -432,10 +432,29 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         val cachedStops = com.pelotcl.app.data.gtfs.LineStopsCache.getLineStops(lineName, currentStopName)
         if (cachedStops != null) {
             android.util.Log.d("TransportViewModel", "Found $lineName in cache with ${cachedStops.size} stops")
-            // Add transfers for each stop
+            // Aligner les libellés du cache sur les libellés officiels GTFS (comparaison stricte requise côté DB)
+            val allStops = getCachedStopsSync()
+            // Construire l'ensemble des noms officiels desservis par la ligne (tous sens confondus)
+            val officialStopsForLine: Set<String> = allStops.filter { stop ->
+                val desserte = stop.properties.desserte
+                desserte.split(',').any { part ->
+                    val lineCode = part.split(':').first().trim()
+                    lineCode.equals(lineName, ignoreCase = true) ||
+                        (lineName.equals("NAV1", ignoreCase = true) && lineCode.equals("NAVI1", ignoreCase = true))
+                }
+            }.map { it.properties.nom }.toSet()
+
+            // Index par nom normalisé -> nom officiel exact
+            val normalizedToOfficial = officialStopsForLine.associateBy { normalizeStopName(it) }
+
+            // Remplacer le nom mis en cache par le libellé officiel si trouvé
             return cachedStops.map { stop ->
-                val connections = getConnectionsForStop(stop.stopName, lineName)
-                stop.copy(connections = connections.map { it.lineName })
+                val officialName = normalizedToOfficial[normalizeStopName(stop.stopName)] ?: stop.stopName
+                val connections = getConnectionsForStop(officialName, lineName)
+                stop.copy(
+                    stopName = officialName,
+                    connections = connections.map { it.lineName }
+                )
             }
         }
         

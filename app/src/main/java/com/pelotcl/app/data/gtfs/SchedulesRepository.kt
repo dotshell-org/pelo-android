@@ -95,10 +95,10 @@ class SchedulesRepository(private val context: Context) {
             }
             Log.d("NavigoneDebug", "Querying with dayColumn: '$dayColumn', isWeekday=$isWeekday, effectiveIsHoliday: $effectiveIsHoliday, lineType: $lineType, serviceIdFilter: '$serviceIdFilter'")
 
-            // Try exact match first
+            // Try exact match first (strict comparison requested)
             var cursor = db.rawQuery(
                 """
-                SELECT DISTINCT s.arrival_time 
+                SELECT DISTINCT substr(s.arrival_time, 1, 5) AS arrival_time 
                 FROM schedules s
                 JOIN calendar c ON s.service_id = c.service_id
                 WHERE s.route_name = ? 
@@ -116,39 +116,21 @@ class SchedulesRepository(private val context: Context) {
             cursor.close()
             Log.d("NavigoneDebug", "Found ${result.size} schedules after exact match query.")
             
-            // If no results, try partial match (LIKE)
+            // Strict mode: no LIKE fallback
             if (result.isEmpty()) {
-                Log.d("NavigoneDebug", "Exact match failed, trying LIKE query.")
-                cursor = db.rawQuery(
-                    """
-                    SELECT DISTINCT s.arrival_time 
-                    FROM schedules s
-                    JOIN calendar c ON s.service_id = c.service_id
-                    WHERE s.route_name = ? 
-                    AND s.direction_id = ?
-                    AND c.$dayColumn = 1
-                    $serviceIdFilter
-                    AND s.station_name LIKE ?
-                    ORDER BY s.arrival_time
-                    """,
-                    arrayOf(lineName, directionId.toString(), "%$stopName%")
-                )
-                
-                while (cursor.moveToNext()) {
-                    result.add(cursor.getString(0))
-                }
-                cursor.close()
-                Log.d("NavigoneDebug", "Found ${result.size} schedules after LIKE query.")
+                Log.w("NavigoneDebug", "Strict exact match returned 0 schedules for line='$lineName', stop='$stopName', direction=$directionId, day=$dayColumn, serviceFilter='${serviceIdFilter.isNotBlank()}'. Will try without AM/AV if applicable.")
             }
 
-            // Fallback: si on a appliqué le filtre AM/AV et qu'on n'a rien trouvé, relancer sans filtre
+                // Strict mode: no tokenized fallback here
+
+            // Fallback: si on a appliqué le filtre AM/AV et qu'on n'a rien trouvé, relancer sans filtre (toujours en égalité stricte)
             if (result.isEmpty() && appliedAmAvFilter) {
                 Log.d("NavigoneDebug", "No results with AM/AV filter, retrying without service_id filter as fallback.")
                 serviceIdFilter = ""
                 // Re-try exact match
                 cursor = db.rawQuery(
                     """
-                    SELECT DISTINCT s.arrival_time 
+                    SELECT DISTINCT substr(s.arrival_time, 1, 5) AS arrival_time 
                     FROM schedules s
                     JOIN calendar c ON s.service_id = c.service_id
                     WHERE s.route_name = ? 
@@ -166,25 +148,7 @@ class SchedulesRepository(private val context: Context) {
                 cursor.close()
 
                 if (result.isEmpty()) {
-                    Log.d("NavigoneDebug", "Fallback exact match failed, trying fallback LIKE query (no AM/AV filter).")
-                    cursor = db.rawQuery(
-                        """
-                        SELECT DISTINCT s.arrival_time 
-                        FROM schedules s
-                        JOIN calendar c ON s.service_id = c.service_id
-                        WHERE s.route_name = ? 
-                        AND s.direction_id = ?
-                        AND c.$dayColumn = 1
-                        $serviceIdFilter
-                        AND s.station_name LIKE ?
-                        ORDER BY s.arrival_time
-                        """,
-                        arrayOf(lineName, directionId.toString(), "%$stopName%")
-                    )
-                    while (cursor.moveToNext()) {
-                        result.add(cursor.getString(0))
-                    }
-                    cursor.close()
+                    Log.w("NavigoneDebug", "Strict exact match still 0 without AM/AV filter for line='$lineName', stop='$stopName', direction=$directionId, day=$dayColumn. This indicates a stop name mismatch.\nConseil: vérifier que le libellé passé à getSchedules() correspond exactement à 'station_name' dans la base.")
                 }
                 Log.d("NavigoneDebug", "Found ${result.size} schedules after fallback without AM/AV filter.")
             }

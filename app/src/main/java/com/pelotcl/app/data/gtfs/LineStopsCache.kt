@@ -136,13 +136,13 @@ object LineStopsCache {
         "A" to listOf(
             "Perrache", "Ampère Victor Hugo", "Bellecour", "Cordeliers", 
             "Hôtel de Ville L. Pradel", "Foch", "Masséna", "Charpennes Charles Hernu",
-            "République Villeurbanne", "Gratte-Ciel", "Flachet", "Cusset", 
-            "Laurent Bonnevay Astroballe", "Vaulx-en-Velin La Soie"
+            "République Villeurbanne", "Gratte-Ciel", "Flachet - Alain Gilles", "Cusset",
+            "Laurent Bonnevay", "Vaulx-en-Velin La Soie"
         ),
         "B" to listOf(
             "Charpennes Charles Hernu", "Brotteaux", "Gare Part-Dieu V.Merle",
-            "Place Guichard Bourse du Travail", "Saxe Gambetta", "Jean Macé",
-            "Place Jean Jaurès", "Debourg", "Stade de Gerland", "Gare d'Oullins",
+            "Place Guichard", "Saxe Gambetta", "Jean Macé",
+            "Place Jean Jaurès", "Debourg", "Stade de Gerland Le LOU", "Gare d'Oullins",
             "Oullins Centre", "St-Genis-Laval Hôp. Sud"
         ),
         "C" to listOf(
@@ -150,7 +150,7 @@ object LineStopsCache {
             "Hénon", "Cuire"
         ),
         "D" to listOf(
-            "Gare de Vaise-G.Collomb", "Valmy", "Gorge de Loup", "Vieux Lyon Cat. St Jean",
+            "Gare de Vaise-G.Collomb", "Valmy", "Gorge de Loup", "Vieux Lyon Cat. St-Jean",
             "Bellecour", "Guillotière Gabriel Péri", "Saxe Gambetta", "Garibaldi",
             "Sans Souci", "Monplaisir Lumière", "Grange Blanche", "Laennec",
             "Mermoz Pinel", "Parilly", "Gare de Vénissieux"
@@ -181,14 +181,14 @@ object LineStopsCache {
             "St-Priest Hôtel de Ville", "Alfred de Vigny", "Salvador Allende", "Hauts de Feuilly",
             "Parc Technologique", "Porte des Alpes", "Europe - Université", "Rebufer", "Les Alizés",
             "Bron Hôtel de Ville", "Boutasse - C. Rousset", "Essarts - Iris", "Desgenettes",
-            "Ambroise Paré", "Grande Blanche", "Jean XXIII - M. Bastié", "Bachut - Mairie du 8ème",
+            "Ambroise Paré", "Grange Blanche", "Jean XXIII - M. Bastié", "Bachut - Mairie du 8ème",
             "Villon", "Jet d'Eau - M. France", "Route de Vienne", "Garibaldi - Berthelot", "Jean Macé",
             "Centre Berthelot", "Perrache", "Place des Archives", "Sainte-Blandine", "Hôtel Région Montrochet"
         ),
         "T3" to listOf(
             "Meyzieu les Panettes", "Meyzieu Z.i.", "Meyzieu Lycée Beltrame", "Meyzieu Gare",
             "Décines Grand Large", "Décines Centre", "Décines Roosevelt", "Vaulx-en-Velin La Soie",
-            "Bel Air - Les Brosses", "Gare de Villeurbane", "Reconnaissance - Balzac", "Dauphiné - Lacassagne",
+            "Bel Air - Les Brosses", "Gare de Villeurbanne", "Reconnaissance - Balzac", "Dauphiné - Lacassagne",
             "Gare Part-Dieu Villette", "Vaulx-en-Velin La Soie"
         ),
         "T4" to listOf(
@@ -196,7 +196,7 @@ object LineStopsCache {
             "Venissy Frida Kahlo", "Herriot - Cagne", "Lycée Jacques Brel", "M. Houël Hôtel de Ville",
             "Croizat - Paul Bert", "Gare de Vénissieux", "La Borelle", "Joliot-Curie - M. Sembat", "Etats-Unis Viviani",
             "Beauvisage CISL", "Etats-Unis Tony Garnier", "Lycée Lumière", "Jet d'Eau - M. France", "Lycee Colbert",
-            "Manufacture Montluc", "Archives Departementales", "Gare Part-Dieu Vilette", "Thiers - Lafayette",
+            "Manufacture Montluc", "Archives Departementales", "Gare Part-Dieu Villette", "Thiers - Lafayette",
             "Collège Bellecombe", "Charpennes Charles Hernu", "Le Tonkin", "Condorcet", "Université Lyon 1",
             "La Doua - Gaston Berger", "INSA - Einstein", "Croix-Luizet", "IUT Feyssine"
         ),
@@ -207,7 +207,7 @@ object LineStopsCache {
         ),
         "T6" to listOf(
             "Hôpitaux Est - Pinel", "Vinatier", "Desgenettes", "Essarts - Laennec", "Mermoz - Pinel", "Mermoz - Moselle",
-            "Mermoz - Californie", "Grande Rouge - Santy", "Beauvisage CISL", "Beauvisage - Pressensé", "Petite Guille",
+            "Mermoz - Californie", "Grange Rouge - Santy", "Beauvisage CISL", "Beauvisage - Pressensé", "Petite Guille",
             "Moulin à Vent", "Challemel Lacour Artill.", "Debourg", "Mermoz - Pinel"
         ),
         "T7" to listOf(
