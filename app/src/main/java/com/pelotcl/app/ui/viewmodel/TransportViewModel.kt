@@ -75,7 +75,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun loadHeadsigns(routeName: String) {
         viewModelScope.launch {
-            _headsigns.value = schedulesRepository.getHeadsigns(routeName)
+            // Le GTFS utilise "NAVI1" pour le Navigone alors que l'app affiche "NAV1"
+            val gtfsRouteName = if (routeName.equals("NAV1", ignoreCase = true)) "NAVI1" else routeName
+            _headsigns.value = schedulesRepository.getHeadsigns(gtfsRouteName)
         }
     }
 
