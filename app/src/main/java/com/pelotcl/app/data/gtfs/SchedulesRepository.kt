@@ -60,18 +60,40 @@ class SchedulesRepository(private val context: Context) {
             }
 
             // Determine which day column to check in calendar table
-            val dayColumn = if (effectiveIsHoliday) "sunday" else "monday"
-            
-            val serviceIdFilter = if (lineType == LineType.BUS) {
-                if (effectiveIsHoliday) {
-                    "AND s.service_id LIKE '%028AV%'" // Bus holiday services
-                } else {
-                    "AND s.service_id LIKE '%040AM%'" // Bus normal weekday services
-                }
-            } else {
-                "" // No specific service_id filter for other line types
+            // New logic:
+            //  - Metro & Funicular: always use weekday schedules -> force "monday"
+            //  - Others: use the real day-of-week column (monday..sunday)
+            val calendar = java.util.Calendar.getInstance()
+            val dayOfWeek = calendar.get(java.util.Calendar.DAY_OF_WEEK)
+            val actualDayColumn = when (dayOfWeek) {
+                java.util.Calendar.MONDAY -> "monday"
+                java.util.Calendar.TUESDAY -> "tuesday"
+                java.util.Calendar.WEDNESDAY -> "wednesday"
+                java.util.Calendar.THURSDAY -> "thursday"
+                java.util.Calendar.FRIDAY -> "friday"
+                java.util.Calendar.SATURDAY -> "saturday"
+                else -> "sunday"
             }
-            Log.d("NavigoneDebug", "Querying with dayColumn: '$dayColumn', effectiveIsHoliday: $effectiveIsHoliday, lineType: $lineType, serviceIdFilter: '$serviceIdFilter'")
+            val dayColumn = if (lineType == LineType.METRO || lineType == LineType.FUNICULAR) "monday" else actualDayColumn
+
+            // Distinction vacances/pas vacances pour TOUTES les lignes sauf métro et funiculaire, et uniquement en semaine (Lun–Ven).
+            // Les jeux de services TCL utilisent souvent des suffixes "AM" (année scolaire) et "AV" (vacances)
+            // dans les service_id, mais les préfixes varient selon les lignes. On filtre donc sur '%AM%' vs '%AV%'.
+            // Samedi/Dimanche: on ne filtre pas (les services dédiés week-end s'appliquent via calendar).
+            // On prévoit un fallback: si le filtre AM/AV renvoie 0 résultat, on relance sans filtre
+            // afin de supporter les lignes qui n'utilisent pas ces suffixes.
+            val isWeekday = dayColumn in setOf("monday", "tuesday", "wednesday", "thursday", "friday")
+            var appliedAmAvFilter = false
+            var serviceIdFilter = ""
+            if (lineType != LineType.METRO && lineType != LineType.FUNICULAR && isWeekday) {
+                appliedAmAvFilter = true
+                serviceIdFilter = if (effectiveIsHoliday) {
+                    "AND s.service_id LIKE '%AV%'"
+                } else {
+                    "AND s.service_id LIKE '%AM%'"
+                }
+            }
+            Log.d("NavigoneDebug", "Querying with dayColumn: '$dayColumn', isWeekday=$isWeekday, effectiveIsHoliday: $effectiveIsHoliday, lineType: $lineType, serviceIdFilter: '$serviceIdFilter'")
 
             // Try exact match first
             var cursor = db.rawQuery(
@@ -117,6 +139,54 @@ class SchedulesRepository(private val context: Context) {
                 }
                 cursor.close()
                 Log.d("NavigoneDebug", "Found ${result.size} schedules after LIKE query.")
+            }
+
+            // Fallback: si on a appliqué le filtre AM/AV et qu'on n'a rien trouvé, relancer sans filtre
+            if (result.isEmpty() && appliedAmAvFilter) {
+                Log.d("NavigoneDebug", "No results with AM/AV filter, retrying without service_id filter as fallback.")
+                serviceIdFilter = ""
+                // Re-try exact match
+                cursor = db.rawQuery(
+                    """
+                    SELECT DISTINCT s.arrival_time 
+                    FROM schedules s
+                    JOIN calendar c ON s.service_id = c.service_id
+                    WHERE s.route_name = ? 
+                    AND s.direction_id = ?
+                    AND c.$dayColumn = 1
+                    $serviceIdFilter
+                    AND s.station_name = ?
+                    ORDER BY s.arrival_time
+                    """,
+                    arrayOf(lineName, directionId.toString(), stopName)
+                )
+                while (cursor.moveToNext()) {
+                    result.add(cursor.getString(0))
+                }
+                cursor.close()
+
+                if (result.isEmpty()) {
+                    Log.d("NavigoneDebug", "Fallback exact match failed, trying fallback LIKE query (no AM/AV filter).")
+                    cursor = db.rawQuery(
+                        """
+                        SELECT DISTINCT s.arrival_time 
+                        FROM schedules s
+                        JOIN calendar c ON s.service_id = c.service_id
+                        WHERE s.route_name = ? 
+                        AND s.direction_id = ?
+                        AND c.$dayColumn = 1
+                        $serviceIdFilter
+                        AND s.station_name LIKE ?
+                        ORDER BY s.arrival_time
+                        """,
+                        arrayOf(lineName, directionId.toString(), "%$stopName%")
+                    )
+                    while (cursor.moveToNext()) {
+                        result.add(cursor.getString(0))
+                    }
+                    cursor.close()
+                }
+                Log.d("NavigoneDebug", "Found ${result.size} schedules after fallback without AM/AV filter.")
             }
             
         } catch (e: Exception) {
