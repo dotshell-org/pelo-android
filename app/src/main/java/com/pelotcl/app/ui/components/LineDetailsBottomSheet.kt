@@ -94,6 +94,7 @@ private fun getLineColor(lineName: String): Color {
 private fun getScheduleColorBasedOnTime(scheduleTime: String): Color {
     try {
         val now = LocalTime.now()
+
         val cleanTime = if (scheduleTime.count { it == ':' } == 2) {
             scheduleTime.substringBeforeLast(":")
         } else {
@@ -107,17 +108,15 @@ private fun getScheduleColorBasedOnTime(scheduleTime: String): Color {
         val minute = parts[1].toInt()
         val schedule = LocalTime.of(hour, minute)
 
-        var diffMinutes = ChronoUnit.MINUTES.between(now, schedule)
+        val diffMinutes = ChronoUnit.MINUTES.between(now, schedule)
 
-        if (diffMinutes < -720) {
-            diffMinutes += 1440
-        } else if (diffMinutes < 0) {
-            return Red500
+        if (diffMinutes < 0) {
+            return Green500
         }
 
         return when {
-            diffMinutes < 2 -> Red500
-            diffMinutes < 15 -> Orange500
+            diffMinutes in 0..<2 -> Red500
+            diffMinutes in 2..<15 -> Orange500
             else -> Green500
         }
     } catch (_: Exception) {
