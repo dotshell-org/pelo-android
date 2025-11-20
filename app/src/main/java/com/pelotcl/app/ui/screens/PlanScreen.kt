@@ -15,6 +15,7 @@ import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -142,7 +143,15 @@ fun PlanScreen(
     var shouldCenterOnUser by remember { mutableStateOf(false) }
     
     // Bottom sheet state for BottomSheetScaffold
-    val scaffoldSheetState = rememberBottomSheetScaffoldState()
+    // Enable Hidden state so we can call hide() safely without crashing
+    val bottomSheetState = rememberStandardBottomSheetState(
+        // Start hidden; we control expansion programmatically
+        initialValue = androidx.compose.material3.SheetValue.Hidden,
+        skipHiddenState = false
+    )
+    val scaffoldSheetState = rememberBottomSheetScaffoldState(
+        bottomSheetState = bottomSheetState
+    )
     var selectedStation by remember { mutableStateOf<StationInfo?>(null) }
     var selectedLine by remember { mutableStateOf<LineInfo?>(null) }
     
@@ -166,14 +175,17 @@ fun PlanScreen(
 
     
     // Monitor bottom sheet state changes to detect when user swipes down to dismiss
-    // BUT only allow dismissal for station sheet, not for line details sheet
-    LaunchedEffect(scaffoldSheetState.bottomSheetState.currentValue, sheetContentState) {
-        val isHidden = scaffoldSheetState.bottomSheetState.currentValue == 
-            androidx.compose.material3.SheetValue.Hidden
-        
-        if (isHidden) {
+    // Fix: don't treat the initial Hidden state as a dismissal. Only react when transitioning
+    // from a visible state (Expanded/PartiallyExpanded) to Hidden.
+    var previousSheetValue by remember { mutableStateOf<androidx.compose.material3.SheetValue?>(null) }
+    LaunchedEffect(scaffoldSheetState.bottomSheetState.currentValue) {
+        val current = scaffoldSheetState.bottomSheetState.currentValue
+        val prev = previousSheetValue
+        val transitionedToHidden = (prev != null && prev != androidx.compose.material3.SheetValue.Hidden && current == androidx.compose.material3.SheetValue.Hidden)
+        if (transitionedToHidden) {
             sheetContentState = null
         }
+        previousSheetValue = current
     }
     
     // Permission launcher - must be registered before STARTED lifecycle state
@@ -454,8 +466,17 @@ fun PlanScreen(
                                 lineInfo = selectedLine!!,
                                 viewModel = viewModel,
                                 onBackToStation = {
-                                    // Simply close details, unloading will happen in LaunchedEffect
-                                    sheetContentState = SheetContentState.STATION
+                                    // Retour à l'état de départ: fermer la sheet et réafficher la barre de recherche
+                                    // Déclenche aussi le déchargement des lignes temporaires via LaunchedEffect
+                                    scope.launch {
+                                        // Ferme complètement la BottomSheet
+                                        scaffoldSheetState.bottomSheetState.hide()
+                                    }
+                                    // Réinitialise l'état des sélections
+                                    selectedLine = null
+                                    selectedStation = null
+                                    // Mettre l'état à null pour signaler au parent de réafficher la barre de recherche
+                                    sheetContentState = null
                                 },
                                 onStopClick = { stopName ->
                                     // Update the selected line with the new stop
@@ -662,6 +683,7 @@ private fun StationSheetContent(
 /**
  * Content for line details sheet (without ModalBottomSheet wrapper)
  */
+@RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LineDetailsSheetContent(
