@@ -492,39 +492,34 @@ class TransportRepository(context: Context? = null) {
             
             val allStopsFeatures = response.features
             
-            // Intelligently filter tram stops:
-            // Group by name and tram line, then keep :A priority, otherwise :R
-            val tramStopsGrouped = allStopsFeatures
-                .filter { stop -> 
-                    stop.properties.desserte.matches(Regex(".*\\bT\\d+:[AR]\\b.*"))
-                }
-                .groupBy { stop ->
-                    // Group by stop name and tram line number
-                    val tramLineMatch = Regex("\\bT(\\d+):[AR]\\b").find(stop.properties.desserte)
-                    if (tramLineMatch != null) {
-                        "${stop.properties.nom}_T${tramLineMatch.groupValues[1]}"
-                    } else {
-                        stop.id.toString()
-                    }
-                }
+            // Intelligently filter tram, trambus, and rhonexpress stops:
+            // Group by name and line, then keep :A priority, otherwise :R
+            val lineRegex = Regex(".*\\b(T\\d+|TB\\d+|RX):[AR]\\b.*")
+            val stopsToDedup = allStopsFeatures.filter { stop ->
+                stop.properties.desserte.matches(lineRegex)
+            }
+            val otherStops = allStopsFeatures.filterNot { stop ->
+                stop.properties.desserte.matches(lineRegex)
+            }
+
+            val lineNameRegex = Regex("\\b(T\\d+|TB\\d+|RX):[AR]\\b")
+            val groupedStops = stopsToDedup.groupBy { stop ->
+                val match = lineNameRegex.find(stop.properties.desserte)
+                // Group by stop name and the matched line name (e.g., T1, TB11, RX)
+                "${stop.properties.nom}_${match?.groupValues?.get(1)}"
+            }
             
-            // For each group, keep :A priority, otherwise :R
-            val dedupedTramStops = tramStopsGrouped.values.map { stops ->
+            val dedupedStops = groupedStops.values.map { stops ->
                 stops.firstOrNull { it.properties.desserte.contains(":A") } 
                     ?: stops.first()
             }
             
-            // Keep all non-tram stops (including navigone stops)
-            val nonTramStops = allStopsFeatures.filter { stop ->
-                !stop.properties.desserte.matches(Regex(".*\\bT\\d+:[AR]\\b.*"))
-            }
-            
-            // Combine deduplicated tram stops with other stops
-            val stopsWithoutTramRetour = dedupedTramStops + nonTramStops
+            // Combine deduplicated stops with other stops
+            val stopsWithoutDuplicates = dedupedStops + otherStops
             
             // Filter metro and funicular stops to avoid duplicates by platform
             // For transfers, we merge all services into one
-            val filteredStops = stopsWithoutTramRetour.groupBy { stop ->
+            val filteredStops = stopsWithoutDuplicates.groupBy { stop ->
                 val desserte = stop.properties.desserte
                 
                 // Strict metro detection: service starts with A:, B:, C: or D:
