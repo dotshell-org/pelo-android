@@ -62,6 +62,10 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     private val _nextSchedules = MutableStateFlow<List<String>>(emptyList())
     val nextSchedules: StateFlow<List<String>> = _nextSchedules.asStateFlow()
 
+    // Directions disponibles (ayant des horaires) pour la combinaison ligne/arrêt courante
+    private val _availableDirections = MutableStateFlow<List<Int>>(emptyList())
+    val availableDirections: StateFlow<List<Int>> = _availableDirections.asStateFlow()
+
     // Préchargement au démarrage pour éviter les lags à l'ouverture des groupes (Bus / JD)
     // On utilise des drapeaux pour éviter les rechargements multiples.
     private var isPreloading: Boolean = false
@@ -78,6 +82,34 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             // Le GTFS utilise "NAVI1" pour le Navigone alors que l'app affiche "NAV1"
             val gtfsRouteName = if (routeName.equals("NAV1", ignoreCase = true)) "NAVI1" else routeName
             _headsigns.value = schedulesRepository.getHeadsigns(gtfsRouteName)
+        }
+    }
+
+    /**
+     * Calcule les directions qui possèdent réellement des horaires pour un arrêt donné.
+     * N.B. utilise les IDs présents dans _headsigns lorsqu'ils sont disponibles.
+     */
+    fun computeAvailableDirections(lineName: String, stopName: String) {
+        viewModelScope.launch {
+            // Détermine si jour férié scolaire
+            val isTodayHoliday = holidayDetector.isSchoolHoliday(java.time.LocalDate.now())
+            val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
+
+            // Liste de directions candidates: celles exposées par _headsigns sinon 0 et 1 par défaut
+            val candidateDirections = _headsigns.value.keys.ifEmpty { setOf(0, 1) }.toList().sorted()
+
+            val available = mutableListOf<Int>()
+            for (dir in candidateDirections) {
+                try {
+                    val schedules = schedulesRepository.getSchedules(gtfsLineName, stopName, dir, isTodayHoliday)
+                    if (schedules.isNotEmpty()) {
+                        available.add(dir)
+                    }
+                } catch (t: Throwable) {
+                    // Ignore l'erreur pour ce dir, on le considère indisponible
+                }
+            }
+            _availableDirections.value = available
         }
     }
 

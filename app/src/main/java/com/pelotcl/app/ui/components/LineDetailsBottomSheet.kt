@@ -308,9 +308,32 @@ private fun NextSchedulesSection(
     val headsigns by viewModel.headsigns.collectAsState()
     val allSchedules by viewModel.allSchedules.collectAsState()
     val nextSchedules by viewModel.nextSchedules.collectAsState()
+    val availableDirections by viewModel.availableDirections.collectAsState()
 
     LaunchedEffect(lineInfo.lineName) {
         viewModel.loadHeadsigns(lineInfo.lineName)
+    }
+
+    // Calcule les directions disponibles à chaque changement de ligne/arrêt ou d'intitulés
+    LaunchedEffect(lineInfo.lineName, lineInfo.currentStationName, headsigns) {
+        if (lineInfo.currentStationName.isNotBlank()) {
+            viewModel.computeAvailableDirections(lineInfo.lineName, lineInfo.currentStationName)
+        }
+    }
+
+    // Si une seule direction possède des horaires, auto‑sélectionner celle‑ci
+    LaunchedEffect(availableDirections) {
+        if (availableDirections.size == 1) {
+            val onlyDir = availableDirections.first()
+            if (selectedDirection != onlyDir) {
+                onDirectionChange(onlyDir)
+            }
+        } else if (availableDirections.isNotEmpty()) {
+            // Si la direction sélectionnée actuelle n'est pas disponible, basculer sur la première dispo
+            if (!availableDirections.contains(selectedDirection)) {
+                onDirectionChange(availableDirections.first())
+            }
+        }
     }
 
     LaunchedEffect(selectedDirection, lineInfo.currentStationName) {
@@ -327,7 +350,7 @@ private fun NextSchedulesSection(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        if (headsigns.isNotEmpty()) {
+        if (availableDirections.isNotEmpty()) {
             Text(
                 text = "Direction",
                 textAlign = TextAlign.Left,
@@ -344,7 +367,7 @@ private fun NextSchedulesSection(
                     .height(IntrinsicSize.Min),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                headsigns.keys.sorted().forEach { directionId ->
+                availableDirections.forEach { directionId ->
                     val headsign = headsigns[directionId] ?: "Direction ${directionId + 1}"
 
                     Button(
@@ -366,6 +389,16 @@ private fun NextSchedulesSection(
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
+        } else {
+            // Aucun sens avec horaires — afficher une info succincte
+            Text(
+                text = "Aucun horaire disponible à cet arrêt pour l’instant",
+                textAlign = TextAlign.Left,
+                color = Color.DarkGray,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 12.dp, bottom = 16.dp)
+            )
         }
 
         Text(
