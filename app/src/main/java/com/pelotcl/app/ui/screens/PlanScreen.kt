@@ -81,7 +81,7 @@ private fun isMetroTramOrFunicular(lineName: String): Boolean {
         upperName.startsWith("NAV") -> true
         // Trams (commence par T)
         upperName.startsWith("T") -> true
-        // Rhônexpress (RX) doit être traité comme un tramway
+        // Rhônexpress (RX)
         upperName == "RX" -> true
         // Sinon c'est un bus
         else -> false
@@ -406,7 +406,8 @@ fun PlanScreen(
                     // Si aucune feature ne correspond à la ligne forte sélectionnée (ex: RX), tenter un rechargement des lignes fortes
                     val selectedName = selectedLine!!.lineName
                     val hasSelectedInState = state.lines.any { it.properties.ligne.equals(selectedName, ignoreCase = true) }
-                    if (!hasSelectedInState && ALWAYS_VISIBLE_LINES.contains(selectedName.uppercase())) {
+                    // Considérer toutes les lignes fortes (métro/tram/funi/navigone/RX/TB*) comme éligibles au rechargement
+                    if (!hasSelectedInState && isMetroTramOrFunicular(selectedName)) {
                         android.util.Log.w("PlanScreen", "No feature found for strong line '$selectedName' — triggering reloadStrongLines()")
                         viewModel.reloadStrongLines()
                     }
@@ -1087,10 +1088,20 @@ private fun showAllMapLines(
     map.getStyle { style ->
         allLines.forEach { feature ->
             val layerId = "layer-${feature.properties.ligne}-${feature.properties.codeTrace}"
-            
-            // Rendre toutes les couches visibles
-            style.getLayer(layerId)?.let { layer ->
-                layer.setProperties(PropertyFactory.visibility("visible"))
+            val sourceId = "line-${feature.properties.ligne}-${feature.properties.codeTrace}"
+
+            // Si la couche n'existe pas (ex: au premier chargement ou après un clear), on la recrée
+            val existingLayer = style.getLayer(layerId)
+            if (existingLayer == null) {
+                addLineToMap(map, feature)
+            } else {
+                // Rendre visibles toutes les couches de lignes
+                existingLayer.setProperties(PropertyFactory.visibility("visible"))
+            }
+
+            // Par sécurité: si la source a été supprimée, on réattache via addLineToMap
+            if (style.getSource(sourceId) == null) {
+                addLineToMap(map, feature)
             }
         }
         
@@ -1163,11 +1174,12 @@ private fun addLineToMap(
         val lineColor = LineColorHelper.getColorForLine(feature)
         
         // Determine line width based on transport type
+        val upperLineName = feature.properties.ligne.uppercase()
         val lineWidth = when {
-            // Navigone: very thin line (1f)
-            feature.properties.familleTransport == "BAT" || feature.properties.ligne.uppercase().startsWith("NAV") -> 2f
-            // Trams: thin lines (2f)
-            feature.properties.familleTransport == "TRA" || feature.properties.familleTransport == "TRAM" -> 2f
+            // Navigone: very thin line (2f)
+            feature.properties.familleTransport == "BAT" || upperLineName.startsWith("NAV") -> 2f
+            // Trams (including Trambus TB*): thin lines (2f)
+            feature.properties.familleTransport == "TRA" || feature.properties.familleTransport == "TRAM" || upperLineName.startsWith("TB") -> 2f
             // Others (metro, funicular, bus): thicker lines (4f)
             else -> 4f
         }
@@ -1620,7 +1632,8 @@ private fun createStopsGeoJsonFromStops(
             val lineName = lineNames[index].uppercase()
             
             // isPriorityStop must be based on CURRENT ICON, not on stop's main line
-            val isPriorityStop = ALWAYS_VISIBLE_LINES.contains(lineName)
+            // Marquer comme prioritaire toutes les lignes fortes (métro/tram/TB/funi/NAV/RX)
+            val isPriorityStop = isMetroTramOrFunicular(lineName)
             
             val pointFeature = JsonObject().apply {
                 addProperty("type", "Feature")

@@ -14,8 +14,9 @@ object LineColorHelper {
     private const val METRO_D_COLOR = "#22C55E"
     private const val TRAM_COLOR = "#A855F7"
     private const val FUNICULAR_COLOR = "#84CC16"
-    private const val NAVIGONE_COLOR = "#14b8a6" // Teal for water shuttle
+    private const val NAVIGONE_COLOR = "#14b8a6"
     private const val BUS_COLOR = "#EF4444"
+    private const val TRAMBUS_COLOR = "#eab308"
     
     /**
      * Retourne la couleur hexadécimale appropriée pour une ligne de transport
@@ -29,8 +30,10 @@ object LineColorHelper {
         val nomTypeLigne = feature.properties.nomTypeLigne?.lowercase() ?: ""
         
         return when {
-            // Rhônexpress: affichage explicitement en rouge officiel RX
+            // Rhône Express
             ligne.equals("RX", ignoreCase = true) -> "#E30613"
+            // Trambus
+            ligne.uppercase().startsWith("TB") -> TRAMBUS_COLOR
             // Metros
             ligne == "A" && familleTransport == "MET" -> METRO_A_COLOR
             ligne == "B" && familleTransport == "MET" -> METRO_B_COLOR
@@ -61,6 +64,7 @@ object LineColorHelper {
         val upperLine = lineName.uppercase()
         val hexColor = when {
             upperLine == "RX" -> "#E30613"
+            upperLine.startsWith("TB") -> TRAMBUS_COLOR
             upperLine == "A" -> METRO_A_COLOR
             upperLine == "B" -> METRO_B_COLOR
             upperLine == "C" -> METRO_C_COLOR
@@ -82,6 +86,8 @@ object LineColorHelper {
         val nomTypeLigne = feature.properties.nomTypeLigne?.lowercase() ?: ""
         
         return when {
+            // Trambus → afficher comme "Tram"
+            ligne.uppercase().startsWith("TB") -> "Tram $ligne"
             familleTransport == "MET" -> "Métro $ligne"
             ligne == "F1" || ligne == "F2" || nomTypeLigne.contains("funiculaire") -> "Funiculaire $ligne"
             familleTransport == "BAT" || ligne.uppercase().startsWith("NAV") -> "Navigône $ligne"

@@ -71,6 +71,23 @@ interface GrandLyonApi {
     ): FeatureCollection
 
     /**
+     * Retrieves TCL trambus lines from Grand Lyon's WFS API
+     */
+    @GET("geoserver/sytral/ows")
+    suspend fun getTrambusLines(
+        @Query("SERVICE") service: String = "WFS",
+        @Query("VERSION") version: String = "2.0.0",
+        @Query("request") request: String = "GetFeature",
+        @Query("typename") typename: String = "sytral:tcl_sytral.tcllignebus_2_0_0",
+        @Query("outputFormat") outputFormat: String = "application/json",
+        @Query("SRSNAME") srsName: String = "EPSG:4171",
+        @Query("startIndex") startIndex: Int = 0,
+        @Query("sortby") sortBy: String = "gid",
+        @Query("count") count: Int = 1000,
+        @Query("cql_filter") cqlFilter: String = "ligne LIKE 'TB%'"
+    ): FeatureCollection
+
+    /**
      * Retrieves TCL navigone (river shuttle) lines from Grand Lyon's WFS API
      * This includes the NAVI1 line (Confluence-Île Barbe)
      */

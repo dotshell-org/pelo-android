@@ -34,6 +34,7 @@ class TransportRepository(context: Context? = null) {
             val metroFuniculaire: FeatureCollection
             val trams: FeatureCollection
             var navigone: FeatureCollection
+            var trambus: FeatureCollection
             
             if (cachedMetro != null && cachedTram != null) {
                 // Cache hit: use cached data
@@ -78,6 +79,21 @@ class TransportRepository(context: Context? = null) {
                 )
             }
 
+            // Load trambus lines (TB*)
+            try {
+                trambus = api.getTrambusLines()
+                android.util.Log.d("TransportRepository", "Loaded ${trambus.features.size} trambus lines")
+            } catch (e: Exception) {
+                android.util.Log.w("TransportRepository", "Failed to load trambus lines: ${e.message}")
+                trambus = FeatureCollection(
+                    type = "FeatureCollection",
+                    features = emptyList(),
+                    totalFeatures = 0,
+                    numberMatched = 0,
+                    numberReturned = 0
+                )
+            }
+
             // Fetch Rhônexpress (RX) from dedicated WFS layer and map to our Feature model
             val rxFeatures: List<Feature> = try {
                 fetchRhonexpressFromWfs()
@@ -86,8 +102,8 @@ class TransportRepository(context: Context? = null) {
                 emptyList()
             }
 
-            // Merge metro/funicular, trams, navigone and RX (NOT buses)
-            val allFeatures = (metroFuniculaire.features + trams.features + navigone.features + rxFeatures)
+            // Merge metro/funicular, trams, navigone, trambus and RX (NOT buses)
+            val allFeatures = (metroFuniculaire.features + trams.features + navigone.features + trambus.features + rxFeatures)
 
             // Log tram lines before grouping
             val tramLines = trams.features.map { it.properties.ligne }.distinct().sorted()
@@ -109,8 +125,8 @@ class TransportRepository(context: Context? = null) {
             val filteredCollection = metroFuniculaire.copy(
                 features = uniqueLines,
                 numberReturned = uniqueLines.size,
-                totalFeatures = (metroFuniculaire.totalFeatures ?: 0) + (trams.totalFeatures ?: 0) + (navigone.totalFeatures ?: 0),
-                numberMatched = (metroFuniculaire.numberMatched ?: 0) + (trams.numberMatched ?: 0) + (navigone.numberMatched ?: 0)
+                totalFeatures = (metroFuniculaire.totalFeatures ?: 0) + (trams.totalFeatures ?: 0) + (navigone.totalFeatures ?: 0) + (trambus.totalFeatures ?: 0),
+                numberMatched = (metroFuniculaire.numberMatched ?: 0) + (trams.numberMatched ?: 0) + (navigone.numberMatched ?: 0) + (trambus.numberMatched ?: 0)
             )
 
             // Log loaded lines
@@ -119,6 +135,7 @@ class TransportRepository(context: Context? = null) {
             android.util.Log.d("TransportRepository", "Metro/Funicular count: ${metroFuniculaire.features.size}")
             android.util.Log.d("TransportRepository", "Tram count: ${trams.features.size}")
             android.util.Log.d("TransportRepository", "Navigone count: ${navigone.features.size}")
+            android.util.Log.d("TransportRepository", "Trambus count: ${trambus.features.size}")
             android.util.Log.d("TransportRepository", "Total unique lines: ${uniqueLines.size}")
             if (rxFeatures.isNotEmpty()) {
                 android.util.Log.d("TransportRepository", "Included Rhônexpress features: ${rxFeatures.size}")

@@ -63,6 +63,7 @@ import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportLinesUiState
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.utils.BusIconHelper
+import com.pelotcl.app.utils.LineColorHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -75,19 +76,8 @@ data class LineInfo(
 )
 
 private fun getLineColor(lineName: String): Color {
-    return when (lineName.uppercase()) {
-        "A" -> Color(0xFFEC4899)
-        "B" -> Color(0xFF3B82F6)
-        "C" -> Color(0xFFF59E0B)
-        "D" -> Color(0xFF22C55E)
-        "F1", "F2" -> Color(0xFF84CC16)
-        "NAV1" -> Color(0xFF14b8a6)
-        else -> when {
-            lineName.uppercase().startsWith("NAV") -> Color(0xFF14b8a6)
-            lineName.uppercase().startsWith("T") -> Color(0xFFA855F7)
-            else -> Color(0xFFEF4444)
-        }
-    }
+    // Utilise le helper centralisé pour garantir la cohérence (TB → #eab308, etc.)
+    return Color(LineColorHelper.getColorForLineString(lineName))
 }
 
 @RequiresApi(Build.VERSION_CODES.O)
