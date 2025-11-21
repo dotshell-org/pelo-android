@@ -64,6 +64,7 @@ import org.maplibre.android.style.sources.GeoJsonSource
 
 private val ALWAYS_VISIBLE_LINES = setOf("F1", "F2", "A", "B", "C", "D", "NAV1", "RX")
 private const val PRIORITY_STOPS_MIN_ZOOM = 12.5f
+private const val TRAM_STOPS_MIN_ZOOM = 14.0f
 private const val SECONDARY_STOPS_MIN_ZOOM = 15f
 private const val SELECTED_STOP_MIN_ZOOM = 9.0f // Zoom minimum when a specific stop is selected (much more permissive)
 
@@ -877,6 +878,7 @@ private fun filterMapStops(
     selectedLineName: String
 ) {
     val priorityLayerPrefix = "transport-stops-layer-priority"
+    val tramLayerPrefix = "transport-stops-layer-tram"
     val secondaryLayerPrefix = "transport-stops-layer-secondary"
     
     // Create property name for this line
@@ -886,18 +888,31 @@ private fun filterMapStops(
     
     (-25..25).forEach { idx ->
         val priorityLayerId = "$priorityLayerPrefix-$idx"
+        val tramLayerId = "$tramLayerPrefix-$idx"
         val secondaryLayerId = "$secondaryLayerPrefix-$idx"
         
         (style.getLayer(priorityLayerId) as? SymbolLayer)?.let { layer ->
             // Filter to display only stops that have property has_line_X = true
             layer.setFilter(
                 Expression.all(
-                    Expression.eq(Expression.get("priority_stop"), true),
+                    Expression.eq(Expression.get("stop_priority"), 2),
                     Expression.eq(Expression.get("slot"), idx),
                     Expression.eq(Expression.get(linePropertyName), true)
                 )
             )
             // Keep same minZoom as usual (already at PRIORITY_STOPS_MIN_ZOOM)
+        }
+
+        (style.getLayer(tramLayerId) as? SymbolLayer)?.let { layer ->
+            layer.setFilter(
+                Expression.all(
+                    Expression.eq(Expression.get("stop_priority"), 1),
+                    Expression.eq(Expression.get("slot"), idx),
+                    Expression.eq(Expression.get(linePropertyName), true)
+                )
+            )
+            // Promote zoom to priority level for better visibility
+            layer.setMinZoom(PRIORITY_STOPS_MIN_ZOOM)
         }
         
         (style.getLayer(secondaryLayerId) as? SymbolLayer)?.let { layer ->
@@ -905,7 +920,7 @@ private fun filterMapStops(
             // AND promote their zoom to priority level for better visibility
             layer.setFilter(
                 Expression.all(
-                    Expression.eq(Expression.get("priority_stop"), false),
+                    Expression.eq(Expression.get("stop_priority"), 0),
                     Expression.eq(Expression.get("slot"), idx),
                     Expression.eq(Expression.get(linePropertyName), true)
                 )
@@ -946,18 +961,33 @@ private fun filterMapStopsWithSelectedStop(
         
         val normalizedSelectedStop = normalizeStopName(selectedStopName)
         val priorityLayerPrefix = "transport-stops-layer-priority"
+        val tramLayerPrefix = "transport-stops-layer-tram"
         val secondaryLayerPrefix = "transport-stops-layer-secondary"
         val linePropertyName = "has_line_${selectedLineName.uppercase()}"
         
         // Filter icon layers to show ONLY the selected stop
         (-25..25).forEach { idx ->
             val priorityLayerId = "$priorityLayerPrefix-$idx"
+            val tramLayerId = "$tramLayerPrefix-$idx"
             val secondaryLayerId = "$secondaryLayerPrefix-$idx"
             
             (style.getLayer(priorityLayerId) as? SymbolLayer)?.let { layer ->
                 layer.setFilter(
                     Expression.all(
-                        Expression.eq(Expression.get("priority_stop"), true),
+                        Expression.eq(Expression.get("stop_priority"), 2),
+                        Expression.eq(Expression.get("slot"), idx),
+                        Expression.eq(Expression.get(linePropertyName), true),
+                        Expression.eq(Expression.get("normalized_nom"), normalizedSelectedStop)
+                    )
+                )
+                // More permissive minZoom when a stop is selected
+                layer.setMinZoom(SELECTED_STOP_MIN_ZOOM)
+            }
+
+            (style.getLayer(tramLayerId) as? SymbolLayer)?.let { layer ->
+                layer.setFilter(
+                    Expression.all(
+                        Expression.eq(Expression.get("stop_priority"), 1),
                         Expression.eq(Expression.get("slot"), idx),
                         Expression.eq(Expression.get(linePropertyName), true),
                         Expression.eq(Expression.get("normalized_nom"), normalizedSelectedStop)
@@ -970,7 +1000,7 @@ private fun filterMapStopsWithSelectedStop(
             (style.getLayer(secondaryLayerId) as? SymbolLayer)?.let { layer ->
                 layer.setFilter(
                     Expression.all(
-                        Expression.eq(Expression.get("priority_stop"), false),
+                        Expression.eq(Expression.get("stop_priority"), 0),
                         Expression.eq(Expression.get("slot"), idx),
                         Expression.eq(Expression.get(linePropertyName), true),
                         Expression.eq(Expression.get("normalized_nom"), normalizedSelectedStop)
@@ -1121,24 +1151,35 @@ private fun showAllMapStops(
     style: org.maplibre.android.maps.Style
 ) {
     val priorityLayerPrefix = "transport-stops-layer-priority"
+    val tramLayerPrefix = "transport-stops-layer-tram"
     val secondaryLayerPrefix = "transport-stops-layer-secondary"
-    
+
     // Restore original filters for all stops
     (-25..25).forEach { idx ->
         (style.getLayer("$priorityLayerPrefix-$idx") as? SymbolLayer)?.let { layer ->
             layer.setFilter(
                 Expression.all(
-                    Expression.eq(Expression.get("priority_stop"), true),
+                    Expression.eq(Expression.get("stop_priority"), 2),
                     Expression.eq(Expression.get("slot"), idx)
                 )
             )
             layer.setMinZoom(PRIORITY_STOPS_MIN_ZOOM)
         }
+
+        (style.getLayer("$tramLayerPrefix-$idx") as? SymbolLayer)?.let { layer ->
+            layer.setFilter(
+                Expression.all(
+                    Expression.eq(Expression.get("stop_priority"), 1),
+                    Expression.eq(Expression.get("slot"), idx)
+                )
+            )
+            layer.setMinZoom(TRAM_STOPS_MIN_ZOOM)
+        }
         
         (style.getLayer("$secondaryLayerPrefix-$idx") as? SymbolLayer)?.let { layer ->
             layer.setFilter(
                 Expression.all(
-                    Expression.eq(Expression.get("priority_stop"), false),
+                    Expression.eq(Expression.get("stop_priority"), 0),
                     Expression.eq(Expression.get("slot"), idx)
                 )
             )
@@ -1234,21 +1275,26 @@ private fun addStopsToMap(
     map.getStyle { style ->
         val sourceId = "transport-stops"
         val priorityLayerPrefix = "transport-stops-layer-priority"
+        val tramLayerPrefix = "transport-stops-layer-tram"
         val secondaryLayerPrefix = "transport-stops-layer-secondary"
 
         // Remove old layers and sources if they exist
         // Remove previous fixed slots (1..3)
         (1..3).forEach { idx ->
             val pId = "$priorityLayerPrefix-$idx"
+            val tId = "$tramLayerPrefix-$idx"
             val sId = "$secondaryLayerPrefix-$idx"
             style.getLayer(pId)?.let { style.removeLayer(it) }
+            style.getLayer(tId)?.let { style.removeLayer(it) }
             style.getLayer(sId)?.let { style.removeLayer(it) }
         }
         // Also remove a reasonable range of dynamic slot layers from previous runs (-25..25)
         (-25..25).forEach { idx ->
             val pId = "$priorityLayerPrefix-$idx"
+            val tId = "$tramLayerPrefix-$idx"
             val sId = "$secondaryLayerPrefix-$idx"
             style.getLayer(pId)?.let { style.removeLayer(it) }
+            style.getLayer(tId)?.let { style.removeLayer(it) }
             style.getLayer(sId)?.let { style.removeLayer(it) }
         }
         style.getSource(sourceId)?.let { style.removeSource(it) }
@@ -1319,13 +1365,33 @@ private fun addStopsToMap(
                 )
                 setFilter(
                     Expression.all(
-                        Expression.eq(Expression.get("priority_stop"), true),
+                        Expression.eq(Expression.get("stop_priority"), 2),
                         Expression.eq(Expression.get("slot"), slotIndex)
                     )
                 )
                 setMinZoom(PRIORITY_STOPS_MIN_ZOOM)
             }
             style.addLayer(priorityLayer)
+
+            val tramLayerId = "$tramLayerPrefix-$slotIndex"
+            val tramLayer = SymbolLayer(tramLayerId, sourceId).apply {
+                setProperties(
+                    PropertyFactory.iconImage("{icon}"),
+                    PropertyFactory.iconSize(iconSizesPriority), // Same size as priority
+                    PropertyFactory.iconAllowOverlap(true),
+                    PropertyFactory.iconIgnorePlacement(true),
+                    PropertyFactory.iconAnchor("center"),
+                    PropertyFactory.iconOffset(arrayOf(0f, yOffset))
+                )
+                setFilter(
+                    Expression.all(
+                        Expression.eq(Expression.get("stop_priority"), 1),
+                        Expression.eq(Expression.get("slot"), slotIndex)
+                    )
+                )
+                setMinZoom(TRAM_STOPS_MIN_ZOOM)
+            }
+            style.addLayer(tramLayer)
 
             val secondaryLayerId = "$secondaryLayerPrefix-$slotIndex"
             val secondaryLayer = SymbolLayer(secondaryLayerId, sourceId).apply {
@@ -1339,7 +1405,7 @@ private fun addStopsToMap(
                 )
                 setFilter(
                     Expression.all(
-                        Expression.eq(Expression.get("priority_stop"), false),
+                        Expression.eq(Expression.get("stop_priority"), 0),
                         Expression.eq(Expression.get("slot"), slotIndex)
                     )
                 )
@@ -1400,6 +1466,7 @@ private fun addStopsToMap(
             val allLayerIds = usedSlots.flatMap { idx ->
                 listOf(
                     "$priorityLayerPrefix-$idx",
+                    "$tramLayerPrefix-$idx",
                     "$secondaryLayerPrefix-$idx"
                 )
             }
@@ -1683,29 +1750,36 @@ private fun createStopsGeoJsonFromStops(
             // Determine line corresponding to this icon
             val lineName = lineNames[index].uppercase()
             
-            // isPriorityStop must be based on CURRENT ICON, not on stop's main line
-            // Marquer comme prioritaire toutes les lignes fortes (métro/tram/TB/funi/NAV/RX)
-            val isPriorityStop = isMetroTramOrFunicular(lineName)
+                        // isPriorityStop must be based on CURRENT ICON, not on stop's main line
+                        // Détermine la priorité de l'arrêt en fonction de la ligne:
+                        // 2: Métro/Funi/Nav/RX (priorité haute)
+                        // 1: Tram (priorité moyenne)
+                        // 0: Bus (priorité basse)
+                        val stopPriority = when {
+                            isMetroTramOrFunicular(lineName) && !lineName.startsWith("T") -> 2
+                            lineName.startsWith("T") -> 1
+                            else -> 0
+                        }
             
-            val pointFeature = JsonObject().apply {
-                addProperty("type", "Feature")
-
-                val pointGeometry = JsonObject().apply {
-                    addProperty("type", "Point")
-                    val coordinatesArray = JsonArray()
-                    coordinatesArray.add(stop.geometry.coordinates[0])
-                    coordinatesArray.add(stop.geometry.coordinates[1])
-                    add("coordinates", coordinatesArray)
-                }
-                add("geometry", pointGeometry)
-
-                val properties = JsonObject().apply {
-                    addProperty("nom", stop.properties.nom)
-                    addProperty("desserte", stop.properties.desserte)
-                    addProperty("pmr", stop.properties.pmr)
-                    addProperty("type", "stop")
-                    addProperty("priority_stop", isPriorityStop)
-                    addProperty("has_tram", hasTram)
+                        val pointFeature = JsonObject().apply {
+                            addProperty("type", "Feature")
+            
+                            val pointGeometry = JsonObject().apply {
+                                addProperty("type", "Point")
+                                val coordinatesArray = JsonArray()
+                                coordinatesArray.add(stop.geometry.coordinates[0])
+                                coordinatesArray.add(stop.geometry.coordinates[1])
+                                add("coordinates", coordinatesArray)
+                            }
+                            add("geometry", pointGeometry)
+            
+                            val properties = JsonObject().apply {
+                                addProperty("nom", stop.properties.nom)
+                                addProperty("desserte", stop.properties.desserte)
+                                addProperty("pmr", stop.properties.pmr)
+                                addProperty("type", "stop")
+                                addProperty("stop_priority", stopPriority)
+                                addProperty("has_tram", hasTram)
                     addProperty("icon", iconName)
                     addProperty("slot", slot)
                     
