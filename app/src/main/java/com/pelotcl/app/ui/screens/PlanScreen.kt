@@ -1496,68 +1496,120 @@ private fun createGeoJsonFromFeature(feature: com.pelotcl.app.data.model.Feature
 }
 
 /**
- * Fusionne les arrêts qui ont le même nom (correspondances métro/tram/funicular/navigone)
- * Fusionne UNIQUEMENT les arrêts M/F/T/Tb/NAVI entre eux, les bus restent séparés
+ * Fusionne les arrêts qui ont le même nom (correspondances métro/tram/funicular/navigone/trambus)
+ *
+ * Logique:
+ * 1. D'abord, SÉPARER chaque arrêt en deux parties:
+ *    - Lignes fortes (M/F/T/TB/NAV/RX)
+ *    - Lignes faibles (bus classiques)
+ * 2. Fusionner UNIQUEMENT les arrêts de lignes fortes entre eux par nom
+ * 3. Les arrêts de lignes faibles restent séparés
  */
 private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>): List<com.pelotcl.app.data.model.StopFeature> {
-    // Function to check if a line is M/F/T/Tb/NAVI
-    fun isMetroTramFuniNavi(line: String): Boolean {
+    // Function to check if a line is a strong line (M/F/T/TB/NAV/RX)
+    // MUST match isMetroTramOrFunicular logic!
+    fun isStrongLine(line: String): Boolean {
         val upperLine = line.uppercase()
-        return upperLine in setOf("A", "B", "C", "D") || // Metro A, B, C, D
-               upperLine.startsWith("F") || // Funiculaire (F1, F2)
-               upperLine.startsWith("NAV") || // Navigone (NAV1, etc.)
-               upperLine.startsWith("T") // Tram (T1-T7) et Trolleybus (Tb)
+        return when {
+            upperLine in setOf("A", "B", "C", "D") -> true
+            upperLine in setOf("F1", "F2") -> true
+            upperLine.startsWith("NAV") -> true
+            upperLine.startsWith("T") -> true
+            upperLine == "RX" -> true
+            else -> false
+        }
     }
-    
-    // Function to normalize stop name (same logic as in TransportViewModel)
+
     fun normalizeStopName(name: String): String {
         return name.filter { it.isLetter() }.lowercase()
     }
-    
-    // Separate stops into two groups:
-    // - Stops that contain ONLY M/F/T/Tb/NAVI lines (no buses)
-    // - All other stops (pure buses or mixed bus+M/F/T/Tb/NAVI)
-    val (pureMetroTramFuniNavi, otherStops) = stops.partition { stop ->
+
+    // Step 1: Split each stop into strong lines part and weak lines part
+    val strongLineStops = mutableListOf<com.pelotcl.app.data.model.StopFeature>()
+    val weakLineStops = mutableListOf<com.pelotcl.app.data.model.StopFeature>()
+
+    stops.forEach { stop ->
         val allLines = BusIconHelper.getAllLinesForStop(stop)
-        val isPure = allLines.isNotEmpty() && allLines.all { isMetroTramFuniNavi(it) }
-        
-        // Debug log for certain stops
-        if (stop.properties.nom.contains("Perrache", ignoreCase = true) || 
-            stop.properties.nom.contains("Bellecour", ignoreCase = true)) {
-            android.util.Log.d("MergeStops", "Arrêt: ${stop.properties.nom}, Lignes: $allLines, isPure: $isPure")
+        val strongLines = allLines.filter { isStrongLine(it) }
+        val weakLines = allLines.filter { !isStrongLine(it) }
+
+        if (allLines.any { it.uppercase().startsWith("TB") }) {
+            android.util.Log.d("MergeStops", "Split arrêt ${stop.properties.nom}: strong=$strongLines, weak=$weakLines")
         }
-        
-        isPure
-    }
-    
-    // Group pure M/F/T/Tb/NAVI stops by NORMALIZED name (without spaces, punctuation, etc.)
-    val stopsByName = pureMetroTramFuniNavi.groupBy { normalizeStopName(it.properties.nom) }
-    
-    // Debug log pour les groupes
-    stopsByName.forEach { (normalizedName, group) ->
-        if (group.size > 1) {
-            val names = group.map { it.properties.nom }
-            val lines = group.flatMap { BusIconHelper.getAllLinesForStop(it) }
-            android.util.Log.d("MergeStops", "Fusion: $normalizedName -> $names avec lignes: $lines")
+
+        if (strongLines.isNotEmpty()) {
+            val strongDesserte = strongLines.joinToString(", ")
+            strongLineStops.add(
+                com.pelotcl.app.data.model.StopFeature(
+                    type = stop.type,
+                    id = stop.id,
+                    geometry = stop.geometry,
+                    properties = com.pelotcl.app.data.model.StopProperties(
+                        id = stop.properties.id,
+                        nom = stop.properties.nom,
+                        desserte = strongDesserte,
+                        pmr = stop.properties.pmr,
+                        ascenseur = stop.properties.ascenseur,
+                        escalator = stop.properties.escalator,
+                        gid = stop.properties.gid,
+                        lastUpdate = stop.properties.lastUpdate ?: "",
+                        lastUpdateFme = stop.properties.lastUpdateFme ?: "",
+                        adresse = stop.properties.adresse ?: "",
+                        localiseFaceAAdresse = stop.properties.localiseFaceAAdresse,
+                        commune = stop.properties.commune ?: "",
+                        insee = stop.properties.insee ?: "",
+                        zone = stop.properties.zone ?: ""
+                    )
+                )
+            )
+        }
+
+        if (weakLines.isNotEmpty()) {
+            val weakDesserte = weakLines.joinToString(", ")
+            weakLineStops.add(
+                com.pelotcl.app.data.model.StopFeature(
+                    type = stop.type,
+                    id = "${stop.id}-weak",
+                    geometry = stop.geometry,
+                    properties = com.pelotcl.app.data.model.StopProperties(
+                        id = stop.properties.id,
+                        nom = stop.properties.nom,
+                        desserte = weakDesserte,
+                        pmr = stop.properties.pmr,
+                        ascenseur = stop.properties.ascenseur,
+                        escalator = stop.properties.escalator,
+                        gid = stop.properties.gid,
+                        lastUpdate = stop.properties.lastUpdate ?: "",
+                        lastUpdateFme = stop.properties.lastUpdateFme ?: "",
+                        adresse = stop.properties.adresse ?: "",
+                        localiseFaceAAdresse = stop.properties.localiseFaceAAdresse,
+                        commune = stop.properties.commune ?: "",
+                        insee = stop.properties.insee ?: "",
+                        zone = stop.properties.zone ?: ""
+                    )
+                )
+            )
         }
     }
-    
-    val merged = stopsByName.map { (name, stopsGroup) ->
+
+    // Step 2: Group and merge strong line stops by normalized name
+    val strongStopsByName = strongLineStops.groupBy { normalizeStopName(it.properties.nom) }
+
+    val mergedStrongStops = strongStopsByName.map { (normalizedName, stopsGroup) ->
         if (stopsGroup.size == 1) {
-            // Single M/F/T/Tb/NAVI stop: no merging
             stopsGroup.first()
         } else {
-            // Multiple M/F/T/Tb/NAVI stops with same name: merge
             val mergedDesserte = stopsGroup
                 .flatMap { BusIconHelper.getAllLinesForStop(it) }
                 .distinct()
                 .sorted()
                 .joinToString(", ")
-            
+
             val firstStop = stopsGroup.first()
             val isPmr = stopsGroup.any { it.properties.pmr }
-            
-            // Return single merged stop
+
+            android.util.Log.d("MergeStops", "Fusion lignes fortes: $normalizedName -> lignes: $mergedDesserte")
+
             com.pelotcl.app.data.model.StopFeature(
                 type = firstStop.type,
                 id = firstStop.id,
@@ -1570,20 +1622,20 @@ private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>
                     ascenseur = firstStop.properties.ascenseur,
                     escalator = firstStop.properties.escalator,
                     gid = firstStop.properties.gid,
-                    lastUpdate = firstStop.properties.lastUpdate,
-                    lastUpdateFme = firstStop.properties.lastUpdateFme,
-                    adresse = firstStop.properties.adresse,
+                    lastUpdate = firstStop.properties.lastUpdate ?: "",
+                    lastUpdateFme = firstStop.properties.lastUpdateFme ?: "",
+                    adresse = firstStop.properties.adresse ?: "",
                     localiseFaceAAdresse = firstStop.properties.localiseFaceAAdresse,
-                    commune = firstStop.properties.commune,
-                    insee = firstStop.properties.insee,
-                    zone = firstStop.properties.zone
+                    commune = firstStop.properties.commune ?: "",
+                    insee = firstStop.properties.insee ?: "",
+                    zone = firstStop.properties.zone ?: ""
                 )
             )
         }
     }
-    
-    // Return merged stops (pure M/F/T/Tb/NAVI) + all other stops (buses and mixed)
-    return merged + otherStops
+
+    // Step 3: Return merged strong stops + all weak stops (not merged)
+    return mergedStrongStops + weakLineStops
 }
 
 /**

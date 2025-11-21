@@ -213,13 +213,16 @@ object LineStopsCache {
         "T7" to listOf(
             "Décines OL Vallée", "Décines Grand Large", "Décines Centre", "Décines Roosevelt", "Vaulx-en-Velin La Soie"
         ),
-        // Rhônexpress (traité comme un tramway pour le cache des arrêts)
-        // Ordre officiel: Part-Dieu -> La Soie -> Meyzieu Z.i. -> Aéroport St Exupéry -RX
         "RX" to listOf(
             "Gare Part-Dieu Villette",
             "Vaulx-en-Velin La Soie",
             "Meyzieu Z.i.",
             "Aéroport St Exupéry -RX"
+        ),
+        "TB11" to listOf(
+            "Gare Saint-Paul", "La Feuillée", "Terrasses Presqu'île", "Cordeliers", "Saxe - Lafayette", "Halles Paul Bocuse",
+            "Part-Dieu Jules Favre", "Thiers - Lafayette", "Charmettes", "Instit. Art Contemporain", "Verlaine",
+            "Blanqui - Le Rize", "Grandclément", "Bernaix", "Cyprian - Léon Blum", "Bon Coin - Médipôle", "Laurent Bonnevay"
         )
     )
     
