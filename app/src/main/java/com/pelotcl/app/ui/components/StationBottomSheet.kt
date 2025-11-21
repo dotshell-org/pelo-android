@@ -118,7 +118,9 @@ private fun sortLines(lines: List<String>): List<String> {
         return Key(9000, subFamily = up, number = Int.MAX_VALUE, raw = up)
     }
 
-    return lines.sortedWith(Comparator { a, b ->
+    return lines
+        .filter { !it.equals("T36", ignoreCase = true) }
+        .sortedWith(Comparator { a, b ->
         val ka = keyFor(a)
         val kb = keyFor(b)
         // Compare by family, then prefix/subFamily, then numeric part, finally raw label

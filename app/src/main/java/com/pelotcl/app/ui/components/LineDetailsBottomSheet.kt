@@ -491,7 +491,7 @@ private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Bool
             val upperCaseConnection = connection.uppercase()
 
             upperCaseConnection in listOf("A", "B", "C", "D") || // Metro
-            upperCaseConnection.startsWith("T") || // Tram & Trambus
+            (upperCaseConnection.startsWith("T") && !upperCaseConnection.endsWith("36")) || // Tram & Trambus
             upperCaseConnection in listOf("F1", "F2") || // Funicular
             upperCaseConnection.startsWith("NAV") || // Navigone
             upperCaseConnection == "RX" // Rhone Express
