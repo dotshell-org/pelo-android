@@ -1,6 +1,7 @@
 package com.pelotcl.app.data.api
 
 import com.pelotcl.app.data.model.FeatureCollection
+import com.google.gson.JsonObject
 import com.pelotcl.app.data.model.StopCollection
 import retrofit2.http.GET
 import retrofit2.http.Query
@@ -128,4 +129,21 @@ interface GrandLyonApi {
         @Query("sortby") sortBy: String = "gid",
         @Query("count") count: Int = 10000
     ): com.pelotcl.app.data.model.StopCollection
+
+    /**
+     * Récupère la géométrie de la ligne Rhônexpress (RX) depuis l'API WFS (brut JSON)
+     * Utilisé car le schéma de la couche RX diffère des couches TCL classiques.
+     */
+    @GET("geoserver/sytral/ows")
+    suspend fun getRhonexpressRaw(
+        @Query("SERVICE") service: String = "WFS",
+        @Query("VERSION") version: String = "2.0.0",
+        @Query("request") request: String = "GetFeature",
+        @Query("typename") typename: String = "sytral:rx_rhonexpress.rxligne_2_0_0",
+        @Query("outputFormat") outputFormat: String = "application/json",
+        @Query("SRSNAME") srsName: String = "EPSG:4326",
+        @Query("startIndex") startIndex: Int = 0,
+        @Query("sortby") sortBy: String = "gid",
+        @Query("count") count: Int = 1000
+    ): JsonObject
 }

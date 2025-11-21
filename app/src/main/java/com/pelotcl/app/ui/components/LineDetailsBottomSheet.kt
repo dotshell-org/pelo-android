@@ -143,6 +143,8 @@ fun LineDetailsBottomSheet(
     var selectedDirection by remember { mutableStateOf(0) }
 
     val linesState by viewModel.uiState.collectAsState()
+    // Intitulés de terminus par direction (ex: 0 -> "Aéroport St Exupéry -RX")
+    val headsigns by viewModel.headsigns.collectAsState()
 
     val loadedLineNames = remember(linesState) {
         when (linesState) {
@@ -185,8 +187,19 @@ fun LineDetailsBottomSheet(
         }
     }
 
-    val displayedStops = remember(lineStops, selectedDirection) {
-        if (selectedDirection == 1) lineStops.reversed() else lineStops
+    val displayedStops = remember(lineStops, selectedDirection, headsigns) {
+        // Aligner l'orientation de la liste d'arrêts avec le terminus (headsign) sélectionné.
+        // Si le headsign correspond au dernier arrêt, on garde l'ordre tel quel.
+        // S'il correspond au premier arrêt, on inverse la liste.
+        val first = lineStops.firstOrNull()?.stopName?.uppercase()
+        val last = lineStops.lastOrNull()?.stopName?.uppercase()
+        val currentHeadsign = headsigns[selectedDirection]?.uppercase()
+
+        when {
+            currentHeadsign != null && last != null && currentHeadsign.contains(last) -> lineStops
+            currentHeadsign != null && first != null && currentHeadsign.contains(first) -> lineStops.reversed()
+            else -> lineStops
+        }
     }
 
     if (lineInfo != null) {

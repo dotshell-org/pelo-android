@@ -5,6 +5,10 @@ import com.pelotcl.app.data.api.RetrofitInstance
 import com.pelotcl.app.data.cache.TransportCache
 import com.pelotcl.app.data.model.Feature
 import com.pelotcl.app.data.model.FeatureCollection
+import com.pelotcl.app.data.model.Geometry
+import com.pelotcl.app.data.model.TransportLineProperties
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
 import com.pelotcl.app.data.model.StopCollection
 
 /**
@@ -74,8 +78,16 @@ class TransportRepository(context: Context? = null) {
                 )
             }
 
-            // Merge metro/funicular, trams, and navigone (NOT buses)
-            val allFeatures = (metroFuniculaire.features + trams.features + navigone.features)
+            // Fetch Rhônexpress (RX) from dedicated WFS layer and map to our Feature model
+            val rxFeatures: List<Feature> = try {
+                fetchRhonexpressFromWfs()
+            } catch (e: Exception) {
+                android.util.Log.w("TransportRepository", "Failed to load Rhônexpress from WFS: ${e.message}")
+                emptyList()
+            }
+
+            // Merge metro/funicular, trams, navigone and RX (NOT buses)
+            val allFeatures = (metroFuniculaire.features + trams.features + navigone.features + rxFeatures)
 
             // Log tram lines before grouping
             val tramLines = trams.features.map { it.properties.ligne }.distinct().sorted()
@@ -108,10 +120,230 @@ class TransportRepository(context: Context? = null) {
             android.util.Log.d("TransportRepository", "Tram count: ${trams.features.size}")
             android.util.Log.d("TransportRepository", "Navigone count: ${navigone.features.size}")
             android.util.Log.d("TransportRepository", "Total unique lines: ${uniqueLines.size}")
+            if (rxFeatures.isNotEmpty()) {
+                android.util.Log.d("TransportRepository", "Included Rhônexpress features: ${rxFeatures.size}")
+            }
 
             Result.success(filteredCollection)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    /**
+     * Récupère et mappe la couche Rhônexpress (RX) vers nos modèles internes
+     */
+    private suspend fun fetchRhonexpressFromWfs(): List<Feature> {
+        fun mapJsonToFeatures(json: JsonObject, srs: String): List<Feature> {
+            val featuresArray: JsonArray = json.getAsJsonArray("features") ?: return emptyList()
+            android.util.Log.d("TransportRepository", "Rhônexpress(WFS $srs): raw features=${featuresArray.size()}")
+
+            val result = mutableListOf<Feature>()
+            var minLon = Double.POSITIVE_INFINITY
+            var minLat = Double.POSITIVE_INFINITY
+            var maxLon = Double.NEGATIVE_INFINITY
+            var maxLat = Double.NEGATIVE_INFINITY
+
+            for (elem in featuresArray) {
+                val featObj = elem.asJsonObject
+
+                val id = featObj.get("id")?.asString ?: "rx-${System.nanoTime()}"
+                val properties = featObj.getAsJsonObject("properties") ?: JsonObject()
+                val gid = properties.get("gid")?.asInt ?: kotlin.math.abs(id.hashCode())
+
+                val geomObj = featObj.getAsJsonObject("geometry") ?: continue
+                val geomType = geomObj.get("type")?.asString ?: "LineString"
+                val coordinatesElement = geomObj.get("coordinates")
+
+                val multiLineCoordinates: List<List<List<Double>>> = when (geomType) {
+                    "MultiLineString" -> {
+                        val outer = coordinatesElement.asJsonArray
+                        outer.map { lineArr ->
+                            lineArr.asJsonArray.map { coord ->
+                                val pair = coord.asJsonArray
+                                val lon = pair[0].asDouble
+                                val lat = pair[1].asDouble
+                                if (!lon.isNaN() && !lat.isNaN()) {
+                                    minLon = kotlin.math.min(minLon, lon)
+                                    maxLon = kotlin.math.max(maxLon, lon)
+                                    minLat = kotlin.math.min(minLat, lat)
+                                    maxLat = kotlin.math.max(maxLat, lat)
+                                }
+                                listOf(lon, lat)
+                            }
+                        }
+                    }
+                    "LineString" -> {
+                        val line = coordinatesElement.asJsonArray.map { coord ->
+                            val pair = coord.asJsonArray
+                            val lon = pair[0].asDouble
+                            val lat = pair[1].asDouble
+                            if (!lon.isNaN() && !lat.isNaN()) {
+                                minLon = kotlin.math.min(minLon, lon)
+                                maxLon = kotlin.math.max(maxLon, lon)
+                                minLat = kotlin.math.min(minLat, lat)
+                                maxLat = kotlin.math.max(maxLat, lat)
+                            }
+                            listOf(lon, lat)
+                        }
+                        listOf(line)
+                    }
+                    else -> continue
+                }
+
+                val geometry = Geometry(
+                    type = "MultiLineString",
+                    coordinates = multiLineCoordinates
+                )
+
+                val transportProps = TransportLineProperties(
+                    ligne = "RX",
+                    codeTrace = "RX-$gid",
+                    codeLigne = "RX",
+                    typeTrace = properties.get("type_trace")?.asString ?: "",
+                    nomTrace = properties.get("nom_trace")?.asString ?: "Rhônexpress",
+                    sens = properties.get("sens")?.asString ?: "ALLER",
+                    origine = properties.get("origine")?.asString ?: "Gare Part-Dieu Villette",
+                    destination = properties.get("destination")?.asString ?: "Aéroport St Exupéry -RX",
+                    nomOrigine = properties.get("nom_origine")?.asString ?: "Gare Part-Dieu Villette",
+                    nomDestination = properties.get("nom_destination")?.asString ?: "Aéroport St Exupéry -RX",
+                    familleTransport = "TRAM",
+                    dateDebut = properties.get("date_debut")?.asString ?: "",
+                    dateFin = properties.get("date_fin")?.asString,
+                    codeTypeLigne = properties.get("code_type_ligne")?.asString ?: "TRAM",
+                    nomTypeLigne = properties.get("nom_type_ligne")?.asString ?: "Tramway",
+                    pmr = properties.get("pmr")?.asBoolean ?: true,
+                    codeTriLigne = properties.get("code_tri_ligne")?.asString ?: "RX",
+                    nomVersion = properties.get("nom_version")?.asString ?: "",
+                    lastUpdate = properties.get("last_update")?.asString ?: "",
+                    lastUpdateFme = properties.get("last_update_fme")?.asString ?: "",
+                    gid = gid,
+                    couleur = properties.get("couleur")?.asString ?: "#E30613"
+                )
+
+                result.add(
+                    Feature(
+                        type = "Feature",
+                        id = "rx_$id",
+                        geometry = geometry,
+                        geometryName = null,
+                        properties = transportProps,
+                        bbox = null
+                    )
+                )
+            }
+
+            if (result.isNotEmpty()) {
+                android.util.Log.d(
+                    "TransportRepository",
+                    "Rhônexpress(WFS $srs): bbox lon[$minLon,$maxLon] lat[$minLat,$maxLat]"
+                )
+            }
+            return result
+        }
+
+        android.util.Log.d("TransportRepository", "Fetching Rhônexpress from WFS (primary SRS=EPSG:4326)…")
+        val primary = try {
+            mapJsonToFeatures(RetrofitInstance.api.getRhonexpressRaw(), "EPSG:4326")
+        } catch (t: Throwable) {
+            android.util.Log.w("TransportRepository", "Rhônexpress primary fetch failed: ${t.message}")
+            emptyList()
+        }
+
+        if (primary.isNotEmpty()) return primary
+
+        android.util.Log.w(
+            "TransportRepository",
+            "Rhônexpress(WFS): 0 feature with EPSG:4326, retrying with EPSG:4171…"
+        )
+        val secondary = try {
+            mapJsonToFeatures(
+                RetrofitInstance.api.getRhonexpressRaw(srsName = "EPSG:4171"),
+                "EPSG:4171"
+            )
+        } catch (t: Throwable) {
+            android.util.Log.w("TransportRepository", "Rhônexpress secondary fetch failed: ${t.message}")
+            emptyList()
+        }
+
+        if (secondary.isNotEmpty()) return secondary
+
+        // Fallback ultime: construire une géométrie simple à partir des arrêts connus si disponibles
+        android.util.Log.w(
+            "TransportRepository",
+            "Rhônexpress(WFS): empty results on both SRS. Building static fallback from stops if possible."
+        )
+
+        return try {
+            val stops = RetrofitInstance.api.getTransportStops()
+            val wanted = listOf(
+                "Gare Part-Dieu Villette",
+                "Vaulx-en-Velin La Soie",
+                "Meyzieu Z.i.",
+                "Aéroport St Exupéry -RX"
+            )
+
+            val found = wanted.mapNotNull { wantedName ->
+                stops.features.firstOrNull { it.properties.nom.equals(wantedName, ignoreCase = true) }?.geometry?.coordinates
+            }
+
+            if (found.size >= 2) {
+                val line = found.map { coords -> listOf(coords[0], coords[1]) } // ensure [lon,lat]
+                val geometry = Geometry(
+                    type = "MultiLineString",
+                    coordinates = listOf(line)
+                )
+                val props = TransportLineProperties(
+                    ligne = "RX",
+                    codeTrace = "RX-fallback",
+                    codeLigne = "RX",
+                    typeTrace = "",
+                    nomTrace = "Rhônexpress (fallback)",
+                    sens = "ALLER",
+                    origine = wanted.first(),
+                    destination = wanted.last(),
+                    nomOrigine = wanted.first(),
+                    nomDestination = wanted.last(),
+                    familleTransport = "TRAM",
+                    dateDebut = "",
+                    dateFin = null,
+                    codeTypeLigne = "TRAM",
+                    nomTypeLigne = "Tramway",
+                    pmr = true,
+                    codeTriLigne = "RX",
+                    nomVersion = "",
+                    lastUpdate = "",
+                    lastUpdateFme = "",
+                    gid = -1,
+                    couleur = "#E30613"
+                )
+                android.util.Log.w(
+                    "TransportRepository",
+                    "Using static fallback geometry for RX built from ${found.size} stops"
+                )
+                listOf(
+                    Feature(
+                        type = "Feature",
+                        id = "rx_fallback",
+                        geometry = geometry,
+                        geometryName = null,
+                        properties = props,
+                        bbox = null
+                    )
+                )
+            } else {
+                android.util.Log.w(
+                    "TransportRepository",
+                    "Fallback from stops failed (found ${found.size} of ${wanted.size}). RX will be absent."
+                )
+                emptyList()
+            }
+        } catch (t: Throwable) {
+            android.util.Log.w(
+                "TransportRepository",
+                "Stops-based fallback failed: ${t.message}. RX will be absent."
+            )
+            emptyList()
         }
     }
     

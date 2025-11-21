@@ -164,6 +164,28 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
     }
+
+    /**
+     * Recharge l’ensemble des lignes fortes (métro/tram/funiculaire/navigône + RX)
+     * et met à jour l’état UI. Utilisé en fallback si une ligne forte manque.
+     */
+    fun reloadStrongLines() {
+        viewModelScope.launch {
+            try {
+                repository.getAllLines()
+                    .onSuccess { collection ->
+                        val rxCount = collection.features.count { it.properties.ligne.equals("RX", ignoreCase = true) }
+                        android.util.Log.d("TransportViewModel", "reloadStrongLines: loaded ${collection.features.size} features; RX count=$rxCount")
+                        _uiState.value = TransportLinesUiState.Success(collection.features)
+                    }
+                    .onFailure { e ->
+                        android.util.Log.w("TransportViewModel", "reloadStrongLines failed: ${e.message}")
+                    }
+            } catch (t: Throwable) {
+                android.util.Log.e("TransportViewModel", "reloadStrongLines: exception ${t.message}")
+            }
+        }
+    }
     
     // Stops cache to avoid reloading them each time
     private var cachedStops: List<StopFeature>? = null

@@ -62,7 +62,7 @@ import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
 
-private val ALWAYS_VISIBLE_LINES = setOf("F1", "F2", "A", "B", "C", "D", "NAV1")
+private val ALWAYS_VISIBLE_LINES = setOf("F1", "F2", "A", "B", "C", "D", "NAV1", "RX")
 private const val PRIORITY_STOPS_MIN_ZOOM = 12.5f
 private const val SECONDARY_STOPS_MIN_ZOOM = 15f
 private const val SELECTED_STOP_MIN_ZOOM = 9.0f // Zoom minimum when a specific stop is selected (much more permissive)
@@ -81,6 +81,8 @@ private fun isMetroTramOrFunicular(lineName: String): Boolean {
         upperName.startsWith("NAV") -> true
         // Trams (commence par T)
         upperName.startsWith("T") -> true
+        // Rhônexpress (RX) doit être traité comme un tramway
+        upperName == "RX" -> true
         // Sinon c'est un bus
         else -> false
     }
@@ -400,7 +402,15 @@ fun PlanScreen(
                     state.lines.filter { it.properties.ligne.equals(selectedLine!!.lineName, ignoreCase = true) }.forEach {
                         android.util.Log.d("PlanScreen", "LaunchedEffect: Found matching feature: ligne=${it.properties.ligne}, codeTrace=${it.properties.codeTrace}")
                     }
-                    
+
+                    // Si aucune feature ne correspond à la ligne forte sélectionnée (ex: RX), tenter un rechargement des lignes fortes
+                    val selectedName = selectedLine!!.lineName
+                    val hasSelectedInState = state.lines.any { it.properties.ligne.equals(selectedName, ignoreCase = true) }
+                    if (!hasSelectedInState && ALWAYS_VISIBLE_LINES.contains(selectedName.uppercase())) {
+                        android.util.Log.w("PlanScreen", "No feature found for strong line '$selectedName' — triggering reloadStrongLines()")
+                        viewModel.reloadStrongLines()
+                    }
+
                     // Display only selected line
                     filterMapLines(map, state.lines, selectedLine!!.lineName)
                     
@@ -711,7 +721,7 @@ private fun filterMapLines(
     map: MapLibreMap,
     allLines: List<com.pelotcl.app.data.model.Feature>,
     selectedLineName: String
-) {
+): Int {
     map.getStyle { style ->
         android.util.Log.d("PlanScreen", "filterMapLines: selectedLineName=$selectedLineName, allLines.size=${allLines.size}")
         
@@ -750,6 +760,14 @@ private fun filterMapLines(
         
         android.util.Log.d("PlanScreen", "filterMapLines: Found $foundCount layers, $notFoundCount not found, made $madeVisibleCount visible")
     }
+    // Return value is evaluated by the caller after style block executes
+    // Note: MapLibre's getStyle callback is synchronous here (style already loaded)
+    // but we conservatively compute and return the last known counter via closure.
+    // Since counters are local to the callback, we mirror the outcome by re-evaluating quickly.
+    // For simplicity and stability, we recompute visibility count here in a lightweight way.
+    // Fallback: compute from provided allLines against selected name.
+    val visibleCandidates = allLines.count { it.properties.ligne.equals(selectedLineName, ignoreCase = true) }
+    return visibleCandidates
 }
 
 /**

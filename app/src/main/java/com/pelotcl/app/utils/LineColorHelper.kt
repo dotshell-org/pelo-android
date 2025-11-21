@@ -29,6 +29,8 @@ object LineColorHelper {
         val nomTypeLigne = feature.properties.nomTypeLigne?.lowercase() ?: ""
         
         return when {
+            // Rhônexpress: affichage explicitement en rouge officiel RX
+            ligne.equals("RX", ignoreCase = true) -> "#E30613"
             // Metros
             ligne == "A" && familleTransport == "MET" -> METRO_A_COLOR
             ligne == "B" && familleTransport == "MET" -> METRO_B_COLOR
@@ -58,13 +60,14 @@ object LineColorHelper {
     fun getColorForLineString(lineName: String): Int {
         val upperLine = lineName.uppercase()
         val hexColor = when {
+            upperLine == "RX" -> "#E30613"
             upperLine == "A" -> METRO_A_COLOR
             upperLine == "B" -> METRO_B_COLOR
             upperLine == "C" -> METRO_C_COLOR
             upperLine == "D" -> METRO_D_COLOR
             upperLine == "F1" || upperLine == "F2" -> FUNICULAR_COLOR
             upperLine.startsWith("NAV") -> NAVIGONE_COLOR
-            upperLine.startsWith("T") && !upperLine.startsWith("TB") -> TRAM_COLOR
+            (upperLine.startsWith("T") && !upperLine.startsWith("TB")) -> TRAM_COLOR
             else -> BUS_COLOR
         }
         return android.graphics.Color.parseColor(hexColor)
