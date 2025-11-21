@@ -397,9 +397,8 @@ private fun NextSchedulesSection(
             }
             Spacer(modifier = Modifier.height(16.dp))
         } else {
-            // Aucun sens avec horaires — afficher une info succincte
             Text(
-                text = "Aucun horaire disponible à cet arrêt pour l’instant",
+                text = "Aucun horaire disponible à cet arrêt",
                 textAlign = TextAlign.Left,
                 color = Color.DarkGray,
                 modifier = Modifier
@@ -408,47 +407,49 @@ private fun NextSchedulesSection(
             )
         }
 
-        Text(
-            text = "Prochains départs",
-            textAlign = TextAlign.Left,
-            fontSize = 22.sp,
-            color = Color.Black,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 12.dp, top = 30.dp, bottom = 12.dp)
-        )
+        if (availableDirections.isNotEmpty()) {
+            Text(
+                text = "Prochains départs",
+                textAlign = TextAlign.Left,
+                fontSize = 22.sp,
+                color = Color.Black,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 12.dp, top = 30.dp, bottom = 12.dp)
+            )
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable {
-                    if (allSchedules.isNotEmpty()) {
-                        val directionName = headsigns[selectedDirection] ?: ""
-                        onShowAllSchedules(lineInfo.lineName, directionName, allSchedules)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        if (allSchedules.isNotEmpty()) {
+                            val directionName = headsigns[selectedDirection] ?: ""
+                            onShowAllSchedules(lineInfo.lineName, directionName, allSchedules)
+                        }
                     }
-                }
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Common style for all schedules
-            val timeStyle = MaterialTheme.typography.titleMedium
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Common style for all schedules
+                val timeStyle = MaterialTheme.typography.titleMedium
 
-            // Loop through up to 3 next schedules
-            nextSchedules.take(3).forEachIndexed { index, schedule ->
-                if (index > 0) {
-                    Spacer(modifier = Modifier.width(16.dp))
+                // Loop through up to 3 next schedules
+                nextSchedules.take(3).forEachIndexed { index, schedule ->
+                    if (index > 0) {
+                        Spacer(modifier = Modifier.width(16.dp))
+                    }
+                    Text(
+                        text = schedule,
+                        style = timeStyle,
+                        color = getScheduleColorBasedOnTime(schedule)
+                    )
                 }
-                Text(
-                    text = schedule,
-                    style = timeStyle,
-                    color = getScheduleColorBasedOnTime(schedule)
-                )
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                Icon(imageVector = Icons.Default.ChevronRight, contentDescription = "See all", tint = Gray700)
             }
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            Icon(imageVector = Icons.Default.ChevronRight, contentDescription = "See all", tint = Gray700)
         }
     }
 }

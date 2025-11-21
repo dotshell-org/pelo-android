@@ -6,10 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.pelotcl.app.data.model.Feature
 import com.pelotcl.app.data.model.StopFeature
 import com.pelotcl.app.data.repository.TransportRepository
-import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.Connection
 import com.pelotcl.app.utils.ConnectionsHelper
-import com.pelotcl.app.utils.TransportType
 import com.pelotcl.app.utils.HolidayDetector
 import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -730,7 +728,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         // Combine and sort
         return (linesFromFeatures + linesFromStops)
             .distinct()
-            .filter { it.isNotEmpty() } // Filter empty lines
+            .filter { it.isNotEmpty() && !it.equals("TS", ignoreCase = true) }
             .sortedWith(compareBy(
                 // Sort by type first (Metro, Funicular, Navigone, Tram, then the rest)
                 { line ->
@@ -748,42 +746,5 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 },
                 { line -> line }
             ))
-    }
-    
-    /**
-     * Forces data reload from the API (ignores cache)
-     */
-    fun refreshAllData() {
-        viewModelScope.launch {
-            _uiState.value = TransportLinesUiState.Loading
-            _stopsUiState.value = TransportStopsUiState.Loading
-            
-            // Clear cache and reload
-            repository.clearCache()
-            
-            // Reload lines
-            repository.getAllLines()
-                .onSuccess { featureCollection ->
-                    _uiState.value = TransportLinesUiState.Success(featureCollection.features)
-                }
-                .onFailure { exception ->
-                    _uiState.value = TransportLinesUiState.Error(
-                        exception.message ?: "Une erreur est survenue"
-                    )
-                }
-            
-            // Reload stops
-            repository.getAllStops()
-                .onSuccess { stopCollection ->
-                    cachedStops = stopCollection.features
-                    buildConnectionsIndex(stopCollection.features)
-                    _stopsUiState.value = TransportStopsUiState.Success(stopCollection.features)
-                }
-                .onFailure { exception ->
-                    _stopsUiState.value = TransportStopsUiState.Error(
-                        exception.message ?: "Une erreur est survenue lors du chargement des arrêts"
-                    )
-                }
-        }
     }
 }

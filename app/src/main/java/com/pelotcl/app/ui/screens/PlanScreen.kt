@@ -1236,7 +1236,13 @@ private fun addLineToMap(
             )
         }
         
-        style.addLayer(lineLayer)
+        // Find a stop layer to add the line below it, to ensure lines are always under stops
+        val firstStopLayer = style.layers.find { it.id.startsWith("transport-stops-layer") }
+        if (firstStopLayer != null) {
+            style.addLayerBelow(lineLayer, firstStopLayer.id)
+        } else {
+            style.addLayer(lineLayer)
+        }
     }
 }
 

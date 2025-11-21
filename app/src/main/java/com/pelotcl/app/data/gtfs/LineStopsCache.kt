@@ -223,6 +223,9 @@ object LineStopsCache {
             "Gare Saint-Paul", "La Feuillée", "Terrasses Presqu'île", "Cordeliers", "Saxe - Lafayette", "Halles Paul Bocuse",
             "Part-Dieu Jules Favre", "Thiers - Lafayette", "Charmettes", "Instit. Art Contemporain", "Verlaine",
             "Blanqui - Le Rize", "Grandclément", "Bernaix", "Cyprian - Léon Blum", "Bon Coin - Médipôle", "Laurent Bonnevay"
+        ),
+        "TS" to listOf(
+            "Part-Dieu Villette Sud", "Vaulx-en-Velin La Soie", "Décines OL Vallée", "Meyzieu. Z.i.", "Meyzieu les Panettes"
         )
     )
     
