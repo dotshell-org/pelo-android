@@ -462,10 +462,10 @@ private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Bool
     ) {
         Box(modifier = Modifier.width(40.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
             if (!isFirst) {
-                Box(modifier = Modifier.width(4.dp).height(30.dp).offset(y = (-16).dp).background(lineColor).align(Alignment.Center))
+                Box(modifier = Modifier.width(4.dp).height(35.dp).offset(y = (-16).dp).background(lineColor).align(Alignment.Center))
             }
             if (!isLast) {
-                Box(modifier = Modifier.width(4.dp).height(30.dp).offset(y = (16).dp).background(lineColor).align(Alignment.Center))
+                Box(modifier = Modifier.width(4.dp).height(35.dp).offset(y = (16).dp).background(lineColor).align(Alignment.Center))
             }
             Box(
                 modifier = Modifier.size(16.dp).clip(CircleShape)
@@ -489,11 +489,12 @@ private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Bool
 
         val filteredConnections = stop.connections.filter { connection ->
             val upperCaseConnection = connection.uppercase()
-            val isTram = upperCaseConnection.startsWith("T") && upperCaseConnection.length == 2 && upperCaseConnection.substring(1).toIntOrNull() != null
 
-            upperCaseConnection in listOf("A", "B", "C", "D") ||
-                    isTram ||
-                    upperCaseConnection in listOf("F1", "F2")
+            upperCaseConnection in listOf("A", "B", "C", "D") || // Metro
+            upperCaseConnection.startsWith("T") || // Tram & Trambus
+            upperCaseConnection in listOf("F1", "F2") || // Funicular
+            upperCaseConnection.startsWith("NAV") || // Navigone
+            upperCaseConnection == "RX" // Rhone Express
         }
 
         if (filteredConnections.isNotEmpty()) {
