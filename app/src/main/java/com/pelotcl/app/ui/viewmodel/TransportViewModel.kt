@@ -399,7 +399,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             
             // Check if line is already loaded
             val isAlreadyLoaded = currentState.lines.any { 
-                it.properties.ligne.equals(lineName, ignoreCase = true) 
+                lineName.equals(it.properties.ligne, ignoreCase = true) 
             }
             
             if (isAlreadyLoaded) {
@@ -446,7 +446,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         
         // Filter to remove the line
         val updatedLines = currentState.lines.filter { 
-            !it.properties.ligne.equals(lineName, ignoreCase = true)
+            !lineName.equals(it.properties.ligne, ignoreCase = true)
         }
         
         val afterCount = updatedLines.size
@@ -520,7 +520,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         if (currentState is TransportLinesUiState.Success) {
             // Get ALL traces of this line (may have multiple directions)
             val lineFeatures = currentState.lines.filter { 
-                it.properties.ligne.equals(lineName, ignoreCase = true) 
+                lineName.equals(it.properties.ligne, ignoreCase = true) 
             }
             
             android.util.Log.d("TransportViewModel", "Found ${lineFeatures.size} traces for line $lineName")
@@ -542,10 +542,17 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     android.util.Log.d("TransportViewModel", "Longest segment (${mainTrace.properties.sens}) has ${longestSegment.size} points")
                     
                     // Determine main trace direction and convert it to letter (A or R)
-                    val mainDirection = when (mainTrace.properties.sens.uppercase()) {
+                    // Be defensive: API may return null sens unexpectedly, avoid NPEs
+                    val sensUpper = try {
+                        mainTrace.properties.sens.uppercase()
+                    } catch (e: Exception) {
+                        android.util.Log.w("TransportViewModel", "properties.sens is null or invalid for line $lineName (codeTrace=${mainTrace.properties.codeTrace}) — falling back to unknown direction")
+                        ""
+                    }
+                    val mainDirection = when (sensUpper) {
                         "ALLER" -> "A"
                         "RETOUR" -> "R"
-                        else -> mainTrace.properties.sens.take(1).uppercase() // First character uppercase
+                        else -> sensUpper.take(1) // First character already uppercased or empty
                     }
                     
                     android.util.Log.d("TransportViewModel", "Filtering stops for direction code: $mainDirection")
@@ -557,13 +564,22 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     
                     // Filter stops to keep only those that match the main direction
                     val directionStops = lineStops.filter { stop ->
-                        val desserte = stop.properties.desserte
+                        // Be defensive: desserte can be null/blank in some rare cases
+                        val desserte = try { stop.properties.desserte } catch (e: Exception) { "" }
                         // Look for "86:A" or "86:R" (or "NAVI1:A" for NAV1) in the desserte
                         val matches = desserte.split(",").any { line ->
                             val trimmed = line.trim()
                             // Check all search names with the direction
-                            val result = searchNames.any { searchName ->
-                                trimmed.equals("$searchName:$mainDirection", ignoreCase = true)
+                            val result = if (mainDirection.isNotEmpty()) {
+                                searchNames.any { searchName ->
+                                    trimmed.equals("$searchName:$mainDirection", ignoreCase = true)
+                                }
+                            } else {
+                                // If direction unknown, accept any entry for the searchName
+                                searchNames.any { searchName ->
+                                    // e.g. "86:A" or "86:R" or just "86"
+                                    trimmed.startsWith(searchName, ignoreCase = true)
+                                }
                             }
                             if (result) {
                                 android.util.Log.d("TransportViewModel", "  ✓ Stop '${stop.properties.nom}' matches (found '$trimmed')")

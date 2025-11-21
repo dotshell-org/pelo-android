@@ -146,7 +146,9 @@ fun LineDetailsBottomSheet(
 
     val loadedLineNames = remember(linesState) {
         when (linesState) {
-            is TransportLinesUiState.Success -> (linesState as TransportLinesUiState.Success).lines.map { it.properties.ligne.uppercase() }.toSet()
+            is TransportLinesUiState.Success -> (linesState as TransportLinesUiState.Success).lines
+                .map { it.properties.ligne.orEmpty().uppercase() }
+                .toSet()
             else -> emptySet()
         }
     }
@@ -154,27 +156,29 @@ fun LineDetailsBottomSheet(
     LaunchedEffect(lineInfo?.lineName, lineInfo?.currentStationName, loadedLineNames) {
         if (lineInfo != null) {
             isLoading = true
-            val lineLoaded = lineInfo.lineName.uppercase() in loadedLineNames
-            if (lineLoaded) {
-                withContext(Dispatchers.IO) {
-                    try {
-                        val stops = viewModel.getStopsForLine(
+            // Toujours tenter de charger les arrêts, même si la ligne n'est pas encore
+            // présente dans uiState (cas des lignes bus/Chrono/JD ajoutées à la volée).
+            // getStopsForLine saura quand même retourner un fallback non ordonné, puis
+            // l'ordre s'améliorera automatiquement quand la ligne sera disponible.
+            withContext(Dispatchers.IO) {
+                try {
+                    val stops = viewModel.getStopsForLine(
+                        lineName = lineInfo.lineName,
+                        currentStopName = lineInfo.currentStationName.takeIf { it.isNotBlank() }
+                    )
+                    if (stops.isEmpty()) {
+                        // Recharge du cache si besoin puis nouvelle tentative rapide
+                        viewModel.reloadStopsCache()
+                        delay(500)
+                        lineStops = viewModel.getStopsForLine(
                             lineName = lineInfo.lineName,
                             currentStopName = lineInfo.currentStationName.takeIf { it.isNotBlank() }
                         )
-                        if (stops.isEmpty()) {
-                            viewModel.reloadStopsCache()
-                            delay(500)
-                            lineStops = viewModel.getStopsForLine(
-                                lineName = lineInfo.lineName,
-                                currentStopName = lineInfo.currentStationName.takeIf { it.isNotBlank() }
-                            )
-                        } else {
-                            lineStops = stops
-                        }
-                    } catch (e: Exception) {
-                        Log.e("LineDetailsBottomSheet", "Error loading stops: ${e.message}", e)
+                    } else {
+                        lineStops = stops
                     }
+                } catch (e: Exception) {
+                    Log.e("LineDetailsBottomSheet", "Error loading stops: ${e.message}", e)
                 }
             }
             isLoading = false
