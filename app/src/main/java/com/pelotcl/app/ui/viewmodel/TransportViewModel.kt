@@ -482,12 +482,22 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             val normalizedToOfficial = officialStopsForLine.associateBy { normalizeStopName(it) }
 
             // Remplacer le nom mis en cache par le libellé officiel si trouvé
-            return cachedStops.map { stop ->
+            // Puis dédupliquer par nom (plateformes doubles, variantes d'écriture), en préservant l'ordre
+            val mapped = cachedStops.map { stop ->
                 val officialName = normalizedToOfficial[normalizeStopName(stop.stopName)] ?: stop.stopName
                 val connections = getConnectionsForStop(officialName, lineName)
                 stop.copy(
                     stopName = officialName,
                     connections = connections.map { it.lineName }
+                )
+            }
+            val dedup = mapped.distinctBy { normalizeStopName(it.stopName) }
+            return dedup.mapIndexed { index, stop ->
+                stop.copy(
+                    stopSequence = index + 1,
+                    isCurrentStop = currentStopName?.let {
+                        normalizeStopName(stop.stopName) == normalizeStopName(it)
+                    } ?: stop.isCurrentStop
                 )
             }
         }
@@ -613,8 +623,11 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     
                     android.util.Log.d("TransportViewModel", "Ordered stops by trace position: ${orderedStops.map { it.properties.nom }}")
                     
+                    // Dédupliquer par nom normalisé (certaines lignes ont des doublons de plateformes)
+                    val dedupOrdered = orderedStops.distinctBy { normalizeStopName(it.properties.nom) }
+                    
                     // Convert to LineStopInfo
-                    return orderedStops.mapIndexed { index, stop ->
+                    return dedupOrdered.mapIndexed { index, stop ->
                         val connections = getConnectionsForStop(stop.properties.nom, lineName)
                         com.pelotcl.app.data.gtfs.LineStopInfo(
                             stopId = stop.properties.id.toString(),
