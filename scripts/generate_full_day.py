@@ -3,43 +3,52 @@ import os
 import sys
 
 # --- CONFIGURATION ---
-GTFS_FILE = "GTFS_TCL.zip"  # Make sure this filename is correct!
+GTFS_FILE = "GTFS_TCL.zip"
 
 # Destination folder in your Android project
-# Using os.path.join for Windows/Linux/Mac compatibility
 ANDROID_ASSETS_DIR = os.path.join("app", "src", "main", "assets", "databases")
 
-# The 5 recommended periods to cover the full day
-# Format: (File Suffix, Start Hour, End Hour)
+# The 5 time periods
 SCHEDULES = [
-    ("morning_peak", 7, 9),  # 07:00 - 09:00 : Morning Rush
-    ("day_offpeak", 9, 16),  # 09:00 - 16:00 : Standard Day
-    ("evening_peak", 16, 19),  # 16:00 - 19:00 : Evening Rush
-    ("evening", 19, 23),  # 19:00 - 23:00 : Evening
-    ("late_night", 23, 26)  # 23:00 - 02:00 : Night (GTFS often handles > 24h)
+    ("morning_peak", 7, 9),   # 07:00 - 09:00
+    ("day_offpeak", 9, 16),   # 09:00 - 16:00
+    ("evening_peak", 16, 19), # 16:00 - 19:00
+    ("evening", 19, 23),      # 19:00 - 23:00
+    ("late_night", 23, 26)    # 23:00 - 02:00
 ]
 
-
 def main():
+    # Check for GTFS file
     if not os.path.exists(GTFS_FILE):
         print(f"CRITICAL ERROR: File '{GTFS_FILE}' not found!")
+        print("Please place the GTFS zip file in the same directory as this script.")
         return
 
-    # Path to the worker script
-    worker_script = os.path.join("scripts", "build_graph.py")
+    # Locate worker script
+    worker_script = "build_graph.py"
     if not os.path.exists(worker_script):
-        print(f"ERROR: Could not find {worker_script}")
-        return
+        # Fallback if inside a scripts/ folder
+        worker_script = os.path.join("scripts", "build_graph.py")
+        if not os.path.exists(worker_script):
+            print(f"ERROR: Could not find {worker_script}")
+            return
 
-    print(f"--- STARTING GENERATION ({len(SCHEDULES)} files) ---")
-    print(f"Destination: {ANDROID_ASSETS_DIR}")
+    # Create output directory if it doesn't exist
+    if not os.path.exists(ANDROID_ASSETS_DIR):
+        try:
+            os.makedirs(ANDROID_ASSETS_DIR)
+            print(f"Directory created: {ANDROID_ASSETS_DIR}")
+        except OSError:
+            print(f"Warning: Could not create {ANDROID_ASSETS_DIR}, check paths.")
+
+    print(f"--- STARTING OPTIMIZED GENERATION ({len(SCHEDULES)} files) ---")
 
     for suffix, start, end in SCHEDULES:
-        # Final filename: network_morning_peak.json
         filename = f"network_{suffix}.json"
         output_path = os.path.join(ANDROID_ASSETS_DIR, filename)
 
-        # Command: python3 scripts/build_graph.py GTFS.zip --out ... --start ... --end ...
+        print(f"\n>> Generating {filename} ({start}h - {end}h)...")
+
         cmd = [
             sys.executable,
             worker_script,
@@ -50,16 +59,13 @@ def main():
         ]
 
         try:
-            # check=True will crash the main script if a step fails
             subprocess.run(cmd, check=True)
         except subprocess.CalledProcessError:
-            print(f"\n!!! FAILURE generating {suffix} !!!")
-            return
+            print(f"!!! ERROR generating {filename} !!!")
+            # Continue to next file despite error
+            continue
 
-    print("\n" + "=" * 50)
-    print("TOTAL SUCCESS! The 5 JSON files are ready in your Android folder.")
-    print("=" * 50)
-
+    print("\n--- GENERATION COMPLETED ---")
 
 if __name__ == "__main__":
     main()

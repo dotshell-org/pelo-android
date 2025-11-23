@@ -32,13 +32,16 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.pelotcl.app.data.graph.StopSearchResult
 import com.pelotcl.app.ui.theme.Red500
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SimpleSearchBar(
-    searchResults: List<String>,
-    onSearch: (String) -> Unit,
+    searchResults: List<StopSearchResult>,
+    onSearch: (StopSearchResult) -> Unit,
+    onQueryChange: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
@@ -58,9 +61,15 @@ fun SimpleSearchBar(
             inputField = {
                 SearchBarDefaults.InputField(
                     query = query,
-                    onQueryChange = { q -> query = q },
+                    onQueryChange = { q -> 
+                        query = q
+                        onQueryChange(q)
+                    },
                     onSearch = {
-                        onSearch(query)
+                        // Si un résultat est sélectionné, on l'utilise
+                        searchResults.firstOrNull()?.let {
+                            onSearch(it)
+                        }
                         expanded = false
                     },
                     expanded = expanded,
@@ -104,17 +113,26 @@ fun SimpleSearchBar(
                 searchResults.forEach { result ->
                     ListItem(
                         headlineContent = {
-                            Text(
-                                result,
-                                color = Color.Black,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            Column {
+                                Text(
+                                    result.stopName,
+                                    color = Color.Black,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (result.distance != null) {
+                                    Text(
+                                        "${String.format("%.0f", result.distance)} m",
+                                        color = Color.Gray,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
                         },
                         colors = ListItemDefaults.colors(containerColor = Color.White),
                         modifier = Modifier
                             .clickable {
-                                query = result
+                                query = result.stopName
                                 expanded = false
                                 onSearch(result)
                             }

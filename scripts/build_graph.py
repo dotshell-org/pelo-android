@@ -2,133 +2,177 @@ import argparse
 import os
 import json
 import pandas as pd
-from itertools import combinations
 import networkx as nx
 import peartree as pt
 
 # Patch Pandas for Peartree compatibility
 pd.Series.iteritems = pd.Series.items
 
+def get_stop_name_robust(node_id, node_data, stops_map, coord_map):
+    """
+    Attempts to retrieve the stop name using multiple strategies:
+    1. Exact ID Match
+    2. Cleaned ID (removing suffixes)
+    3. Spatial Match (GPS Coordinates)
+    """
+    str_id = str(node_id)
+
+    # --- STRATEGY 1: EXACT ID ---
+    if str_id in stops_map:
+        return stops_map[str_id].get('stop_name', "Unknown")
+
+    # --- STRATEGY 2: CLEANED ID ---
+    # Frequent case: "56GHZ_726_0" -> looks for "56GHZ_726" or "726"
+    if "_" in str_id:
+        # Try without the last suffix (e.g., "_0")
+        base = str_id.rsplit('_', 1)[0]
+        if base in stops_map:
+            return stops_map[base].get('stop_name', "Unknown")
+
+        # Try just the numeric part if it exists (e.g., "726")
+        parts = str_id.split('_')
+        for p in parts:
+            if p in stops_map:
+                return stops_map[p].get('stop_name', "Unknown")
+
+    # --- STRATEGY 3: SPATIAL MATCH (GPS) ---
+    # Check if a stop exists at these exact coordinates (rounded to 4 decimals ~10m)
+    x = float(node_data.get('x', 0))
+    y = float(node_data.get('y', 0))
+
+    # Note: coord_map keys are (lon, lat)
+    geo_key = (round(x, 4), round(y, 4))
+    if geo_key in coord_map:
+        return coord_map[geo_key]
+
+    return "Unknown Stop" # Total failure
 
 def generate_graph(zip_path, output_json_path, start_hour, end_hour):
-    # Create parent directory if necessary
     output_dir = os.path.dirname(output_json_path)
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
     print(f"\n=== PROCESSING: {start_hour}:00 to {end_hour}:00 ===")
+
+    # 1. Load GTFS
     print(f"1. Reading GTFS: {zip_path}...")
     feed = pt.get_representative_feed(zip_path)
 
-    # Convert hours -> seconds
+    # --- DATA PREPARATION (Lookup Dictionaries) ---
+    stops_df = feed.stops.copy()
+    stops_df['stop_id'] = stops_df['stop_id'].astype(str)
+
+    # Map by ID: "726" -> {name, lat, lon}
+    stops_map = stops_df.set_index('stop_id').to_dict('index')
+
+    # Map by Coordinates: (4.8522, 45.7601) -> "Part-Dieu"
+    # Allows finding the name even if the ID is completely different
+    coord_map = {}
+    for idx, row in stops_df.iterrows():
+        try:
+            # Rounding to 4 decimals (~10m precision) to tolerate micro-variations
+            lat = round(float(row['stop_lat']), 4)
+            lon = round(float(row['stop_lon']), 4)
+            name = row.get('stop_name', "Unknown")
+            coord_map[(lon, lat)] = name # Note: Order is (x, y) i.e., (lon, lat)
+        except ValueError:
+            continue
+
+    # DEBUG: Show what GTFS IDs look like
+    print(f"   [DEBUG] Sample GTFS IDs: {list(stops_map.keys())[:5]}")
+
+    # 2. Load Graph
     start_sec = start_hour * 60 * 60
     end_sec = end_hour * 60 * 60
-
     print("2. Building graph structure (Peartree)...")
-    # impute_walk_transfers=True is important to link geographically close stops
+    # impute_walk_transfers=True is critical to link nearby stops
     G = pt.load_feed_as_graph(feed, start_sec, end_sec, impute_walk_transfers=True)
 
-    print("3. Injecting names using SPATIAL MAPPING (Lat/Lon)...")
-    stops_df = feed.stops.copy()
+    print("3. Converting and Mapping...")
+    # Sorting nodes to ensure deterministic output
+    sorted_nodes = sorted(list(G.nodes(data=True)), key=lambda x: str(x[0]))
 
-    if 'stop_name' not in stops_df.columns:
-        print("   Warning: 'stop_name' not found, names will be set to 'Unknown'")
-        stops_df['stop_name'] = "Unknown"
-    else:
-        stops_df['stop_name'] = stops_df['stop_name'].fillna("Unknown")
+    # DEBUG: Show what generated Graph IDs look like
+    if len(sorted_nodes) > 0:
+        print(f"   [DEBUG] Sample Graph ID: {sorted_nodes[0][0]}")
 
-    # Dictionary: (Lat, Lon) -> Stop Name
-    # We round to 4 decimal places (~11m) to avoid floating point errors
-    lat_lon_map = {}
-    for _, row in stops_df.iterrows():
-        r_lat = round(float(row['stop_lat']), 4)
-        r_lon = round(float(row['stop_lon']), 4)
-        lat_lon_map[(r_lat, r_lon)] = row['stop_name']
+    node_id_to_int = {}
+    nodes_list_output = []
 
-    matches = 0
-    failures = 0
+    count_found = 0
+    count_missed = 0
 
-    for node in G.nodes():
-        node_data = G.nodes[node]
-        if 'y' in node_data and 'x' in node_data:
-            n_lat = round(float(node_data['y']), 4)
-            n_lon = round(float(node_data['x']), 4)
+    for internal_idx, (original_id, data) in enumerate(sorted_nodes):
+        node_id_to_int[original_id] = internal_idx
 
-            if (n_lat, n_lon) in lat_lon_map:
-                G.nodes[node]['name'] = lat_lon_map[(n_lat, n_lon)]
-                matches += 1
-            else:
-                G.nodes[node]['name'] = f"Unknown ({node})"
-                failures += 1
+        # --- NAME RETRIEVAL ---
+        name = get_stop_name_robust(original_id, data, stops_map, coord_map)
+
+        # Cleanup
+        clean_name = str(name).replace('"', '').strip()
+
+        if clean_name == "Unknown Stop":
+            count_missed += 1
         else:
-            G.nodes[node]['name'] = "Unknown (No Coords)"
-            failures += 1
+            count_found += 1
 
-    print(f"   > Names found: {matches} | Not found: {failures}")
+        # Coordinates
+        x_val = float(data.get("x", 0.0))
+        y_val = float(data.get("y", 0.0))
 
-    print("4. Creating transfers...")
-    stops_by_name = {}
-    for node in G.nodes():
-        name = G.nodes[node].get('name')
-        if name and "Unknown" not in name:
-            if name not in stops_by_name:
-                stops_by_name[name] = []
-            stops_by_name[name].append(node)
+        # Modes
+        modes = data.get("modes", [])
+        if not isinstance(modes, list):
+            modes = [str(modes)]
 
-    transfer_count = 0
-    transfer_cost = 120  # 2 minutes penalty for changing lines/platforms
+        node_obj = {
+            "id": str(original_id),
+            "name": clean_name,
+            "x": x_val,
+            "y": y_val,
+            "modes": modes,
+            "boarding_cost": float(data.get("boarding_cost", 0.0))
+        }
+        nodes_list_output.append(node_obj)
 
-    for name, nodes in stops_by_name.items():
-        if len(nodes) > 1:
-            for u, v in combinations(nodes, 2):
-                if not G.has_edge(u, v):
-                    G.add_edge(u, v, length=transfer_cost, mode='transfer')
-                    transfer_count += 1
-                if not G.has_edge(v, u):
-                    G.add_edge(v, u, length=transfer_cost, mode='transfer')
-                    transfer_count += 1
+    print(f"   > Names found: {count_found} | Missing names: {count_missed}")
 
-    print(f"   > {transfer_count} walking connections added.")
+    # Edges processing (Converting to Int array format)
+    edges_list_output = []
+    for u, v, data in G.edges(data=True):
+        if u in node_id_to_int and v in node_id_to_int:
+            u_idx = node_id_to_int[u]
+            v_idx = node_id_to_int[v]
+            # Converting weight to Int for Android efficiency
+            w_int = int(float(data.get("length", 0.0)))
+            edges_list_output.append([u_idx, v_idx, w_int])
 
-    print("5. Cleaning and Exporting JSON...")
-
-    # --- SANITIZATION (Fixing the CRS bug) ---
-    # We convert all complex objects to strings to avoid JSON crashes
-    for key, value in list(G.graph.items()):
-        if not isinstance(value, (str, int, float, bool, list, dict, type(None))):
-            G.graph[key] = str(value)
-
-    for node, data in G.nodes(data=True):
-        for key, value in list(data.items()):
-            if not isinstance(value, (str, int, float, bool, list, dict, type(None))):
-                data[key] = str(value)
-
-    # Convert to Node-Link format compatible with Android
-    data = nx.node_link_data(G, edges="links")
+    final_data = {
+        "metadata": {
+            "period": f"{start_hour}-{end_hour}",
+            "node_count": len(nodes_list_output),
+            "edge_count": len(edges_list_output)
+        },
+        "nodes": nodes_list_output,
+        "edges": edges_list_output
+    }
 
     print(f"   > Saving to: {output_json_path}")
     with open(output_json_path, 'w', encoding='utf-8') as f:
-        # ensure_ascii=False keeps accents (e.g., Hôtel de Ville)
-        # indent=None minifies the file to save space on Android
-        json.dump(data, f, ensure_ascii=False, indent=None)
+        # separators=(',', ':') compacts JSON (removes whitespaces)
+        json.dump(final_data, f, ensure_ascii=False, separators=(',', ':'))
 
     print("   > Done.")
 
-
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("zip_file")
-    parser.add_argument("--out", required=True, help="Full path to the output JSON file")
-    parser.add_argument("--start", type=int, required=True, help="Start hour (0-26)")
-    parser.add_argument("--end", type=int, required=True, help="End hour (0-26)")
+    parser = argparse.ArgumentParser(description="Generate optimized JSON graph from GTFS")
+    parser.add_argument("zip_file", help="Path to GTFS Zip file")
+    parser.add_argument("--out", required=True, help="Output JSON path")
+    parser.add_argument("--start", type=int, required=True, help="Start hour")
+    parser.add_argument("--end", type=int, required=True, help="End hour")
     args = parser.parse_args()
 
-    if not os.path.exists(args.zip_file):
-        print(f"Error: File '{args.zip_file}' not found.")
-        return
-
     generate_graph(args.zip_file, args.out, args.start, args.end)
-
 
 if __name__ == "__main__":
     main()
