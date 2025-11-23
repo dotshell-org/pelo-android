@@ -4,187 +4,184 @@ import folium
 import statistics
 import os
 
-# --- COLOR PALETTE (From your Kotlin code) ---
-METRO_A_COLOR = "#EC4899"  # Pink
-METRO_B_COLOR = "#3B82F6"  # Blue
-METRO_C_COLOR = "#F59E0B"  # Orange
-METRO_D_COLOR = "#22C55E"  # Green
-TRAM_COLOR    = "#A855F7"  # Purple
-FUNICULAR_COLOR = "#84CC16" # Lime
-NAVIGONE_COLOR  = "#14b8a6" # Teal
-BUS_COLOR       = "#EF4444" # Red
-TRAMBUS_COLOR   = "#eab308" # Yellow (Used for C lines in Lyon)
-DEFAULT_COLOR   = "#666666" # Grey for walk/unknown
+# --- COLOR PALETTE ---
+STYLES = {
+    "METRO":     {"color": "#EC4899", "weight": 6, "opacity": 1.0, "z_index": 100},
+    "TRAM":      {"color": "#A855F7", "weight": 4, "opacity": 1.0, "z_index": 90},
+    "FUNI":      {"color": "#84CC16", "weight": 4, "opacity": 1.0, "z_index": 80},
+    "TRAMBUS":   {"color": "#eab308", "weight": 5, "opacity": 1.0, "z_index": 70}, # Yellow (Tb11)
+    "NAVIGONE":  {"color": "#14b8a6", "weight": 4, "opacity": 1.0, "z_index": 60}, # Turquoise
+    "CHRONO":    {"color": "#EF4444", "weight": 3, "opacity": 0.6, "z_index": 20}, # Red (thicker than bus)
+    "BUS":       {"color": "#EF4444", "weight": 1.5, "opacity": 0.4, "z_index": 10} # Red (thin)
+}
 
-def get_line_color(modes_u, modes_v):
-    """
-    Determines the edge color based on the intersection of modes
-    between two nodes.
-    Priority: Metro > Funi > Tram > Trambus (C) > Navigone > Bus
-    """
-    # Find common modes between the two stops
-    common_modes = set(modes_u).intersection(set(modes_v))
+METRO_COLORS = {"A": "#EC4899", "B": "#3B82F6", "C": "#F59E0B", "D": "#22C55E"}
 
-    if not common_modes:
-        return DEFAULT_COLOR
+# --- STRICT LISTS ---
+# Only Tb11 is a Trambus.
+# Adding case variants just in case (TB11, tb11)
+REAL_TRAMBUS = {"Tb11", "TB11", "tb11"}
 
-    # 1. METRO (Highest Priority)
-    if "A" in common_modes: return METRO_A_COLOR
-    if "B" in common_modes: return METRO_B_COLOR
-    if "C" in common_modes: return METRO_C_COLOR
-    if "D" in common_modes: return METRO_D_COLOR
+REAL_NAVIGONE = {"N1", "N2", "NAVI1"}
+REAL_FUNICULAR = {"F1", "F2"}
 
-    # 2. FUNICULAR (F1, F2)
+def analyze_segment(modes_u, modes_v):
+    set_u = {str(m).strip() for m in modes_u}
+    set_v = {str(m).strip() for m in modes_v}
+
+    # Case-insensitive intersection to be safe
+    u_upper = {m.upper(): m for m in set_u}
+    v_upper = {m.upper(): m for m in set_v}
+    common_keys = set(u_upper.keys()).intersection(set(v_upper.keys()))
+
+    if not common_keys: return None, None
+
+    # Retrieve the real name (original casing) for display
+    # Arbitrarily taking the one from node U
+    common_modes = [u_upper[k] for k in common_keys]
+
+    # 1. METRO
     for m in common_modes:
-        if m.startswith("F") and len(m) < 4:
-            return FUNICULAR_COLOR
+        if m in ["A", "B", "C", "D"]:
+            s = STYLES["METRO"].copy()
+            s["color"] = METRO_COLORS[m]
+            return s, f"Métro {m}"
 
-    # 3. TRAM (T1, T2, etc.)
+    # 2. FUNICULAR
     for m in common_modes:
-        if m.startswith("T") and len(m) < 4:
-            return TRAM_COLOR
+        if m in REAL_FUNICULAR or (m.startswith("F") and len(m) < 3):
+            return STYLES["FUNI"], m
 
-    # 4. TRAMBUS (C1, C2... lines "Cristalis" or Strong lines)
+    # 3. TRAMWAY
     for m in common_modes:
-        if m.startswith("C") and len(m) < 4:
-            return TRAMBUS_COLOR
+        if (m.startswith("T") and m[1:].isdigit() and m.upper() not in ["TB11"]) or m == "RX":
+            return STYLES["TRAM"], m
 
-    # 5. NAVIGONE (N1, N2... River shuttle)
+    # 4. TRAMBUS (Only Tb11)
     for m in common_modes:
-        if m.startswith("N") and len(m) < 4:
-            return NAVIGONE_COLOR
+        if m in REAL_TRAMBUS or m.upper() == "TB11":
+            return STYLES["TRAMBUS"], m
 
-    # 6. BUS (Default for everything else)
-    # If there is any other mode remaining, assume it's a bus
-    return BUS_COLOR
+    # 5. NAVIGONE
+    for m in common_modes:
+        if m in REAL_NAVIGONE or "NAVI" in m.upper():
+            return STYLES["NAVIGONE"], m
+
+    # 6. CHRONO (The C lines)
+    # Treated like Bus (Red) but with higher Z-Index (20 vs 10)
+    for m in common_modes:
+        if m.upper().startswith("C") and m[1:].isdigit():
+            return STYLES["CHRONO"], m
+
+    # 7. BUS (Everything else)
+    return STYLES["BUS"], common_modes[0]
 
 def create_map(json_path, output_html):
-    print(f"Loading file: {json_path}...")
+    print(f"Loading: {json_path}...")
+    if not os.path.exists(json_path): return
 
-    if not os.path.exists(json_path):
-        print("Error: JSON file not found.")
-        return
-
-    try:
-        with open(json_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-    except json.JSONDecodeError:
-        print("Error: Failed to decode JSON.")
-        return
+    with open(json_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
 
     nodes = data.get("nodes", [])
     edges = data.get("edges", [])
 
-    if not nodes:
-        print("No nodes found.")
-        return
+    if not nodes: return
 
-    # Center Map
+    # Centering
     lats = [n["y"] for n in nodes]
     lons = [n["x"] for n in nodes]
-    center_lat = statistics.mean(lats)
-    center_lon = statistics.mean(lons)
+    m = folium.Map(location=[statistics.mean(lats), statistics.mean(lons)], zoom_start=13, tiles="CartoDB dark_matter")
 
-    # Use 'CartoDB dark_matter' to make neon colors pop
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=13, tiles="CartoDB dark_matter")
+    fg_edges = folium.FeatureGroup(name="Lignes")
+    fg_nodes = folium.FeatureGroup(name="Arrêts")
 
-    fg_edges = folium.FeatureGroup(name="Lines (Edges)")
-    fg_nodes = folium.FeatureGroup(name="Stops (Nodes)")
+    drawable_edges = []
 
-    # --- DRAW EDGES ---
-    print(f"Drawing {len(edges)} edges...")
+    print(f"Analyzing {len(edges)} segments...")
+    stats = {"Metro":0, "Tram":0, "Trambus":0, "Chrono":0, "Bus":0}
+
     for u_idx, v_idx, weight in edges:
         try:
             node_u = nodes[u_idx]
             node_v = nodes[v_idx]
 
-            coord_u = [node_u["y"], node_u["x"]]
-            coord_v = [node_v["y"], node_v["x"]]
+            style, mode_name = analyze_segment(node_u.get("modes", []), node_v.get("modes", []))
 
-            modes_u = node_u.get("modes", [])
-            modes_v = node_v.get("modes", [])
+            if style is None: continue
 
-            # Determine Color
-            color = get_line_color(modes_u, modes_v)
+            # Quick stats
+            if style == STYLES["TRAMBUS"]: stats["Trambus"] += 1
+            elif style == STYLES["CHRONO"]: stats["Chrono"] += 1
+            elif style == STYLES["BUS"]: stats["Bus"] += 1
 
-            # Thickness: Metros are thicker
-            weight_line = 4
-            if color in [METRO_A_COLOR, METRO_B_COLOR, METRO_C_COLOR, METRO_D_COLOR]:
-                weight_line = 6
+            item = {
+                "coord_u": [node_u["y"], node_u["x"]],
+                "coord_v": [node_v["y"], node_v["x"]],
+                "style": style,
+                "mode": mode_name,
+                "weight": weight
+            }
+            drawable_edges.append(item)
 
-            folium.PolyLine(
-                locations=[coord_u, coord_v],
-                color=color,
-                weight=weight_line,
-                opacity=0.8,
-                tooltip=f"Time: {weight}s"
-            ).add_to(fg_edges)
+        except IndexError: continue
 
-        except IndexError:
-            continue
+    print(f"   > Stats detected: {stats}")
 
-    # --- DRAW NODES ---
-    print(f"Drawing {len(nodes)} nodes...")
+    # Sort by Z-Index (Bus bottom -> Chrono -> Trambus -> Tram -> Metro top)
+    drawable_edges.sort(key=lambda x: x["style"]["z_index"])
+
+    for item in drawable_edges:
+        s = item["style"]
+        folium.PolyLine(
+            locations=[item["coord_u"], item["coord_v"]],
+            color=s["color"],
+            weight=s["weight"],
+            opacity=s["opacity"],
+            tooltip=f"{item['mode']} ({item['weight']}s)"
+        ).add_to(fg_edges)
+
+    # --- NODES (STOPS) RENDERING ---
     for node in nodes:
-        lat = node["y"]
-        lon = node["x"]
-        name = node["name"]
-        modes = ", ".join(node.get("modes", []))
-
-        html_popup = f"""
-        <div style="font-family:sans-serif; width:150px; color:black">
-            <b>{name}</b><br>
-            <hr>
-            Lines: {modes}
-        </div>
-        """
-
         folium.CircleMarker(
-            location=[lat, lon],
-            radius=2, # Small nodes to emphasize lines
-            color="#ffffff",
-            weight=0,
+            location=[node["y"], node["x"]],
+            radius=6,              # INCREASED SIZE (was 1)
+            color="#ffffff",       # Border color
+            weight=2,              # Border thickness (was 0)
             fill=True,
-            fill_color="#ffffff",
-            fill_opacity=0.5,
-            tooltip=name,
-            popup=folium.Popup(html_popup, max_width=200)
+            fill_opacity=0.9,      # Higher opacity (was 0.2)
+            tooltip=node["name"],
+            popup=node["name"]
         ).add_to(fg_nodes)
 
     fg_edges.add_to(m)
     fg_nodes.add_to(m)
     folium.LayerControl(collapsed=False).add_to(m)
 
-    # --- CUSTOM LEGEND ---
+    # Legend
     legend_html = f'''
      <div style="position: fixed; 
      bottom: 30px; left: 30px; width: 150px; height: auto; 
-     border:2px solid grey; z-index:9999; font-size:14px;
-     background-color:rgba(0,0,0,0.7); color:white; padding: 10px; border-radius: 5px;">
-     <b>Transport Lines</b><br>
-     <i style="background:{METRO_A_COLOR};width:10px;height:10px;display:inline-block;margin-right:5px;"></i> Metro A<br>
-     <i style="background:{METRO_B_COLOR};width:10px;height:10px;display:inline-block;margin-right:5px;"></i> Metro B<br>
-     <i style="background:{METRO_C_COLOR};width:10px;height:10px;display:inline-block;margin-right:5px;"></i> Metro C<br>
-     <i style="background:{METRO_D_COLOR};width:10px;height:10px;display:inline-block;margin-right:5px;"></i> Metro D<br>
-     <i style="background:{TRAM_COLOR};width:10px;height:10px;display:inline-block;margin-right:5px;"></i> Tram (T)<br>
-     <i style="background:{TRAMBUS_COLOR};width:10px;height:10px;display:inline-block;margin-right:5px;"></i> Trambus (C)<br>
-     <i style="background:{BUS_COLOR};width:10px;height:10px;display:inline-block;margin-right:5px;"></i> Bus<br>
-     <i style="background:{FUNICULAR_COLOR};width:10px;height:10px;display:inline-block;margin-right:5px;"></i> Funicular<br>
-     <i style="background:{NAVIGONE_COLOR};width:10px;height:10px;display:inline-block;margin-right:5px;"></i> Navigone<br>
+     border:2px solid #555; z-index:9999; font-size:12px;
+     background-color:rgba(0,0,0,0.85); color:white; padding: 10px; border-radius: 8px;">
+     <b>Légende</b><br>
+     <i style="background:{METRO_COLORS['A']};width:8px;height:8px;display:inline-block;"></i> Métro<br>
+     <i style="background:{STYLES['TRAM']['color']};width:8px;height:8px;display:inline-block;"></i> Tram<br>
+     <i style="background:{STYLES['TRAMBUS']['color']};width:8px;height:8px;display:inline-block;"></i> Trambus<br>
+     <i style="background:{STYLES['NAVIGONE']['color']};width:8px;height:8px;display:inline-block;"></i> Navigone<br>
+     <i style="background:{STYLES['BUS']['color']};width:8px;height:8px;display:inline-block;"></i> Bus<br>
      </div>
      '''
     m.get_root().html.add_child(folium.Element(legend_html))
 
-    print(f"Saving map to: {output_html}")
+    print(f"Saving: {output_html}")
     m.save(output_html)
-    print("Done.")
 
 def main():
-    parser = argparse.ArgumentParser(description="Visualize network with specific line colors")
-    parser.add_argument("json_file", help="Path to the JSON graph file")
-    parser.add_argument("--out", default="scripts/output/lines_viz.html", help="Output HTML path")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("json_file")
+    parser.add_argument("--out", default="scripts/output/lines_viz.html")
     args = parser.parse_args()
-
     create_map(args.json_file, args.out)
 
 if __name__ == "__main__":

@@ -4,121 +4,196 @@ import json
 import pandas as pd
 import peartree as pt
 import networkx as nx
+import partridge as ptg
+import datetime
+from datetime import timedelta
+import warnings
 
-# Patch Pandas compatibility
+# 1. Suppression des warnings inutiles
+warnings.simplefilter(action='ignore', category=FutureWarning)
 try:
     pd.Series.iteritems = pd.Series.items
 except AttributeError:
     pass
 
+# 2. Classe "Façade" pour tromper Peartree (Correction du Crash)
+class CustomFeed:
+    def __init__(self, original_feed, filtered_stop_times):
+        self.routes = original_feed.routes
+        self.trips = original_feed.trips
+        self.stops = original_feed.stops
+        self.stop_times = filtered_stop_times
+        # On copie les autres champs au cas où
+        self.calendar = getattr(original_feed, 'calendar', pd.DataFrame())
+        self.calendar_dates = getattr(original_feed, 'calendar_dates', pd.DataFrame())
+        self.agency = getattr(original_feed, 'agency', pd.DataFrame())
+
 def clean_val(val):
-    """Cleans ID values to string without decimals."""
     s = str(val).strip()
-    if s.endswith(".0"):
-        s = s[:-2]
+    if s.endswith(".0"): s = s[:-2]
     return s
 
+def robust_time_to_seconds(val):
+    try:
+        if isinstance(val, (int, float)): return int(val)
+        val_str = str(val).strip()
+        parts = val_str.split(':')
+        return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2].split('.')[0])
+    except: return -1
+
 def get_stop_name_spatial(node_data, coord_map, id_map, raw_id):
-    """Finds stop name via ID or GPS."""
     cid = clean_val(raw_id)
     if cid in id_map: return id_map[cid]
-
     x = float(node_data.get('x', 0))
     y = float(node_data.get('y', 0))
-    geo_key = (round(x, 4), round(y, 4))
+    return coord_map.get((round(x, 4), round(y, 4)), "Unknown")
 
-    if geo_key in coord_map: return coord_map[geo_key]
-    return "Unknown"
+def generate_graph(zip_path, output_json_path, start_hour, end_hour, target_lines, date_str):
+    start_sec = int(start_hour * 3600)
+    end_sec = int(end_hour * 3600)
 
-def generate_graph(zip_path, output_json_path, start_hour, end_hour, target_lines):
-    output_dir = os.path.dirname(output_json_path)
-    if output_dir and not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    # Fenêtre nuit GTFS (ex: 02h00 = 26h00)
+    start_sec_ext = start_sec + 86400
+    end_sec_ext = end_sec + 86400
 
-    print(f"\n=== GENERATING GRAPH (NAME-BASED MODES): {start_hour}h - {end_hour}h ===")
+    print(f"\n=== GÉNÉRATION ROBUSTE ({start_hour}h - {end_hour}h) ===")
 
-    # 1. Load GTFS
-    print(f"1. Reading GTFS file: {zip_path}...")
-    feed = pt.get_representative_feed(zip_path)
+    # --- CHARGEMENT ---
+    print(f"1. Chargement {date_str}...")
+    try:
+        target_date = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
+        service_ids_by_date = ptg.read_service_ids_by_date(zip_path)
 
-    # 2. FILTER LINES (Optional)
-    if target_lines:
-        targets = [t.strip() for t in target_lines.split(',')]
-        print(f"   > FILTER ACTIVE: Keeping only lines {targets}")
-        feed.routes = feed.routes[feed.routes['route_short_name'].isin(targets)]
-        valid_route_ids = feed.routes['route_id'].unique()
-        feed.trips = feed.trips[feed.trips['route_id'].isin(valid_route_ids)]
+        services = service_ids_by_date.get(target_date, set())
+        if start_hour < 5:
+            prev_date = target_date - timedelta(days=1)
+            services = services.union(service_ids_by_date.get(prev_date, set()))
+            print(f"   > Services : {target_date} + {prev_date} (Veille)")
 
-    # 3. BUILD MAPPING: STOP NAME -> LINE NAMES
-    print("2. Mapping 'Stop Name' to 'Lines'...")
+        if not services:
+            print("   /!\\ ERREUR : Pas de services.")
+            return
 
-    # Force types
-    feed.routes['route_id'] = feed.routes['route_id'].astype(str)
-    feed.trips['route_id'] = feed.trips['route_id'].astype(str)
-    feed.trips['trip_id'] = feed.trips['trip_id'].astype(str)
-    feed.stop_times['trip_id'] = feed.stop_times['trip_id'].astype(str)
-    feed.stop_times['stop_id'] = feed.stop_times['stop_id'].astype(str)
-    feed.stops['stop_id'] = feed.stops['stop_id'].astype(str)
+        feed = ptg.load_feed(zip_path, view={'trips.txt': {'service_id': list(services)}})
 
-    # A. Map trip -> route name
-    feed.routes['route_short_name'] = feed.routes['route_short_name'].astype(str).str.strip()
+    except ValueError:
+        print("   Erreur date.")
+        return
+
+    # --- FILTRAGE ---
+    print(f"2. Filtrage Technique (Garages, Métros de nuit)...")
+
+    st = feed.stop_times.copy()
+
+    # A. Suppression des "Haut-le-pied" (Non commerciaux)
+    if 'pickup_type' in st.columns:
+        st['pickup_type'] = pd.to_numeric(st['pickup_type'], errors='coerce').fillna(0)
+        st = st[st['pickup_type'] != 1] # 1 = Pas de montée
+
+    # B. Filtrage Horaire
+    st['seconds'] = st['arrival_time'].apply(robust_time_to_seconds)
+    mask_std = (st['seconds'] >= start_sec) & (st['seconds'] <= end_sec)
+    mask_ext = (st['seconds'] >= start_sec_ext) & (st['seconds'] <= end_sec_ext)
+
+    if mask_ext.sum() > mask_std.sum():
+        print("   > Mode Nuit GTFS détecté.")
+        st_active = st[mask_ext].copy()
+        search_start, search_end = start_sec_ext, end_sec_ext
+    else:
+        print("   > Mode Matin détecté.")
+        st_active = st[mask_std].copy()
+        search_start, search_end = start_sec, end_sec
+
+    if st_active.empty:
+        print("   /!\\ VIDE : Aucun véhicule.")
+        with open(output_json_path, 'w') as f: json.dump({"nodes":[], "edges":[]}, f)
+        return
+
+    # C. SUPPRESSION INTELLIGENTE DU MÉTRO (Si nuit profonde)
+    # Si on est entre 1h et 4h du matin, le métro ne DOIT PAS être là.
+    is_deep_night = (1.0 <= start_hour <= 4.0)
+
+    if is_deep_night:
+        print("   > Nuit profonde détectée : Suppression forcée des métros résiduels.")
+        # On a besoin des types de route. On merge avec trips et routes.
+        feed.routes['route_id'] = feed.routes['route_id'].astype(str)
+        feed.trips['route_id'] = feed.trips['route_id'].astype(str)
+        st_active['trip_id'] = st_active['trip_id'].astype(str)
+
+        # On récupère les info de lignes pour chaque stop_time
+        trips_mini = feed.trips[['trip_id', 'route_id']]
+        routes_mini = feed.routes[['route_id', 'route_type', 'route_short_name']]
+
+        # Merge en chaîne
+        merged_check = st_active.merge(trips_mini, on='trip_id').merge(routes_mini, on='route_id')
+
+        # Route Type 1 = Métro. On garde tout ce qui N'EST PAS 1.
+        # (Bus = 3, Tram = 0, Funiculaire = 7)
+        # On garde aussi les bus de nuit (PL)
+
+        valid_indices = merged_check[merged_check['route_type'] != 1].index
+        # Attention : valid_indices correspond à merged_check, pas st_active si les index ont changé
+        # On filtre via trip_id pour être sûr
+
+        valid_trips = merged_check[merged_check['route_type'] != 1]['trip_id'].unique()
+
+        before_metro = len(st_active)
+        st_active = st_active[st_active['trip_id'].isin(valid_trips)]
+        after_metro = len(st_active)
+
+        if before_metro > after_metro:
+            print(f"     - {before_metro - after_metro} horaires de Métro supprimés.")
+
+    # --- VERIFICATION FINALE ---
+    # On ré-vérifie les lignes présentes pour l'affichage console
+    check_trips = feed.trips[feed.trips['trip_id'].isin(st_active['trip_id'])]
+    check_routes = feed.routes[feed.routes['route_id'].isin(check_trips['route_id'])]
+    lines_present = sorted(check_routes['route_short_name'].unique())
+
+    print("\n" + "="*40)
+    print(f" LIGNES RÉELLES ({len(lines_present)}) : {', '.join(lines_present)}")
+    print("="*40 + "\n")
+
+    # --- CONSTRUCTION GRAPHE ---
+    print("3. Mapping & Construction...")
+
+    # On prépare le feed custom pour éviter le crash
+    custom_feed = CustomFeed(feed, st_active)
+
+    # Mapping des noms de lignes pour les noeuds JSON
     route_map = feed.routes.set_index('route_id')['route_short_name'].to_dict()
-
-    # B. Link Stops -> Lines (via stop_times & trips)
-    st_mini = feed.stop_times[['stop_id', 'trip_id']].copy()
-    trips_mini = feed.trips[['trip_id', 'route_id']].copy()
-
-    merged = pd.merge(st_mini, trips_mini, on='trip_id', how='inner')
+    trips_mini = feed.trips[['trip_id', 'route_id']]
+    merged = pd.merge(st_active, trips_mini, on='trip_id', how='inner')
     merged['line_name'] = merged['route_id'].map(route_map)
     merged['clean_stop_id'] = merged['stop_id'].apply(clean_val)
 
-    # C. Get Stop Names from stops.txt
     stops_df = feed.stops.copy()
     stops_df['clean_id'] = stops_df['stop_id'].apply(clean_val)
-    # Map ID -> Name (e.g. "21000" -> "Gare Part-Dieu")
     id_to_name_map = stops_df.set_index('clean_id')['stop_name'].to_dict()
 
-    # D. Create the Master Map: "Gare Part-Dieu" -> {"A", "B", "T1", "T3", "T4"}
-    # First, group lines by Stop ID
     id_to_lines = merged.groupby('clean_stop_id')['line_name'].apply(set).to_dict()
-
-    # Then, aggregate by Stop Name
     name_to_lines = {}
     for sid, lines in id_to_lines.items():
-        # Find the name of this stop ID
         sname = id_to_name_map.get(sid, "Unknown")
-        clean_sname = str(sname).replace('"', '').strip()
+        clean = str(sname).replace('"', '').strip()
+        if clean not in name_to_lines: name_to_lines[clean] = set()
+        name_to_lines[clean].update(lines)
 
-        if clean_sname not in name_to_lines:
-            name_to_lines[clean_sname] = set()
-        name_to_lines[clean_sname].update(lines)
-
-    print(f"   > Associated lines to {len(name_to_lines)} unique stop names.")
-
-    # 4. PREPARE SPATIAL LOOKUP
-    id_map = id_to_name_map
+    # Spatial Map
     coord_map = {}
     for idx, row in stops_df.iterrows():
-        try:
-            lat = round(float(row['stop_lat']), 4)
-            lon = round(float(row['stop_lon']), 4)
-            coord_map[(lon, lat)] = row['stop_name']
+        try: coord_map[(round(float(row['stop_lon']), 4), round(float(row['stop_lat']), 4))] = row['stop_name']
         except: continue
 
-    # 5. BUILD GRAPH
-    start_sec = start_hour * 3600
-    end_sec = end_hour * 3600
-
-    print(f"3. Building graph ({start_sec}s - {end_sec}s)...")
+    # Peartree Generation (Sans crash grâce à custom_feed)
     try:
-        G = pt.load_feed_as_graph(feed, start_sec, end_sec, impute_walk_transfers=True)
+        G = pt.load_feed_as_graph(custom_feed, search_start, search_end, impute_walk_transfers=False)
     except Exception as e:
-        print(f"   /!\\ Peartree Error: {e}")
+        print(f"Erreur Graphe: {e}")
         G = nx.MultiDiGraph()
 
-    # 6. PROCESS NODES
-    print(f"4. Processing nodes ({len(G.nodes)} raw nodes)...")
-
+    # --- EXPORT JSON ---
+    print("4. Export JSON...")
     nodes_list = []
     edges_list = []
     grouped_nodes = {}
@@ -126,85 +201,52 @@ def generate_graph(zip_path, output_json_path, start_hour, end_hour, target_line
 
     sorted_nodes = sorted(list(G.nodes(data=True)), key=lambda x: str(x[0]))
 
-    debug_limit = 0
-
     for i, (node_id, data) in enumerate(sorted_nodes):
-        # 1. Resolve Name (The Spatial Fix)
-        stop_name = get_stop_name_spatial(data, coord_map, id_map, node_id)
+        stop_name = get_stop_name_spatial(data, coord_map, id_to_name_map, node_id)
         clean_name = str(stop_name).replace('"', '').strip()
 
-        # 2. Retrieve Lines using the NAME
         real_modes = name_to_lines.get(clean_name, set())
-
-        # Remove nan/None
         valid_modes = {m for m in real_modes if m and str(m) != 'nan'}
 
-        # Debug print for verifying lines are found
-        if debug_limit < 3 and len(valid_modes) > 0 and clean_name != "Unknown":
-            print(f"   [DEBUG] {clean_name} -> {valid_modes}")
-            debug_limit += 1
-
         if clean_name not in grouped_nodes:
-            grouped_nodes[clean_name] = {
-                "x_sum": 0, "y_sum": 0, "count": 0,
-                "modes": set(), "cost": 0
-            }
+            grouped_nodes[clean_name] = {"x": 0, "y": 0, "count": 0, "modes": set()}
 
-        grouped_nodes[clean_name]["x_sum"] += float(data.get("x", 0))
-        grouped_nodes[clean_name]["y_sum"] += float(data.get("y", 0))
+        grouped_nodes[clean_name]["x"] += float(data.get("x", 0))
+        grouped_nodes[clean_name]["y"] += float(data.get("y", 0))
         grouped_nodes[clean_name]["count"] += 1
         grouped_nodes[clean_name]["modes"].update(valid_modes)
 
-    # Output Nodes
     for idx, (name, data) in enumerate(grouped_nodes.items()):
         node_obj = {
             "id": str(idx),
             "name": name,
-            "x": data["x_sum"] / data["count"],
-            "y": data["y_sum"] / data["count"],
+            "x": data["x"] / data["count"],
+            "y": data["y"] / data["count"],
             "modes": list(data["modes"]),
             "boarding_cost": 0
         }
         nodes_list.append(node_obj)
         node_name_to_id[name] = idx
 
-    # Output Edges
     orig_to_new_id = {}
     for node_id, data in sorted_nodes:
-        s_name = get_stop_name_spatial(data, coord_map, id_map, node_id)
+        s_name = get_stop_name_spatial(data, coord_map, id_to_name_map, node_id)
         clean = str(s_name).replace('"', '').strip()
-        if clean in node_name_to_id:
-            orig_to_new_id[node_id] = node_name_to_id[clean]
+        if clean in node_name_to_id: orig_to_new_id[node_id] = node_name_to_id[clean]
 
-    unique_edges = {}
     for u, v, data in G.edges(data=True):
         if u in orig_to_new_id and v in orig_to_new_id:
             new_u = orig_to_new_id[u]
             new_v = orig_to_new_id[v]
             if new_u == new_v: continue
+            edges_list.append([new_u, new_v, int(float(data.get("length", 0)))])
 
-            w = int(float(data.get("length", 0)))
-            if (new_u, new_v) not in unique_edges or w < unique_edges[(new_u, new_v)]:
-                unique_edges[(new_u, new_v)] = w
-
-    for (u, v), w in unique_edges.items():
-        edges_list.append([u, v, w])
-
-    final_data = {
-        "metadata": {
-            "period": f"{start_hour}-{end_hour}",
-            "node_count": len(nodes_list),
-            "edge_count": len(edges_list)
-        },
-        "nodes": nodes_list,
-        "edges": edges_list
-    }
-
-    print(f"   > Saving to: {output_json_path}")
-    print(f"   > Final Graph: {len(nodes_list)} nodes, {len(edges_list)} edges.")
+    final_data = {"nodes": nodes_list, "edges": edges_list}
 
     with open(output_json_path, 'w', encoding='utf-8') as f:
         json.dump(final_data, f, ensure_ascii=False, separators=(',', ':'))
+
+    print(f"   > Terminé : {output_json_path}")
 
 def main():
     parser = argparse.ArgumentParser()
@@ -212,10 +254,11 @@ def main():
     parser.add_argument("--out", required=True)
     parser.add_argument("--start", type=float, required=True)
     parser.add_argument("--end", type=float, required=True)
-    parser.add_argument("--lines", help="Lines filter", default=None)
+    parser.add_argument("--lines", default=None)
+    parser.add_argument("--date", help="YYYY-MM-DD", default=None)
     args = parser.parse_args()
 
-    generate_graph(args.zip_file, args.out, args.start, args.end, args.lines)
+    generate_graph(args.zip_file, args.out, args.start, args.end, args.lines, args.date)
 
 if __name__ == "__main__":
     main()
