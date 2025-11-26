@@ -25,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -150,18 +151,32 @@ fun PlanScreen(
 
     var sheetContentState by remember { mutableStateOf<SheetContentState?>(null) }
 
-    LaunchedEffect(sheetContentState) {
+    LaunchedEffect(sheetContentState, selectedStation, selectedLine) {
         onSheetStateChanged(sheetContentState != null)
+
+        if ((sheetContentState == SheetContentState.STATION && selectedStation != null) ||
+            (sheetContentState == SheetContentState.LINE_DETAILS && selectedLine != null)) {
+            scope.launch {
+                scaffoldSheetState.bottomSheetState.expand()
+            }
+        }
     }
 
+    val latestSheetContentState by rememberUpdatedState(sheetContentState)
     var previousSheetValue by remember { mutableStateOf<androidx.compose.material3.SheetValue?>(null) }
     LaunchedEffect(scaffoldSheetState.bottomSheetState.currentValue) {
         val current = scaffoldSheetState.bottomSheetState.currentValue
-        val prev = previousSheetValue
-        val transitionedToHidden = (prev != null && prev != androidx.compose.material3.SheetValue.Hidden && current == androidx.compose.material3.SheetValue.Hidden)
-        if (transitionedToHidden) {
-            sheetContentState = null
+        val previous = previousSheetValue
+
+        if (current != previous) {
+            val justBecameHidden = current == androidx.compose.material3.SheetValue.Hidden
+            val swipedDownToPartial = current == androidx.compose.material3.SheetValue.PartiallyExpanded && previous == androidx.compose.material3.SheetValue.Expanded
+
+            if (justBecameHidden || (swipedDownToPartial && latestSheetContentState == SheetContentState.STATION)) {
+                sheetContentState = null
+            }
         }
+
         previousSheetValue = current
     }
 
@@ -284,11 +299,9 @@ fun PlanScreen(
                     }
 
                     sheetContentState = SheetContentState.LINE_DETAILS
-                    scaffoldSheetState.bottomSheetState.expand()
                 } else {
                     selectedStation = stationInfo
                     sheetContentState = SheetContentState.STATION
-                    scaffoldSheetState.bottomSheetState.expand()
                 }
 
                 onSearchSelectionHandled()
@@ -336,11 +349,9 @@ fun PlanScreen(
                             }
 
                             sheetContentState = SheetContentState.LINE_DETAILS
-                            scaffoldSheetState.bottomSheetState.expand()
                         } else {
                             selectedStation = clickedStationInfo
                             sheetContentState = SheetContentState.STATION
-                            scaffoldSheetState.bottomSheetState.expand()
                         }
                     }
                 }
@@ -496,13 +507,9 @@ fun PlanScreen(
                                             }
                                             kotlinx.coroutines.delay(100)
                                             sheetContentState = SheetContentState.LINE_DETAILS
-                                            scaffoldSheetState.bottomSheetState.expand()
                                         }
                                     } else {
                                         sheetContentState = SheetContentState.LINE_DETAILS
-                                        scope.launch {
-                                            scaffoldSheetState.bottomSheetState.expand()
-                                        }
                                     }
                                 }
                             )
