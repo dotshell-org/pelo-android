@@ -1,13 +1,19 @@
 package com.pelotcl.app.ui.components
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
@@ -15,6 +21,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.Text
@@ -26,21 +33,31 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.traversalIndex
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.pelotcl.app.data.graph.StopSearchResult
 import com.pelotcl.app.ui.theme.Red500
+import com.pelotcl.app.utils.BusIconHelper
+
+data class StationSearchResult(
+    val stopName: String,
+    val lines: List<String>,
+    val isPmr: Boolean = false
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SimpleSearchBar(
-    searchResults: List<StopSearchResult>,
-    onSearch: (StopSearchResult) -> Unit,
+    searchResults: List<StationSearchResult>,
+    onSearch: (StationSearchResult) -> Unit,
     onQueryChange: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -61,28 +78,28 @@ fun SimpleSearchBar(
             inputField = {
                 SearchBarDefaults.InputField(
                     query = query,
-                    onQueryChange = { q -> 
+                    onQueryChange = { q ->
                         query = q
                         onQueryChange(q)
                     },
                     onSearch = {
-                        // Si un résultat est sélectionné, on l'utilise
                         searchResults.firstOrNull()?.let {
                             onSearch(it)
                         }
                         expanded = false
+                        query = ""
                     },
                     expanded = expanded,
                     onExpandedChange = { expanded = it },
-                    placeholder = { Text("Recherche", color = Color.White) },
+                    placeholder = { Text("Search for a stop...", color = Color.White) },
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Default.Search,
-                            contentDescription = "Rechercher",
+                            contentDescription = "Search",
                             tint = Red500,
                             modifier = Modifier
                                 .padding(start = if (expanded) 32.dp else 0.dp,
-                                        end = if (expanded) 12.dp else 0.dp
+                                    end = if (expanded) 12.dp else 0.dp
                                 )
                         )
                     },
@@ -118,21 +135,30 @@ fun SimpleSearchBar(
                                     result.stopName,
                                     color = Color.Black,
                                     maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis,
+                                    fontWeight = FontWeight.Bold
                                 )
-                                if (result.distance != null) {
-                                    Text(
-                                        "${String.format("%.0f", result.distance)} m",
-                                        color = Color.Gray,
-                                        fontSize = 12.sp
-                                    )
+                                if (result.lines.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.size(4.dp))
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // Limit icons to prevent UI overflow
+                                        result.lines.take(6).forEach { lineName ->
+                                            SearchConnectionBadge(lineName = lineName)
+                                        }
+                                        if (result.lines.size > 6) {
+                                            Text("...", fontSize = 10.sp, color = Color.Gray)
+                                        }
+                                    }
                                 }
                             }
                         },
                         colors = ListItemDefaults.colors(containerColor = Color.White),
                         modifier = Modifier
                             .clickable {
-                                query = result.stopName
+                                query = ""
                                 expanded = false
                                 onSearch(result)
                             }
@@ -143,7 +169,7 @@ fun SimpleSearchBar(
                     ListItem(
                         headlineContent = {
                             Text(
-                                "Aucun résultat",
+                                "No results",
                                 color = Color.Black.copy(alpha = 0.6f)
                             )
                         },
@@ -152,6 +178,40 @@ fun SimpleSearchBar(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SearchConnectionBadge(lineName: String) {
+    val context = LocalContext.current
+    val drawableName = BusIconHelper.getDrawableNameForLineName(lineName)
+    val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
+
+    if (resourceId != 0) {
+        Image(
+            painter = painterResource(id = resourceId),
+            contentDescription = null,
+            modifier = Modifier.size(24.dp)
+        )
+    } else {
+        val backgroundColor = when (lineName) {
+            "A", "B", "C", "D" -> Color(0xFFEC4899)
+            else -> Color.Gray
+        }
+        Box(
+            modifier = Modifier
+                .size(18.dp)
+                .clip(CircleShape)
+                .background(backgroundColor),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = lineName,
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White,
+                fontSize = 8.sp
+            )
         }
     }
 }

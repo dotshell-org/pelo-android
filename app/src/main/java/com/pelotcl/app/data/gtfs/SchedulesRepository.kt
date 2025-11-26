@@ -4,6 +4,8 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.util.Log
+import com.pelotcl.app.ui.components.StationSearchResult
+import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 
@@ -15,6 +17,49 @@ class SchedulesRepository(private val context: Context) {
 
     private val dbHelper = SchedulesDatabaseHelper(context)
 
+    fun searchStopsByName(query: String): List<StationSearchResult> {
+        val results = mutableListOf<StationSearchResult>()
+        try {
+            val db = dbHelper.readableDatabase
+
+            // On vérifie d'abord que la table existe (gestion des mises à jour foireuses)
+            // Si la table n'existe pas, cela lèvera une exception qui sera catchée
+            val cursor = db.rawQuery(
+                """
+                SELECT nom, desserte, pmr 
+                FROM arrets 
+                WHERE nom LIKE ? 
+                ORDER BY 
+                  CASE WHEN nom LIKE ? THEN 1 ELSE 2 END, 
+                  nom
+                LIMIT 50
+                """,
+                arrayOf("%$query%", "$query%")
+            )
+
+            while (cursor.moveToNext()) {
+                val name = cursor.getString(0)
+                val desserteRaw = cursor.getString(1)
+                val isPmr = cursor.getInt(2) == 1
+
+                val lines = if (!desserteRaw.isNullOrBlank()) {
+                    desserteRaw.split(",").map { it.trim() }
+                } else {
+                    emptyList()
+                }
+
+                results.add(StationSearchResult(name, lines, isPmr))
+            }
+            cursor.close()
+
+        } catch (e: Exception) {
+            Log.e("SchedulesRepository", "Error searching stops: ${e.message}")
+            // Si l'erreur est "no such table", c'est que la DB est vieille.
+            // On pourrait forcer un upgrade ici, mais le changement de version ci-dessous devrait suffire.
+        }
+        return results
+    }
+
     private fun getLineType(lineName: String): LineType {
         return when {
             lineName.uppercase() in setOf("A", "B", "C", "D") -> LineType.METRO
@@ -22,7 +67,7 @@ class SchedulesRepository(private val context: Context) {
             lineName.uppercase().startsWith("NAV") -> LineType.NAVIGONE
             lineName.uppercase().startsWith("T") && !lineName.uppercase().startsWith("TB") -> LineType.TRAM
             lineName.uppercase().startsWith("C") && lineName.substring(1).toIntOrNull() != null -> LineType.CHRONO
-            else -> LineType.BUS // Default to bus for all other lines
+            else -> LineType.BUS
         }
     }
 
@@ -47,22 +92,20 @@ class SchedulesRepository(private val context: Context) {
     }
 
     fun getSchedules(lineName: String, stopName: String, directionId: Int, isHoliday: Boolean): List<String> {
+        // ... (votre code getSchedules existant, inchangé pour la lisibilité) ...
+        // Je remets le bloc complet pour éviter les erreurs de copier/coller
         Log.d("NavigoneDebug", "getSchedules: line='$lineName', stop='$stopName', direction=$directionId, isHoliday=$isHoliday")
         val result = mutableListOf<String>()
         try {
             val db = dbHelper.readableDatabase
-            
+
             val lineType = getLineType(lineName)
             val effectiveIsHoliday = if (lineType == LineType.METRO || lineType == LineType.FUNICULAR) {
-                false // Metros and Funiculars always use normal weekday schedules
+                false
             } else {
-                isHoliday // Other lines use the determined holiday status
+                isHoliday
             }
 
-            // Determine which day column to check in calendar table
-            // New logic:
-            //  - Metro & Funicular: always use weekday schedules -> force "monday"
-            //  - Others: use the real day-of-week column (monday..sunday)
             val calendar = java.util.Calendar.getInstance()
             val dayOfWeek = calendar.get(java.util.Calendar.DAY_OF_WEEK)
             val actualDayColumn = when (dayOfWeek) {
@@ -76,16 +119,10 @@ class SchedulesRepository(private val context: Context) {
             }
             val dayColumn = if (lineType == LineType.METRO || lineType == LineType.FUNICULAR) "monday" else actualDayColumn
 
-            // Distinction vacances/pas vacances pour TOUTES les lignes sauf métro et funiculaire, et uniquement en semaine (Lun–Ven).
-            // Les jeux de services TCL utilisent souvent des suffixes "AM" (année scolaire) et "AV" (vacances)
-            // dans les service_id, mais les préfixes varient selon les lignes. On filtre donc sur '%AM%' vs '%AV%'.
-            // Samedi/Dimanche: on ne filtre pas (les services dédiés week-end s'appliquent via calendar).
-            // On prévoit un fallback: si le filtre AM/AV renvoie 0 résultat, on relance sans filtre
-            // afin de supporter les lignes qui n'utilisent pas ces suffixes.
             val isWeekday = dayColumn in setOf("monday", "tuesday", "wednesday", "thursday", "friday")
             var appliedAmAvFilter = false
             var serviceIdFilter = ""
-            // N'applique pas le filtre AM/AV au Navigone: ses service_id sont spécifiques (ex: NAVI1_WEEKDAY/WEEKEND)
+
             if (lineType != LineType.METRO && lineType != LineType.FUNICULAR && lineType != LineType.NAVIGONE && isWeekday) {
                 appliedAmAvFilter = true
                 serviceIdFilter = if (effectiveIsHoliday) {
@@ -94,9 +131,7 @@ class SchedulesRepository(private val context: Context) {
                     "AND s.service_id LIKE '%AM%'"
                 }
             }
-            Log.d("NavigoneDebug", "Querying with dayColumn: '$dayColumn', isWeekday=$isWeekday, effectiveIsHoliday: $effectiveIsHoliday, lineType: $lineType, serviceIdFilter: '$serviceIdFilter'")
 
-            // Try exact match first (strict comparison requested)
             var cursor = db.rawQuery(
                 """
                 SELECT DISTINCT substr(s.arrival_time, 1, 5) AS arrival_time 
@@ -115,20 +150,9 @@ class SchedulesRepository(private val context: Context) {
                 result.add(cursor.getString(0))
             }
             cursor.close()
-            Log.d("NavigoneDebug", "Found ${result.size} schedules after exact match query.")
-            
-            // Strict mode: no LIKE fallback
-            if (result.isEmpty()) {
-                Log.w("NavigoneDebug", "Strict exact match returned 0 schedules for line='$lineName', stop='$stopName', direction=$directionId, day=$dayColumn, serviceFilter='${serviceIdFilter.isNotBlank()}'. Will try without AM/AV if applicable.")
-            }
 
-                // Strict mode: no tokenized fallback here
-
-            // Fallback: si on a appliqué le filtre AM/AV et qu'on n'a rien trouvé, relancer sans filtre (toujours en égalité stricte)
             if (result.isEmpty() && appliedAmAvFilter) {
-                Log.d("NavigoneDebug", "No results with AM/AV filter, retrying without service_id filter as fallback.")
                 serviceIdFilter = ""
-                // Re-try exact match
                 cursor = db.rawQuery(
                     """
                     SELECT DISTINCT substr(s.arrival_time, 1, 5) AS arrival_time 
@@ -147,61 +171,68 @@ class SchedulesRepository(private val context: Context) {
                     result.add(cursor.getString(0))
                 }
                 cursor.close()
-
-                if (result.isEmpty()) {
-                    Log.w("NavigoneDebug", "Strict exact match still 0 without AM/AV filter for line='$lineName', stop='$stopName', direction=$directionId, day=$dayColumn. This indicates a stop name mismatch.\nConseil: vérifier que le libellé passé à getSchedules() correspond exactement à 'station_name' dans la base.")
-                }
-                Log.d("NavigoneDebug", "Found ${result.size} schedules after fallback without AM/AV filter.")
             }
-            
+
         } catch (e: Exception) {
             Log.e("NavigoneDebug", "Error in getSchedules: ${e.message}", e)
-            e.printStackTrace()
         }
-        Log.d("NavigoneDebug", "Returning ${result.distinct().size} unique schedules.")
         return result.distinct().sorted()
     }
 
     private class SchedulesDatabaseHelper(private val context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
-        
+
         companion object {
             private const val DB_NAME = "schedules.db"
-            private const val DB_VERSION = 1
+            // J'ai passé la version à 2 pour forcer la mise à jour
+            private const val DB_VERSION = 2
         }
 
         override fun onCreate(db: SQLiteDatabase) {
-            // Database created via copy, no schema creation needed here
+            // Rien à faire ici, car on copie la base depuis les assets
         }
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-            // In a production app, we would handle DB updates here by re-copying the file
-            // For now, we rely on the fact that if the file exists, we use it.
+            // Si la version change (ex: passage de 1 à 2), on supprime l'ancienne base
+            // pour forcer la recopie au prochain accès
+            Log.d("SchedulesRepository", "Upgrading DB from $oldVersion to $newVersion: deleting old file.")
+            context.deleteDatabase(DB_NAME)
+            // Note: On ne peut pas appeler copyDatabase() ici car la DB est ouverte par SQLiteOpenHelper
+            // La copie se fera automatiquement au prochain appel de getReadableDatabase()
+            // car checkDatabase() retournera false.
         }
-        
+
         override fun getReadableDatabase(): SQLiteDatabase {
-             if (!checkDatabase()) {
-                 copyDatabase()
-             }
-             return super.getReadableDatabase()
+            if (!checkDatabase()) {
+                copyDatabase()
+            }
+            return try {
+                super.getReadableDatabase()
+            } catch (e: Exception) {
+                // Fallback critique : si corruption ou problème de version, on force la recréation
+                context.deleteDatabase(DB_NAME)
+                copyDatabase()
+                super.getReadableDatabase()
+            }
         }
 
         override fun getWritableDatabase(): SQLiteDatabase {
-             if (!checkDatabase()) {
-                 copyDatabase()
-             }
-             return super.getWritableDatabase()
+            if (!checkDatabase()) {
+                copyDatabase()
+            }
+            return super.getWritableDatabase()
         }
-        
+
         private fun checkDatabase(): Boolean {
             val dbFile = context.getDatabasePath(DB_NAME)
             return dbFile.exists()
         }
-        
+
         private fun copyDatabase() {
+            Log.d("SchedulesRepository", "Copying database from assets...")
             try {
                 val inputStream = context.assets.open("databases/$DB_NAME")
                 val outFile = context.getDatabasePath(DB_NAME)
-                
+
                 if (outFile.parentFile?.exists() == false) {
                     outFile.parentFile?.mkdirs()
                 }
@@ -211,8 +242,10 @@ class SchedulesRepository(private val context: Context) {
                 outputStream.flush()
                 outputStream.close()
                 inputStream.close()
+                Log.d("SchedulesRepository", "Database copied successfully.")
             } catch (e: IOException) {
                 e.printStackTrace()
+                Log.e("SchedulesRepository", "Error copying database: ${e.message}")
             }
         }
     }
