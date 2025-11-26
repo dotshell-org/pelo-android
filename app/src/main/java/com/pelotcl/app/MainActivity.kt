@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -216,7 +217,9 @@ fun NavBar(modifier: Modifier = Modifier) {
                 isBottomSheetOpen = isBottomSheetOpen,
                 showLinesSheet = showLinesSheet,
                 onBottomSheetStateChanged = { isOpen -> isBottomSheetOpen = isOpen },
-                onLinesSheetDismiss = { showLinesSheet = false },
+                onLinesSheetDismiss = {
+                    showLinesSheet = false
+                },
                 searchSelectedStop = selectedStationFromSearch,
                 onSearchSelectionHandled = { selectedStationFromSearch = null },
                 modifier = if (shouldApplyPadding) Modifier.padding(contentPadding) else Modifier,

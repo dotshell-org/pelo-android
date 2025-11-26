@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.isTraversalGroup
@@ -64,6 +66,18 @@ fun SimpleSearchBar(
     var expanded by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
 
+    fun isStrongLine(line: String): Boolean {
+        val upperLine = line.uppercase()
+        return when {
+            upperLine in setOf("A", "B", "C", "D") -> true
+            upperLine in setOf("F1", "F2") -> true
+            upperLine.startsWith("NAV") -> true
+            upperLine.startsWith("T") -> true
+            upperLine == "RX" -> true
+            else -> false
+        }
+    }
+
     Box(
         (if (expanded) Modifier.fillMaxSize().background(Color.Black) else modifier)
             .semantics { isTraversalGroup = true }
@@ -91,7 +105,7 @@ fun SimpleSearchBar(
                     },
                     expanded = expanded,
                     onExpandedChange = { expanded = it },
-                    placeholder = { Text("Search for a stop...", color = Color.White) },
+                    placeholder = { Text("Rechercher", color = Color.White) },
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Default.Search,
@@ -125,15 +139,21 @@ fun SimpleSearchBar(
             )
         ) {
             Column(
-                Modifier.verticalScroll(rememberScrollState())
+                Modifier
+                    .padding(top = 12.dp, bottom = 28.dp)
+                    .verticalScroll(rememberScrollState())
             ) {
                 searchResults.forEach { result ->
                     ListItem(
                         headlineContent = {
-                            Column {
+                            Column (
+                                modifier = Modifier
+                                    .padding(horizontal = 24.dp)
+                            ) {
+                                Spacer(modifier = Modifier.size(6.dp))
                                 Text(
                                     result.stopName,
-                                    color = Color.Black,
+                                    color = Color.White,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     fontWeight = FontWeight.Bold
@@ -144,18 +164,28 @@ fun SimpleSearchBar(
                                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        // Limit icons to prevent UI overflow
-                                        result.lines.take(6).forEach { lineName ->
-                                            SearchConnectionBadge(lineName = lineName)
+                                        result.lines.forEach { lineName ->
+                                            if (isStrongLine(lineName))
+                                            {
+                                                SearchConnectionBadge(lineName = lineName)
+                                            }
                                         }
-                                        if (result.lines.size > 6) {
-                                            Text("...", fontSize = 10.sp, color = Color.Gray)
+                                    }
+                                    FlowRow(
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        verticalArrangement = Arrangement.spacedBy((-8).dp)
+                                    ) {
+                                        result.lines.forEach { lineName ->
+                                            if (!isStrongLine(lineName)) {
+                                                SearchConnectionBadge(lineName = lineName)
+                                            }
                                         }
                                     }
                                 }
+                                Spacer(modifier = Modifier.size(4.dp))
                             }
                         },
-                        colors = ListItemDefaults.colors(containerColor = Color.White),
+                        colors = ListItemDefaults.colors(containerColor = Color.Black),
                         modifier = Modifier
                             .clickable {
                                 query = ""
@@ -169,11 +199,11 @@ fun SimpleSearchBar(
                     ListItem(
                         headlineContent = {
                             Text(
-                                "No results",
-                                color = Color.Black.copy(alpha = 0.6f)
+                                "Aucun résultat",
+                                color = Color.White.copy(alpha = 0.6f)
                             )
                         },
-                        colors = ListItemDefaults.colors(containerColor = Color.White),
+                        colors = ListItemDefaults.colors(containerColor = Color.Black),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -192,26 +222,7 @@ private fun SearchConnectionBadge(lineName: String) {
         Image(
             painter = painterResource(id = resourceId),
             contentDescription = null,
-            modifier = Modifier.size(24.dp)
+            modifier = Modifier.size(30.dp)
         )
-    } else {
-        val backgroundColor = when (lineName) {
-            "A", "B", "C", "D" -> Color(0xFFEC4899)
-            else -> Color.Gray
-        }
-        Box(
-            modifier = Modifier
-                .size(18.dp)
-                .clip(CircleShape)
-                .background(backgroundColor),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = lineName,
-                style = MaterialTheme.typography.labelSmall,
-                color = Color.White,
-                fontSize = 8.sp
-            )
-        }
     }
 }
