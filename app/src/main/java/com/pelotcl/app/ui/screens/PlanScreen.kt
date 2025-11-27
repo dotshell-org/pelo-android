@@ -151,11 +151,9 @@ fun PlanScreen(
 
     var sheetContentState by remember { mutableStateOf<SheetContentState?>(null) }
 
-    LaunchedEffect(sheetContentState, selectedStation, selectedLine) {
+    LaunchedEffect(sheetContentState, selectedStation) {
         onSheetStateChanged(sheetContentState != null)
-
-        if ((sheetContentState == SheetContentState.STATION && selectedStation != null) ||
-            (sheetContentState == SheetContentState.LINE_DETAILS && selectedLine != null)) {
+        if (sheetContentState == SheetContentState.STATION && selectedStation != null) {
             scope.launch {
                 scaffoldSheetState.bottomSheetState.expand()
             }
