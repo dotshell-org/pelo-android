@@ -126,6 +126,7 @@ fun PlanScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val stopsUiState by viewModel.stopsUiState.collectAsState()
+    val favoriteLines by viewModel.favoriteLines.collectAsState()
     var mapInstance by remember { mutableStateOf<MapLibreMap?>(null) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -150,6 +151,7 @@ fun PlanScreen(
     var temporaryLoadedBusLines by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     var sheetContentState by remember { mutableStateOf<SheetContentState?>(null) }
+    val selectedLineNameFromViewModel by viewModel.selectedLineName.collectAsState()
 
     LaunchedEffect(sheetContentState, selectedStation) {
         onSheetStateChanged(sheetContentState != null)
@@ -431,6 +433,29 @@ fun PlanScreen(
         }
     }
 
+    // Observe selection from viewModel (e.g. when Lines screen clicks a line)
+    LaunchedEffect(selectedLineNameFromViewModel) {
+        val name = selectedLineNameFromViewModel
+        if (!name.isNullOrEmpty()) {
+            selectedLine = LineInfo(
+                lineName = name,
+                currentStationName = ""
+            )
+
+            // if not a strong line, add it to loaded lines
+            if (!isMetroTramOrFunicular(name)) {
+                viewModel.addLineToLoaded(name)
+                if (isTemporaryBus(name)) {
+                    temporaryLoadedBusLines = temporaryLoadedBusLines + name
+                }
+                kotlinx.coroutines.delay(100)
+            }
+
+            sheetContentState = SheetContentState.LINE_DETAILS
+            viewModel.clearSelectedLine()
+        }
+    }
+
     val bottomPadding = contentPadding.calculateBottomPadding()
 
     val peekHeight = when(sheetContentState) {
@@ -567,7 +592,7 @@ fun PlanScreen(
             }
         }
 
-        androidx.compose.material3.ModalBottomSheet(
+            androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = onLinesSheetDismiss,
             containerColor = Color.White,
             sheetState = modalBottomSheetState
@@ -615,7 +640,9 @@ fun PlanScreen(
                             scaffoldSheetState.bottomSheetState.partialExpand()
                         }
                     }
-                }
+                },
+                favoriteLines = favoriteLines,
+                onToggleFavorite = { viewModel.toggleFavorite(it) }
             )
         }
     }

@@ -26,6 +26,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Button
@@ -225,6 +227,13 @@ fun LineDetailsBottomSheet(
                         color = Color.Black,
                         modifier = Modifier.weight(1f)
                     )
+                    // Favorite button
+                    val favorites by viewModel.favoriteLines.collectAsState()
+                    val isFav = favorites.contains(lineInfo.lineName.uppercase())
+                    IconButton(onClick = { viewModel.toggleFavorite(lineInfo.lineName) }) {
+                        val starIcon = if (isFav) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder
+                        Icon(imageVector = starIcon, contentDescription = if (isFav) "Unfavorite" else "Favorite", tint = if (isFav) Red500 else Color.Gray)
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(36.dp))

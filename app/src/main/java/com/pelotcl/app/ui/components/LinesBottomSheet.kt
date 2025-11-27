@@ -46,15 +46,37 @@ fun LinesBottomSheet(
     allLines: List<String>,
     onDismiss: () -> Unit,
     onLineClick: (String) -> Unit,
+    favoriteLines: Set<String> = emptySet(),
+    onToggleFavorite: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
     
     // Organize lines by category
-    val categorizedLines = remember(allLines) {
+    val categorizedLines = remember(allLines, favoriteLines) {
         // Map<String, List<String>> but we will iterate deterministically by turning to list
-        categorizeLines(allLines, context).toList()
+        val base = categorizeLines(allLines, context).toMutableMap()
+
+        // Insert favorites first if present
+        val favoritesInAll = allLines
+            .map { it.uppercase() }
+            .distinct()
+            .filter { favoriteLines.contains(it) }
+            .sortedWith(java.util.Comparator { a, b -> naturalComparatorString(a, b) })
+
+        if (favoritesInAll.isNotEmpty()) {
+            // We want to preserve the original tile formats (case) - pick the case from `allLines`
+            val favoritesWithCase = allLines.filter { favoritesInAll.contains(it.uppercase()) }
+            val orderedFavorites = favoritesWithCase.sortedWith(java.util.Comparator { a, b -> naturalComparatorString(a, b) })
+            // Prepend as the 'Favoris' category
+            val result = linkedMapOf<String, List<String>>()
+            result["Favoris"] = orderedFavorites
+            base.forEach { (k, v) -> result[k] = v }
+            result.toList()
+        } else {
+            base.toList()
+        }
     }
     
     // Filtrer les lignes selon la recherche
@@ -109,6 +131,7 @@ fun LinesBottomSheet(
                     ) {
                         // Up to 4 chips per row
                         rowLines.forEach { line ->
+                            // Each chip now also accepts an optional favorite status & toggle
                             LineChip(
                                 lineName = line,
                                 onClick = { onLineClick(line) },
@@ -142,6 +165,32 @@ fun LinesBottomSheet(
             }
         }
     }
+}
+
+private fun naturalComparatorString(a: String, b: String): Int {
+    val partsA = a.split(Regex("(?<=\\D)(?=\\d)|(?<=\\d)(?=\\D)"))
+    val partsB = b.split(Regex("(?<=\\D)(?=\\d)|(?<=\\d)(?=\\D)"))
+    val maxParts = maxOf(partsA.size, partsB.size)
+
+    for (i in 0 until maxParts) {
+        val partA = partsA.getOrNull(i)
+        val partB = partsB.getOrNull(i)
+
+        if (partA == null) return -1
+        if (partB == null) return 1
+
+        val numA = partA.toIntOrNull()
+        val numB = partB.toIntOrNull()
+
+        if (numA != null && numB != null) {
+            val numCompare = numA.compareTo(numB)
+            if (numCompare != 0) return numCompare
+        } else {
+            val strCompare = partA.compareTo(partB)
+            if (strCompare != 0) return strCompare
+        }
+    }
+    return 0
 }
 
 /**

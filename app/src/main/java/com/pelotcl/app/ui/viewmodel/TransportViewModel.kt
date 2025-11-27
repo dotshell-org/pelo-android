@@ -10,6 +10,7 @@ import com.pelotcl.app.data.model.StopFeature
 import com.pelotcl.app.data.repository.TransportRepository
 import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.utils.Connection
+import com.pelotcl.app.data.repository.FavoritesRepository
 import com.pelotcl.app.utils.ConnectionsHelper
 import com.pelotcl.app.utils.HolidayDetector
 import java.time.LocalDate
@@ -55,6 +56,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val schedulesRepository = com.pelotcl.app.data.gtfs.SchedulesRepository(application.applicationContext)
     private val holidayDetector = HolidayDetector(application.applicationContext)
+    private val favoritesRepository = FavoritesRepository(application.applicationContext)
 
     private val _headsigns = MutableStateFlow<Map<Int, String>>(emptyMap())
     val headsigns: StateFlow<Map<Int, String>> = _headsigns.asStateFlow()
@@ -69,6 +71,11 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     private val _availableDirections = MutableStateFlow<List<Int>>(emptyList())
     val availableDirections: StateFlow<List<Int>> = _availableDirections.asStateFlow()
 
+    private val _favoriteLines = MutableStateFlow<Set<String>>(emptySet())
+    val favoriteLines: StateFlow<Set<String>> = _favoriteLines.asStateFlow()
+    private val _selectedLineName = MutableStateFlow<String?>(null)
+    val selectedLineName: StateFlow<String?> = _selectedLineName.asStateFlow()
+
     // Preloading flags to avoid multiple reloads
     private var isPreloading: Boolean = false
     private var hasPreloaded: Boolean = false
@@ -76,6 +83,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     init {
         // Start non-blocking preload on creation to have lines, stops, and connection index ready
         preloadAllData()
+        // Load favorites
+        _favoriteLines.value = favoritesRepository.getFavorites().map { it.uppercase() }.toSet()
     }
 
     /**
@@ -392,6 +401,36 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     )
                 }
         }
+    }
+
+    /**
+     * Toggle favorite status for a line and persist
+     */
+    fun toggleFavorite(lineName: String) {
+        viewModelScope.launch {
+            // Normalize to uppercase for consistency
+            val normalized = lineName.uppercase()
+            val current = _favoriteLines.value.toMutableSet()
+            if (current.contains(normalized)) {
+                current.remove(normalized)
+            } else {
+                current.add(normalized)
+            }
+            favoritesRepository.saveFavorites(current)
+            _favoriteLines.value = current
+        }
+    }
+
+    fun isFavorite(lineName: String): Boolean {
+        return _favoriteLines.value.contains(lineName.uppercase())
+    }
+
+    fun selectLine(lineName: String, currentStationName: String = "") {
+        _selectedLineName.value = lineName
+    }
+
+    fun clearSelectedLine() {
+        _selectedLineName.value = null
     }
 
     /**

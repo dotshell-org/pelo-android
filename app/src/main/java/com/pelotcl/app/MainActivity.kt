@@ -30,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +48,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.pelotcl.app.ui.components.SimpleSearchBar
+import com.pelotcl.app.ui.components.LinesBottomSheet
 import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.ui.screens.PlanScreen
 import com.pelotcl.app.ui.theme.PeloTheme
@@ -277,7 +279,22 @@ private fun AppNavHost(
             )
         }
         composable(Destination.LIGNES.route) {
-            SimpleScreen(title = "Lines")
+            val favoriteLines by viewModel.favoriteLines.collectAsState()
+            LinesBottomSheet(
+                allLines = viewModel.getAllAvailableLines(),
+                onDismiss = { /* Nothing to dismiss - full-screen */ },
+                onLineClick = { lineName ->
+                    // Select line and navigate back to Plan screen where it will open the details
+                    viewModel.selectLine(lineName)
+                    navController.navigate(Destination.PLAN.route) {
+                        launchSingleTop = true
+                        popUpTo(navController.graph.startDestinationId) { saveState = true }
+                        restoreState = true
+                    }
+                },
+                favoriteLines = favoriteLines,
+                onToggleFavorite = { viewModel.toggleFavorite(it) }
+            )
         }
         composable(Destination.PARAMETRES.route) {
             SimpleScreen(title = "Settings")
