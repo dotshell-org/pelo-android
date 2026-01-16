@@ -151,6 +151,9 @@ fun PlanScreen(
     var sheetContentState by remember { mutableStateOf<SheetContentState?>(null) }
     val selectedLineNameFromViewModel by viewModel.selectedLineName.collectAsState()
 
+    // Track previous sheetContentState to detect transitions
+    var previousSheetContentState by remember { mutableStateOf<SheetContentState?>(null) }
+
     LaunchedEffect(sheetContentState, selectedStation) {
         onSheetStateChanged(sheetContentState != null)
         if (sheetContentState == SheetContentState.STATION && selectedStation != null) {
@@ -158,6 +161,13 @@ fun PlanScreen(
                 scaffoldSheetState.bottomSheetState.expand()
             }
         }
+        // Auto-expand when transitioning to LINE_DETAILS (not when already in LINE_DETAILS)
+        if (sheetContentState == SheetContentState.LINE_DETAILS && previousSheetContentState != SheetContentState.LINE_DETAILS) {
+            scope.launch {
+                scaffoldSheetState.bottomSheetState.expand()
+            }
+        }
+        previousSheetContentState = sheetContentState
     }
 
     val latestSheetContentState by rememberUpdatedState(sheetContentState)

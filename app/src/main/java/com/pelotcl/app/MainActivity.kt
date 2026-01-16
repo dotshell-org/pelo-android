@@ -75,22 +75,6 @@ class MainActivity : ComponentActivity() {
                 NavBar(modifier = Modifier.fillMaxSize())
             }
         }
-
-        val raptor = RaptorLibrary(
-            stopsInputStream = assets.open("stops.bin"),
-            routesInputStream = assets.open("routes.bin")
-        )
-        val originStops = raptor.searchStopsByName("Perrache")
-        val destStops = raptor.searchStopsByName("Cuire")
-        val departureTime = 8 * 3600
-        val journeys = raptor.getOptimizedPaths(
-            originStopIds = originStops.map { it.id },
-            destinationStopIds = destStops.map { it.id },
-            departureTime = departureTime
-        )
-        for (journey in journeys) {
-            raptor.displayJourney(journey)
-        }
     }
 }
 
