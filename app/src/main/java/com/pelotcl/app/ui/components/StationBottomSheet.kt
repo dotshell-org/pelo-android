@@ -23,11 +23,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -35,13 +30,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.pelotcl.app.data.gtfs.GtfsParser
-import com.pelotcl.app.data.gtfs.StopDeparture
 import com.pelotcl.app.ui.theme.Gray200
 import com.pelotcl.app.ui.theme.Gray700
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Station data for display in the bottom sheet
@@ -146,37 +136,6 @@ fun StationBottomSheet(
     onLineClick: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
-    
-    // Map pour stocker les horaires de chaque ligne
-    var departuresByLine by remember { mutableStateOf<Map<String, List<StopDeparture>>>(emptyMap()) }
-    
-    // Charger les horaires pour toutes les lignes
-    LaunchedEffect(stationInfo) {
-        if (stationInfo != null) {
-            val departures = mutableMapOf<String, List<StopDeparture>>()
-            
-            withTimeoutOrNull(3000L) {
-                withContext(Dispatchers.IO) {
-                    try {
-                        val parser = GtfsParser(context)
-                        val sortedLines = sortLines(stationInfo.lignes)
-                        
-                        sortedLines.forEach { lineName ->
-                            val lineDepartures = parser.getNextDepartures(
-                                lineName = lineName,
-                                maxResults = 2
-                            )
-                            departures[lineName] = lineDepartures
-                        }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                }
-            }
-            
-            departuresByLine = departures
-        }
-    }
     
     if (stationInfo != null) {
         val content = @Composable {
