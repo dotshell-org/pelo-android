@@ -71,6 +71,7 @@ import com.pelotcl.app.data.repository.RaptorStop
 import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.ui.theme.Gray200
 import com.pelotcl.app.ui.theme.Gray700
+import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LineColorHelper
@@ -225,22 +226,18 @@ fun ItineraryScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(Color.Black)
                 .padding(contentPadding)
+                .verticalScroll(rememberScrollState())
         ) {
-            // Stop selection card
-            Card(
+            // Stop selection fields directly on black background
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                    .padding(16.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    // Departure stop field
-                    StopSelectionField(
-                        label = "Départ",
+                // Departure stop field
+                StopSelectionField(
                         selectedStop = departureStop,
                         query = departureQuery,
                         onQueryChange = { 
@@ -266,8 +263,7 @@ fun ItineraryScreen(
                             departureQuery = ""
                             isSearchingDeparture = false
                         },
-                        icon = Icons.Default.MyLocation,
-                        iconTint = Color.Black
+                        icon = Icons.Default.MyLocation
                     )
                     
                     // Swap button
@@ -285,14 +281,13 @@ fun ItineraryScreen(
                             Icon(
                                 imageVector = Icons.Default.SwapVert,
                                 contentDescription = "Inverser",
-                                tint = Color.Black
+                                tint = Color.White
                             )
                         }
                     }
                     
                     // Arrival stop field
                     StopSelectionField(
-                        label = "Arrivée",
                         selectedStop = arrivalStop,
                         query = arrivalQuery,
                         onQueryChange = { 
@@ -318,11 +313,11 @@ fun ItineraryScreen(
                             arrivalQuery = ""
                             isSearchingArrival = false
                         },
-                        icon = Icons.Default.Search,
-                        iconTint = Color.Black
+                        icon = Icons.Default.Search
                     )
-                }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
             
             // Results section
             when {
@@ -330,13 +325,13 @@ fun ItineraryScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f),
+                            .padding(vertical = 32.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator(color = Color.Black)
+                            CircularProgressIndicator(color = Color.White)
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text("Calcul de l'itinéraire...", color = Gray700)
+                            Text("Calcul de l'itinéraire...", color = Color.White.copy(alpha = 0.7f))
                         }
                     }
                 }
@@ -344,40 +339,32 @@ fun ItineraryScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f),
+                            .padding(vertical = 32.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = errorMessage!!,
-                            color = Gray700,
+                            color = Color.White.copy(alpha = 0.7f),
                             style = MaterialTheme.typography.bodyLarge
                         )
                     }
                 }
                 journeys.isNotEmpty() -> {
-                    androidx.compose.foundation.lazy.LazyColumn(
+                    Column(
                         modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                            start = 16.dp,
-                            end = 16.dp,
-                            bottom = 16.dp
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(12.dp) // Gère l'espacement automatiquement
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
                     ) {
-                        item {
-                            Text(
-                                text = "Itinéraires proposés",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            )
+                        journeys.forEachIndexed { index, journey ->
+                            JourneyCard(journey = journey)
+                            if (index < journeys.size - 1) {
+                                HorizontalDivider(
+                                    color = Color.White.copy(alpha = 0.2f),
+                                    modifier = Modifier.padding(vertical = 32.dp)
+                                )
+                            }
                         }
-
-                        items(journeys.size) { index ->
-                            JourneyCard(journey = journeys[index])
-                        }
+                        Spacer(modifier = Modifier.height(16.dp))
                     }
                 }
                 departureStop != null && arrivalStop != null -> {
@@ -387,24 +374,25 @@ fun ItineraryScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f),
+                            .padding(vertical = 32.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = "Sélectionnez un arrêt de départ et d'arrivée",
-                            color = Gray700,
+                            color = Color.White.copy(alpha = 0.7f),
                             style = MaterialTheme.typography.bodyLarge
                         )
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(80.dp))
         }
     }
 }
 
 @Composable
 private fun StopSelectionField(
-    label: String,
     selectedStop: SelectedStop?,
     query: String,
     onQueryChange: (String) -> Unit,
@@ -412,19 +400,17 @@ private fun StopSelectionField(
     searchResults: List<StationSearchResult>,
     onStopSelected: (StationSearchResult) -> Unit,
     onClear: () -> Unit,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    iconTint: Color
+    icon: androidx.compose.ui.graphics.vector.ImageVector
 ) {
     Column {
         OutlinedTextField(
             value = if (selectedStop != null && !isSearching) selectedStop.name else query,
             onValueChange = onQueryChange,
-            label = { Text(label) },
             leadingIcon = {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = iconTint
+                    tint = Red500
                 )
             },
             trailingIcon = {
@@ -441,10 +427,17 @@ private fun StopSelectionField(
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Color.Black,
+                focusedTextColor = Color.Black,
+                unfocusedTextColor = Color.Black,
+                focusedContainerColor = Color.White,
+                unfocusedContainerColor = Color.White,
+                focusedBorderColor = Color.Transparent,
+                unfocusedBorderColor = Color.Transparent,
                 focusedLabelColor = Color.Black,
+                unfocusedLabelColor = Color.Gray,
                 cursorColor = Color.Black
-            )
+            ),
+            shape = RoundedCornerShape(12.dp)
         )
         
         // Search results dropdown
@@ -466,7 +459,8 @@ private fun StopSelectionField(
                                     text = result.stopName,
                                     fontWeight = FontWeight.Medium,
                                     maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = Color.Black
                                 )
                             },
                             supportingContent = {
@@ -491,7 +485,10 @@ private fun StopSelectionField(
                             modifier = Modifier.clickable { onStopSelected(result) },
                             colors = ListItemDefaults.colors(containerColor = Color.White)
                         )
-                        HorizontalDivider(color = Gray200)
+                        if (result != searchResults.last())
+                        {
+                            HorizontalDivider(color = Gray200)
+                        }
                     }
                 }
             }
@@ -531,60 +528,62 @@ private fun SmallLineBadge(lineName: String) {
 
 @Composable
 private fun JourneyCard(journey: JourneyResult) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
+        // Header with times and duration
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Header with times and duration
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = journey.formatDepartureTime(),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = " → ",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Gray700
-                    )
-                    Text(
-                        text = journey.formatArrivalTime(),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.1f))
-                ) {
-                    Text(
-                        text = "${journey.durationMinutes} min",
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        color = Color.Black,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Journey legs
-            journey.legs.forEachIndexed { index, leg ->
-                JourneyLegItem(
-                    leg = leg,
-                    isFirst = index == 0,
-                    isLast = index == journey.legs.size - 1
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = journey.formatDepartureTime(),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Text(
+                    text = " → ",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+                Text(
+                    text = journey.formatArrivalTime(),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
                 )
             }
+            
+            Box(
+                modifier = Modifier
+                    .background(
+                        color = Color.White.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+            ) {
+                Text(
+                    text = "${journey.durationMinutes} min",
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+            
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // Journey legs
+        journey.legs.forEachIndexed { index, leg ->
+            JourneyLegItem(
+                leg = leg,
+                isFirst = index == 0,
+                isLast = index == journey.legs.size - 1
+            )
         }
     }
 }
@@ -596,12 +595,8 @@ private fun JourneyLegItem(
     isLast: Boolean
 ) {
     val context = LocalContext.current
-    val lineColor = if (leg.isWalking) {
-        Gray700
-    } else {
-        Color(LineColorHelper.getColorForLineString(leg.routeName ?: ""))
-    }
-    
+    val lineColor = if (leg.isWalking) Gray700 else Color(LineColorHelper.getColorForLineString(leg.routeName ?: ""))
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -609,7 +604,6 @@ private fun JourneyLegItem(
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.Top
     ) {
-        // Timeline
         Box(
             modifier = Modifier
                 .width(40.dp)
@@ -617,30 +611,24 @@ private fun JourneyLegItem(
             contentAlignment = Alignment.TopCenter
         ) {
             Column(
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxHeight()
             ) {
-                // Top connector line
                 if (!isFirst) {
-                    Box(
-                        modifier = Modifier
-                            .width(3.dp)
-                            .height(8.dp)
-                            .background(lineColor)
-                    )
+                    Box(modifier = Modifier.width(3.dp).height(8.dp).background(lineColor))
                 }
-                
-                // Circle or icon
+
                 if (leg.isWalking) {
                     Icon(
                         imageVector = Icons.Default.DirectionsWalk,
-                        contentDescription = "Marche",
+                        contentDescription = null,
                         tint = Gray700,
                         modifier = Modifier.size(20.dp)
                     )
                 } else {
                     val drawableName = BusIconHelper.getDrawableNameForLineName(leg.routeName ?: "")
                     val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
-                    
+
                     if (resourceId != 0) {
                         Image(
                             painter = painterResource(id = resourceId),
@@ -649,82 +637,55 @@ private fun JourneyLegItem(
                         )
                     } else {
                         Box(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .clip(CircleShape)
-                                .background(lineColor),
+                            modifier = Modifier.size(24.dp).clip(CircleShape).background(lineColor),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = leg.routeName ?: "?",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
+                            Text(text = leg.routeName ?: "?", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         }
                     }
                 }
-                
-                // Bottom connector line
-                if (!isLast) {
+
+                Box(
+                    modifier = Modifier
+                        .width(3.dp)
+                        .weight(1f)
+                        .background(lineColor)
+                )
+
+                if (isLast) {
                     Box(
                         modifier = Modifier
-                            .width(3.dp)
-                            .weight(1f)
-                            .background(lineColor)
+                            .size(12.dp)
+                            .border(3.dp, lineColor, CircleShape)
+                            .background(Color.Black)
                     )
                 }
             }
         }
-        
-        // Leg details
+
         Column(
             modifier = Modifier
                 .weight(1f)
                 .padding(start = 8.dp)
         ) {
+            Text(text = leg.fromStopName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, color = Color.White)
+            Text(text = leg.formatDepartureTime(), color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+
+            Spacer(modifier = Modifier.height(4.dp))
+
             Text(
-                text = leg.fromStopName,
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.bodyMedium
-            )
-            
-            Text(
-                text = leg.formatDepartureTime(),
-                color = Gray700,
+                text = if (leg.isWalking) "Marche ${leg.durationMinutes} min" else "Direction ${leg.direction ?: leg.toStopName}",
+                color = Color.White.copy(alpha = 0.7f),
                 style = MaterialTheme.typography.bodySmall
             )
-            
-            Spacer(modifier = Modifier.height(4.dp))
-            
-            if (leg.isWalking) {
-                Text(
-                    text = "Marche ${leg.durationMinutes} min",
-                    color = Gray700,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            } else {
-                val directionText = leg.direction ?: leg.toStopName
-                Text(
-                    text = "Direction $directionText",
-                    color = Gray700,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
+
             if (isLast) {
-                Text(
-                    text = leg.toStopName,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Text(
-                    text = leg.formatArrivalTime(),
-                    color = Gray700,
-                    style = MaterialTheme.typography.bodySmall
-                )
+                Spacer(modifier = Modifier.weight(1f))
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(text = leg.toStopName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                Text(text = leg.formatArrivalTime(), color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+            } else {
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
