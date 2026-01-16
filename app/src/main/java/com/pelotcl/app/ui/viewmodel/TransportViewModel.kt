@@ -2,6 +2,7 @@ package com.pelotcl.app.ui.viewmodel
 
 import android.app.Application
 import android.os.Build
+import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -113,7 +114,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     fun computeAvailableDirections(lineName: String, stopName: String) {
         viewModelScope.launch {
             // Determine if it is a school holiday
-            val isTodayHoliday = holidayDetector.isSchoolHoliday(java.time.LocalDate.now())
+            val isTodayHoliday = holidayDetector.isSchoolHoliday(LocalDate.now())
             val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
 
             // Candidate directions list: those exposed by _headsigns otherwise 0 and 1 by default
@@ -127,7 +128,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                         available.add(dir)
                     }
                 } catch (t: Throwable) {
-                    // Ignore error for this dir, consider it unavailable
+                    Log.e("TransportViewModel", "computeAvailableDirections: exception ${t.message}")
                 }
             }
             _availableDirections.value = available
@@ -143,16 +144,11 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             _allSchedules.value = emptyList()
             _nextSchedules.value = emptyList()
 
-            android.util.Log.d("NavigoneDebug", "loadSchedulesForDirection called with lineName: '$lineName'")
-
             // Determine if today is a school holiday
             val isTodayHoliday = holidayDetector.isSchoolHoliday(LocalDate.now())
-            android.util.Log.d("NavigoneDebug", "Is today a school holiday? $isTodayHoliday")
 
             // The GTFS data uses NAVI1 for the Navigone, but the app displays NAV1
             val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
-
-            android.util.Log.d("NavigoneDebug", "Translated lineName to gtfsLineName: '$gtfsLineName'")
 
             val allSchedulesForDay = schedulesRepository.getSchedules(gtfsLineName, stopName, directionId, isTodayHoliday)
             _allSchedules.value = allSchedulesForDay
@@ -182,7 +178,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 _nextSchedules.value = nextThree
 
             } catch (e: Exception) {
-                android.util.Log.e("TransportViewModel", "Error filtering next schedules: ${e.message}")
+                Log.e("TransportViewModel", "Error filtering next schedules: ${e.message}")
             }
         }
     }
@@ -196,15 +192,14 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             try {
                 repository.getAllLines()
                     .onSuccess { collection ->
-                        val rxCount = collection.features.count { it.properties.ligne.equals("RX", ignoreCase = true) }
-                        android.util.Log.d("TransportViewModel", "reloadStrongLines: loaded ${collection.features.size} features; RX count=$rxCount")
+                        collection.features.count { it.properties.ligne.equals("RX", ignoreCase = true) }
                         _uiState.value = TransportLinesUiState.Success(collection.features)
                     }
                     .onFailure { e ->
-                        android.util.Log.w("TransportViewModel", "reloadStrongLines failed: ${e.message}")
+                        Log.w("TransportViewModel", "reloadStrongLines failed: ${e.message}")
                     }
             } catch (t: Throwable) {
-                android.util.Log.e("TransportViewModel", "reloadStrongLines: exception ${t.message}")
+                Log.e("TransportViewModel", "reloadStrongLines: exception ${t.message}")
             }
         }
     }
@@ -215,7 +210,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
     // Pre-calculated transfers index by stop name
     // Key = normalized stop name, Value = list of transfer lines
-    private var connectionsIndex: Map<String, List<com.pelotcl.app.utils.Connection>> = emptyMap()
+    private var connectionsIndex: Map<String, List<Connection>> = emptyMap()
 
     /**
      * Preloads lines and stops at launch, builds transfers index,
@@ -234,7 +229,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                             _uiState.value = TransportLinesUiState.Success(featureCollection.features)
                         }
                         .onFailure { e ->
-                            android.util.Log.w("TransportViewModel", "Preload: failed loading lines: ${e.message}")
+                            Log.w("TransportViewModel", "Preload: failed loading lines: ${e.message}")
                         }
                 }
 
@@ -250,11 +245,11 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                             }
                         }
                         .onFailure { e ->
-                            android.util.Log.w("TransportViewModel", "Preload: failed loading stops: ${e.message}")
+                            Log.w("TransportViewModel", "Preload: failed loading stops: ${e.message}")
                         }
                 }
             } catch (t: Throwable) {
-                android.util.Log.e("TransportViewModel", "Preload: unexpected exception: ${t.message}")
+                Log.e("TransportViewModel", "Preload: unexpected exception: ${t.message}")
             } finally {
                 hasPreloaded = true
                 isPreloading = false
@@ -283,7 +278,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      * Retrieves transfers for a given stop from the pre-calculated index
      * Ultra-fast method (O(1))
      */
-    fun getConnectionsForStop(stopName: String, currentLine: String): List<com.pelotcl.app.utils.Connection> {
+    fun getConnectionsForStop(stopName: String, currentLine: String): List<Connection> {
         val normalized = normalizeStopName(stopName)
         val connections = connectionsIndex[normalized] ?: emptyList()
         // Exclude the current line (with normalization to handle NAVI1 vs NAV1)
@@ -336,10 +331,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             .onSuccess { stopCollection ->
                 cachedStops = stopCollection.features
                 buildConnectionsIndex(stopCollection.features)
-                android.util.Log.d("TransportViewModel", "Stops cache reloaded: ${stopCollection.features.size} stops")
             }
             .onFailure { exception ->
-                android.util.Log.e("TransportViewModel", "Error reloading stops cache: ${exception.message}")
+                Log.e("TransportViewModel", "Error reloading stops cache: ${exception.message}")
             }
     }
 
@@ -371,7 +365,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
         // Step 2: Build index using groups
         val index = mutableMapOf<String, List<Connection>>()
-        for ((canonicalName, stopsInGroup) in stopGroups) {
+        for ((_, stopsInGroup) in stopGroups) {
             val allConnectionsForGroup = stopsInGroup
                 .flatMap { stop -> ConnectionsHelper.parseAllConnections(stop.properties.desserte) }
                 .distinctBy { it.lineName }
@@ -421,11 +415,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun isFavorite(lineName: String): Boolean {
-        return _favoriteLines.value.contains(lineName.uppercase())
-    }
-
-    fun selectLine(lineName: String, currentStationName: String = "") {
+    fun selectLine(lineName: String) {
         _selectedLineName.value = lineName
     }
 
@@ -434,40 +424,16 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
-     * Loads a specific line by its name
-     */
-    fun loadLineByName(lineName: String) {
-        viewModelScope.launch {
-            _uiState.value = TransportLinesUiState.Loading
-            repository.getLineByName(lineName)
-                .onSuccess { feature ->
-                    _uiState.value = if (feature != null) {
-                        TransportLinesUiState.Success(listOf(feature))
-                    } else {
-                        TransportLinesUiState.Error("Line $lineName not found")
-                    }
-                }
-                .onFailure { exception ->
-                    _uiState.value = TransportLinesUiState.Error(
-                        exception.message ?: "An error occurred"
-                    )
-                }
-        }
-    }
-
-    /**
      * Adds a specific line to already loaded lines (for on-demand bus lines)
      * Does not modify state if the line is already present
      */
     fun addLineToLoaded(lineName: String) {
-        android.util.Log.d("TransportViewModel", "addLineToLoaded called for: $lineName")
-
         viewModelScope.launch {
             val currentState = _uiState.value
 
             // Do nothing if not in Success state
             if (currentState !is TransportLinesUiState.Success) {
-                android.util.Log.w("TransportViewModel", "Current state is not Success, cannot add line")
+                Log.w("TransportViewModel", "Current state is not Success, cannot add line")
                 return@launch
             }
 
@@ -477,27 +443,23 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             }
 
             if (isAlreadyLoaded) {
-                android.util.Log.d("TransportViewModel", "Line $lineName is already loaded, skipping")
                 return@launch // Line already present, do nothing
             }
-
-            android.util.Log.d("TransportViewModel", "Loading line $lineName from API...")
 
             // Load the line from the API
             repository.getLineByName(lineName)
                 .onSuccess { feature ->
                     if (feature != null) {
-                        android.util.Log.d("TransportViewModel", "Successfully loaded line $lineName, adding to map")
                         // Add the new line to existing lines
                         val updatedLines = currentState.lines + feature
                         _uiState.value = TransportLinesUiState.Success(updatedLines)
                     } else {
-                        android.util.Log.w("TransportViewModel", "getLineByName returned null for $lineName")
+                        Log.w("TransportViewModel", "getLineByName returned null for $lineName")
                     }
                 }
                 .onFailure { exception ->
                     // In case of error, don't change state (keep current lines)
-                    android.util.Log.e("TransportViewModel", "Error loading line $lineName: ${exception.message}")
+                    Log.e("TransportViewModel", "Error loading line $lineName: ${exception.message}")
                 }
         }
     }
@@ -506,25 +468,18 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      * Removes a specific line from loaded lines (to clean up temporary bus lines)
      */
     fun removeLineFromLoaded(lineName: String) {
-        android.util.Log.d("TransportViewModel", "removeLineFromLoaded called for: $lineName")
-
         val currentState = _uiState.value
 
         // Do nothing if not in Success state
         if (currentState !is TransportLinesUiState.Success) {
-            android.util.Log.w("TransportViewModel", "Current state is not Success, cannot remove line")
+            Log.w("TransportViewModel", "Current state is not Success, cannot remove line")
             return
         }
-
-        val beforeCount = currentState.lines.size
 
         // Filter to remove the line
         val updatedLines = currentState.lines.filter {
             !lineName.equals(it.properties.ligne, ignoreCase = true)
         }
-
-        val afterCount = updatedLines.size
-        android.util.Log.d("TransportViewModel", "Removed line $lineName. Before: $beforeCount lines, After: $afterCount lines")
 
         _uiState.value = TransportLinesUiState.Success(updatedLines)
     }
@@ -539,7 +494,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         // First, try to retrieve from cache (for metros and trams)
         val cachedStops = com.pelotcl.app.data.gtfs.LineStopsCache.getLineStops(lineName, currentStopName)
         if (cachedStops != null) {
-            android.util.Log.d("TransportViewModel", "Found $lineName in cache with ${cachedStops.size} stops")
             // Align cache labels with official GTFS labels (strict comparison required DB side)
             val allStops = getCachedStopsSync()
             // Build set of official names served by the line (all directions)
@@ -579,8 +533,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         // Get all stops from cache
         val allStops = getCachedStopsSync()
 
-        android.util.Log.d("TransportViewModel", "getStopsForLine: line=$lineName, total stops=${allStops.size}")
-
         // API uses NAVI1 but we display NAV1, so we need to search for both
         val searchNames = if (lineName.equals("NAV1", ignoreCase = true)) {
             listOf("NAV1", "NAVI1")
@@ -597,8 +549,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
 
-        android.util.Log.d("TransportViewModel", "Found ${lineStops.size} stops for line $lineName (with duplicates)")
-
         // Get all line traces to order stops
         val currentState = _uiState.value
         if (currentState is TransportLinesUiState.Success) {
@@ -606,8 +556,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             val lineFeatures = currentState.lines.filter {
                 lineName.equals(it.properties.ligne, ignoreCase = true)
             }
-
-            android.util.Log.d("TransportViewModel", "Found ${lineFeatures.size} traces for line $lineName")
 
             if (lineFeatures.isNotEmpty()) {
                 // Choose the longest trace (generally main/outbound direction)
@@ -622,15 +570,12 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                         segment.size
                     } ?: emptyList()
 
-                    android.util.Log.d("TransportViewModel", "Main trace has ${mainTrace.geometry.coordinates.size} segments")
-                    android.util.Log.d("TransportViewModel", "Longest segment (${mainTrace.properties.sens}) has ${longestSegment.size} points")
-
                     // Determine main trace direction and convert it to letter (A or R)
                     // Be defensive: API may return null sens unexpectedly, avoid NPEs
                     val sensUpper = try {
                         mainTrace.properties.sens.uppercase()
                     } catch (e: Exception) {
-                        android.util.Log.w("TransportViewModel", "properties.sens is null or invalid for line $lineName (codeTrace=${mainTrace.properties.codeTrace}) — falling back to unknown direction")
+                        Log.e("TransportViewModel", "getStopsForLine: exception ${e.message}")
                         ""
                     }
                     val mainDirection = when (sensUpper) {
@@ -639,17 +584,10 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                         else -> sensUpper.take(1) // First character already uppercased or empty
                     }
 
-                    android.util.Log.d("TransportViewModel", "Filtering stops for direction code: $mainDirection")
-
-                    // Display a few desserte examples for debug
-                    lineStops.take(5).forEach { stop ->
-                        android.util.Log.d("TransportViewModel", "  Stop '${stop.properties.nom}': desserte='${stop.properties.desserte}'")
-                    }
-
                     // Filter stops to keep only those that match the main direction
                     val directionStops = lineStops.filter { stop ->
                         // Be defensive: desserte can be null/blank in some rare cases
-                        val desserte = try { stop.properties.desserte } catch (e: Exception) { "" }
+                        val desserte = try { stop.properties.desserte } catch (_: Exception) { "" }
                         // Look for "86:A" or "86:R" (or "NAVI1:A" for NAV1) in the desserte
                         val matches = desserte.split(",").any { line ->
                             val trimmed = line.trim()
@@ -665,15 +603,10 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                                     trimmed.startsWith(searchName, ignoreCase = true)
                                 }
                             }
-                            if (result) {
-                                android.util.Log.d("TransportViewModel", "  ✓ Stop '${stop.properties.nom}' matches (found '$trimmed')")
-                            }
                             result
                         }
                         matches
                     }
-
-                    android.util.Log.d("TransportViewModel", "Found ${directionStops.size} stops for direction $mainDirection")
 
                     // For each stop, find its position on the main segment
                     val stopsWithPosition = directionStops.map { stop ->
@@ -694,8 +627,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     val orderedStops = stopsWithPosition
                         .sortedBy { (_, traceIndex) -> traceIndex }
                         .map { (stop, _) -> stop }
-
-                    android.util.Log.d("TransportViewModel", "Ordered stops by trace position: ${orderedStops.map { it.properties.nom }}")
 
                     // Deduplicate by normalized name (some lines have double platforms)
                     val dedupOrdered = orderedStops.distinctBy { normalizeStopName(it.properties.nom) }
@@ -722,8 +653,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             normalizeStopName(stop.properties.nom)
         }
 
-        android.util.Log.d("TransportViewModel", "Fallback: returning ${uniqueStops.size} unique stops without ordering")
-
         return uniqueStops.mapIndexed { index, stop ->
             val connections = getConnectionsForStop(stop.properties.nom, lineName)
             com.pelotcl.app.data.gtfs.LineStopInfo(
@@ -735,24 +664,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 } ?: false,
                 connections = connections.map { it.lineName }
             )
-        }
-    }
-
-    /**
-     * Loads all transport stops
-     */
-    fun loadAllStops() {
-        viewModelScope.launch {
-            _stopsUiState.value = TransportStopsUiState.Loading
-            repository.getAllStops()
-                .onSuccess { stopCollection ->
-                    _stopsUiState.value = TransportStopsUiState.Success(stopCollection.features)
-                }
-                .onFailure { exception ->
-                    _stopsUiState.value = TransportStopsUiState.Error(
-                        exception.message ?: "An error occurred while loading stops"
-                    )
-                }
         }
     }
 

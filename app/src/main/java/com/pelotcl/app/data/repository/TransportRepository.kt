@@ -38,7 +38,6 @@ class TransportRepository(context: Context? = null) {
             
             if (cachedMetro != null && cachedTram != null) {
                 // Cache hit: use cached data
-                android.util.Log.d("TransportRepository", "Cache HIT: Loading lines from cache")
                 metroFuniculaire = FeatureCollection(
                     type = "FeatureCollection",
                     features = cachedMetro,
@@ -55,7 +54,6 @@ class TransportRepository(context: Context? = null) {
                 )
             } else {
                 // Cache miss: load from API
-                android.util.Log.d("TransportRepository", "Cache MISS: Loading lines from API")
                 metroFuniculaire = api.getTransportLines()
                 trams = api.getTramLines()
                 
@@ -67,7 +65,6 @@ class TransportRepository(context: Context? = null) {
             // Load navigone lines (NAVI1 - always loaded like metro/tram)
             try {
                 navigone = api.getNavigoneLines()
-                android.util.Log.d("TransportRepository", "Loaded ${navigone.features.size} navigone lines")
             } catch (e: Exception) {
                 android.util.Log.w("TransportRepository", "Failed to load navigone lines: ${e.message}")
                 navigone = FeatureCollection(
@@ -82,7 +79,6 @@ class TransportRepository(context: Context? = null) {
             // Load trambus lines (TB*)
             try {
                 trambus = api.getTrambusLines()
-                android.util.Log.d("TransportRepository", "Loaded ${trambus.features.size} trambus lines")
             } catch (e: Exception) {
                 android.util.Log.w("TransportRepository", "Failed to load trambus lines: ${e.message}")
                 trambus = FeatureCollection(
@@ -105,18 +101,6 @@ class TransportRepository(context: Context? = null) {
             // Merge metro/funicular, trams, navigone, trambus and RX (NOT buses)
             val allFeatures = (metroFuniculaire.features + trams.features + navigone.features + trambus.features + rxFeatures)
 
-            // Log tram lines before grouping
-            val tramLines = trams.features.map { it.properties.ligne }.distinct().sorted()
-            android.util.Log.d("TransportRepository", "Tram lines from API: $tramLines")
-            android.util.Log.d("TransportRepository", "Total tram features before grouping: ${trams.features.size}")
-            
-            // Log code_trace for T1
-            val t1Features = trams.features.filter { it.properties.ligne.equals("T1", ignoreCase = true) }
-            android.util.Log.d("TransportRepository", "T1 features count: ${t1Features.size}")
-            t1Features.forEach { feature ->
-                android.util.Log.d("TransportRepository", "T1 code_trace: ${feature.properties.codeTrace}, sens: ${feature.properties.sens}")
-            }
-
             // Group by code_trace and keep only the first of each group (outbound direction)
             val uniqueLines = allFeatures
                 .groupBy { it.properties.codeTrace }
@@ -129,18 +113,6 @@ class TransportRepository(context: Context? = null) {
                 numberMatched = (metroFuniculaire.numberMatched ?: 0) + (trams.numberMatched ?: 0) + (navigone.numberMatched ?: 0) + (trambus.numberMatched ?: 0)
             )
 
-            // Log loaded lines
-            val lineNames = uniqueLines.map { it.properties.ligne }.sorted()
-            android.util.Log.d("TransportRepository", "Loaded lines: $lineNames")
-            android.util.Log.d("TransportRepository", "Metro/Funicular count: ${metroFuniculaire.features.size}")
-            android.util.Log.d("TransportRepository", "Tram count: ${trams.features.size}")
-            android.util.Log.d("TransportRepository", "Navigone count: ${navigone.features.size}")
-            android.util.Log.d("TransportRepository", "Trambus count: ${trambus.features.size}")
-            android.util.Log.d("TransportRepository", "Total unique lines: ${uniqueLines.size}")
-            if (rxFeatures.isNotEmpty()) {
-                android.util.Log.d("TransportRepository", "Included Rhônexpress features: ${rxFeatures.size}")
-            }
-
             Result.success(filteredCollection)
         } catch (e: Exception) {
             Result.failure(e)
@@ -151,9 +123,8 @@ class TransportRepository(context: Context? = null) {
      * Récupère et mappe la couche Rhônexpress (RX) vers nos modèles internes
      */
     private suspend fun fetchRhonexpressFromWfs(): List<Feature> {
-        fun mapJsonToFeatures(json: JsonObject, srs: String): List<Feature> {
+        fun mapJsonToFeatures(json: JsonObject): List<Feature> {
             val featuresArray: JsonArray = json.getAsJsonArray("features") ?: return emptyList()
-            android.util.Log.d("TransportRepository", "Rhônexpress(WFS $srs): raw features=${featuresArray.size()}")
 
             val result = mutableListOf<Feature>()
             var minLon = Double.POSITIVE_INFINITY
@@ -250,18 +221,11 @@ class TransportRepository(context: Context? = null) {
                 )
             }
 
-            if (result.isNotEmpty()) {
-                android.util.Log.d(
-                    "TransportRepository",
-                    "Rhônexpress(WFS $srs): bbox lon[$minLon,$maxLon] lat[$minLat,$maxLat]"
-                )
-            }
             return result
         }
 
-        android.util.Log.d("TransportRepository", "Fetching Rhônexpress from WFS (primary SRS=EPSG:4326)…")
         val primary = try {
-            mapJsonToFeatures(RetrofitInstance.api.getRhonexpressRaw(), "EPSG:4326")
+            mapJsonToFeatures(RetrofitInstance.api.getRhonexpressRaw())
         } catch (t: Throwable) {
             android.util.Log.w("TransportRepository", "Rhônexpress primary fetch failed: ${t.message}")
             emptyList()
@@ -275,8 +239,7 @@ class TransportRepository(context: Context? = null) {
         )
         val secondary = try {
             mapJsonToFeatures(
-                RetrofitInstance.api.getRhonexpressRaw(srsName = "EPSG:4171"),
-                "EPSG:4171"
+                RetrofitInstance.api.getRhonexpressRaw(srsName = "EPSG:4171")
             )
         } catch (t: Throwable) {
             android.util.Log.w("TransportRepository", "Rhônexpress secondary fetch failed: ${t.message}")
@@ -380,11 +343,9 @@ class TransportRepository(context: Context? = null) {
             
             if (cachedMetro != null && cachedTram != null) {
                 // Cache hit: use cached data
-                android.util.Log.d("TransportRepository", "Cache HIT: Loading line $lineName from cache")
                 priorityFeatures = cachedMetro + cachedTram
             } else {
                 // Cache miss: load from API
-                android.util.Log.d("TransportRepository", "Cache MISS: Loading line $lineName from API")
                 val metroFuniculaire = api.getTransportLines()
                 val trams = api.getTramLines()
                 priorityFeatures = metroFuniculaire.features + trams.features
@@ -404,10 +365,13 @@ class TransportRepository(context: Context? = null) {
             }
 
             // Search first in metro/funicular/tram/navigone
-            val line = (priorityFeatures + navigoneFeatures)
-                .filter { it.properties.ligne.equals(lineName, ignoreCase = true) }
-                .firstOrNull()
-            
+            val line = (priorityFeatures + navigoneFeatures).firstOrNull {
+                it.properties.ligne.equals(
+                    lineName,
+                    ignoreCase = true
+                )
+            }
+
             // If found, return it
             if (line != null) {
                 return Result.success(line)
@@ -417,27 +381,30 @@ class TransportRepository(context: Context? = null) {
             val cachedBus = cache?.getBusLines()
             val busLine = if (cachedBus != null) {
                 // Cache hit for buses
-                android.util.Log.d("TransportRepository", "Cache HIT: Loading bus line $lineName from cache")
-                cachedBus.filter { it.properties.ligne.equals(lineName, ignoreCase = true) }
-                    .firstOrNull()
+                cachedBus.firstOrNull { it.properties.ligne.equals(lineName, ignoreCase = true) }
             } else {
                 // Cache miss: load all buses from API
-                android.util.Log.d("TransportRepository", "Cache MISS: Loading all bus lines from API")
                 try {
                     val bus = api.getBusLines()
                     // Save to cache (memory only, not on disk)
                     cache?.saveBusLines(bus.features)
-                    
-                    bus.features
-                        .filter { it.properties.ligne.equals(lineName, ignoreCase = true) }
-                        .firstOrNull()
+
+                    bus.features.firstOrNull {
+                        it.properties.ligne.equals(
+                            lineName,
+                            ignoreCase = true
+                        )
+                    }
                 } catch (e: OutOfMemoryError) {
                     android.util.Log.e("TransportRepository", "OutOfMemoryError loading bus lines, trying to find line without caching", e)
                     // In case of OutOfMemoryError, just load the requested line without caching everything
                     val bus = api.getBusLines()
-                    bus.features
-                        .filter { it.properties.ligne.equals(lineName, ignoreCase = true) }
-                        .firstOrNull()
+                    bus.features.firstOrNull {
+                        it.properties.ligne.equals(
+                            lineName,
+                            ignoreCase = true
+                        )
+                    }
                 }
             }
             
@@ -464,7 +431,6 @@ class TransportRepository(context: Context? = null) {
             
             if (cachedStops != null) {
                 // Cache hit: use cached data
-                android.util.Log.d("TransportRepository", "Cache HIT: Loading stops from cache (${cachedStops.size} stops)")
                 response = StopCollection(
                     type = "FeatureCollection",
                     features = cachedStops,
@@ -474,17 +440,7 @@ class TransportRepository(context: Context? = null) {
                 )
             } else {
                 // Cache miss: load from API
-                android.util.Log.d("TransportRepository", "Cache MISS: Loading stops from API")
                 response = api.getTransportStops()
-                
-                // Debug: check if any stops serve NAV1
-                val navStops = response.features.filter { 
-                    it.properties.desserte.contains("NAV", ignoreCase = true) 
-                }
-                android.util.Log.d("TransportRepository", "Found ${navStops.size} stops with NAV in desserte")
-                navStops.take(5).forEach { stop ->
-                    android.util.Log.d("TransportRepository", "NAV stop: ${stop.properties.nom}, desserte: ${stop.properties.desserte}")
-                }
             }
             
             // No need to load navigone stops separately - they are in the main API with code NAVI1
@@ -579,38 +535,5 @@ class TransportRepository(context: Context? = null) {
         } catch (e: Exception) {
             Result.failure(e)
         }
-    }
-    
-    /**
-     * Forces reloading of stops from the API and updates the cache
-     */
-    suspend fun refreshStops(): Result<StopCollection> {
-        return try {
-            android.util.Log.d("TransportRepository", "Forcing refresh of stops from API")
-            cache?.clearStops()
-            getAllStops()
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-    
-    /**
-     * Forces reloading of lines from the API and updates the cache
-     */
-    suspend fun refreshLines(): Result<FeatureCollection> {
-        return try {
-            android.util.Log.d("TransportRepository", "Forcing refresh of lines from API")
-            cache?.clearLines()
-            getAllLines()
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-    
-    /**
-     * Clears the entire cache
-     */
-    suspend fun clearCache() {
-        cache?.clearAll()
     }
 }

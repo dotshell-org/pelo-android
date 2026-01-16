@@ -1,20 +1,17 @@
 package com.pelotcl.app.ui.components
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -24,8 +21,6 @@ import org.maplibre.android.maps.MapView
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.sources.GeoJsonSource
-import com.google.gson.JsonObject
-import com.google.gson.JsonArray
 
 @Composable
 fun MapLibreView(
@@ -34,15 +29,12 @@ fun MapLibreView(
     initialZoom: Double = 10.0,
     styleUrl: String = "https://tiles.openfreemap.org/styles/positron",
     onMapReady: (MapLibreMap) -> Unit = {},
-    searchResults: List<String> = emptyList(),
-    onSearch: (String) -> Unit = {},
     userLocation: LatLng? = null,
     centerOnUserLocation: Boolean = false
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
-    // Initialiser MapLibre une seule fois
     remember {
         MapLibre.getInstance(context)
     }

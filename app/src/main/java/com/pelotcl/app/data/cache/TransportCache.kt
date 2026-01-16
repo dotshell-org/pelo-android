@@ -4,8 +4,6 @@ import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.pelotcl.app.data.model.Feature
-import com.pelotcl.app.data.model.FeatureCollection
-import com.pelotcl.app.data.model.StopCollection
 import com.pelotcl.app.data.model.StopFeature
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -15,7 +13,7 @@ import java.util.concurrent.TimeUnit
  * In-memory and disk cache class for transport data.
  * Avoids repeated API calls and improves performance.
  */
-class TransportCache(private val context: Context) {
+class TransportCache(context: Context) {
     
     private val gson = Gson()
     private val prefs = context.getSharedPreferences("transport_cache", Context.MODE_PRIVATE)
@@ -42,8 +40,6 @@ class TransportCache(private val context: Context) {
         private const val KEY_METRO_LINES_TIMESTAMP = "metro_lines_timestamp"
         private const val KEY_TRAM_LINES = "tram_lines"
         private const val KEY_TRAM_LINES_TIMESTAMP = "tram_lines_timestamp"
-        private const val KEY_BUS_LINES = "bus_lines"
-        private const val KEY_BUS_LINES_TIMESTAMP = "bus_lines_timestamp"
         private const val KEY_STOPS = "stops"
         private const val KEY_STOPS_TIMESTAMP = "stops_timestamp"
         
@@ -159,9 +155,6 @@ class TransportCache(private val context: Context) {
     suspend fun saveBusLines(lines: List<Feature>) = mutex.withLock {
         busLinesCache = lines
         busLinesTimestamp = System.currentTimeMillis()
-        
-        // DO NOT save to disk - too large
-        android.util.Log.d("TransportCache", "Bus lines cached in memory only (${lines.size} lines)")
     }
     
     /**
@@ -171,12 +164,10 @@ class TransportCache(private val context: Context) {
     suspend fun getBusLines(): List<Feature>? = mutex.withLock {
         // Check memory cache only
         if (busLinesCache != null && isTimestampValid(busLinesTimestamp)) {
-            android.util.Log.d("TransportCache", "Bus lines found in memory cache")
             return@withLock busLinesCache
         }
         
         // Buses are not cached on disk
-        android.util.Log.d("TransportCache", "Bus lines not in cache")
         null
     }
     
@@ -195,7 +186,6 @@ class TransportCache(private val context: Context) {
                 putLong(KEY_STOPS_TIMESTAMP, stopsTimestamp)
                 apply()
             }
-            android.util.Log.d("TransportCache", "Saved ${stops.size} stops to disk and memory")
         } catch (e: Exception) {
             android.util.Log.e("TransportCache", "Failed to save stops to disk, keeping memory cache only", e)
             // In case of error, we still keep the memory cache
@@ -230,80 +220,4 @@ class TransportCache(private val context: Context) {
         
         null
     }
-    
-    /**
-     * Clears all cache (memory and disk)
-     */
-    suspend fun clearAll() = mutex.withLock {
-        metroLinesCache = null
-        tramLinesCache = null
-        busLinesCache = null
-        stopsCache = null
-        
-        metroLinesTimestamp = 0
-        tramLinesTimestamp = 0
-        busLinesTimestamp = 0
-        stopsTimestamp = 0
-        
-        prefs.edit().clear().apply()
-    }
-    
-    /**
-     * Clears only the lines cache
-     */
-    suspend fun clearLines() = mutex.withLock {
-        metroLinesCache = null
-        tramLinesCache = null
-        busLinesCache = null
-        
-        metroLinesTimestamp = 0
-        tramLinesTimestamp = 0
-        busLinesTimestamp = 0
-        
-        prefs.edit().apply {
-            remove(KEY_METRO_LINES)
-            remove(KEY_METRO_LINES_TIMESTAMP)
-            remove(KEY_TRAM_LINES)
-            remove(KEY_TRAM_LINES_TIMESTAMP)
-            remove(KEY_BUS_LINES)
-            remove(KEY_BUS_LINES_TIMESTAMP)
-            apply()
-        }
-    }
-    
-    /**
-     * Clears only the stops cache
-     */
-    suspend fun clearStops() = mutex.withLock {
-        stopsCache = null
-        stopsTimestamp = 0
-        
-        prefs.edit().apply {
-            remove(KEY_STOPS)
-            remove(KEY_STOPS_TIMESTAMP)
-            apply()
-        }
-    }
-    
-    /**
-     * Checks if the cache is valid for a data type
-     */
-    fun isCacheValid(type: CacheType): Boolean {
-        return when (type) {
-            CacheType.METRO_LINES -> isTimestampValid(metroLinesTimestamp)
-            CacheType.TRAM_LINES -> isTimestampValid(tramLinesTimestamp)
-            CacheType.BUS_LINES -> isTimestampValid(busLinesTimestamp)
-            CacheType.STOPS -> isTimestampValid(stopsTimestamp)
-        }
-    }
-}
-
-/**
- * Available cache types
- */
-enum class CacheType {
-    METRO_LINES,
-    TRAM_LINES,
-    BUS_LINES,
-    STOPS
 }

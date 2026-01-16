@@ -5,15 +5,14 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.util.Log
 import com.pelotcl.app.ui.components.StationSearchResult
-import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 
 enum class LineType {
-    METRO, FUNICULAR, NAVIGONE, TRAM, BUS, CHRONO, OTHER
+    METRO, FUNICULAR, NAVIGONE, TRAM, BUS, CHRONO
 }
 
-class SchedulesRepository(private val context: Context) {
+class SchedulesRepository(context: Context) {
 
     private val dbHelper = SchedulesDatabaseHelper(context)
 
@@ -92,9 +91,6 @@ class SchedulesRepository(private val context: Context) {
     }
 
     fun getSchedules(lineName: String, stopName: String, directionId: Int, isHoliday: Boolean): List<String> {
-        // ... (votre code getSchedules existant, inchangé pour la lisibilité) ...
-        // Je remets le bloc complet pour éviter les erreurs de copier/coller
-        Log.d("NavigoneDebug", "getSchedules: line='$lineName', stop='$stopName', direction=$directionId, isHoliday=$isHoliday")
         val result = mutableListOf<String>()
         try {
             val db = dbHelper.readableDatabase
@@ -183,22 +179,15 @@ class SchedulesRepository(private val context: Context) {
 
         companion object {
             private const val DB_NAME = "schedules.db"
-            // J'ai passé la version à 2 pour forcer la mise à jour
             private const val DB_VERSION = 2
         }
 
         override fun onCreate(db: SQLiteDatabase) {
-            // Rien à faire ici, car on copie la base depuis les assets
+            // Nothing to do here, because we copy the database from assets
         }
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-            // Si la version change (ex: passage de 1 à 2), on supprime l'ancienne base
-            // pour forcer la recopie au prochain accès
-            Log.d("SchedulesRepository", "Upgrading DB from $oldVersion to $newVersion: deleting old file.")
             context.deleteDatabase(DB_NAME)
-            // Note: On ne peut pas appeler copyDatabase() ici car la DB est ouverte par SQLiteOpenHelper
-            // La copie se fera automatiquement au prochain appel de getReadableDatabase()
-            // car checkDatabase() retournera false.
         }
 
         override fun getReadableDatabase(): SQLiteDatabase {
@@ -207,8 +196,7 @@ class SchedulesRepository(private val context: Context) {
             }
             return try {
                 super.getReadableDatabase()
-            } catch (e: Exception) {
-                // Fallback critique : si corruption ou problème de version, on force la recréation
+            } catch (_: Exception) {
                 context.deleteDatabase(DB_NAME)
                 copyDatabase()
                 super.getReadableDatabase()
@@ -228,7 +216,6 @@ class SchedulesRepository(private val context: Context) {
         }
 
         private fun copyDatabase() {
-            Log.d("SchedulesRepository", "Copying database from assets...")
             try {
                 val inputStream = context.assets.open("databases/$DB_NAME")
                 val outFile = context.getDatabasePath(DB_NAME)
@@ -242,7 +229,6 @@ class SchedulesRepository(private val context: Context) {
                 outputStream.flush()
                 outputStream.close()
                 inputStream.close()
-                Log.d("SchedulesRepository", "Database copied successfully.")
             } catch (e: IOException) {
                 e.printStackTrace()
                 Log.e("SchedulesRepository", "Error copying database: ${e.message}")

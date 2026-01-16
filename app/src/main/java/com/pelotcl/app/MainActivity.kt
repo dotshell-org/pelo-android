@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -29,8 +28,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,13 +46,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.pelotcl.app.ui.components.SimpleSearchBar
 import com.pelotcl.app.ui.components.LinesBottomSheet
+import com.pelotcl.app.ui.components.SimpleSearchBar
 import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.ui.screens.PlanScreen
 import com.pelotcl.app.ui.theme.PeloTheme
 import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
+import io.raptor.RaptorLibrary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -74,6 +74,22 @@ class MainActivity : ComponentActivity() {
             PeloTheme {
                 NavBar(modifier = Modifier.fillMaxSize())
             }
+        }
+
+        val raptor = RaptorLibrary(
+            stopsInputStream = assets.open("stops.bin"),
+            routesInputStream = assets.open("routes.bin")
+        )
+        val originStops = raptor.searchStopsByName("Perrache")
+        val destStops = raptor.searchStopsByName("Cuire")
+        val departureTime = 8 * 3600
+        val journeys = raptor.getOptimizedPaths(
+            originStopIds = originStops.map { it.id },
+            destinationStopIds = destStops.map { it.id },
+            departureTime = departureTime
+        )
+        for (journey in journeys) {
+            raptor.displayJourney(journey)
         }
     }
 }
@@ -216,7 +232,6 @@ fun NavBar(modifier: Modifier = Modifier) {
                 navController = navController,
                 startDestination = startDestination,
                 contentPadding = contentPadding,
-                isBottomSheetOpen = isBottomSheetOpen,
                 showLinesSheet = showLinesSheet,
                 onBottomSheetStateChanged = { isOpen -> isBottomSheetOpen = isOpen },
                 onLinesSheetDismiss = {
@@ -253,7 +268,6 @@ private fun AppNavHost(
     navController: androidx.navigation.NavHostController,
     startDestination: Destination,
     contentPadding: androidx.compose.foundation.layout.PaddingValues,
-    isBottomSheetOpen: Boolean,
     showLinesSheet: Boolean,
     onBottomSheetStateChanged: (Boolean) -> Unit,
     onLinesSheetDismiss: () -> Unit,

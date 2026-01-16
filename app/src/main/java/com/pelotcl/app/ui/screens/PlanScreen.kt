@@ -3,7 +3,6 @@ package com.pelotcl.app.ui.screens
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
-import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
@@ -65,7 +64,6 @@ import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
 
-private val ALWAYS_VISIBLE_LINES = setOf("F1", "F2", "A", "B", "C", "D", "NAV1", "RX")
 private const val PRIORITY_STOPS_MIN_ZOOM = 12.5f
 private const val TRAM_STOPS_MIN_ZOOM = 14.0f
 private const val SECONDARY_STOPS_MIN_ZOOM = 15f
@@ -563,8 +561,6 @@ fun PlanScreen(
                 onMapReady = { map ->
                     mapInstance = map
                 },
-                searchResults = emptyList(),
-                onSearch = {},
                 userLocation = userLocation,
                 centerOnUserLocation = shouldCenterOnUser
             )
@@ -809,15 +805,13 @@ private fun filterMapStops(
         val tramLayerId = "$tramLayerPrefix-$idx"
         val secondaryLayerId = "$secondaryLayerPrefix-$idx"
 
-        (style.getLayer(priorityLayerId) as? SymbolLayer)?.let { layer ->
-            layer.setFilter(
-                Expression.all(
-                    Expression.eq(Expression.get("stop_priority"), 2),
-                    Expression.eq(Expression.get("slot"), idx),
-                    Expression.eq(Expression.get(linePropertyName), true)
-                )
+        (style.getLayer(priorityLayerId) as? SymbolLayer)?.setFilter(
+            Expression.all(
+                Expression.eq(Expression.get("stop_priority"), 2),
+                Expression.eq(Expression.get("slot"), idx),
+                Expression.eq(Expression.get(linePropertyName), true)
             )
-        }
+        )
 
         (style.getLayer(tramLayerId) as? SymbolLayer)?.let { layer ->
             layer.setFilter(
@@ -1439,13 +1433,13 @@ private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>
                         ascenseur = stop.properties.ascenseur,
                         escalator = stop.properties.escalator,
                         gid = stop.properties.gid,
-                        lastUpdate = stop.properties.lastUpdate ?: "",
-                        lastUpdateFme = stop.properties.lastUpdateFme ?: "",
-                        adresse = stop.properties.adresse ?: "",
+                        lastUpdate = stop.properties.lastUpdate,
+                        lastUpdateFme = stop.properties.lastUpdateFme,
+                        adresse = stop.properties.adresse,
                         localiseFaceAAdresse = stop.properties.localiseFaceAAdresse,
-                        commune = stop.properties.commune ?: "",
-                        insee = stop.properties.insee ?: "",
-                        zone = stop.properties.zone ?: ""
+                        commune = stop.properties.commune,
+                        insee = stop.properties.insee,
+                        zone = stop.properties.zone
                     )
                 )
             )
@@ -1466,13 +1460,13 @@ private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>
                         ascenseur = stop.properties.ascenseur,
                         escalator = stop.properties.escalator,
                         gid = stop.properties.gid,
-                        lastUpdate = stop.properties.lastUpdate ?: "",
-                        lastUpdateFme = stop.properties.lastUpdateFme ?: "",
-                        adresse = stop.properties.adresse ?: "",
+                        lastUpdate = stop.properties.lastUpdate,
+                        lastUpdateFme = stop.properties.lastUpdateFme,
+                        adresse = stop.properties.adresse,
                         localiseFaceAAdresse = stop.properties.localiseFaceAAdresse,
-                        commune = stop.properties.commune ?: "",
-                        insee = stop.properties.insee ?: "",
-                        zone = stop.properties.zone ?: ""
+                        commune = stop.properties.commune,
+                        insee = stop.properties.insee,
+                        zone = stop.properties.zone
                     )
                 )
             )
@@ -1481,7 +1475,7 @@ private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>
 
     val strongStopsByName = strongLineStops.groupBy { normalizeStopName(it.properties.nom) }
 
-    val mergedStrongStops = strongStopsByName.map { (normalizedName, stopsGroup) ->
+    val mergedStrongStops = strongStopsByName.map { (_, stopsGroup) ->
         if (stopsGroup.size == 1) {
             stopsGroup.first()
         } else {
@@ -1506,13 +1500,13 @@ private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>
                     ascenseur = firstStop.properties.ascenseur,
                     escalator = firstStop.properties.escalator,
                     gid = firstStop.properties.gid,
-                    lastUpdate = firstStop.properties.lastUpdate ?: "",
-                    lastUpdateFme = firstStop.properties.lastUpdateFme ?: "",
-                    adresse = firstStop.properties.adresse ?: "",
+                    lastUpdate = firstStop.properties.lastUpdate,
+                    lastUpdateFme = firstStop.properties.lastUpdateFme,
+                    adresse = firstStop.properties.adresse,
                     localiseFaceAAdresse = firstStop.properties.localiseFaceAAdresse,
-                    commune = firstStop.properties.commune ?: "",
-                    insee = firstStop.properties.insee ?: "",
-                    zone = firstStop.properties.zone ?: ""
+                    commune = firstStop.properties.commune,
+                    insee = firstStop.properties.insee,
+                    zone = firstStop.properties.zone
                 )
             )
         }
@@ -1625,7 +1619,7 @@ private fun getLocation(
                 }
             }
         }
-    } catch (e: SecurityException) {
+    } catch (_: SecurityException) {
         // Permission denied
     }
 }
