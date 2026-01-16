@@ -161,8 +161,14 @@ fun PlanScreen(
                 scaffoldSheetState.bottomSheetState.expand()
             }
         }
-        // Auto-expand when transitioning to LINE_DETAILS (not when already in LINE_DETAILS)
-        if (sheetContentState == SheetContentState.LINE_DETAILS && previousSheetContentState != SheetContentState.LINE_DETAILS) {
+        // Auto-expand when transitioning to LINE_DETAILS:
+        // - from STATION (clicked on a line from station details)
+        // - or from null but with a station selected (clicked on a stop with only one line)
+        // Don't auto-expand when coming from lines menu (currentStationName is empty)
+        if (sheetContentState == SheetContentState.LINE_DETAILS && 
+            previousSheetContentState != SheetContentState.LINE_DETAILS &&
+            (previousSheetContentState == SheetContentState.STATION || 
+             selectedLine?.currentStationName?.isNotBlank() == true)) {
             scope.launch {
                 scaffoldSheetState.bottomSheetState.expand()
             }
@@ -622,6 +628,7 @@ fun PlanScreen(
                                 currentStationName = ""
                             )
                             sheetContentState = SheetContentState.LINE_DETAILS
+                            kotlinx.coroutines.delay(50)
                             scaffoldSheetState.bottomSheetState.partialExpand()
                         }
                     } else {
@@ -643,6 +650,7 @@ fun PlanScreen(
                                 currentStationName = ""
                             )
                             sheetContentState = SheetContentState.LINE_DETAILS
+                            kotlinx.coroutines.delay(50)
                             scaffoldSheetState.bottomSheetState.partialExpand()
                         }
                     }
