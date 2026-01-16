@@ -50,12 +50,17 @@ import com.pelotcl.app.ui.components.LinesBottomSheet
 import com.pelotcl.app.ui.components.SimpleSearchBar
 import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.ui.screens.PlanScreen
+import com.pelotcl.app.ui.screens.ItineraryScreen
 import com.pelotcl.app.ui.theme.PeloTheme
 import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import io.raptor.RaptorLibrary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.maplibre.android.geometry.LatLng
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 
 class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.O)
@@ -132,10 +137,34 @@ fun NavBar(modifier: Modifier = Modifier) {
     var searchQuery by remember { mutableStateOf("") }
     var stationSearchResults by remember { mutableStateOf<List<StationSearchResult>>(emptyList()) }
     var selectedStationFromSearch by remember { mutableStateOf<StationSearchResult?>(null) }
+    
+    // User location for itinerary
+    var userLocation by remember { mutableStateOf<LatLng?>(null) }
+    
+    // Itinerary destination stop
+    var itineraryDestinationStop by remember { mutableStateOf<String?>(null) }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { _ -> }
+    ) { permissions ->
+        val granted = permissions.entries.any { it.value }
+        if (granted) {
+            // Get location when permission granted
+            try {
+                val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+                fusedLocationClient.getCurrentLocation(
+                    Priority.PRIORITY_HIGH_ACCURACY,
+                    CancellationTokenSource().token
+                ).addOnSuccessListener { location ->
+                    if (location != null) {
+                        userLocation = LatLng(location.latitude, location.longitude)
+                    }
+                }
+            } catch (e: SecurityException) {
+                // Handle exception
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         val hasPermission = ContextCompat.checkSelfPermission(
@@ -154,6 +183,21 @@ fun NavBar(modifier: Modifier = Modifier) {
                     Manifest.permission.ACCESS_COARSE_LOCATION
                 )
             )
+        } else {
+            // Get location if permission already granted
+            try {
+                val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+                fusedLocationClient.getCurrentLocation(
+                    Priority.PRIORITY_HIGH_ACCURACY,
+                    CancellationTokenSource().token
+                ).addOnSuccessListener { location ->
+                    if (location != null) {
+                        userLocation = LatLng(location.latitude, location.longitude)
+                    }
+                }
+            } catch (e: SecurityException) {
+                // Handle exception
+            }
         }
     }
 
@@ -224,7 +268,17 @@ fun NavBar(modifier: Modifier = Modifier) {
                 searchSelectedStop = selectedStationFromSearch,
                 onSearchSelectionHandled = { selectedStationFromSearch = null },
                 modifier = if (shouldApplyPadding) Modifier.padding(contentPadding) else Modifier,
-                viewModel = viewModel
+                viewModel = viewModel,
+                userLocation = userLocation,
+                itineraryDestinationStop = itineraryDestinationStop,
+                onItineraryClick = { stopName ->
+                    itineraryDestinationStop = stopName
+                    navController.navigate("itinerary")
+                },
+                onItineraryBack = {
+                    itineraryDestinationStop = null
+                    navController.popBackStack()
+                }
             )
         }
 
@@ -258,7 +312,11 @@ private fun AppNavHost(
     searchSelectedStop: StationSearchResult?,
     onSearchSelectionHandled: () -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: TransportViewModel
+    viewModel: TransportViewModel,
+    userLocation: LatLng?,
+    itineraryDestinationStop: String?,
+    onItineraryClick: (String) -> Unit,
+    onItineraryBack: () -> Unit
 ) {
     NavHost(
         navController = navController,
@@ -273,7 +331,17 @@ private fun AppNavHost(
                 onLinesSheetDismiss = onLinesSheetDismiss,
                 searchSelectedStop = searchSelectedStop,
                 onSearchSelectionHandled = onSearchSelectionHandled,
-                viewModel = viewModel
+                viewModel = viewModel,
+                onItineraryClick = onItineraryClick,
+                userLocation = userLocation
+            )
+        }
+        composable("itinerary") {
+            ItineraryScreen(
+                destinationStopName = itineraryDestinationStop ?: "",
+                userLocation = userLocation,
+                viewModel = viewModel,
+                onBack = onItineraryBack
             )
         }
         composable(Destination.LIGNES.route) {

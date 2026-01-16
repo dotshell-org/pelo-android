@@ -120,7 +120,9 @@ fun PlanScreen(
     showLinesSheet: Boolean = false,
     onLinesSheetDismiss: () -> Unit = {},
     searchSelectedStop: StationSearchResult? = null,
-    onSearchSelectionHandled: () -> Unit = {}
+    onSearchSelectionHandled: () -> Unit = {},
+    onItineraryClick: (stopName: String) -> Unit = {},
+    userLocation: LatLng? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val stopsUiState by viewModel.stopsUiState.collectAsState()
@@ -516,6 +518,9 @@ fun PlanScreen(
                                 onShowAllSchedules = { lineName, directionName, schedules ->
                                     allSchedulesInfo = AllSchedulesInfo(lineName, directionName, schedules)
                                     sheetContentState = SheetContentState.ALL_SCHEDULES
+                                },
+                                onItineraryClick = { stopName ->
+                                    onItineraryClick(stopName)
                                 }
                             )
                         }
@@ -685,7 +690,8 @@ private fun LineDetailsSheetContent(
     viewModel: TransportViewModel,
     onBackToStation: () -> Unit,
     onStopClick: (String) -> Unit = {},
-    onShowAllSchedules: (lineName: String, directionName: String, schedules: List<String>) -> Unit
+    onShowAllSchedules: (lineName: String, directionName: String, schedules: List<String>) -> Unit,
+    onItineraryClick: (stopName: String) -> Unit = {}
 ) {
     LineDetailsBottomSheet(
         lineInfo = lineInfo,
@@ -694,7 +700,8 @@ private fun LineDetailsSheetContent(
         onDismiss = {},
         onBackToStation = onBackToStation,
         onStopClick = onStopClick,
-        onShowAllSchedules = onShowAllSchedules
+        onShowAllSchedules = onShowAllSchedules,
+        onItineraryClick = onItineraryClick
     )
 }
 

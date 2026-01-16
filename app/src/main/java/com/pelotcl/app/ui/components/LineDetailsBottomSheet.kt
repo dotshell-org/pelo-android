@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Route
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -126,7 +127,8 @@ fun LineDetailsBottomSheet(
     onDismiss: () -> Unit,
     onBackToStation: () -> Unit,
     onStopClick: (String) -> Unit = {},
-    onShowAllSchedules: (lineName: String, directionName: String, schedules: List<String>) -> Unit
+    onShowAllSchedules: (lineName: String, directionName: String, schedules: List<String>) -> Unit,
+    onItineraryClick: (stopName: String) -> Unit = {}
 ) {
     val context = LocalContext.current
     var lineStops by remember { mutableStateOf<List<LineStopInfo>>(emptyList()) }
@@ -253,7 +255,8 @@ fun LineDetailsBottomSheet(
                             lineInfo = lineInfo,
                             selectedDirection = selectedDirection,
                             onDirectionChange = { newDirection -> selectedDirection = newDirection },
-                            onShowAllSchedules = onShowAllSchedules
+                            onShowAllSchedules = onShowAllSchedules,
+                            onItineraryClick = { onItineraryClick(lineInfo.currentStationName) }
                         )
                         Spacer(modifier = Modifier.height(20.dp))
                     }
@@ -319,7 +322,8 @@ private fun NextSchedulesSection(
     lineInfo: LineInfo,
     selectedDirection: Int,
     onDirectionChange: (Int) -> Unit,
-    onShowAllSchedules: (lineName: String, directionName: String, schedules: List<String>) -> Unit
+    onShowAllSchedules: (lineName: String, directionName: String, schedules: List<String>) -> Unit,
+    onItineraryClick: () -> Unit = {}
 ) {
     val headsigns by viewModel.headsigns.collectAsState()
     val allSchedules by viewModel.allSchedules.collectAsState()
@@ -366,6 +370,39 @@ private fun NextSchedulesSection(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // Itinéraire button
+        Button(
+            onClick = onItineraryClick,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFFa855f7),
+                contentColor = Color.White
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .padding(horizontal = 12.dp),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Route,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Itinéraire",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
         if (availableDirections.isNotEmpty()) {
             Text(
                 text = "Direction",
