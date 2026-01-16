@@ -163,7 +163,6 @@ fun StationBottomSheet(
                         
                         sortedLines.forEach { lineName ->
                             val lineDepartures = parser.getNextDepartures(
-                                stopName = stationInfo.nom,
                                 lineName = lineName,
                                 maxResults = 2
                             )
@@ -224,7 +223,6 @@ fun StationBottomSheet(
                     sortedLines.forEachIndexed { index, ligne ->
                         LineListItem(
                             lineName = ligne,
-                            departures = departuresByLine[ligne] ?: emptyList(),
                             onClick = { onLineClick(ligne) }
                         )
                         
@@ -261,7 +259,6 @@ fun StationBottomSheet(
 @Composable
 private fun LineListItem(
     lineName: String,
-    departures: List<StopDeparture>,
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
@@ -300,18 +297,6 @@ private fun LineListItem(
             tint = Gray700,
             modifier = Modifier.size(24.dp)
         )
-    }
-}
-
-/**
- * Formate un temps HH:MM:SS en HH:MM
- */
-private fun formatTime(time: String): String {
-    val parts = time.split(":")
-    return if (parts.size >= 2) {
-        "${parts[0]}:${parts[1]}"
-    } else {
-        time
     }
 }
 

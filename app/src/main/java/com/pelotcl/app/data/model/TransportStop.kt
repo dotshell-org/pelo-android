@@ -49,13 +49,13 @@ data class StopProperties(
     val escalator: Boolean,
     val gid: Int,
     @SerializedName("last_update")
-    val lastUpdate: String,
+    val lastUpdate: String?,
     @SerializedName("last_update_fme")
-    val lastUpdateFme: String,
-    val adresse: String,
+    val lastUpdateFme: String?,
+    val adresse: String?,
     @SerializedName("localise_face_a_adresse")
     val localiseFaceAAdresse: Boolean,
-    val commune: String,
-    val insee: String,
-    val zone: String
+    val commune: String?,
+    val insee: String?,
+    val zone: String?
 )
