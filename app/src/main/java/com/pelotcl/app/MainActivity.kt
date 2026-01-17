@@ -49,21 +49,20 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.pelotcl.app.ui.components.LinesBottomSheet
-import com.pelotcl.app.ui.components.SimpleSearchBar
-import com.pelotcl.app.ui.components.StationSearchResult
-import com.pelotcl.app.ui.screens.PlanScreen
-import com.pelotcl.app.ui.screens.ItineraryScreen
-import com.pelotcl.app.ui.theme.PeloTheme
-import com.pelotcl.app.ui.theme.Red500
-import com.pelotcl.app.ui.viewmodel.TransportViewModel
-import io.raptor.RaptorLibrary
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.maplibre.android.geometry.LatLng
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
+import com.pelotcl.app.ui.components.LinesBottomSheet
+import com.pelotcl.app.ui.components.SimpleSearchBar
+import com.pelotcl.app.ui.components.StationSearchResult
+import com.pelotcl.app.ui.screens.ItineraryScreen
+import com.pelotcl.app.ui.screens.PlanScreen
+import com.pelotcl.app.ui.theme.PeloTheme
+import com.pelotcl.app.ui.theme.Red500
+import com.pelotcl.app.ui.viewmodel.TransportViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.maplibre.android.geometry.LatLng
 
 class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.O)
@@ -100,13 +99,13 @@ private enum class Destination(
     ),
     LIGNES(
         route = "lines",
-        label = "Lines",
+        label = "Lignes",
         icon = Icons.Filled.Route,
         contentDescription = "Lines Tab"
     ),
     PARAMETRES(
         route = "settings",
-        label = "Settings",
+        label = "Paramètres",
         icon = Icons.Filled.Settings,
         contentDescription = "Settings Tab"
     );
@@ -369,7 +368,7 @@ private fun AppNavHost(
             )
         }
         composable(Destination.PARAMETRES.route) {
-            SimpleScreen(title = "Settings")
+            SimpleScreen(title = "Paramètres")
         }
     }
 }
