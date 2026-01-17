@@ -11,6 +11,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -224,6 +227,9 @@ fun NavBar(modifier: Modifier = Modifier) {
                         NavigationBarItem(
                             selected = selectedDestination == index,
                             onClick = {
+                                // Close itinerary overlay when navigating
+                                itineraryDestinationStop = null
+                                
                                 if (destination == Destination.LIGNES) {
                                     showLinesSheet = true
                                 } else if (selectedDestination != index) {
@@ -270,19 +276,29 @@ fun NavBar(modifier: Modifier = Modifier) {
                 modifier = if (shouldApplyPadding) Modifier.padding(contentPadding) else Modifier,
                 viewModel = viewModel,
                 userLocation = userLocation,
-                itineraryDestinationStop = itineraryDestinationStop,
                 onItineraryClick = { stopName ->
                     itineraryDestinationStop = stopName
-                    navController.navigate("itinerary")
-                },
-                onItineraryBack = {
-                    itineraryDestinationStop = null
-                    navController.popBackStack()
                 }
             )
+            
+            // Itinerary overlay - displayed on top of everything
+            AnimatedVisibility(
+                visible = itineraryDestinationStop != null,
+                enter = slideInVertically(initialOffsetY = { it }),
+                exit = slideOutVertically(targetOffsetY = { it })
+            ) {
+                ItineraryScreen(
+                    destinationStopName = itineraryDestinationStop ?: "",
+                    userLocation = userLocation,
+                    viewModel = viewModel,
+                    onBack = {
+                        itineraryDestinationStop = null
+                    }
+                )
+            }
         }
 
-        if (selectedDestination == Destination.PLAN.ordinal && !isBottomSheetOpen && !showLinesSheet) {
+        if (selectedDestination == Destination.PLAN.ordinal && !isBottomSheetOpen && !showLinesSheet && itineraryDestinationStop == null) {
             SimpleSearchBar(
                 searchResults = stationSearchResults,
                 onQueryChange = { query ->
@@ -314,9 +330,7 @@ private fun AppNavHost(
     modifier: Modifier = Modifier,
     viewModel: TransportViewModel,
     userLocation: LatLng?,
-    itineraryDestinationStop: String?,
-    onItineraryClick: (String) -> Unit,
-    onItineraryBack: () -> Unit
+    onItineraryClick: (String) -> Unit
 ) {
     NavHost(
         navController = navController,
@@ -334,14 +348,6 @@ private fun AppNavHost(
                 viewModel = viewModel,
                 onItineraryClick = onItineraryClick,
                 userLocation = userLocation
-            )
-        }
-        composable("itinerary") {
-            ItineraryScreen(
-                destinationStopName = itineraryDestinationStop ?: "",
-                userLocation = userLocation,
-                viewModel = viewModel,
-                onBack = onItineraryBack
             )
         }
         composable(Destination.LIGNES.route) {
