@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Directions
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -374,21 +375,19 @@ private fun NextSchedulesSection(
         Button(
             onClick = onItineraryClick,
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFFa855f7),
+                containerColor = Color.Black,
                 contentColor = Color.White
             ),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)
-                .padding(horizontal = 12.dp),
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.Route,
+                    imageVector = Icons.Default.Directions,
                     contentDescription = null,
                     modifier = Modifier.size(24.dp)
                 )
@@ -401,7 +400,7 @@ private fun NextSchedulesSection(
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(40.dp))
 
         if (availableDirections.isNotEmpty()) {
             Text(

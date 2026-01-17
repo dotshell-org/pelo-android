@@ -1,6 +1,9 @@
 package com.pelotcl.app.ui.screens
 
 import android.os.Build
+import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -56,11 +59,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -101,7 +106,20 @@ fun ItineraryScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val view = LocalView.current
     val scope = rememberCoroutineScope()
+    
+    // Change status bar to light content (white icons) for dark background
+    SideEffect {
+        (view.context as? ComponentActivity)?.enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(
+                android.graphics.Color.TRANSPARENT
+            ),
+            navigationBarStyle = SystemBarStyle.dark(
+                android.graphics.Color.TRANSPARENT
+            )
+        )
+    }
     
     val raptorRepository = remember { RaptorRepository(context) }
     
@@ -209,7 +227,7 @@ fun ItineraryScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Itinéraire", color = Color.White) },
+                title = { Text("Itinéraire", fontWeight = FontWeight.Normal, color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -569,7 +587,7 @@ private fun JourneyCard(journey: JourneyResult) {
                     )
             ) {
                 Text(
-                    text = "${journey.durationMinutes} min",
+                    text = if (journey.durationMinutes < 60) "${journey.durationMinutes} min" else "${journey.durationMinutes / 60}h${(journey.durationMinutes % 60).toString().padStart(2, '0')}min",
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                     color = Color.White,
                     fontWeight = FontWeight.Bold
