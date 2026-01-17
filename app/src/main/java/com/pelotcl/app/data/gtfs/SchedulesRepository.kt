@@ -179,7 +179,7 @@ class SchedulesRepository(context: Context) {
 
         companion object {
             private const val DB_NAME = "schedules.db"
-            private const val DB_VERSION = 2
+            private const val DB_VERSION = 3
         }
 
         override fun onCreate(db: SQLiteDatabase) {
@@ -187,7 +187,8 @@ class SchedulesRepository(context: Context) {
         }
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-            context.deleteDatabase(DB_NAME)
+            // Force recreation by throwing an exception, which is caught in getReadableDatabase
+            throw RuntimeException("Database upgrade required from $oldVersion to $newVersion")
         }
 
         override fun getReadableDatabase(): SQLiteDatabase {
@@ -229,6 +230,15 @@ class SchedulesRepository(context: Context) {
                 outputStream.flush()
                 outputStream.close()
                 inputStream.close()
+
+                // Set version to match expected version to avoid immediate upgrade loop
+                try {
+                    val db = SQLiteDatabase.openDatabase(outFile.path, null, SQLiteDatabase.OPEN_READWRITE)
+                    db.version = DB_VERSION
+                    db.close()
+                } catch (e: Exception) {
+                    Log.e("SchedulesRepository", "Error setting database version: ${e.message}")
+                }
             } catch (e: IOException) {
                 e.printStackTrace()
                 Log.e("SchedulesRepository", "Error copying database: ${e.message}")
