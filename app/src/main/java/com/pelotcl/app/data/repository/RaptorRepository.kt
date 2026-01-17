@@ -135,6 +135,18 @@ class RaptorRepository(private val context: Context) {
                     
                     if (fromStop == null || toStop == null) return@mapNotNull null
                     
+                    // Map intermediate stops
+                    val intermediateStops = leg.intermediateStopIndices.mapIndexedNotNull { idx, stopIndex ->
+                        val stop = stopsCache.getOrNull(stopIndex)
+                        val arrivalTime = leg.intermediateArrivalTimes.getOrNull(idx)
+                        if (stop != null && arrivalTime != null) {
+                            IntermediateStop(
+                                stopName = stop.name,
+                                arrivalTime = arrivalTime
+                            )
+                        } else null
+                    }
+                    
                     JourneyLeg(
                         fromStopId = fromStop.id.toString(),
                         fromStopName = fromStop.name,
@@ -145,7 +157,8 @@ class RaptorRepository(private val context: Context) {
                         routeName = leg.routeName,
                         routeColor = null, // Library doesn't provide color
                         isWalking = leg.isTransfer,
-                        direction = leg.direction
+                        direction = leg.direction,
+                        intermediateStops = intermediateStops
                     )
                 }
                 
@@ -210,6 +223,20 @@ data class JourneyResult(
 }
 
 /**
+ * Data class representing an intermediate stop
+ */
+data class IntermediateStop(
+    val stopName: String,
+    val arrivalTime: Int
+) {
+    fun formatArrivalTime(): String {
+        val hours = arrivalTime / 3600
+        val minutes = (arrivalTime % 3600) / 60
+        return String.format("%02d:%02d", hours, minutes)
+    }
+}
+
+/**
  * Data class representing a leg of a journey
  */
 data class JourneyLeg(
@@ -222,7 +249,8 @@ data class JourneyLeg(
     val routeName: String?,
     val routeColor: String?,
     val isWalking: Boolean,
-    val direction: String? = null
+    val direction: String? = null,
+    val intermediateStops: List<IntermediateStop> = emptyList()
 ) {
     val durationMinutes: Int
         get() = (arrivalTime - departureTime) / 60

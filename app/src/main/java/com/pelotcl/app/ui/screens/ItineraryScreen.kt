@@ -28,6 +28,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DirectionsWalk
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SwapVert
@@ -596,6 +598,10 @@ private fun JourneyLegItem(
 ) {
     val context = LocalContext.current
     val lineColor = if (leg.isWalking) Gray700 else Color(LineColorHelper.getColorForLineString(leg.routeName ?: ""))
+    
+    // State for expanding intermediate stops
+    var isExpanded by remember { mutableStateOf(false) }
+    val hasIntermediateStops = !leg.isWalking && leg.intermediateStops.isNotEmpty()
 
     Row(
         modifier = Modifier
@@ -678,6 +684,59 @@ private fun JourneyLegItem(
                 color = Color.White.copy(alpha = 0.7f),
                 style = MaterialTheme.typography.bodySmall
             )
+            
+            // Expandable intermediate stops section
+            if (hasIntermediateStops) {
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                Row(
+                    modifier = Modifier
+                        .clickable { isExpanded = !isExpanded }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = if (isExpanded) "Réduire" else "Développer",
+                        tint = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "${leg.intermediateStops.size} arrêt${if (leg.intermediateStops.size > 1) "s" else ""}",
+                        color = Color.White.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                }
+                
+                // Expanded intermediate stops list
+                if (isExpanded) {
+                    Column(
+                        modifier = Modifier.padding(start = 20.dp, top = 4.dp)
+                    ) {
+                        leg.intermediateStops.forEach { stop ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 2.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = stop.stopName,
+                                    color = Color.White.copy(alpha = 0.6f),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    text = stop.formatArrivalTime(),
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                }
+            }
 
             if (isLast) {
                 Spacer(modifier = Modifier.weight(1f))
