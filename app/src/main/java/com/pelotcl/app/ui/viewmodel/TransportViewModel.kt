@@ -309,8 +309,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
                 // Preload Raptor after a short delay to not compete with UI rendering
                 // This lazy-initializes the Raptor library in the background
+                // Reduced from 2000ms to 500ms for faster itinerary availability
                 launch(Dispatchers.IO) {
-                    kotlinx.coroutines.delay(2000) // Wait 2s for UI to stabilize
+                    kotlinx.coroutines.delay(500) // Wait 500ms for initial UI to render
                     if (raptorRepository.isReady()) {
                         Log.d("TransportViewModel", "Raptor already initialized")
                     } else {

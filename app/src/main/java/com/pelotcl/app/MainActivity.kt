@@ -90,11 +90,11 @@ class MainActivity : ComponentActivity() {
         // Initialize HTTP cache early for network optimization
         RetrofitInstance.initialize(applicationContext)
 
-        // Preload disk cache and warm up SQLite in parallel for faster startup
+        // Preload disk cache, SQLite, and Raptor in parallel for faster startup
         // This runs before UI is shown, so data is ready when needed
         appScope.launch {
             try {
-                // Parallel cache and SQLite warmup
+                // Parallel cache, SQLite, and Raptor warmup
                 val cacheJob = launch {
                     val cache = TransportCache.getInstance(applicationContext)
                     cache.preloadFromDisk()
@@ -103,7 +103,15 @@ class MainActivity : ComponentActivity() {
                     val schedulesRepo = com.pelotcl.app.data.gtfs.SchedulesRepository(applicationContext)
                     schedulesRepo.warmupDatabase()
                 }
-                // Wait for both to complete
+                // Preload Raptor library in background (deferred slightly to prioritize UI)
+                // Fire and forget - doesn't need to complete before UI shows
+                launch {
+                    delay(300) // Small delay to let UI start rendering
+                    val raptorRepo = com.pelotcl.app.data.repository.RaptorRepository(applicationContext)
+                    raptorRepo.initialize()
+                    android.util.Log.d("MainActivity", "Raptor preloaded at startup")
+                }
+                // Wait for cache and SQLite (critical for UI), Raptor can complete later
                 cacheJob.join()
                 sqliteJob.join()
             } catch (e: Exception) {
