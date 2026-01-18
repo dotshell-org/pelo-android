@@ -9,6 +9,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.pelotcl.app.data.model.Feature
 import com.pelotcl.app.data.model.StopFeature
+import com.pelotcl.app.data.repository.RaptorRepository
 import com.pelotcl.app.data.repository.TransportRepository
 import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.utils.Connection
@@ -51,6 +52,9 @@ sealed class TransportStopsUiState {
 class TransportViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = TransportRepository(application.applicationContext)
+
+    // Shared RaptorRepository instance - kept alive during app lifetime
+    val raptorRepository = RaptorRepository(application.applicationContext)
 
     private val _uiState = MutableStateFlow<TransportLinesUiState>(TransportLinesUiState.Loading)
     val uiState: StateFlow<TransportLinesUiState> = _uiState.asStateFlow()
