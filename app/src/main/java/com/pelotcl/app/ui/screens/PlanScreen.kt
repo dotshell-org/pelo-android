@@ -1620,6 +1620,10 @@ private fun createStopsGeoJsonFromStops(
                 else -> 0
             }
 
+            // Calculate vertical offset to display icons in a column when multiple lines at same stop
+            // Offset in latitude degrees (approximately 0.00003 degrees ≈ 3.3 meters)
+            val latOffset = slot * 0.00003
+
             val pointFeature = JsonObject().apply {
                 addProperty("type", "Feature")
 
@@ -1627,7 +1631,7 @@ private fun createStopsGeoJsonFromStops(
                     addProperty("type", "Point")
                     val coordinatesArray = JsonArray()
                     coordinatesArray.add(stop.geometry.coordinates[0])
-                    coordinatesArray.add(stop.geometry.coordinates[1])
+                    coordinatesArray.add(stop.geometry.coordinates[1] + latOffset)
                     add("coordinates", coordinatesArray)
                 }
                 add("geometry", pointGeometry)
