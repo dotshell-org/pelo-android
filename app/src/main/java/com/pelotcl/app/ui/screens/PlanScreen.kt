@@ -64,7 +64,9 @@ import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
+import org.maplibre.android.style.sources.GeoJsonOptions
 import org.maplibre.android.style.sources.GeoJsonSource
+import org.maplibre.geojson.Point
 
 private const val PRIORITY_STOPS_MIN_ZOOM = 12.5f
 private const val TRAM_STOPS_MIN_ZOOM = 14.0f
@@ -1187,12 +1189,18 @@ private suspend fun addStopsToMap(
         val validStops = mutableListOf<com.pelotcl.app.data.model.StopFeature>()
         val usedSlots = mutableSetOf<Int>()
 
+        // Cache for resource existence check to avoid repetitive reflection calls
+        val iconAvailabilityCache = mutableMapOf<String, Boolean>()
+        fun checkIconAvailable(name: String): Boolean {
+            return iconAvailabilityCache.getOrPut(name) {
+                context.resources.getIdentifier(name, "drawable", context.packageName) != 0
+            }
+        }
+
         stops.forEach { stop ->
             val drawableNames = BusIconHelper.getAllDrawableNamesForStop(stop)
-            val availableNames = drawableNames.filter { name ->
-                val id = context.resources.getIdentifier(name, "drawable", context.packageName)
-                id != 0
-            }
+            val availableNames = drawableNames.filter { name -> checkIconAvailable(name) }
+
             if (availableNames.isNotEmpty()) {
                 requiredIcons.addAll(availableNames)
                 validStops.add(stop)
@@ -1206,7 +1214,7 @@ private suspend fun addStopsToMap(
             }
         }
 
-        val stopsGeoJson = createStopsGeoJsonFromStops(validStops, context)
+        val stopsGeoJson = createStopsGeoJsonFromStops(validStops, requiredIcons)
         Triple(stopsGeoJson, requiredIcons, usedSlots)
     }
 
@@ -1249,8 +1257,54 @@ private suspend fun addStopsToMap(
         }
 
 
-        val stopsSource = GeoJsonSource(sourceId, stopsGeoJson)
+        val stopsSource = GeoJsonSource(
+            sourceId,
+            stopsGeoJson,
+            GeoJsonOptions()
+                .withCluster(true)
+                .withClusterRadius(50)
+                .withClusterMaxZoom(13) // Stop clustering at zoom 14 (TRAM_STOPS_MIN_ZOOM)
+        )
         style.addSource(stopsSource)
+
+        // 1. Cluster Circles (Aggregated stops)
+        val clusterLayer = org.maplibre.android.style.layers.CircleLayer("clusters", sourceId).apply {
+            setProperties(
+                PropertyFactory.circleColor(
+                    Expression.step(
+                        Expression.get("point_count"),
+                        Expression.literal("#E60000"), // Default TCL Red
+                        Expression.stop(10, "#E60000"),
+                        Expression.stop(50, "#B71C1C")
+                    )
+                ),
+                PropertyFactory.circleRadius(
+                    Expression.step(
+                        Expression.get("point_count"),
+                        Expression.literal(15f),
+                        Expression.stop(10, 20f),
+                        Expression.stop(50, 25f)
+                    )
+                ),
+                PropertyFactory.circleStrokeWidth(2f),
+                PropertyFactory.circleStrokeColor("#FFFFFF")
+            )
+            setFilter(Expression.has("point_count"))
+        }
+        style.addLayer(clusterLayer)
+
+        // 2. Cluster Counts (Text)
+        val countLayer = SymbolLayer("cluster-count", sourceId).apply {
+            setProperties(
+                PropertyFactory.textField(Expression.toString(Expression.get("point_count_abbreviated"))),
+                PropertyFactory.textSize(12f),
+                PropertyFactory.textColor("#FFFFFF"),
+                PropertyFactory.textIgnorePlacement(true),
+                PropertyFactory.textAllowOverlap(true)
+            )
+            setFilter(Expression.has("point_count"))
+        }
+        style.addLayer(countLayer)
 
         val iconSizesPriority = 0.7f
         val iconSizesSecondary = 0.62f
@@ -1270,6 +1324,7 @@ private suspend fun addStopsToMap(
                 )
                 setFilter(
                     Expression.all(
+                        Expression.not(Expression.has("point_count")), // Not a cluster
                         Expression.eq(Expression.get("stop_priority"), 2),
                         Expression.eq(Expression.get("slot"), slotIndex)
                     )
@@ -1290,6 +1345,7 @@ private suspend fun addStopsToMap(
                 )
                 setFilter(
                     Expression.all(
+                        Expression.not(Expression.has("point_count")),
                         Expression.eq(Expression.get("stop_priority"), 1),
                         Expression.eq(Expression.get("slot"), slotIndex)
                     )
@@ -1310,6 +1366,7 @@ private suspend fun addStopsToMap(
                 )
                 setFilter(
                     Expression.all(
+                        Expression.not(Expression.has("point_count")),
                         Expression.eq(Expression.get("stop_priority"), 0),
                         Expression.eq(Expression.get("slot"), slotIndex)
                     )
@@ -1319,8 +1376,39 @@ private suspend fun addStopsToMap(
             style.addLayer(secondaryLayer)
         }
 
+        // Add simplified circle layer for individual stops when zoomed out slightly but not clustered
+        // to avoid loading heavy icons too early
+        val simpleStopLayer = org.maplibre.android.style.layers.CircleLayer("simple-unclustered-stops", sourceId).apply {
+             setProperties(
+                 PropertyFactory.circleColor("#FFFFFF"),
+                 PropertyFactory.circleRadius(4f),
+                 PropertyFactory.circleStrokeWidth(1f),
+                 PropertyFactory.circleStrokeColor("#999999")
+             )
+            // Show only when NOT clustered AND zoom is less than when full icons appear
+            setFilter(Expression.not(Expression.has("point_count")))
+            setMaxZoom(PRIORITY_STOPS_MIN_ZOOM)
+        }
+        style.addLayerBelow(simpleStopLayer, "clusters")
+
         map.addOnMapClickListener { point ->
             val pixel = map.projection.toScreenLocation(point)
+
+            // 1. Check for clusters click -> Zoom in
+            val clusterFeatures = map.queryRenderedFeatures(pixel, "clusters", "cluster-count")
+            if (clusterFeatures.isNotEmpty()) {
+                val cluster = clusterFeatures.first()
+                val geometry = cluster.geometry()
+                if (geometry is Point) {
+                    val coordinates = geometry.coordinates()
+                    val zoom = map.cameraPosition.zoom
+                    map.animateCamera(CameraUpdateFactory.newLatLngZoom(
+                        LatLng(coordinates[1], coordinates[0]),
+                        zoom + 2
+                    ), 500)
+                }
+                return@addOnMapClickListener true
+            }
 
             val circleFeatures = map.queryRenderedFeatures(pixel, "line-stops-circles")
             if (circleFeatures.isNotEmpty()) {
@@ -1567,7 +1655,7 @@ private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>
 
 private fun createStopsGeoJsonFromStops(
     stops: List<com.pelotcl.app.data.model.StopFeature>,
-    context: android.content.Context
+    validIcons: Set<String>
 ): String {
     val features = JsonArray()
 
@@ -1580,8 +1668,7 @@ private fun createStopsGeoJsonFromStops(
         val drawableNamesAll = BusIconHelper.getAllDrawableNamesForStop(stop)
 
         val validPairs = lineNamesAll.zip(drawableNamesAll).filter { (_, drawableName) ->
-            val id = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
-            id != 0
+            validIcons.contains(drawableName)
         }
 
         if (validPairs.isEmpty()) return@forEach
