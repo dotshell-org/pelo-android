@@ -12,6 +12,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
@@ -30,6 +32,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -55,8 +58,13 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import com.pelotcl.app.ui.components.LinesBottomSheet
 import com.pelotcl.app.ui.components.SimpleSearchBar
 import com.pelotcl.app.ui.components.StationSearchResult
+import com.pelotcl.app.ui.screens.AboutScreen
+import com.pelotcl.app.ui.screens.ContactScreen
+import com.pelotcl.app.ui.screens.CreditsScreen
 import com.pelotcl.app.ui.screens.ItineraryScreen
+import com.pelotcl.app.ui.screens.LegalScreen
 import com.pelotcl.app.ui.screens.PlanScreen
+import com.pelotcl.app.ui.screens.SettingsScreen
 import com.pelotcl.app.ui.theme.PeloTheme
 import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
@@ -118,6 +126,10 @@ private enum class Destination(
 
     companion object {
         val entries: List<Destination> = values().toList()
+        const val ABOUT = "about"
+        const val LEGAL = "legal"
+        const val CREDITS = "credits"
+        const val CONTACT = "contact"
     }
 }
 
@@ -223,6 +235,34 @@ fun NavBar(modifier: Modifier = Modifier) {
         }
     }
 
+    // Gérer la barre de statut selon l'écran actif
+    DisposableEffect(selectedDestination) {
+        val activity = context as? ComponentActivity
+        if (selectedDestination == Destination.PARAMETRES.ordinal) {
+            // Barre de statut avec icônes blanches pour fond noir
+            activity?.enableEdgeToEdge(
+                statusBarStyle = SystemBarStyle.dark(
+                    android.graphics.Color.TRANSPARENT
+                ),
+                navigationBarStyle = SystemBarStyle.dark(
+                    android.graphics.Color.TRANSPARENT
+                )
+            )
+        } else {
+            // Barre de statut normale pour les autres écrans
+            activity?.enableEdgeToEdge(
+                statusBarStyle = SystemBarStyle.light(
+                    android.graphics.Color.TRANSPARENT,
+                    android.graphics.Color.TRANSPARENT
+                ),
+                navigationBarStyle = SystemBarStyle.dark(
+                    android.graphics.Color.TRANSPARENT
+                )
+            )
+        }
+        onDispose { }
+    }
+
     Box(modifier = modifier) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
@@ -239,6 +279,15 @@ fun NavBar(modifier: Modifier = Modifier) {
                                 itineraryDestinationStop = null
                                 
                                 if (destination == Destination.LIGNES) {
+                                    // Si on n'est pas sur Plan, naviguer vers Plan d'abord
+                                    if (selectedDestination != Destination.PLAN.ordinal) {
+                                        navController.navigate(Destination.PLAN.route) {
+                                            launchSingleTop = true
+                                            popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                            restoreState = true
+                                        }
+                                        selectedDestination = Destination.PLAN.ordinal
+                                    }
                                     showLinesSheet = true
                                 } else if (selectedDestination != index) {
                                     navController.navigate(destination.route) {
@@ -343,7 +392,11 @@ private fun AppNavHost(
     NavHost(
         navController = navController,
         startDestination = startDestination.route,
-        modifier = modifier
+        modifier = modifier,
+        enterTransition = { EnterTransition.None },
+        exitTransition = { ExitTransition.None },
+        popEnterTransition = { EnterTransition.None },
+        popExitTransition = { ExitTransition.None }
     ) {
         composable(Destination.PLAN.route) {
             PlanScreen(
@@ -377,12 +430,48 @@ private fun AppNavHost(
             )
         }
         composable(Destination.PARAMETRES.route) {
-            SimpleScreen(title = "Paramètres")
+            SettingsScreen(
+                onAboutClick = {
+                    navController.navigate(Destination.ABOUT)
+                }
+            )
+        }
+        composable(Destination.ABOUT) {
+            AboutScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                onLegalClick = {
+                    navController.navigate(Destination.LEGAL)
+                },
+                onCreditsClick = {
+                    navController.navigate(Destination.CREDITS)
+                },
+                onContactClick = {
+                    navController.navigate(Destination.CONTACT)
+                }
+            )
+        }
+        composable(Destination.LEGAL) {
+            LegalScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        composable(Destination.CREDITS) {
+            CreditsScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        composable(Destination.CONTACT) {
+            ContactScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                }
+            )
         }
     }
-}
-
-@Composable
-private fun SimpleScreen(title: String) {
-    Text(text = title)
 }
