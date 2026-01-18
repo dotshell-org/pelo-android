@@ -10,6 +10,7 @@ import com.pelotcl.app.data.model.TransportLineProperties
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.pelotcl.app.data.model.StopCollection
+import kotlinx.coroutines.withContext
 
 /**
  * Repository for managing transport line data
@@ -26,96 +27,98 @@ class TransportRepository(context: Context? = null) {
      * Uses cache to improve performance
      */
     suspend fun getAllLines(): Result<FeatureCollection> {
-        return try {
-            // Try to load from cache
-            val cachedMetro = cache?.getMetroLines()
-            val cachedTram = cache?.getTramLines()
-            
-            val metroFuniculaire: FeatureCollection
-            val trams: FeatureCollection
-            var navigone: FeatureCollection
-            var trambus: FeatureCollection
-            
-            if (cachedMetro != null && cachedTram != null) {
-                // Cache hit: use cached data
-                metroFuniculaire = FeatureCollection(
-                    type = "FeatureCollection",
-                    features = cachedMetro,
-                    totalFeatures = cachedMetro.size,
-                    numberMatched = cachedMetro.size,
-                    numberReturned = cachedMetro.size
-                )
-                trams = FeatureCollection(
-                    type = "FeatureCollection",
-                    features = cachedTram,
-                    totalFeatures = cachedTram.size,
-                    numberMatched = cachedTram.size,
-                    numberReturned = cachedTram.size
-                )
-            } else {
-                // Cache miss: load from API
-                metroFuniculaire = api.getTransportLines()
-                trams = api.getTramLines()
-                
-                // Save to cache
-                cache?.saveMetroLines(metroFuniculaire.features)
-                cache?.saveTramLines(trams.features)
-            }
-
-            // Load navigone lines (NAVI1 - always loaded like metro/tram)
+        return withContext(kotlinx.coroutines.Dispatchers.Default) {
             try {
-                navigone = api.getNavigoneLines()
-            } catch (e: Exception) {
-                android.util.Log.w("TransportRepository", "Failed to load navigone lines: ${e.message}")
-                navigone = FeatureCollection(
-                    type = "FeatureCollection",
-                    features = emptyList(),
-                    totalFeatures = 0,
-                    numberMatched = 0,
-                    numberReturned = 0
+                // Try to load from cache
+                val cachedMetro = cache?.getMetroLines()
+                val cachedTram = cache?.getTramLines()
+
+                val metroFuniculaire: FeatureCollection
+                val trams: FeatureCollection
+                var navigone: FeatureCollection
+                var trambus: FeatureCollection
+
+                if (cachedMetro != null && cachedTram != null) {
+                    // Cache hit: use cached data
+                    metroFuniculaire = FeatureCollection(
+                        type = "FeatureCollection",
+                        features = cachedMetro,
+                        totalFeatures = cachedMetro.size,
+                        numberMatched = cachedMetro.size,
+                        numberReturned = cachedMetro.size
+                    )
+                    trams = FeatureCollection(
+                        type = "FeatureCollection",
+                        features = cachedTram,
+                        totalFeatures = cachedTram.size,
+                        numberMatched = cachedTram.size,
+                        numberReturned = cachedTram.size
+                    )
+                } else {
+                    // Cache miss: load from API
+                    metroFuniculaire = api.getTransportLines()
+                    trams = api.getTramLines()
+
+                    // Save to cache
+                    cache?.saveMetroLines(metroFuniculaire.features)
+                    cache?.saveTramLines(trams.features)
+                }
+
+                // Load navigone lines (NAVI1 - always loaded like metro/tram)
+                try {
+                    navigone = api.getNavigoneLines()
+                } catch (e: Exception) {
+                    android.util.Log.w("TransportRepository", "Failed to load navigone lines: ${e.message}")
+                    navigone = FeatureCollection(
+                        type = "FeatureCollection",
+                        features = emptyList(),
+                        totalFeatures = 0,
+                        numberMatched = 0,
+                        numberReturned = 0
+                    )
+                }
+
+                // Load trambus lines (TB*)
+                try {
+                    trambus = api.getTrambusLines()
+                } catch (e: Exception) {
+                    android.util.Log.w("TransportRepository", "Failed to load trambus lines: ${e.message}")
+                    trambus = FeatureCollection(
+                        type = "FeatureCollection",
+                        features = emptyList(),
+                        totalFeatures = 0,
+                        numberMatched = 0,
+                        numberReturned = 0
+                    )
+                }
+
+                // Fetch Rhônexpress (RX) from dedicated WFS layer and map to our Feature model
+                val rxFeatures: List<Feature> = try {
+                    fetchRhonexpressFromWfs()
+                } catch (e: Exception) {
+                    android.util.Log.w("TransportRepository", "Failed to load Rhônexpress from WFS: ${e.message}")
+                    emptyList()
+                }
+
+                // Merge metro/funicular, trams, navigone, trambus and RX (NOT buses)
+                val allFeatures = (metroFuniculaire.features + trams.features + navigone.features + trambus.features + rxFeatures)
+
+                // Group by code_trace and keep only the first of each group (outbound direction)
+                val uniqueLines = allFeatures
+                    .groupBy { it.properties.codeTrace }
+                    .map { (_, features) -> features.first() }
+
+                val filteredCollection = metroFuniculaire.copy(
+                    features = uniqueLines,
+                    numberReturned = uniqueLines.size,
+                    totalFeatures = (metroFuniculaire.totalFeatures ?: 0) + (trams.totalFeatures ?: 0) + (navigone.totalFeatures ?: 0) + (trambus.totalFeatures ?: 0),
+                    numberMatched = (metroFuniculaire.numberMatched ?: 0) + (trams.numberMatched ?: 0) + (navigone.numberMatched ?: 0) + (trambus.numberMatched ?: 0)
                 )
-            }
 
-            // Load trambus lines (TB*)
-            try {
-                trambus = api.getTrambusLines()
+                Result.success(filteredCollection)
             } catch (e: Exception) {
-                android.util.Log.w("TransportRepository", "Failed to load trambus lines: ${e.message}")
-                trambus = FeatureCollection(
-                    type = "FeatureCollection",
-                    features = emptyList(),
-                    totalFeatures = 0,
-                    numberMatched = 0,
-                    numberReturned = 0
-                )
+                Result.failure(e)
             }
-
-            // Fetch Rhônexpress (RX) from dedicated WFS layer and map to our Feature model
-            val rxFeatures: List<Feature> = try {
-                fetchRhonexpressFromWfs()
-            } catch (e: Exception) {
-                android.util.Log.w("TransportRepository", "Failed to load Rhônexpress from WFS: ${e.message}")
-                emptyList()
-            }
-
-            // Merge metro/funicular, trams, navigone, trambus and RX (NOT buses)
-            val allFeatures = (metroFuniculaire.features + trams.features + navigone.features + trambus.features + rxFeatures)
-
-            // Group by code_trace and keep only the first of each group (outbound direction)
-            val uniqueLines = allFeatures
-                .groupBy { it.properties.codeTrace }
-                .map { (_, features) -> features.first() }
-
-            val filteredCollection = metroFuniculaire.copy(
-                features = uniqueLines,
-                numberReturned = uniqueLines.size,
-                totalFeatures = (metroFuniculaire.totalFeatures ?: 0) + (trams.totalFeatures ?: 0) + (navigone.totalFeatures ?: 0) + (trambus.totalFeatures ?: 0),
-                numberMatched = (metroFuniculaire.numberMatched ?: 0) + (trams.numberMatched ?: 0) + (navigone.numberMatched ?: 0) + (trambus.numberMatched ?: 0)
-            )
-
-            Result.success(filteredCollection)
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
@@ -423,117 +426,119 @@ class TransportRepository(context: Context? = null) {
      * Uses cache to improve performance
      */
     suspend fun getAllStops(): Result<StopCollection> {
-        return try {
-            // Try to load from cache
-            val cachedStops = cache?.getStops()
-            
-            val response: StopCollection
-            
-            if (cachedStops != null) {
-                // Cache hit: use cached data
-                response = StopCollection(
-                    type = "FeatureCollection",
-                    features = cachedStops,
-                    totalFeatures = cachedStops.size,
-                    numberMatched = cachedStops.size,
-                    numberReturned = cachedStops.size
-                )
-            } else {
-                // Cache miss: load from API
-                response = api.getTransportStops()
-            }
-            
-            // No need to load navigone stops separately - they are in the main API with code NAVI1
-            // (which will be normalized to NAV1 in BusIconHelper)
-            
-            val allStopsFeatures = response.features
-            
-            // Intelligently filter tram, trambus, and rhonexpress stops:
-            // Group by name and line, then keep :A priority, otherwise :R
-            val lineRegex = Regex(".*\\b(T\\d+|TB\\d+|RX):[AR]\\b.*")
-            val stopsToDedup = allStopsFeatures.filter { stop ->
-                stop.properties.desserte.matches(lineRegex)
-            }
-            val otherStops = allStopsFeatures.filterNot { stop ->
-                stop.properties.desserte.matches(lineRegex)
-            }
+        return withContext(kotlinx.coroutines.Dispatchers.Default) {
+            try {
+                // Try to load from cache
+                val cachedStops = cache?.getStops()
 
-            val lineNameRegex = Regex("\\b(T\\d+|TB\\d+|RX):[AR]\\b")
-            val groupedStops = stopsToDedup.groupBy { stop ->
-                val match = lineNameRegex.find(stop.properties.desserte)
-                // Group by stop name and the matched line name (e.g., T1, TB11, RX)
-                "${stop.properties.nom}_${match?.groupValues?.get(1)}"
-            }
-            
-            val dedupedStops = groupedStops.values.map { stops ->
-                stops.firstOrNull { it.properties.desserte.contains(":A") } 
-                    ?: stops.first()
-            }
-            
-            // Combine deduplicated stops with other stops
-            val stopsWithoutDuplicates = dedupedStops + otherStops
-            
-            // Filter metro and funicular stops to avoid duplicates by platform
-            // For transfers, we merge all services into one
-            val filteredStops = stopsWithoutDuplicates.groupBy { stop ->
-                val desserte = stop.properties.desserte
-                
-                // Strict metro detection: service starts with A:, B:, C: or D:
-                // Strict funicular detection: service starts with F1: or F2:
-                // This excludes buses that have these lines later in their service
-                val isMetro = desserte.matches(Regex("^[ABCD]:.*"))
-                val isFunicular = desserte.matches(Regex("^F[12]:.*"))
-                
-                if (isMetro || isFunicular) {
-                    // Group only by station name so that all lines
-                    // at the same station (transfers) are displayed stacked at the same place
-                    stop.properties.nom
-                } else {
-                    // For others (bus, tram), keep each stop unique
-                    stop.id
-                }
-            }.map { (_, stops) ->
-                if (stops.size == 1) {
-                    // Single stop for this group, return as is
-                    stops.first()
-                } else {
-                    // Multiple stops (transfer): merge services
-                    val baseStop = stops.firstOrNull { it.properties.desserte.contains(":A") } ?: stops.first()
-                    
-                    // Collect all unique lines from all stops at this station
-                    val allDessertes = stops.map { it.properties.desserte }.toSet()
-                    
-                    // Merge services into a single string with commas
-                    // Ex: "A:A" + "D:A" -> "A:A,D:A"
-                    val mergedDesserte = allDessertes.joinToString(",")
-                    
-                    // Create a new stop with the merged service
-                    baseStop.copy(
-                        properties = baseStop.properties.copy(
-                            desserte = mergedDesserte
-                        )
+                val response: StopCollection
+
+                if (cachedStops != null) {
+                    // Cache hit: use cached data
+                    response = StopCollection(
+                        type = "FeatureCollection",
+                        features = cachedStops,
+                        totalFeatures = cachedStops.size,
+                        numberMatched = cachedStops.size,
+                        numberReturned = cachedStops.size
                     )
+                } else {
+                    // Cache miss: load from API
+                    response = api.getTransportStops()
                 }
-            }
-            
-            val filteredCollection = response.copy(
-                features = filteredStops,
-                numberReturned = filteredStops.size
-            )
-            
-            // Save to cache only if it wasn't already cached
-            if (cachedStops == null) {
-                try {
-                    cache?.saveStops(filteredCollection.features)
-                } catch (e: OutOfMemoryError) {
-                    android.util.Log.e("TransportRepository", "OutOfMemoryError saving stops to cache, continuing without cache", e)
-                    // Continue without cache in case of memory error
+
+                // No need to load navigone stops separately - they are in the main API with code NAVI1
+                // (which will be normalized to NAV1 in BusIconHelper)
+
+                val allStopsFeatures = response.features
+
+                // Intelligently filter tram, trambus, and rhonexpress stops:
+                // Group by name and line, then keep :A priority, otherwise :R
+                val lineRegex = Regex(".*\\b(T\\d+|TB\\d+|RX):[AR]\\b.*")
+                val stopsToDedup = allStopsFeatures.filter { stop ->
+                    stop.properties.desserte.matches(lineRegex)
                 }
+                val otherStops = allStopsFeatures.filterNot { stop ->
+                    stop.properties.desserte.matches(lineRegex)
+                }
+
+                val lineNameRegex = Regex("\\b(T\\d+|TB\\d+|RX):[AR]\\b")
+                val groupedStops = stopsToDedup.groupBy { stop ->
+                    val match = lineNameRegex.find(stop.properties.desserte)
+                    // Group by stop name and the matched line name (e.g., T1, TB11, RX)
+                    "${stop.properties.nom}_${match?.groupValues?.get(1)}"
+                }
+
+                val dedupedStops = groupedStops.values.map { stops ->
+                    stops.firstOrNull { it.properties.desserte.contains(":A") }
+                        ?: stops.first()
+                }
+
+                // Combine deduplicated stops with other stops
+                val stopsWithoutDuplicates = dedupedStops + otherStops
+
+                // Filter metro and funicular stops to avoid duplicates by platform
+                // For transfers, we merge all services into one
+                val filteredStops = stopsWithoutDuplicates.groupBy { stop ->
+                    val desserte = stop.properties.desserte
+
+                    // Strict metro detection: service starts with A:, B:, C: or D:
+                    // Strict funicular detection: service starts with F1: or F2:
+                    // This excludes buses that have these lines later in their service
+                    val isMetro = desserte.matches(Regex("^[ABCD]:.*"))
+                    val isFunicular = desserte.matches(Regex("^F[12]:.*"))
+
+                    if (isMetro || isFunicular) {
+                        // Group only by station name so that all lines
+                        // at the same station (transfers) are displayed stacked at the same place
+                        stop.properties.nom
+                    } else {
+                        // For others (bus, tram), keep each stop unique
+                        stop.id
+                    }
+                }.map { (_, stops) ->
+                    if (stops.size == 1) {
+                        // Single stop for this group, return as is
+                        stops.first()
+                    } else {
+                        // Multiple stops (transfer): merge services
+                        val baseStop = stops.firstOrNull { it.properties.desserte.contains(":A") } ?: stops.first()
+
+                        // Collect all unique lines from all stops at this station
+                        val allDessertes = stops.map { it.properties.desserte }.toSet()
+
+                        // Merge services into a single string with commas
+                        // Ex: "A:A" + "D:A" -> "A:A,D:A"
+                        val mergedDesserte = allDessertes.joinToString(",")
+
+                        // Create a new stop with the merged service
+                        baseStop.copy(
+                            properties = baseStop.properties.copy(
+                                desserte = mergedDesserte
+                            )
+                        )
+                    }
+                }
+
+                val filteredCollection = response.copy(
+                    features = filteredStops,
+                    numberReturned = filteredStops.size
+                )
+
+                // Save to cache only if it wasn't already cached
+                if (cachedStops == null) {
+                    try {
+                        cache?.saveStops(filteredCollection.features)
+                    } catch (e: OutOfMemoryError) {
+                        android.util.Log.e("TransportRepository", "OutOfMemoryError saving stops to cache, continuing without cache", e)
+                        // Continue without cache in case of memory error
+                    }
+                }
+
+                Result.success(filteredCollection)
+            } catch (e: Exception) {
+                Result.failure(e)
             }
-            
-            Result.success(filteredCollection)
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 }

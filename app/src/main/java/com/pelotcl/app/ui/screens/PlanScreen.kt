@@ -67,7 +67,6 @@ import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonOptions
 import org.maplibre.android.style.sources.GeoJsonSource
-import org.maplibre.geojson.Point
 
 private const val PRIORITY_STOPS_MIN_ZOOM = 12.5f
 private const val TRAM_STOPS_MIN_ZOOM = 14.0f
@@ -1226,22 +1225,23 @@ private suspend fun addStopsToMap(
         val tramLayerPrefix = "transport-stops-layer-tram"
         val secondaryLayerPrefix = "transport-stops-layer-secondary"
 
-        (1..3).forEach { idx ->
-            val pId = "$priorityLayerPrefix-$idx"
-            val tId = "$tramLayerPrefix-$idx"
-            val sId = "$secondaryLayerPrefix-$idx"
-            style.getLayer(pId)?.let { style.removeLayer(it) }
-            style.getLayer(tId)?.let { style.removeLayer(it) }
-            style.getLayer(sId)?.let { style.removeLayer(it) }
-        }
+        // Clean up previous layers
+        // Optimization: Reduce the range if possible, or track added layers.
+        // Assuming slots are within a reasonable range [-10, 10] for most cases, but keeping safe range for now
+        // to ensure no artifacts remain.
+        val layersToRemove = mutableListOf<String>()
         (-25..25).forEach { idx ->
-            val pId = "$priorityLayerPrefix-$idx"
-            val tId = "$tramLayerPrefix-$idx"
-            val sId = "$secondaryLayerPrefix-$idx"
-            style.getLayer(pId)?.let { style.removeLayer(it) }
-            style.getLayer(tId)?.let { style.removeLayer(it) }
-            style.getLayer(sId)?.let { style.removeLayer(it) }
+            layersToRemove.add("$priorityLayerPrefix-$idx")
+            layersToRemove.add("$tramLayerPrefix-$idx")
+            layersToRemove.add("$secondaryLayerPrefix-$idx")
         }
+        // Batch removal if possible or just fast iterate
+        layersToRemove.forEach { id ->
+            if (style.getLayer(id) != null) {
+                style.removeLayer(id)
+            }
+        }
+
         style.getSource(sourceId)?.let { style.removeSource(it) }
 
         // Optimize image loading: Load bitmaps in background, add to style in main thread
@@ -1274,8 +1274,11 @@ private suspend fun addStopsToMap(
             }
 
             withContext(Dispatchers.Main) {
+                // Batch add images if possible, otherwise simple loop
                 bitmaps.forEach { (name, bitmap) ->
-                    style.addImage(name, bitmap)
+                    if (style.getImage(name) == null) { // Avoid re-adding if existing
+                        style.addImage(name, bitmap)
+                    }
                 }
 
                 // Add source and layers only AFTER images are added
@@ -1300,27 +1303,17 @@ private suspend fun addStopsToMap(
                                 Expression.stop(50, "#B71C1C")
                             )
                         ),
-                        PropertyFactory.circleRadius(
-                            Expression.step(
-                                Expression.get("point_count"),
-                                Expression.literal(15f),
-                                Expression.stop(10, 20f),
-                                Expression.stop(50, 25f)
-                            )
-                        ),
-                        PropertyFactory.circleStrokeWidth(2f),
-                        PropertyFactory.circleStrokeColor("#FFFFFF")
+                        PropertyFactory.circleRadius(18f)
                     )
                     setFilter(Expression.has("point_count"))
                 }
                 style.addLayer(clusterLayer)
 
-                // 2. Cluster Counts (Text)
                 val countLayer = SymbolLayer("cluster-count", sourceId).apply {
                     setProperties(
                         PropertyFactory.textField(Expression.toString(Expression.get("point_count_abbreviated"))),
                         PropertyFactory.textSize(12f),
-                        PropertyFactory.textColor("#FFFFFF"),
+                        PropertyFactory.textColor(android.graphics.Color.WHITE),
                         PropertyFactory.textIgnorePlacement(true),
                         PropertyFactory.textAllowOverlap(true)
                     )
@@ -1328,205 +1321,118 @@ private suspend fun addStopsToMap(
                 }
                 style.addLayer(countLayer)
 
-                val iconSizesPriority = 0.7f
-                val iconSizesSecondary = 0.62f
-
-                usedSlots.sorted().forEach { slotIndex ->
-                    val yOffset = slotIndex * 13f
-
-                    val priorityLayerId = "$priorityLayerPrefix-$slotIndex"
-                    val priorityLayer = SymbolLayer(priorityLayerId, sourceId).apply {
+                // 2. Individual Stops Icons (Unclustered)
+                // Use the calculated usedSlots to create only necessary layers
+                usedSlots.sorted().forEach { idx ->
+                    // Priority Stops (Metro, Funiculaire, Tram stations mainly)
+                    val priorityLayer = SymbolLayer("$priorityLayerPrefix-$idx", sourceId).apply {
                         setProperties(
-                            PropertyFactory.iconImage("{icon}"),
-                            PropertyFactory.iconSize(iconSizesPriority),
+                            PropertyFactory.iconImage(Expression.get("icon-$idx")),
                             PropertyFactory.iconAllowOverlap(true),
-                            PropertyFactory.iconIgnorePlacement(true),
-                            PropertyFactory.iconAnchor("center"),
-                            PropertyFactory.iconOffset(arrayOf(0f, yOffset))
-                        )
-                        setFilter(
-                            Expression.all(
-                                Expression.not(Expression.has("point_count")), // Not a cluster
-                                Expression.eq(Expression.get("stop_priority"), 2),
-                                Expression.eq(Expression.get("slot"), slotIndex)
+                            PropertyFactory.iconIgnorePlacement(true), // They must appear
+                            PropertyFactory.iconSize(
+                                Expression.interpolate(
+                                    Expression.linear(),
+                                    Expression.zoom(),
+                                    Expression.stop(12, 0.5f),
+                                    Expression.stop(15, 0.8f)
+                                )
                             )
-                        )
-                        setMinZoom(PRIORITY_STOPS_MIN_ZOOM)
-                    }
-                    style.addLayer(priorityLayer)
-
-                    val tramLayerId = "$tramLayerPrefix-$slotIndex"
-                    val tramLayer = SymbolLayer(tramLayerId, sourceId).apply {
-                        setProperties(
-                            PropertyFactory.iconImage("{icon}"),
-                            PropertyFactory.iconSize(iconSizesPriority),
-                            PropertyFactory.iconAllowOverlap(true),
-                            PropertyFactory.iconIgnorePlacement(true),
-                            PropertyFactory.iconAnchor("center"),
-                            PropertyFactory.iconOffset(arrayOf(0f, yOffset))
                         )
                         setFilter(
                             Expression.all(
                                 Expression.not(Expression.has("point_count")),
-                                Expression.eq(Expression.get("stop_priority"), 1),
-                                Expression.eq(Expression.get("slot"), slotIndex)
+                                Expression.eq(Expression.get("stop_priority"), 2),
+                                Expression.eq(Expression.get("slot"), idx)
                             )
                         )
-                        setMinZoom(TRAM_STOPS_MIN_ZOOM)
+                        minZoom = PRIORITY_STOPS_MIN_ZOOM
                     }
-                    style.addLayer(tramLayer)
+                    style.addLayerBelow(priorityLayer, "clusters")
 
-                    val secondaryLayerId = "$secondaryLayerPrefix-$slotIndex"
-                    val secondaryLayer = SymbolLayer(secondaryLayerId, sourceId).apply {
+                    // Tram Stops (Specific handling if separated)
+                    val tramLayer = SymbolLayer("$tramLayerPrefix-$idx", sourceId).apply {
+                       setProperties(
+                            PropertyFactory.iconImage(Expression.get("icon-$idx")),
+                            PropertyFactory.iconAllowOverlap(false), // Avoid too much clutter for trams if crowded
+                            PropertyFactory.iconSize(0.7f)
+                       )
+                       setFilter(
+                           Expression.all(
+                               Expression.not(Expression.has("point_count")),
+                               Expression.eq(Expression.get("stop_priority"), 1),
+                               Expression.eq(Expression.get("slot"), idx)
+                           )
+                       )
+                       minZoom = TRAM_STOPS_MIN_ZOOM
+                    }
+                    style.addLayerBelow(tramLayer, "clusters")
+
+                    // Secondary Stops (Bus, etc.)
+                    val secondaryLayer = SymbolLayer("$secondaryLayerPrefix-$idx", sourceId).apply {
                         setProperties(
-                            PropertyFactory.iconImage("{icon}"),
-                            PropertyFactory.iconSize(iconSizesSecondary),
-                            PropertyFactory.iconAllowOverlap(true),
-                            PropertyFactory.iconIgnorePlacement(true),
-                            PropertyFactory.iconAnchor("center"),
-                            PropertyFactory.iconOffset(arrayOf(0f, yOffset))
+                            PropertyFactory.iconImage(Expression.get("icon-$idx")),
+                            PropertyFactory.iconAllowOverlap(false),
+                            PropertyFactory.iconSize(0.6f)
                         )
                         setFilter(
                             Expression.all(
                                 Expression.not(Expression.has("point_count")),
                                 Expression.eq(Expression.get("stop_priority"), 0),
-                                Expression.eq(Expression.get("slot"), slotIndex)
+                                Expression.eq(Expression.get("slot"), idx)
                             )
                         )
-                        setMinZoom(SECONDARY_STOPS_MIN_ZOOM)
+                        minZoom = SECONDARY_STOPS_MIN_ZOOM
                     }
-                    style.addLayer(secondaryLayer)
+                    style.addLayerBelow(secondaryLayer, "clusters")
                 }
 
-                // Add simplified circle layer for individual stops when zoomed out slightly but not clustered
-                // to avoid loading heavy icons too early
-                val simpleStopLayer = org.maplibre.android.style.layers.CircleLayer("simple-unclustered-stops", sourceId).apply {
-                     setProperties(
-                         PropertyFactory.circleColor("#FFFFFF"),
-                         PropertyFactory.circleRadius(4f),
-                         PropertyFactory.circleStrokeWidth(1f),
-                         PropertyFactory.circleStrokeColor("#999999")
-                     )
-                    // Show only when NOT clustered AND zoom is less than when full icons appear
-                    setFilter(Expression.not(Expression.has("point_count")))
-                    setMaxZoom(PRIORITY_STOPS_MIN_ZOOM)
-                }
-                style.addLayerBelow(simpleStopLayer, "clusters")
-
+                // Interaction listener for stops
                 map.addOnMapClickListener { point ->
-                    val pixel = map.projection.toScreenLocation(point)
+                    val screenPoint = map.projection.toScreenLocation(point)
 
-                    // 1. Check for clusters click -> Zoom in
-                    val clusterFeatures = map.queryRenderedFeatures(pixel, "clusters", "cluster-count")
+                    // Check clusters first
+                    val clusterFeatures = map.queryRenderedFeatures(screenPoint, "clusters")
                     if (clusterFeatures.isNotEmpty()) {
-                        val cluster = clusterFeatures.first()
-                        val geometry = cluster.geometry()
-                        if (geometry is Point) {
-                            val coordinates = geometry.coordinates()
-                            val zoom = map.cameraPosition.zoom
-                            map.animateCamera(CameraUpdateFactory.newLatLngZoom(
-                                LatLng(coordinates[1], coordinates[0]),
-                                zoom + 2
-                            ), 500)
+                        val cameraUpdate = CameraUpdateFactory.newLatLngZoom(point, map.cameraPosition.zoom + 2)
+                        map.animateCamera(cameraUpdate)
+                        return@addOnMapClickListener true
+                    }
+
+                    // Check individual stops
+                    // We need to query all the dynamic layers we added
+                    val interactableLayers = usedSlots.flatMap { idx ->
+                        listOf("$priorityLayerPrefix-$idx", "$tramLayerPrefix-$idx", "$secondaryLayerPrefix-$idx")
+                    }.toTypedArray()
+
+                    val stopFeatures = map.queryRenderedFeatures(screenPoint, *interactableLayers)
+                    if (stopFeatures.isNotEmpty()) {
+                        val feature = stopFeatures.first()
+                        val props = feature.properties()
+                        if (props != null) {
+                                try {
+                                    val stopName = if (props.has("nom")) props.get("nom").asString else ""
+                                    val lignesJson = if (props.has("lignes")) props.get("lignes").asString else "[]"
+
+                                val lignes = try {
+                                    val jsonArray = com.google.gson.JsonParser.parseString(lignesJson).asJsonArray
+                                    jsonArray.map { it.asString }
+                                } catch (e: Exception) {
+                                    emptyList()
+                                }
+
+                                val stationInfo = StationInfo(
+                                    nom = stopName,
+                                    lignes = lignes
+                                )
+                                onStationClick(stationInfo)
+                                return@addOnMapClickListener true
+                            } catch (e: Exception) {
+                                // Ignore parse errors
+                            }
                         }
-                        return@addOnMapClickListener true
                     }
-
-                    val circleFeatures = map.queryRenderedFeatures(pixel, "line-stops-circles")
-                    if (circleFeatures.isNotEmpty()) {
-                        val feature = circleFeatures.first()
-                        val stationName = feature.getStringProperty("nom") ?: ""
-                        val desserte = feature.getStringProperty("desserte") ?: ""
-                        val isPmr = feature.getBooleanProperty("pmr") ?: false
-
-                        val lines = BusIconHelper.getAllLinesForStop(
-                            com.pelotcl.app.data.model.StopFeature(
-                                type = "Feature",
-                                id = "",
-                                geometry = com.pelotcl.app.data.model.StopGeometry("Point", listOf(0.0, 0.0)),
-                                properties = com.pelotcl.app.data.model.StopProperties(
-                                    id = 0,
-                                    nom = stationName,
-                                    desserte = desserte,
-                                    pmr = isPmr,
-                                    ascenseur = false,
-                                    escalator = false,
-                                    gid = 0,
-                                    lastUpdate = "",
-                                    lastUpdateFme = "",
-                                    adresse = "",
-                                    localiseFaceAAdresse = false,
-                                    commune = "",
-                                    insee = "",
-                                    zone = ""
-                                )
-                            )
-                        )
-
-                        val stationInfo = StationInfo(
-                            nom = stationName,
-                            lignes = lines,
-                            isPmr = isPmr,
-                            desserte = desserte
-                        )
-
-                        onStationClick(stationInfo)
-                        return@addOnMapClickListener true
-                    }
-
-                    val allLayerIds = usedSlots.flatMap { idx ->
-                        listOf(
-                            "$priorityLayerPrefix-$idx",
-                            "$tramLayerPrefix-$idx",
-                            "$secondaryLayerPrefix-$idx"
-                        )
-                    }
-
-                    val features = map.queryRenderedFeatures(pixel, *allLayerIds.toTypedArray())
-
-                    if (features.isNotEmpty()) {
-                        val feature = features.first()
-
-                        val stationName = feature.getStringProperty("nom") ?: ""
-                        val desserte = feature.getStringProperty("desserte") ?: ""
-                        val isPmr = feature.getBooleanProperty("pmr") ?: false
-
-                        val lines = BusIconHelper.getAllLinesForStop(
-                            com.pelotcl.app.data.model.StopFeature(
-                                type = "Feature",
-                                id = "",
-                                geometry = com.pelotcl.app.data.model.StopGeometry("Point", listOf(0.0, 0.0)),
-                                properties = com.pelotcl.app.data.model.StopProperties(
-                                    id = 0,
-                                    nom = stationName,
-                                    desserte = desserte,
-                                    pmr = isPmr,
-                                    ascenseur = false,
-                                    escalator = false,
-                                    gid = 0,
-                                    lastUpdate = "",
-                                    lastUpdateFme = "",
-                                    adresse = "",
-                                    localiseFaceAAdresse = false,
-                                    commune = "",
-                                    insee = "",
-                                    zone = ""
-                                )
-                            )
-                        )
-
-                        val stationInfo = StationInfo(
-                            nom = stationName,
-                            lignes = lines,
-                            isPmr = isPmr,
-                            desserte = desserte
-                        )
-
-                        onStationClick(stationInfo)
-                        true
-                    } else {
-                        false
-                    }
+                    false
                 }
             }
         }
@@ -1784,8 +1690,6 @@ private fun getLocation(
         // Permission denied
     }
 }
-
-
 
 
 
