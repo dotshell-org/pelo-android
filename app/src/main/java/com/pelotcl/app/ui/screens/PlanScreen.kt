@@ -1323,21 +1323,21 @@ private suspend fun addStopsToMap(
 
                 // 2. Individual Stops Icons (Unclustered)
                 // Use the calculated usedSlots to create only necessary layers
+                val iconSizesPriority = 0.7f
+                val iconSizesSecondary = 0.62f
+
                 usedSlots.sorted().forEach { idx ->
+                    val yOffset = idx * 13f
+
                     // Priority Stops (Metro, Funiculaire, Tram stations mainly)
                     val priorityLayer = SymbolLayer("$priorityLayerPrefix-$idx", sourceId).apply {
                         setProperties(
                             PropertyFactory.iconImage(Expression.get("icon")),
+                            PropertyFactory.iconSize(iconSizesPriority),
                             PropertyFactory.iconAllowOverlap(true),
-                            PropertyFactory.iconIgnorePlacement(true), // They must appear
-                            PropertyFactory.iconSize(
-                                Expression.interpolate(
-                                    Expression.linear(),
-                                    Expression.zoom(),
-                                    Expression.stop(12, 0.5f),
-                                    Expression.stop(15, 0.8f)
-                                )
-                            )
+                            PropertyFactory.iconIgnorePlacement(true),
+                            PropertyFactory.iconAnchor("center"),
+                            PropertyFactory.iconOffset(arrayOf(0f, yOffset))
                         )
                         setFilter(
                             Expression.all(
@@ -1354,8 +1354,11 @@ private suspend fun addStopsToMap(
                     val tramLayer = SymbolLayer("$tramLayerPrefix-$idx", sourceId).apply {
                        setProperties(
                             PropertyFactory.iconImage(Expression.get("icon")),
-                            PropertyFactory.iconAllowOverlap(false), // Avoid too much clutter for trams if crowded
-                            PropertyFactory.iconSize(0.7f)
+                            PropertyFactory.iconSize(iconSizesPriority),
+                            PropertyFactory.iconAllowOverlap(true),
+                            PropertyFactory.iconIgnorePlacement(true),
+                            PropertyFactory.iconAnchor("center"),
+                            PropertyFactory.iconOffset(arrayOf(0f, yOffset))
                        )
                        setFilter(
                            Expression.all(
@@ -1372,8 +1375,11 @@ private suspend fun addStopsToMap(
                     val secondaryLayer = SymbolLayer("$secondaryLayerPrefix-$idx", sourceId).apply {
                         setProperties(
                             PropertyFactory.iconImage(Expression.get("icon")),
-                            PropertyFactory.iconAllowOverlap(false),
-                            PropertyFactory.iconSize(0.6f)
+                            PropertyFactory.iconSize(iconSizesSecondary),
+                            PropertyFactory.iconAllowOverlap(true),
+                            PropertyFactory.iconIgnorePlacement(true),
+                            PropertyFactory.iconAnchor("center"),
+                            PropertyFactory.iconOffset(arrayOf(0f, yOffset))
                         )
                         setFilter(
                             Expression.all(
@@ -1556,10 +1562,18 @@ private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>
             val firstStop = stopsGroup.first()
             val isPmr = stopsGroup.any { it.properties.pmr }
 
+            // Calculate average position (centroid) for all stops with same name
+            val avgLon = stopsGroup.map { it.geometry.coordinates[0] }.average()
+            val avgLat = stopsGroup.map { it.geometry.coordinates[1] }.average()
+            val mergedGeometry = com.pelotcl.app.data.model.StopGeometry(
+                type = "Point",
+                coordinates = listOf(avgLon, avgLat)
+            )
+
             com.pelotcl.app.data.model.StopFeature(
                 type = firstStop.type,
                 id = firstStop.id,
-                geometry = firstStop.geometry,
+                geometry = mergedGeometry,
                 properties = com.pelotcl.app.data.model.StopProperties(
                     id = firstStop.properties.id,
                     nom = firstStop.properties.nom,
@@ -1620,10 +1634,6 @@ private fun createStopsGeoJsonFromStops(
                 else -> 0
             }
 
-            // Calculate vertical offset to display icons in a column when multiple lines at same stop
-            // Offset in latitude degrees (approximately 0.00003 degrees ≈ 3.3 meters)
-            val latOffset = slot * 0.00003
-
             val pointFeature = JsonObject().apply {
                 addProperty("type", "Feature")
 
@@ -1631,7 +1641,7 @@ private fun createStopsGeoJsonFromStops(
                     addProperty("type", "Point")
                     val coordinatesArray = JsonArray()
                     coordinatesArray.add(stop.geometry.coordinates[0])
-                    coordinatesArray.add(stop.geometry.coordinates[1] + latOffset)
+                    coordinatesArray.add(stop.geometry.coordinates[1])
                     add("coordinates", coordinatesArray)
                 }
                 add("geometry", pointGeometry)
