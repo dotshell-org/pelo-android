@@ -15,6 +15,8 @@ import com.pelotcl.app.data.repository.FavoritesRepository
 import com.pelotcl.app.utils.ConnectionsHelper
 import com.pelotcl.app.utils.HolidayDetector
 import java.time.LocalDate
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -215,6 +217,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     /**
      * Preloads lines and stops at launch, builds transfers index,
      * and populates StateFlows if possible. Does not block UI.
+     * Uses parallel loading for faster startup.
      */
     private fun preloadAllData() {
         if (hasPreloaded || isPreloading) return
@@ -222,31 +225,48 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
         viewModelScope.launch {
             try {
-                // 1) Load lines if not already loaded
-                if (_uiState.value !is TransportLinesUiState.Success) {
-                    repository.getAllLines()
-                        .onSuccess { featureCollection ->
-                            _uiState.value = TransportLinesUiState.Success(featureCollection.features)
-                        }
-                        .onFailure { e ->
-                            Log.w("TransportViewModel", "Preload: failed loading lines: ${e.message}")
-                        }
+                // Load lines and stops in PARALLEL for faster startup
+                val linesDeferred = async(Dispatchers.IO) {
+                    if (_uiState.value !is TransportLinesUiState.Success) {
+                        repository.getAllLines()
+                    } else null
                 }
 
-                // 2) Load all stops, cache them and build transfers index
-                if (cachedStops == null || connectionsIndex.isEmpty()) {
-                    repository.getAllStops()
-                        .onSuccess { stopCollection ->
-                            cachedStops = stopCollection.features
+                val stopsDeferred = async(Dispatchers.IO) {
+                    if (cachedStops == null || connectionsIndex.isEmpty()) {
+                        repository.getAllStops()
+                    } else null
+                }
+
+                // Wait for both to complete
+                val (linesResult, stopsResult) = awaitAll(linesDeferred, stopsDeferred)
+
+                // Process lines result
+                @Suppress("UNCHECKED_CAST")
+                (linesResult as? Result<com.pelotcl.app.data.model.FeatureCollection>)?.let { result ->
+                    result.onSuccess { featureCollection ->
+                        _uiState.value = TransportLinesUiState.Success(featureCollection.features)
+                    }.onFailure { e ->
+                        Log.w("TransportViewModel", "Preload: failed loading lines: ${e.message}")
+                    }
+                }
+
+                // Process stops result
+                @Suppress("UNCHECKED_CAST")
+                (stopsResult as? Result<com.pelotcl.app.data.model.StopCollection>)?.let { result ->
+                    result.onSuccess { stopCollection ->
+                        cachedStops = stopCollection.features
+                        // Build connections index in background
+                        launch(Dispatchers.Default) {
                             buildConnectionsIndex(stopCollection.features)
-                            // Publish stops state only if not already success
-                            if (_stopsUiState.value !is TransportStopsUiState.Success) {
-                                _stopsUiState.value = TransportStopsUiState.Success(stopCollection.features)
-                            }
                         }
-                        .onFailure { e ->
-                            Log.w("TransportViewModel", "Preload: failed loading stops: ${e.message}")
+                        // Publish stops state only if not already success
+                        if (_stopsUiState.value !is TransportStopsUiState.Success) {
+                            _stopsUiState.value = TransportStopsUiState.Success(stopCollection.features)
                         }
+                    }.onFailure { e ->
+                        Log.w("TransportViewModel", "Preload: failed loading stops: ${e.message}")
+                    }
                 }
             } catch (t: Throwable) {
                 Log.e("TransportViewModel", "Preload: unexpected exception: ${t.message}")

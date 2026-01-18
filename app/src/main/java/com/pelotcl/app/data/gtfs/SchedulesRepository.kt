@@ -4,6 +4,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.util.Log
+import android.util.LruCache
 import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.data.repository.TransportRepository
 import java.io.FileOutputStream
@@ -18,7 +19,32 @@ class SchedulesRepository(context: Context) {
     private val appContext: Context = context.applicationContext
     private val dbHelper = SchedulesDatabaseHelper(appContext)
 
+    companion object {
+        // LRU Cache for schedules: key = "lineName|stopName|directionId|isHoliday"
+        // Max 100 entries (typical usage pattern is viewing ~10-20 stops per session)
+        private val schedulesCache = LruCache<String, List<String>>(100)
+
+        // LRU Cache for headsigns: key = routeName
+        private val headsignsCache = LruCache<String, Map<Int, String>>(50)
+
+        // LRU Cache for search results: key = query
+        private val searchCache = LruCache<String, List<StationSearchResult>>(30)
+
+        /**
+         * Clear all caches (call when data is updated)
+         */
+        fun clearCaches() {
+            schedulesCache.evictAll()
+            headsignsCache.evictAll()
+            searchCache.evictAll()
+        }
+    }
+
     suspend fun searchStopsByName(query: String): List<StationSearchResult> {
+        // Check cache first
+        val cacheKey = query.lowercase().trim()
+        searchCache.get(cacheKey)?.let { return it }
+
         val results = mutableListOf<StationSearchResult>()
         try {
             val db = dbHelper.readableDatabase
@@ -77,6 +103,12 @@ class SchedulesRepository(context: Context) {
                 emptyList()
             }
         }
+
+        // Cache the results
+        if (results.isNotEmpty()) {
+            searchCache.put(cacheKey, results)
+        }
+
         return results
     }
 
@@ -92,6 +124,9 @@ class SchedulesRepository(context: Context) {
     }
 
     fun getHeadsigns(routeName: String): Map<Int, String> {
+        // Check cache first
+        headsignsCache.get(routeName)?.let { return it }
+
         val result = mutableMapOf<Int, String>()
         try {
             val db = dbHelper.readableDatabase
@@ -105,6 +140,11 @@ class SchedulesRepository(context: Context) {
                 result[directionId] = headsign
             }
             cursor.close()
+
+            // Cache the result
+            if (result.isNotEmpty()) {
+                headsignsCache.put(routeName, result)
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -112,6 +152,10 @@ class SchedulesRepository(context: Context) {
     }
 
     fun getSchedules(lineName: String, stopName: String, directionId: Int, isHoliday: Boolean): List<String> {
+        // Build cache key
+        val cacheKey = "$lineName|$stopName|$directionId|$isHoliday"
+        schedulesCache.get(cacheKey)?.let { return it }
+
         val result = mutableListOf<String>()
         try {
             val db = dbHelper.readableDatabase
@@ -193,7 +237,13 @@ class SchedulesRepository(context: Context) {
         } catch (e: Exception) {
             Log.e("NavigoneDebug", "Error in getSchedules: ${e.message}", e)
         }
-        return result.distinct().sorted()
+
+        val finalResult = result.distinct().sorted()
+
+        // Cache the result (even empty results to avoid repeated queries)
+        schedulesCache.put(cacheKey, finalResult)
+
+        return finalResult
     }
 
     private class SchedulesDatabaseHelper(private val context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {

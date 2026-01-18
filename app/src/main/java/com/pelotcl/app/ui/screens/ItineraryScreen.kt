@@ -87,6 +87,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.maplibre.android.geometry.LatLng
+import android.util.Log
 
 /**
  * Represents a selected stop for the itinerary
@@ -142,11 +143,14 @@ fun ItineraryScreen(
     
     // Initialize raptor and set default stops
     LaunchedEffect(Unit) {
+        Log.d("ItineraryScreen", "Initializing Raptor repository...")
         raptorRepository.initialize()
-        
+        Log.d("ItineraryScreen", "Raptor initialized. Destination: '$destinationStopName', UserLocation: $userLocation")
+
         // Set arrival stop from the destination
         if (destinationStopName.isNotBlank()) {
             val arrivalResults = raptorRepository.searchStopsByName(destinationStopName)
+            Log.d("ItineraryScreen", "Arrival search for '$destinationStopName': found ${arrivalResults.size} stops - ${arrivalResults.map { "${it.name}(${it.id})" }}")
             if (arrivalResults.isNotEmpty()) {
                 arrivalStop = SelectedStop(
                     name = destinationStopName,
@@ -161,9 +165,11 @@ fun ItineraryScreen(
                 latitude = userLocation.latitude,
                 longitude = userLocation.longitude
             )
+            Log.d("ItineraryScreen", "Closest stop to $userLocation: ${closestStop?.name} (id=${closestStop?.id})")
             if (closestStop != null) {
                 // Get all stop IDs with the same name
                 val allStopsWithName = raptorRepository.searchStopsByName(closestStop.name)
+                Log.d("ItineraryScreen", "Departure search for '${closestStop.name}': found ${allStopsWithName.size} stops - ${allStopsWithName.map { "${it.name}(${it.id})" }}")
                 departureStop = SelectedStop(
                     name = closestStop.name,
                     stopIds = allStopsWithName.map { it.id }
@@ -205,17 +211,33 @@ fun ItineraryScreen(
             errorMessage = null
             journeys = emptyList()
             
+            Log.d("ItineraryScreen", "Calculating journey from '${departureStop!!.name}' (ids=${departureStop!!.stopIds}) to '${arrivalStop!!.name}' (ids=${arrivalStop!!.stopIds})")
+
             scope.launch {
                 try {
-                    val results = raptorRepository.getOptimizedPaths(
+                    // Try with current time first
+                    var results = raptorRepository.getOptimizedPaths(
                         originStopIds = departureStop!!.stopIds,
                         destinationStopIds = arrivalStop!!.stopIds
                     )
+
+                    // If no results with current time, try with 9:00 AM as fallback test
+                    if (results.isEmpty()) {
+                        Log.d("ItineraryScreen", "No results with current time, trying with 9:00 AM...")
+                        results = raptorRepository.getOptimizedPaths(
+                            originStopIds = departureStop!!.stopIds,
+                            destinationStopIds = arrivalStop!!.stopIds,
+                            departureTimeSeconds = 9 * 3600 // 9:00 AM
+                        )
+                    }
+
+                    Log.d("ItineraryScreen", "Journey results: ${results.size} journeys found")
                     journeys = results
                     if (results.isEmpty()) {
                         errorMessage = "Aucun itinéraire trouvé"
                     }
                 } catch (e: Exception) {
+                    Log.e("ItineraryScreen", "Error calculating journey", e)
                     errorMessage = "Erreur lors du calcul de l'itinéraire"
                 } finally {
                     isLoading = false
