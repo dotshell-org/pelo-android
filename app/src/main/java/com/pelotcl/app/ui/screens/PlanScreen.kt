@@ -1327,7 +1327,7 @@ private suspend fun addStopsToMap(
                     // Priority Stops (Metro, Funiculaire, Tram stations mainly)
                     val priorityLayer = SymbolLayer("$priorityLayerPrefix-$idx", sourceId).apply {
                         setProperties(
-                            PropertyFactory.iconImage(Expression.get("icon-$idx")),
+                            PropertyFactory.iconImage(Expression.get("icon")),
                             PropertyFactory.iconAllowOverlap(true),
                             PropertyFactory.iconIgnorePlacement(true), // They must appear
                             PropertyFactory.iconSize(
@@ -1353,7 +1353,7 @@ private suspend fun addStopsToMap(
                     // Tram Stops (Specific handling if separated)
                     val tramLayer = SymbolLayer("$tramLayerPrefix-$idx", sourceId).apply {
                        setProperties(
-                            PropertyFactory.iconImage(Expression.get("icon-$idx")),
+                            PropertyFactory.iconImage(Expression.get("icon")),
                             PropertyFactory.iconAllowOverlap(false), // Avoid too much clutter for trams if crowded
                             PropertyFactory.iconSize(0.7f)
                        )
@@ -1371,7 +1371,7 @@ private suspend fun addStopsToMap(
                     // Secondary Stops (Bus, etc.)
                     val secondaryLayer = SymbolLayer("$secondaryLayerPrefix-$idx", sourceId).apply {
                         setProperties(
-                            PropertyFactory.iconImage(Expression.get("icon-$idx")),
+                            PropertyFactory.iconImage(Expression.get("icon")),
                             PropertyFactory.iconAllowOverlap(false),
                             PropertyFactory.iconSize(0.6f)
                         )
