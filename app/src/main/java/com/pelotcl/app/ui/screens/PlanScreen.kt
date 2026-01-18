@@ -240,30 +240,94 @@ fun PlanScreen(
         viewModel.preloadStops()
     }
 
-    var displayedLines by remember { mutableStateOf<Set<String>>(emptySet()) }
+// deleted
 
     LaunchedEffect(uiState, mapInstance) {
         val map = mapInstance ?: return@LaunchedEffect
 
         when (val state = uiState) {
             is TransportLinesUiState.Success -> {
-                val currentLineNames = state.lines.map {
-                    "${it.properties.ligne}-${it.properties.codeTrace}"
-                }.toSet()
+                // Prepare GeoJSON in background
+                val allLinesGeoJson = withContext(Dispatchers.Default) {
+                    val featuresMeta = JsonObject().apply {
+                        addProperty("type", "FeatureCollection")
+                        val featuresArray = JsonArray()
+                        state.lines.forEach { lineFeature ->
+                            val featObj = JsonObject()
+                            featObj.addProperty("type", "Feature")
 
-                val linesToRemove = displayedLines - currentLineNames
-                linesToRemove.forEach { lineKey ->
-                    removeLineFromMap(map, lineKey)
+                            val geomObj = JsonObject()
+                            geomObj.addProperty("type", lineFeature.geometry.type)
+                            val coordsArray = JsonArray()
+                            lineFeature.geometry.coordinates.forEach { segment ->
+                                val segmentArray = JsonArray()
+                                segment.forEach { point ->
+                                    val pointArray = JsonArray()
+                                    point.forEach { c -> pointArray.add(c) }
+                                    segmentArray.add(pointArray)
+                                }
+                                coordsArray.add(segmentArray)
+                            }
+                            geomObj.add("coordinates", coordsArray)
+                            featObj.add("geometry", geomObj)
+
+                            val propsObj = JsonObject()
+                            propsObj.addProperty("ligne", lineFeature.properties.ligne)
+                            propsObj.addProperty("nom_trace", lineFeature.properties.nomTrace)
+                            propsObj.addProperty("couleur", LineColorHelper.getColorForLine(lineFeature))
+                            // Determine line width property based on type
+                            val upperName = lineFeature.properties.ligne.uppercase()
+                            val width = when {
+                                lineFeature.properties.familleTransport == "BAT" || upperName.startsWith("NAV") -> 2f
+                                lineFeature.properties.familleTransport == "TRA" || lineFeature.properties.familleTransport == "TRAM" || upperName.startsWith("TB") -> 2f
+                                else -> 4f
+                            }
+                            propsObj.addProperty("line_width", width)
+                            featObj.add("properties", propsObj)
+
+                            featuresArray.add(featObj)
+                        }
+                        add("features", featuresArray)
+                    }
+                    featuresMeta.toString()
                 }
 
-                state.lines.forEach { feature ->
-                    val lineKey = "${feature.properties.ligne}-${feature.properties.codeTrace}"
-                    if (lineKey !in displayedLines) {
-                        addLineToMap(map, feature)
+                // Update Map on Main Thread
+                map.getStyle { style ->
+                    val sourceId = "all-lines-source"
+                    val layerId = "all-lines-layer"
+
+                    // Clean up individual layers if they exist (migration)
+                    state.lines.forEach { feature ->
+                        val oldLayerId = "layer-${feature.properties.ligne}-${feature.properties.codeTrace}"
+                        val oldSourceId = "line-${feature.properties.ligne}-${feature.properties.codeTrace}"
+                        style.getLayer(oldLayerId)?.let { style.removeLayer(it) }
+                        style.getSource(oldSourceId)?.let { style.removeSource(it) }
+                    }
+
+                    style.getLayer(layerId)?.let { style.removeLayer(it) }
+                    style.getSource(sourceId)?.let { style.removeSource(it) }
+
+                    style.addSource(GeoJsonSource(sourceId, allLinesGeoJson))
+
+                    val lineLayer = LineLayer(layerId, sourceId).apply {
+                        setProperties(
+                            PropertyFactory.lineColor(Expression.get("couleur")),
+                            PropertyFactory.lineWidth(Expression.get("line_width")),
+                            PropertyFactory.lineOpacity(0.8f),
+                            PropertyFactory.lineCap("round"),
+                            PropertyFactory.lineJoin("round")
+                        )
+                    }
+
+                    // Ensure lines are below stops
+                    val firstStopLayer = style.layers.find { it.id.startsWith("transport-stops-layer") }
+                    if (firstStopLayer != null) {
+                        style.addLayerBelow(lineLayer, firstStopLayer.id)
+                    } else {
+                        style.addLayer(lineLayer)
                     }
                 }
-
-                displayedLines = currentLineNames
             }
             else -> {}
         }
@@ -713,31 +777,13 @@ private fun filterMapLines(
     selectedLineName: String
 ): Int {
     map.getStyle { style ->
-        var foundCount = 0
-        var notFoundCount = 0
-        var madeVisibleCount = 0
+        val layerId = "all-lines-layer"
+        val existingLayer = style.getLayer(layerId)
 
-        allLines.forEach { feature ->
-            val layerId = "layer-${feature.properties.ligne}-${feature.properties.codeTrace}"
-            val isSelectedLine = feature.properties.ligne.equals(selectedLineName, ignoreCase = true)
-
-            val existingLayer = style.getLayer(layerId)
-
-            if (existingLayer != null) {
-                foundCount++
-                if (isSelectedLine) {
-                    existingLayer.setProperties(PropertyFactory.visibility("visible"))
-                    madeVisibleCount++
-                } else {
-                    existingLayer.setProperties(PropertyFactory.visibility("none"))
-                }
-            } else {
-                notFoundCount++
-                if (isSelectedLine) {
-                    addLineToMap(map, feature)
-                    madeVisibleCount++
-                }
-            }
+        if (existingLayer != null) {
+            (existingLayer as? LineLayer)?.setFilter(
+                Expression.eq(Expression.get("ligne"), selectedLineName)
+            )
         }
     }
     val visibleCandidates = allLines.count { it.properties.ligne.equals(selectedLineName, ignoreCase = true) }
@@ -1128,22 +1174,7 @@ private fun addLineToMap(
     }
 }
 
-private fun removeLineFromMap(
-    map: MapLibreMap,
-    lineKey: String
-) {
-    map.getStyle { style ->
-        val sourceId = "line-$lineKey"
-        val layerId = "layer-$lineKey"
-
-        style.getLayer(layerId)?.let {
-            style.removeLayer(it)
-        }
-        style.getSource(sourceId)?.let {
-            style.removeSource(it)
-        }
-    }
-}
+// deleted
 
 private suspend fun addStopsToMap(
     map: MapLibreMap,
