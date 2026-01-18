@@ -1,27 +1,36 @@
 package com.pelotcl.app.data.cache
 
 import android.content.Context
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import com.pelotcl.app.data.model.Feature
 import com.pelotcl.app.data.model.StopFeature
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 
 /**
  * In-memory and disk cache class for transport data.
- * Uses binary serialization for faster disk I/O and reduced storage.
+ * Uses kotlinx.serialization for fast JSON serialization and Gzip compression
+ * for reduced disk I/O and storage.
  * Avoids repeated API calls and improves performance.
  */
 class TransportCache(private val context: Context) {
 
-    private val gson = Gson()
+    // High-performance JSON parser with optimized settings
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+        coerceInputValues = true
+    }
+
     private val prefs = context.getSharedPreferences("transport_cache_meta", Context.MODE_PRIVATE)
     private val mutex = Mutex()
     private val cacheDir = File(context.cacheDir, "transport_data").also { it.mkdirs() }
@@ -47,13 +56,13 @@ class TransportCache(private val context: Context) {
         private const val KEY_TRAM_LINES_TIMESTAMP = "tram_lines_timestamp"
         private const val KEY_STOPS_TIMESTAMP = "stops_timestamp"
         
-        // Binary cache file names
-        private const val FILE_METRO_LINES = "metro_lines.bin"
-        private const val FILE_TRAM_LINES = "tram_lines.bin"
-        private const val FILE_STOPS = "stops.json" // Keep JSON for stops due to size/complexity
+        // Compressed cache file names
+        private const val FILE_METRO_LINES = "metro_lines.json.gz"
+        private const val FILE_TRAM_LINES = "tram_lines.json.gz"
+        private const val FILE_STOPS = "stops.json.gz"
 
         // Cache schema version - increment when model classes change
-        private const val CACHE_VERSION = 1
+        private const val CACHE_VERSION = 2  // Incremented for new format
         private const val KEY_CACHE_VERSION = "cache_version"
 
         @Volatile
@@ -106,13 +115,15 @@ class TransportCache(private val context: Context) {
     }
     
     /**
-     * Write features to binary file (runs on IO dispatcher)
+     * Write data to compressed Gzip file (runs on IO dispatcher)
+     * Uses kotlinx.serialization for fast encoding
      */
-    private suspend fun writeToBinaryFile(fileName: String, data: String) = withContext(Dispatchers.IO) {
+    private suspend inline fun <reified T> writeToCompressedFile(fileName: String, data: T) = withContext(Dispatchers.IO) {
         try {
             val file = File(cacheDir, fileName)
-            FileOutputStream(file).bufferedWriter().use { writer ->
-                writer.write(data)
+            val jsonString = json.encodeToString(data)
+            GZIPOutputStream(FileOutputStream(file).buffered()).use { gzip ->
+                gzip.write(jsonString.toByteArray(Charsets.UTF_8))
             }
         } catch (e: Exception) {
             android.util.Log.e("TransportCache", "Error writing to $fileName", e)
@@ -120,15 +131,17 @@ class TransportCache(private val context: Context) {
     }
 
     /**
-     * Read features from binary file (runs on IO dispatcher)
+     * Read data from compressed Gzip file (runs on IO dispatcher)
+     * Uses kotlinx.serialization for fast decoding
      */
-    private suspend fun readFromBinaryFile(fileName: String): String? = withContext(Dispatchers.IO) {
+    private suspend inline fun <reified T> readFromCompressedFile(fileName: String): T? = withContext(Dispatchers.IO) {
         try {
             val file = File(cacheDir, fileName)
             if (file.exists()) {
-                FileInputStream(file).bufferedReader().use { reader ->
-                    reader.readText()
+                val jsonString = GZIPInputStream(FileInputStream(file).buffered()).use { gzip ->
+                    gzip.bufferedReader(Charsets.UTF_8).readText()
                 }
+                json.decodeFromString<T>(jsonString)
             } else null
         } catch (e: Exception) {
             android.util.Log.e("TransportCache", "Error reading from $fileName", e)
@@ -145,7 +158,7 @@ class TransportCache(private val context: Context) {
         
         // Save timestamp to prefs and data to file asynchronously
         prefs.edit().putLong(KEY_METRO_LINES_TIMESTAMP, metroLinesTimestamp).apply()
-        writeToBinaryFile(FILE_METRO_LINES, gson.toJson(lines))
+        writeToCompressedFile(FILE_METRO_LINES, lines)
     }
     
     /**
@@ -160,17 +173,11 @@ class TransportCache(private val context: Context) {
         // Otherwise, load from disk
         val timestamp = prefs.getLong(KEY_METRO_LINES_TIMESTAMP, 0)
         if (isTimestampValid(timestamp)) {
-            val json = readFromBinaryFile(FILE_METRO_LINES)
-            if (json != null) {
-                try {
-                    val type = object : TypeToken<List<Feature>>() {}.type
-                    val lines = gson.fromJson<List<Feature>>(json, type)
-                    metroLinesCache = lines
-                    metroLinesTimestamp = timestamp
-                    return@withLock lines
-                } catch (e: Exception) {
-                    android.util.Log.e("TransportCache", "Error loading metro lines from cache", e)
-                }
+            val lines = readFromCompressedFile<List<Feature>>(FILE_METRO_LINES)
+            if (lines != null) {
+                metroLinesCache = lines
+                metroLinesTimestamp = timestamp
+                return@withLock lines
             }
         }
         
@@ -186,7 +193,7 @@ class TransportCache(private val context: Context) {
         
         // Save timestamp to prefs and data to file asynchronously
         prefs.edit().putLong(KEY_TRAM_LINES_TIMESTAMP, tramLinesTimestamp).apply()
-        writeToBinaryFile(FILE_TRAM_LINES, gson.toJson(lines))
+        writeToCompressedFile(FILE_TRAM_LINES, lines)
     }
     
     /**
@@ -201,17 +208,11 @@ class TransportCache(private val context: Context) {
         // Otherwise, load from disk
         val timestamp = prefs.getLong(KEY_TRAM_LINES_TIMESTAMP, 0)
         if (isTimestampValid(timestamp)) {
-            val json = readFromBinaryFile(FILE_TRAM_LINES)
-            if (json != null) {
-                try {
-                    val type = object : TypeToken<List<Feature>>() {}.type
-                    val lines = gson.fromJson<List<Feature>>(json, type)
-                    tramLinesCache = lines
-                    tramLinesTimestamp = timestamp
-                    return@withLock lines
-                } catch (e: Exception) {
-                    android.util.Log.e("TransportCache", "Error loading tram lines from cache", e)
-                }
+            val lines = readFromCompressedFile<List<Feature>>(FILE_TRAM_LINES)
+            if (lines != null) {
+                tramLinesCache = lines
+                tramLinesTimestamp = timestamp
+                return@withLock lines
             }
         }
         
@@ -242,27 +243,16 @@ class TransportCache(private val context: Context) {
     }
     
     /**
-     * Saves stops to cache using file storage
-     * WARNING: Stops are large, we keep all stops (including buses) on disk
+     * Saves stops to cache using compressed file storage
+     * WARNING: Stops are large, we keep all stops (including buses) on disk with Gzip compression
      */
     suspend fun saveStops(stops: List<StopFeature>) = mutex.withLock {
         stopsCache = stops
         stopsTimestamp = System.currentTimeMillis()
         
-        // Save timestamp to prefs and data to file
+        // Save timestamp to prefs and data to compressed file
         prefs.edit().putLong(KEY_STOPS_TIMESTAMP, stopsTimestamp).apply()
-
-        // Save to file asynchronously (large data)
-        withContext(Dispatchers.IO) {
-            try {
-                val file = File(cacheDir, FILE_STOPS)
-                FileOutputStream(file).bufferedWriter().use { writer ->
-                    gson.toJson(stops, writer)
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("TransportCache", "Failed to save stops to disk", e)
-            }
-        }
+        writeToCompressedFile(FILE_STOPS, stops)
     }
     
     /**
@@ -277,21 +267,7 @@ class TransportCache(private val context: Context) {
         // Otherwise, load from disk
         val timestamp = prefs.getLong(KEY_STOPS_TIMESTAMP, 0)
         if (isTimestampValid(timestamp)) {
-            val stops = withContext(Dispatchers.IO) {
-                try {
-                    val file = File(cacheDir, FILE_STOPS)
-                    if (file.exists()) {
-                        FileInputStream(file).bufferedReader().use { reader ->
-                            val type = object : TypeToken<List<StopFeature>>() {}.type
-                            gson.fromJson<List<StopFeature>>(reader, type)
-                        }
-                    } else null
-                } catch (e: Exception) {
-                    android.util.Log.e("TransportCache", "Error loading stops from cache", e)
-                    null
-                }
-            }
-
+            val stops = readFromCompressedFile<List<StopFeature>>(FILE_STOPS)
             if (stops != null) {
                 stopsCache = stops
                 stopsTimestamp = timestamp
@@ -311,6 +287,7 @@ class TransportCache(private val context: Context) {
 
     /**
      * Preload cache from disk into memory (call on background thread at startup)
+     * Now uses compressed files for faster I/O
      */
     suspend fun preloadFromDisk() {
         // Trigger lazy loading from disk

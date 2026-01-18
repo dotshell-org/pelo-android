@@ -1,10 +1,13 @@
 package com.pelotcl.app.data.model
 
 import com.google.gson.annotations.SerializedName
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 /**
  * Représente une collection GeoJSON d'arrêts de transport
  */
+@Serializable
 data class StopCollection(
     val type: String,
     val features: List<StopFeature>,
@@ -19,11 +22,13 @@ data class StopCollection(
 /**
  * Représente un arrêt de transport (Feature GeoJSON)
  */
+@Serializable
 data class StopFeature(
     val type: String,
     val id: String,
     val geometry: StopGeometry,
     @SerializedName("geometry_name")
+    @SerialName("geometry_name")
     val geometryName: String? = null,
     val properties: StopProperties,
     val bbox: List<Double>? = null
@@ -32,6 +37,7 @@ data class StopFeature(
 /**
  * Géométrie d'un arrêt (Point)
  */
+@Serializable
 data class StopGeometry(
     val type: String, // "Point"
     val coordinates: List<Double> // [longitude, latitude]
@@ -40,6 +46,7 @@ data class StopGeometry(
 /**
  * Propriétés d'un arrêt TCL
  */
+@Serializable
 data class StopProperties(
     val id: Int,
     val nom: String,
@@ -49,11 +56,14 @@ data class StopProperties(
     val escalator: Boolean,
     val gid: Int,
     @SerializedName("last_update")
+    @SerialName("last_update")
     val lastUpdate: String?,
     @SerializedName("last_update_fme")
+    @SerialName("last_update_fme")
     val lastUpdateFme: String?,
     val adresse: String?,
     @SerializedName("localise_face_a_adresse")
+    @SerialName("localise_face_a_adresse")
     val localiseFaceAAdresse: Boolean,
     val commune: String?,
     val insee: String?,

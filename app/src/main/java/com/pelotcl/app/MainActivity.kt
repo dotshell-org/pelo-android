@@ -69,18 +69,37 @@ import com.pelotcl.app.ui.theme.PeloTheme
 import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.data.api.RetrofitInstance
+import com.pelotcl.app.data.cache.TransportCache
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import org.maplibre.android.geometry.LatLng
 
 class MainActivity : ComponentActivity() {
+
+    // Application-level coroutine scope for early background work
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         // Initialize HTTP cache early for network optimization
         RetrofitInstance.initialize(applicationContext)
+
+        // Preload disk cache in background for faster data access
+        // This runs before UI is shown, so data is ready when needed
+        appScope.launch {
+            try {
+                val cache = TransportCache.getInstance(applicationContext)
+                cache.preloadFromDisk()
+            } catch (e: Exception) {
+                android.util.Log.w("MainActivity", "Cache preload failed: ${e.message}")
+            }
+        }
 
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.light(

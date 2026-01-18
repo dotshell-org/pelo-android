@@ -27,8 +27,9 @@ class SchedulesRepository(context: Context) {
         // LRU Cache for headsigns: key = routeName
         private val headsignsCache = LruCache<String, Map<Int, String>>(50)
 
-        // LRU Cache for search results: key = query
-        private val searchCache = LruCache<String, List<StationSearchResult>>(30)
+        // LRU Cache for search results: key = normalized query (3+ chars)
+        // Increased size for better search responsiveness
+        private val searchCache = LruCache<String, List<StationSearchResult>>(50)
 
         /**
          * Clear all caches (call when data is updated)
@@ -41,9 +42,11 @@ class SchedulesRepository(context: Context) {
     }
 
     suspend fun searchStopsByName(query: String): List<StationSearchResult> {
-        // Check cache first
+        // Don't cache very short queries (too many results, not useful)
         val cacheKey = query.lowercase().trim()
-        searchCache.get(cacheKey)?.let { return it }
+        if (cacheKey.length >= 2) {
+            searchCache.get(cacheKey)?.let { return it }
+        }
 
         val results = mutableListOf<StationSearchResult>()
         try {
@@ -104,8 +107,8 @@ class SchedulesRepository(context: Context) {
             }
         }
 
-        // Cache the results
-        if (results.isNotEmpty()) {
+        // Cache the results (only for queries with 2+ chars)
+        if (results.isNotEmpty() && cacheKey.length >= 2) {
             searchCache.put(cacheKey, results)
         }
 
@@ -266,20 +269,59 @@ class SchedulesRepository(context: Context) {
             if (!checkDatabase()) {
                 copyDatabase()
             }
-            return try {
+            val db = try {
                 super.getReadableDatabase()
             } catch (_: Exception) {
                 context.deleteDatabase(DB_NAME)
                 copyDatabase()
                 super.getReadableDatabase()
             }
+            // Ensure indexes exist for fast queries
+            ensureIndexes(db)
+            return db
         }
 
         override fun getWritableDatabase(): SQLiteDatabase {
             if (!checkDatabase()) {
                 copyDatabase()
             }
-            return super.getWritableDatabase()
+            val db = super.getWritableDatabase()
+            ensureIndexes(db)
+            return db
+        }
+
+        /**
+         * Create composite indexes if they don't exist for faster schedule queries.
+         * These indexes dramatically speed up getSchedules() lookups.
+         */
+        private fun ensureIndexes(db: SQLiteDatabase) {
+            try {
+                // Composite index for schedule lookups (route_name, direction_id, station_name)
+                db.execSQL("""
+                    CREATE INDEX IF NOT EXISTS idx_schedules_lookup 
+                    ON schedules(route_name, direction_id, station_name)
+                """)
+
+                // Index for station name searches
+                db.execSQL("""
+                    CREATE INDEX IF NOT EXISTS idx_arrets_nom 
+                    ON arrets(nom)
+                """)
+
+                // Index for calendar service_id lookups
+                db.execSQL("""
+                    CREATE INDEX IF NOT EXISTS idx_calendar_service 
+                    ON calendar(service_id)
+                """)
+
+                // Index for directions lookups
+                db.execSQL("""
+                    CREATE INDEX IF NOT EXISTS idx_directions_route 
+                    ON directions(route_name)
+                """)
+            } catch (e: Exception) {
+                Log.w("SchedulesRepository", "Could not create indexes: ${e.message}")
+            }
         }
 
         private fun checkDatabase(): Boolean {

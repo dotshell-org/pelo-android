@@ -3,6 +3,7 @@ package com.pelotcl.app.ui.viewmodel
 import android.app.Application
 import android.os.Build
 import android.util.Log
+import android.util.LruCache
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -213,6 +214,20 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     // Pre-calculated transfers index by stop name
     // Key = normalized stop name, Value = list of transfer lines
     private var connectionsIndex: Map<String, List<Connection>> = emptyMap()
+
+    // LruCache for line stops to avoid expensive geometric calculations
+    // Key = "lineName|currentStopName", Value = list of LineStopInfo
+    private val lineStopsCache = LruCache<String, List<com.pelotcl.app.data.gtfs.LineStopInfo>>(30)
+
+    /**
+     * Clears all cached data for performance optimization.
+     * Call when data sources are updated.
+     */
+    fun clearAllCaches() {
+        lineStopsCache.evictAll()
+        connectionsIndex = emptyMap()
+        cachedStops = null
+    }
 
     /**
      * Preloads lines and stops at launch, builds transfers index,
@@ -506,12 +521,17 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
     /**
      * Retrieves stops served by a specific line, ordered according to the line's path
+     * Uses LruCache to avoid expensive geometric calculations on repeated calls
      * @param lineName Line name (ex: "86", "A", "T1")
      * @param currentStopName Current stop name to mark it (optional)
      * @return List of stops with their transfers, ordered according to the line's route
      */
     fun getStopsForLine(lineName: String, currentStopName: String? = null): List<com.pelotcl.app.data.gtfs.LineStopInfo> {
-        // First, try to retrieve from cache (for metros and trams)
+        // Check LruCache first for ultra-fast repeated lookups
+        val cacheKey = "$lineName|${currentStopName ?: ""}"
+        lineStopsCache.get(cacheKey)?.let { return it }
+
+        // First, try to retrieve from static cache (for metros and trams)
         val cachedStops = com.pelotcl.app.data.gtfs.LineStopsCache.getLineStops(lineName, currentStopName)
         if (cachedStops != null) {
             // Align cache labels with official GTFS labels (strict comparison required DB side)
@@ -540,7 +560,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 )
             }
             val dedup = mapped.distinctBy { normalizeStopName(it.stopName) }
-            return dedup.mapIndexed { index, stop ->
+            val result = dedup.mapIndexed { index, stop ->
                 stop.copy(
                     stopSequence = index + 1,
                     isCurrentStop = currentStopName?.let {
@@ -548,6 +568,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     } ?: stop.isCurrentStop
                 )
             }
+            // Cache the result for future lookups
+            lineStopsCache.put(cacheKey, result)
+            return result
         }
 
         // Get all stops from cache
@@ -652,7 +675,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     val dedupOrdered = orderedStops.distinctBy { normalizeStopName(it.properties.nom) }
 
                     // Convert to LineStopInfo
-                    return dedupOrdered.mapIndexed { index, stop ->
+                    val result = dedupOrdered.mapIndexed { index, stop ->
                         val connections = getConnectionsForStop(stop.properties.nom, lineName)
                         com.pelotcl.app.data.gtfs.LineStopInfo(
                             stopId = stop.properties.id.toString(),
@@ -664,6 +687,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                             connections = connections.map { it.lineName }
                         )
                     }
+                    // Cache the result for future lookups
+                    lineStopsCache.put(cacheKey, result)
+                    return result
                 }
             }
         }
@@ -673,7 +699,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             normalizeStopName(stop.properties.nom)
         }
 
-        return uniqueStops.mapIndexed { index, stop ->
+        val result = uniqueStops.mapIndexed { index, stop ->
             val connections = getConnectionsForStop(stop.properties.nom, lineName)
             com.pelotcl.app.data.gtfs.LineStopInfo(
                 stopId = stop.properties.id.toString(),
@@ -685,6 +711,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 connections = connections.map { it.lineName }
             )
         }
+        // Cache the result for future lookups
+        lineStopsCache.put(cacheKey, result)
+        return result
     }
 
     /**

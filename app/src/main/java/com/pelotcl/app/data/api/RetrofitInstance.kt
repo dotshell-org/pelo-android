@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit
 object RetrofitInstance {
     
     private const val BASE_URL = "https://data.grandlyon.com/"
-    private const val CACHE_SIZE = 10L * 1024 * 1024 // 10 MB
+    private const val CACHE_SIZE = 25L * 1024 * 1024 // 25 MB for better caching of WFS data
     private const val CACHE_MAX_AGE_MINUTES = 30 // Cache validity for online requests
     private const val CACHE_MAX_STALE_DAYS = 7 // Use stale cache for up to 7 days when offline
 
