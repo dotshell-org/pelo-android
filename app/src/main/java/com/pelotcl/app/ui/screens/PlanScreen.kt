@@ -53,6 +53,7 @@ import com.pelotcl.app.ui.viewmodel.TransportStopsUiState
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LineColorHelper
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -126,7 +127,7 @@ fun PlanScreen(
     searchSelectedStop: StationSearchResult? = null,
     onSearchSelectionHandled: () -> Unit = {},
     onItineraryClick: (stopName: String) -> Unit = {},
-    userLocation: LatLng? = null
+    initialUserLocation: LatLng? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val stopsUiState by viewModel.stopsUiState.collectAsState()
@@ -136,7 +137,7 @@ fun PlanScreen(
     val scope = rememberCoroutineScope()
 
     // Location state
-    var userLocation by remember { mutableStateOf<LatLng?>(null) }
+    var userLocation by remember { mutableStateOf(initialUserLocation) }
     var shouldCenterOnUser by remember { mutableStateOf(false) }
 
     // Bottom sheet state for BottomSheetScaffold
@@ -398,7 +399,7 @@ fun PlanScreen(
 
         when (val state = stopsUiState) {
             is TransportStopsUiState.Success -> {
-                addStopsToMap(map, state.stops, context) { clickedStationInfo ->
+                addStopsToMap(map, state.stops, context, onStationClick = { clickedStationInfo ->
                     scope.launch {
                         if (sheetContentState == SheetContentState.LINE_DETAILS || sheetContentState == SheetContentState.ALL_SCHEDULES) {
                             selectedLine?.let { lineInfo ->
@@ -438,7 +439,7 @@ fun PlanScreen(
                             sheetContentState = SheetContentState.STATION
                         }
                     }
-                }
+                }, scope = scope)
             }
             else -> {}
         }
@@ -1182,7 +1183,8 @@ private suspend fun addStopsToMap(
     map: MapLibreMap,
     stops: List<com.pelotcl.app.data.model.StopFeature>,
     context: android.content.Context,
-    onStationClick: (StationInfo) -> Unit = {}
+    onStationClick: (StationInfo) -> Unit = {},
+    scope: CoroutineScope
 ) {
     val (stopsGeoJson, requiredIcons, usedSlots) = withContext(Dispatchers.Default) {
         val requiredIcons = mutableSetOf<String>()
@@ -1242,268 +1244,290 @@ private suspend fun addStopsToMap(
         }
         style.getSource(sourceId)?.let { style.removeSource(it) }
 
-        requiredIcons.forEach { iconName ->
-            try {
-                val resourceId = context.resources.getIdentifier(iconName, "drawable", context.packageName)
-                if (resourceId != 0) {
-                    val drawable = ContextCompat.getDrawable(context, resourceId)
-                    drawable?.let {
-                        style.addImage(iconName, it)
+        // Optimize image loading: Load bitmaps in background, add to style in main thread
+        scope.launch(Dispatchers.IO) {
+            val bitmaps: List<Pair<String, android.graphics.Bitmap>> = requiredIcons.mapNotNull { iconName ->
+                try {
+                    val resourceId = context.resources.getIdentifier(iconName, "drawable", context.packageName)
+                    if (resourceId != 0) {
+                        val drawable = ContextCompat.getDrawable(context, resourceId)
+                        drawable?.let { d ->
+                            val bitmap = if (d is android.graphics.drawable.BitmapDrawable) {
+                                d.bitmap
+                            } else {
+                                val bitmap = android.graphics.Bitmap.createBitmap(
+                                    d.intrinsicWidth.coerceAtLeast(1),
+                                    d.intrinsicHeight.coerceAtLeast(1),
+                                    android.graphics.Bitmap.Config.ARGB_8888
+                                )
+                                val canvas = android.graphics.Canvas(bitmap)
+                                d.setBounds(0, 0, canvas.width, canvas.height)
+                                d.draw(canvas)
+                                bitmap
+                            }
+                            iconName to bitmap
+                        }
+                    } else null
+                } catch (e: Exception) {
+                    null
+                }
+            }
+
+            withContext(Dispatchers.Main) {
+                bitmaps.forEach { (name, bitmap) ->
+                    style.addImage(name, bitmap)
+                }
+
+                // Add source and layers only AFTER images are added
+                val stopsSource = GeoJsonSource(
+                    sourceId,
+                    stopsGeoJson,
+                    GeoJsonOptions()
+                        .withCluster(true)
+                        .withClusterRadius(50)
+                        .withClusterMaxZoom(13)
+                )
+                style.addSource(stopsSource)
+
+                // 1. Cluster Circles (Aggregated stops)
+                val clusterLayer = org.maplibre.android.style.layers.CircleLayer("clusters", sourceId).apply {
+                    setProperties(
+                        PropertyFactory.circleColor(
+                            Expression.step(
+                                Expression.get("point_count"),
+                                Expression.literal("#E60000"), // Default TCL Red
+                                Expression.stop(10, "#E60000"),
+                                Expression.stop(50, "#B71C1C")
+                            )
+                        ),
+                        PropertyFactory.circleRadius(
+                            Expression.step(
+                                Expression.get("point_count"),
+                                Expression.literal(15f),
+                                Expression.stop(10, 20f),
+                                Expression.stop(50, 25f)
+                            )
+                        ),
+                        PropertyFactory.circleStrokeWidth(2f),
+                        PropertyFactory.circleStrokeColor("#FFFFFF")
+                    )
+                    setFilter(Expression.has("point_count"))
+                }
+                style.addLayer(clusterLayer)
+
+                // 2. Cluster Counts (Text)
+                val countLayer = SymbolLayer("cluster-count", sourceId).apply {
+                    setProperties(
+                        PropertyFactory.textField(Expression.toString(Expression.get("point_count_abbreviated"))),
+                        PropertyFactory.textSize(12f),
+                        PropertyFactory.textColor("#FFFFFF"),
+                        PropertyFactory.textIgnorePlacement(true),
+                        PropertyFactory.textAllowOverlap(true)
+                    )
+                    setFilter(Expression.has("point_count"))
+                }
+                style.addLayer(countLayer)
+
+                val iconSizesPriority = 0.7f
+                val iconSizesSecondary = 0.62f
+
+                usedSlots.sorted().forEach { slotIndex ->
+                    val yOffset = slotIndex * 13f
+
+                    val priorityLayerId = "$priorityLayerPrefix-$slotIndex"
+                    val priorityLayer = SymbolLayer(priorityLayerId, sourceId).apply {
+                        setProperties(
+                            PropertyFactory.iconImage("{icon}"),
+                            PropertyFactory.iconSize(iconSizesPriority),
+                            PropertyFactory.iconAllowOverlap(true),
+                            PropertyFactory.iconIgnorePlacement(true),
+                            PropertyFactory.iconAnchor("center"),
+                            PropertyFactory.iconOffset(arrayOf(0f, yOffset))
+                        )
+                        setFilter(
+                            Expression.all(
+                                Expression.not(Expression.has("point_count")), // Not a cluster
+                                Expression.eq(Expression.get("stop_priority"), 2),
+                                Expression.eq(Expression.get("slot"), slotIndex)
+                            )
+                        )
+                        setMinZoom(PRIORITY_STOPS_MIN_ZOOM)
+                    }
+                    style.addLayer(priorityLayer)
+
+                    val tramLayerId = "$tramLayerPrefix-$slotIndex"
+                    val tramLayer = SymbolLayer(tramLayerId, sourceId).apply {
+                        setProperties(
+                            PropertyFactory.iconImage("{icon}"),
+                            PropertyFactory.iconSize(iconSizesPriority),
+                            PropertyFactory.iconAllowOverlap(true),
+                            PropertyFactory.iconIgnorePlacement(true),
+                            PropertyFactory.iconAnchor("center"),
+                            PropertyFactory.iconOffset(arrayOf(0f, yOffset))
+                        )
+                        setFilter(
+                            Expression.all(
+                                Expression.not(Expression.has("point_count")),
+                                Expression.eq(Expression.get("stop_priority"), 1),
+                                Expression.eq(Expression.get("slot"), slotIndex)
+                            )
+                        )
+                        setMinZoom(TRAM_STOPS_MIN_ZOOM)
+                    }
+                    style.addLayer(tramLayer)
+
+                    val secondaryLayerId = "$secondaryLayerPrefix-$slotIndex"
+                    val secondaryLayer = SymbolLayer(secondaryLayerId, sourceId).apply {
+                        setProperties(
+                            PropertyFactory.iconImage("{icon}"),
+                            PropertyFactory.iconSize(iconSizesSecondary),
+                            PropertyFactory.iconAllowOverlap(true),
+                            PropertyFactory.iconIgnorePlacement(true),
+                            PropertyFactory.iconAnchor("center"),
+                            PropertyFactory.iconOffset(arrayOf(0f, yOffset))
+                        )
+                        setFilter(
+                            Expression.all(
+                                Expression.not(Expression.has("point_count")),
+                                Expression.eq(Expression.get("stop_priority"), 0),
+                                Expression.eq(Expression.get("slot"), slotIndex)
+                            )
+                        )
+                        setMinZoom(SECONDARY_STOPS_MIN_ZOOM)
+                    }
+                    style.addLayer(secondaryLayer)
+                }
+
+                // Add simplified circle layer for individual stops when zoomed out slightly but not clustered
+                // to avoid loading heavy icons too early
+                val simpleStopLayer = org.maplibre.android.style.layers.CircleLayer("simple-unclustered-stops", sourceId).apply {
+                     setProperties(
+                         PropertyFactory.circleColor("#FFFFFF"),
+                         PropertyFactory.circleRadius(4f),
+                         PropertyFactory.circleStrokeWidth(1f),
+                         PropertyFactory.circleStrokeColor("#999999")
+                     )
+                    // Show only when NOT clustered AND zoom is less than when full icons appear
+                    setFilter(Expression.not(Expression.has("point_count")))
+                    setMaxZoom(PRIORITY_STOPS_MIN_ZOOM)
+                }
+                style.addLayerBelow(simpleStopLayer, "clusters")
+
+                map.addOnMapClickListener { point ->
+                    val pixel = map.projection.toScreenLocation(point)
+
+                    // 1. Check for clusters click -> Zoom in
+                    val clusterFeatures = map.queryRenderedFeatures(pixel, "clusters", "cluster-count")
+                    if (clusterFeatures.isNotEmpty()) {
+                        val cluster = clusterFeatures.first()
+                        val geometry = cluster.geometry()
+                        if (geometry is Point) {
+                            val coordinates = geometry.coordinates()
+                            val zoom = map.cameraPosition.zoom
+                            map.animateCamera(CameraUpdateFactory.newLatLngZoom(
+                                LatLng(coordinates[1], coordinates[0]),
+                                zoom + 2
+                            ), 500)
+                        }
+                        return@addOnMapClickListener true
+                    }
+
+                    val circleFeatures = map.queryRenderedFeatures(pixel, "line-stops-circles")
+                    if (circleFeatures.isNotEmpty()) {
+                        val feature = circleFeatures.first()
+                        val stationName = feature.getStringProperty("nom") ?: ""
+                        val desserte = feature.getStringProperty("desserte") ?: ""
+                        val isPmr = feature.getBooleanProperty("pmr") ?: false
+
+                        val lines = BusIconHelper.getAllLinesForStop(
+                            com.pelotcl.app.data.model.StopFeature(
+                                type = "Feature",
+                                id = "",
+                                geometry = com.pelotcl.app.data.model.StopGeometry("Point", listOf(0.0, 0.0)),
+                                properties = com.pelotcl.app.data.model.StopProperties(
+                                    id = 0,
+                                    nom = stationName,
+                                    desserte = desserte,
+                                    pmr = isPmr,
+                                    ascenseur = false,
+                                    escalator = false,
+                                    gid = 0,
+                                    lastUpdate = "",
+                                    lastUpdateFme = "",
+                                    adresse = "",
+                                    localiseFaceAAdresse = false,
+                                    commune = "",
+                                    insee = "",
+                                    zone = ""
+                                )
+                            )
+                        )
+
+                        val stationInfo = StationInfo(
+                            nom = stationName,
+                            lignes = lines,
+                            isPmr = isPmr,
+                            desserte = desserte
+                        )
+
+                        onStationClick(stationInfo)
+                        return@addOnMapClickListener true
+                    }
+
+                    val allLayerIds = usedSlots.flatMap { idx ->
+                        listOf(
+                            "$priorityLayerPrefix-$idx",
+                            "$tramLayerPrefix-$idx",
+                            "$secondaryLayerPrefix-$idx"
+                        )
+                    }
+
+                    val features = map.queryRenderedFeatures(pixel, *allLayerIds.toTypedArray())
+
+                    if (features.isNotEmpty()) {
+                        val feature = features.first()
+
+                        val stationName = feature.getStringProperty("nom") ?: ""
+                        val desserte = feature.getStringProperty("desserte") ?: ""
+                        val isPmr = feature.getBooleanProperty("pmr") ?: false
+
+                        val lines = BusIconHelper.getAllLinesForStop(
+                            com.pelotcl.app.data.model.StopFeature(
+                                type = "Feature",
+                                id = "",
+                                geometry = com.pelotcl.app.data.model.StopGeometry("Point", listOf(0.0, 0.0)),
+                                properties = com.pelotcl.app.data.model.StopProperties(
+                                    id = 0,
+                                    nom = stationName,
+                                    desserte = desserte,
+                                    pmr = isPmr,
+                                    ascenseur = false,
+                                    escalator = false,
+                                    gid = 0,
+                                    lastUpdate = "",
+                                    lastUpdateFme = "",
+                                    adresse = "",
+                                    localiseFaceAAdresse = false,
+                                    commune = "",
+                                    insee = "",
+                                    zone = ""
+                                )
+                            )
+                        )
+
+                        val stationInfo = StationInfo(
+                            nom = stationName,
+                            lignes = lines,
+                            isPmr = isPmr,
+                            desserte = desserte
+                        )
+
+                        onStationClick(stationInfo)
+                        true
+                    } else {
+                        false
                     }
                 }
-            } catch (e: Exception) {
-                println("Error loading icon $iconName: ${e.message}")
-            }
-        }
-
-
-        val stopsSource = GeoJsonSource(
-            sourceId,
-            stopsGeoJson,
-            GeoJsonOptions()
-                .withCluster(true)
-                .withClusterRadius(50)
-                .withClusterMaxZoom(13) // Stop clustering at zoom 14 (TRAM_STOPS_MIN_ZOOM)
-        )
-        style.addSource(stopsSource)
-
-        // 1. Cluster Circles (Aggregated stops)
-        val clusterLayer = org.maplibre.android.style.layers.CircleLayer("clusters", sourceId).apply {
-            setProperties(
-                PropertyFactory.circleColor(
-                    Expression.step(
-                        Expression.get("point_count"),
-                        Expression.literal("#E60000"), // Default TCL Red
-                        Expression.stop(10, "#E60000"),
-                        Expression.stop(50, "#B71C1C")
-                    )
-                ),
-                PropertyFactory.circleRadius(
-                    Expression.step(
-                        Expression.get("point_count"),
-                        Expression.literal(15f),
-                        Expression.stop(10, 20f),
-                        Expression.stop(50, 25f)
-                    )
-                ),
-                PropertyFactory.circleStrokeWidth(2f),
-                PropertyFactory.circleStrokeColor("#FFFFFF")
-            )
-            setFilter(Expression.has("point_count"))
-        }
-        style.addLayer(clusterLayer)
-
-        // 2. Cluster Counts (Text)
-        val countLayer = SymbolLayer("cluster-count", sourceId).apply {
-            setProperties(
-                PropertyFactory.textField(Expression.toString(Expression.get("point_count_abbreviated"))),
-                PropertyFactory.textSize(12f),
-                PropertyFactory.textColor("#FFFFFF"),
-                PropertyFactory.textIgnorePlacement(true),
-                PropertyFactory.textAllowOverlap(true)
-            )
-            setFilter(Expression.has("point_count"))
-        }
-        style.addLayer(countLayer)
-
-        val iconSizesPriority = 0.7f
-        val iconSizesSecondary = 0.62f
-
-        usedSlots.sorted().forEach { slotIndex ->
-            val yOffset = slotIndex * 13f
-
-            val priorityLayerId = "$priorityLayerPrefix-$slotIndex"
-            val priorityLayer = SymbolLayer(priorityLayerId, sourceId).apply {
-                setProperties(
-                    PropertyFactory.iconImage("{icon}"),
-                    PropertyFactory.iconSize(iconSizesPriority),
-                    PropertyFactory.iconAllowOverlap(true),
-                    PropertyFactory.iconIgnorePlacement(true),
-                    PropertyFactory.iconAnchor("center"),
-                    PropertyFactory.iconOffset(arrayOf(0f, yOffset))
-                )
-                setFilter(
-                    Expression.all(
-                        Expression.not(Expression.has("point_count")), // Not a cluster
-                        Expression.eq(Expression.get("stop_priority"), 2),
-                        Expression.eq(Expression.get("slot"), slotIndex)
-                    )
-                )
-                setMinZoom(PRIORITY_STOPS_MIN_ZOOM)
-            }
-            style.addLayer(priorityLayer)
-
-            val tramLayerId = "$tramLayerPrefix-$slotIndex"
-            val tramLayer = SymbolLayer(tramLayerId, sourceId).apply {
-                setProperties(
-                    PropertyFactory.iconImage("{icon}"),
-                    PropertyFactory.iconSize(iconSizesPriority),
-                    PropertyFactory.iconAllowOverlap(true),
-                    PropertyFactory.iconIgnorePlacement(true),
-                    PropertyFactory.iconAnchor("center"),
-                    PropertyFactory.iconOffset(arrayOf(0f, yOffset))
-                )
-                setFilter(
-                    Expression.all(
-                        Expression.not(Expression.has("point_count")),
-                        Expression.eq(Expression.get("stop_priority"), 1),
-                        Expression.eq(Expression.get("slot"), slotIndex)
-                    )
-                )
-                setMinZoom(TRAM_STOPS_MIN_ZOOM)
-            }
-            style.addLayer(tramLayer)
-
-            val secondaryLayerId = "$secondaryLayerPrefix-$slotIndex"
-            val secondaryLayer = SymbolLayer(secondaryLayerId, sourceId).apply {
-                setProperties(
-                    PropertyFactory.iconImage("{icon}"),
-                    PropertyFactory.iconSize(iconSizesSecondary),
-                    PropertyFactory.iconAllowOverlap(true),
-                    PropertyFactory.iconIgnorePlacement(true),
-                    PropertyFactory.iconAnchor("center"),
-                    PropertyFactory.iconOffset(arrayOf(0f, yOffset))
-                )
-                setFilter(
-                    Expression.all(
-                        Expression.not(Expression.has("point_count")),
-                        Expression.eq(Expression.get("stop_priority"), 0),
-                        Expression.eq(Expression.get("slot"), slotIndex)
-                    )
-                )
-                setMinZoom(SECONDARY_STOPS_MIN_ZOOM)
-            }
-            style.addLayer(secondaryLayer)
-        }
-
-        // Add simplified circle layer for individual stops when zoomed out slightly but not clustered
-        // to avoid loading heavy icons too early
-        val simpleStopLayer = org.maplibre.android.style.layers.CircleLayer("simple-unclustered-stops", sourceId).apply {
-             setProperties(
-                 PropertyFactory.circleColor("#FFFFFF"),
-                 PropertyFactory.circleRadius(4f),
-                 PropertyFactory.circleStrokeWidth(1f),
-                 PropertyFactory.circleStrokeColor("#999999")
-             )
-            // Show only when NOT clustered AND zoom is less than when full icons appear
-            setFilter(Expression.not(Expression.has("point_count")))
-            setMaxZoom(PRIORITY_STOPS_MIN_ZOOM)
-        }
-        style.addLayerBelow(simpleStopLayer, "clusters")
-
-        map.addOnMapClickListener { point ->
-            val pixel = map.projection.toScreenLocation(point)
-
-            // 1. Check for clusters click -> Zoom in
-            val clusterFeatures = map.queryRenderedFeatures(pixel, "clusters", "cluster-count")
-            if (clusterFeatures.isNotEmpty()) {
-                val cluster = clusterFeatures.first()
-                val geometry = cluster.geometry()
-                if (geometry is Point) {
-                    val coordinates = geometry.coordinates()
-                    val zoom = map.cameraPosition.zoom
-                    map.animateCamera(CameraUpdateFactory.newLatLngZoom(
-                        LatLng(coordinates[1], coordinates[0]),
-                        zoom + 2
-                    ), 500)
-                }
-                return@addOnMapClickListener true
-            }
-
-            val circleFeatures = map.queryRenderedFeatures(pixel, "line-stops-circles")
-            if (circleFeatures.isNotEmpty()) {
-                val feature = circleFeatures.first()
-                val stationName = feature.getStringProperty("nom") ?: ""
-                val desserte = feature.getStringProperty("desserte") ?: ""
-                val isPmr = feature.getBooleanProperty("pmr") ?: false
-
-                val lines = BusIconHelper.getAllLinesForStop(
-                    com.pelotcl.app.data.model.StopFeature(
-                        type = "Feature",
-                        id = "",
-                        geometry = com.pelotcl.app.data.model.StopGeometry("Point", listOf(0.0, 0.0)),
-                        properties = com.pelotcl.app.data.model.StopProperties(
-                            id = 0,
-                            nom = stationName,
-                            desserte = desserte,
-                            pmr = isPmr,
-                            ascenseur = false,
-                            escalator = false,
-                            gid = 0,
-                            lastUpdate = "",
-                            lastUpdateFme = "",
-                            adresse = "",
-                            localiseFaceAAdresse = false,
-                            commune = "",
-                            insee = "",
-                            zone = ""
-                        )
-                    )
-                )
-
-                val stationInfo = StationInfo(
-                    nom = stationName,
-                    lignes = lines,
-                    isPmr = isPmr,
-                    desserte = desserte
-                )
-
-                onStationClick(stationInfo)
-                return@addOnMapClickListener true
-            }
-
-            val allLayerIds = usedSlots.flatMap { idx ->
-                listOf(
-                    "$priorityLayerPrefix-$idx",
-                    "$tramLayerPrefix-$idx",
-                    "$secondaryLayerPrefix-$idx"
-                )
-            }
-
-            val features = map.queryRenderedFeatures(pixel, *allLayerIds.toTypedArray())
-
-            if (features.isNotEmpty()) {
-                val feature = features.first()
-
-                val stationName = feature.getStringProperty("nom") ?: ""
-                val desserte = feature.getStringProperty("desserte") ?: ""
-                val isPmr = feature.getBooleanProperty("pmr") ?: false
-
-                val lines = BusIconHelper.getAllLinesForStop(
-                    com.pelotcl.app.data.model.StopFeature(
-                        type = "Feature",
-                        id = "",
-                        geometry = com.pelotcl.app.data.model.StopGeometry("Point", listOf(0.0, 0.0)),
-                        properties = com.pelotcl.app.data.model.StopProperties(
-                            id = 0,
-                            nom = stationName,
-                            desserte = desserte,
-                            pmr = isPmr,
-                            ascenseur = false,
-                            escalator = false,
-                            gid = 0,
-                            lastUpdate = "",
-                            lastUpdateFme = "",
-                            adresse = "",
-                            localiseFaceAAdresse = false,
-                            commune = "",
-                            insee = "",
-                            zone = ""
-                        )
-                    )
-                )
-
-                val stationInfo = StationInfo(
-                    nom = stationName,
-                    lignes = lines,
-                    isPmr = isPmr,
-                    desserte = desserte
-                )
-
-                onStationClick(stationInfo)
-                true
-            } else {
-                false
             }
         }
     }
@@ -1760,3 +1784,10 @@ private fun getLocation(
         // Permission denied
     }
 }
+
+
+
+
+
+
+

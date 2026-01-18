@@ -346,7 +346,7 @@ private fun AppNavHost(
                 onSearchSelectionHandled = onSearchSelectionHandled,
                 viewModel = viewModel,
                 onItineraryClick = onItineraryClick,
-                userLocation = userLocation
+                initialUserLocation = userLocation
             )
         }
         composable(Destination.LIGNES.route) {
