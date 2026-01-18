@@ -567,6 +567,13 @@ fun PlanScreen(
                                 lineInfo = selectedLine!!,
                                 viewModel = viewModel,
                                 onBackToStation = {
+                                    selectedLine?.let { lineInfo ->
+                                        val lineName = lineInfo.lineName
+                                        if (!isMetroTramOrFunicular(lineName)) {
+                                            viewModel.removeLineFromLoaded(lineName)
+                                        }
+                                    }
+                                    
                                     scope.launch {
                                         scaffoldSheetState.bottomSheetState.hide()
                                     }
