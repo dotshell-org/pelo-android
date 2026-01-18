@@ -5,6 +5,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.util.Log
 import com.pelotcl.app.ui.components.StationSearchResult
+import com.pelotcl.app.data.repository.TransportRepository
 import java.io.FileOutputStream
 import java.io.IOException
 
@@ -14,9 +15,10 @@ enum class LineType {
 
 class SchedulesRepository(context: Context) {
 
-    private val dbHelper = SchedulesDatabaseHelper(context)
+    private val appContext: Context = context.applicationContext
+    private val dbHelper = SchedulesDatabaseHelper(appContext)
 
-    fun searchStopsByName(query: String): List<StationSearchResult> {
+    suspend fun searchStopsByName(query: String): List<StationSearchResult> {
         val results = mutableListOf<StationSearchResult>()
         try {
             val db = dbHelper.readableDatabase
@@ -53,8 +55,27 @@ class SchedulesRepository(context: Context) {
 
         } catch (e: Exception) {
             Log.e("SchedulesRepository", "Error searching stops: ${e.message}")
-            // Si l'erreur est "no such table", c'est que la DB est vieille.
-            // On pourrait forcer un upgrade ici, mais le changement de version ci-dessous devrait suffire.
+            // Fallback: search within cached API stops if SQLite fails (e.g. no such table)
+            return try {
+                val repo = TransportRepository(appContext)
+                val stopsResult = repo.getAllStops()
+                val lower = query.lowercase()
+                stopsResult.getOrNull()?.features
+                    ?.asSequence()
+                    ?.filter { it.properties.nom.contains(query, ignoreCase = true) }
+                    ?.map { stop ->
+                        val desserteRaw = stop.properties.desserte
+                        val lines = if (!desserteRaw.isNullOrBlank()) desserteRaw.split(',').map { it.trim() } else emptyList()
+                        StationSearchResult(stop.properties.nom, lines, stop.properties.pmr)
+                    }
+                    ?.sortedWith(compareBy<StationSearchResult>({ !it.stopName.lowercase().startsWith(lower) }, { it.stopName }))
+                    ?.take(50)
+                    ?.toList()
+                    ?: emptyList()
+            } catch (t: Throwable) {
+                Log.e("SchedulesRepository", "Fallback search failed: ${t.message}")
+                emptyList()
+            }
         }
         return results
     }
@@ -179,7 +200,7 @@ class SchedulesRepository(context: Context) {
 
         companion object {
             private const val DB_NAME = "schedules.db"
-            private const val DB_VERSION = 3
+            private const val DB_VERSION = 4
         }
 
         override fun onCreate(db: SQLiteDatabase) {

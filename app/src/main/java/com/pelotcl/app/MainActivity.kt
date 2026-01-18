@@ -62,6 +62,7 @@ import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 import org.maplibre.android.geometry.LatLng
 
 class MainActivity : ComponentActivity() {
@@ -204,9 +205,12 @@ fun NavBar(modifier: Modifier = Modifier) {
     }
 
     LaunchedEffect(searchQuery) {
-        if (searchQuery.isNotEmpty()) {
-            withContext(Dispatchers.IO) {
-                val results = viewModel.searchStops(searchQuery)
+        val current = searchQuery.trim()
+        if (current.isNotEmpty()) {
+            // Debounce to avoid querying on every keystroke
+            delay(300)
+            if (current == searchQuery.trim()) {
+                val results = viewModel.searchStops(current)
                 stationSearchResults = results
             }
         } else {

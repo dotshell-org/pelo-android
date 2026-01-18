@@ -1642,6 +1642,12 @@ private fun createStopsGeoJsonFromStops(
                     addProperty("icon", iconName)
                     addProperty("slot", slot)
 
+                    // Provide all served lines as a JSON array string for click handling
+                    val lignesArray = JsonArray().apply {
+                        lineNamesAll.forEach { add(it) }
+                    }
+                    addProperty("lignes", lignesArray.toString())
+
                     val normalizedNom = stop.properties.nom.filter { it.isLetter() }.lowercase()
                     addProperty("normalized_nom", normalizedNom)
 
