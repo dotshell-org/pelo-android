@@ -18,6 +18,7 @@ import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -35,6 +36,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.CreationExtras
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
@@ -138,6 +143,7 @@ fun PlanScreen(
     // Location state
     var userLocation by remember { mutableStateOf(initialUserLocation) }
     var shouldCenterOnUser by remember { mutableStateOf(false) }
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
     // Bottom sheet state for BottomSheetScaffold
     val bottomSheetState = rememberStandardBottomSheetState(
@@ -205,9 +211,11 @@ fun PlanScreen(
     ) { permissions ->
         val granted = permissions.entries.any { it.value }
         if (granted) {
-            getLocation(context) { location ->
+            startLocationUpdates(fusedLocationClient, context) { location ->
                 userLocation = location
-                shouldCenterOnUser = true
+                if (userLocation == null) {
+                    shouldCenterOnUser = true
+                }
             }
         }
     }
@@ -223,9 +231,11 @@ fun PlanScreen(
                 ) == PackageManager.PERMISSION_GRANTED
 
         if (hasPermission) {
-            getLocation(context) { location ->
+            startLocationUpdates(fusedLocationClient, context) { location ->
                 userLocation = location
-                shouldCenterOnUser = true
+                if (shouldCenterOnUser == false && userLocation == null) {
+                    shouldCenterOnUser = true
+                }
             }
         } else {
             locationPermissionLauncher.launch(
@@ -234,6 +244,13 @@ fun PlanScreen(
                     Manifest.permission.ACCESS_COARSE_LOCATION
                 )
             )
+        }
+    }
+
+    // Stop location updates when the composable is disposed
+    DisposableEffect(Unit) {
+        onDispose {
+            stopLocationUpdates(fusedLocationClient)
         }
     }
 
@@ -1688,6 +1705,50 @@ private fun createStopsGeoJsonFromStops(
     }
 
     return geoJsonCollection.toString()
+}
+
+private var locationCallback: LocationCallback? = null
+
+private fun startLocationUpdates(
+    fusedLocationClient: FusedLocationProviderClient,
+    context: android.content.Context,
+    onLocationUpdate: (LatLng) -> Unit
+) {
+    try {
+        // Create location request for real-time updates
+        val locationRequest = LocationRequest.Builder(
+            Priority.PRIORITY_HIGH_ACCURACY,
+            1000L // Update every seconds
+        ).apply {
+            setMinUpdateIntervalMillis(2000L) // Fastest update interval: 2 seconds
+            setWaitForAccurateLocation(false)
+        }.build()
+
+        // Create location callback
+        locationCallback = object : LocationCallback() {
+            override fun onLocationResult(locationResult: LocationResult) {
+                locationResult.lastLocation?.let { location ->
+                    onLocationUpdate(LatLng(location.latitude, location.longitude))
+                }
+            }
+        }
+
+        // Start receiving location updates
+        fusedLocationClient.requestLocationUpdates(
+            locationRequest,
+            locationCallback!!,
+            android.os.Looper.getMainLooper()
+        )
+    } catch (_: SecurityException) {
+        // Permission denied
+    }
+}
+
+private fun stopLocationUpdates(fusedLocationClient: FusedLocationProviderClient) {
+    locationCallback?.let {
+        fusedLocationClient.removeLocationUpdates(it)
+        locationCallback = null
+    }
 }
 
 private fun getLocation(
