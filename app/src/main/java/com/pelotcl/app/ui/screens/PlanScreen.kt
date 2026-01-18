@@ -1194,7 +1194,6 @@ private suspend fun addStopsToMap(
 ) {
     val (stopsGeoJson, requiredIcons, usedSlots) = withContext(Dispatchers.Default) {
         val requiredIcons = mutableSetOf<String>()
-        val validStops = mutableListOf<com.pelotcl.app.data.model.StopFeature>()
         val usedSlots = mutableSetOf<Int>()
 
         // Cache for resource existence check to avoid repetitive reflection calls
@@ -1211,7 +1210,6 @@ private suspend fun addStopsToMap(
 
             if (availableNames.isNotEmpty()) {
                 requiredIcons.addAll(availableNames)
-                validStops.add(stop)
                 val n = availableNames.size
                 val start = -(n - 1)
                 var slot = start
@@ -1222,7 +1220,8 @@ private suspend fun addStopsToMap(
             }
         }
 
-        val stopsGeoJson = createStopsGeoJsonFromStops(validStops, requiredIcons)
+        // Pass all stops to merge function, but only use required icons for filtering in GeoJSON creation
+        val stopsGeoJson = createStopsGeoJsonFromStops(stops, requiredIcons)
         Triple(stopsGeoJson, requiredIcons, usedSlots)
     }
 
