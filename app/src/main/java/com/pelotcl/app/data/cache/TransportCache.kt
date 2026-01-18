@@ -4,6 +4,9 @@ import android.content.Context
 import com.pelotcl.app.data.model.Feature
 import com.pelotcl.app.data.model.StopFeature
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -39,12 +42,16 @@ class TransportCache(private val context: Context) {
     @Volatile private var metroLinesCache: List<Feature>? = null
     @Volatile private var tramLinesCache: List<Feature>? = null
     @Volatile private var busLinesCache: List<Feature>? = null
+    @Volatile private var navigoneLinesCache: List<Feature>? = null
+    @Volatile private var trambusLinesCache: List<Feature>? = null
     @Volatile private var stopsCache: List<StopFeature>? = null
 
     // Timestamps for expiration management
     @Volatile private var metroLinesTimestamp: Long = 0
     @Volatile private var tramLinesTimestamp: Long = 0
     @Volatile private var busLinesTimestamp: Long = 0
+    @Volatile private var navigoneLinesTimestamp: Long = 0
+    @Volatile private var trambusLinesTimestamp: Long = 0
     @Volatile private var stopsTimestamp: Long = 0
 
     companion object {
@@ -54,15 +61,19 @@ class TransportCache(private val context: Context) {
         // Keys for SharedPreferences (metadata only)
         private const val KEY_METRO_LINES_TIMESTAMP = "metro_lines_timestamp"
         private const val KEY_TRAM_LINES_TIMESTAMP = "tram_lines_timestamp"
+        private const val KEY_NAVIGONE_LINES_TIMESTAMP = "navigone_lines_timestamp"
+        private const val KEY_TRAMBUS_LINES_TIMESTAMP = "trambus_lines_timestamp"
         private const val KEY_STOPS_TIMESTAMP = "stops_timestamp"
         
         // Compressed cache file names
         private const val FILE_METRO_LINES = "metro_lines.json.gz"
         private const val FILE_TRAM_LINES = "tram_lines.json.gz"
+        private const val FILE_NAVIGONE_LINES = "navigone_lines.json.gz"
+        private const val FILE_TRAMBUS_LINES = "trambus_lines.json.gz"
         private const val FILE_STOPS = "stops.json.gz"
 
         // Cache schema version - increment when model classes change
-        private const val CACHE_VERSION = 2  // Incremented for new format
+        private const val CACHE_VERSION = 3  // Incremented for navigone/trambus cache
         private const val KEY_CACHE_VERSION = "cache_version"
 
         @Volatile
@@ -96,10 +107,14 @@ class TransportCache(private val context: Context) {
         metroLinesCache = null
         tramLinesCache = null
         busLinesCache = null
+        navigoneLinesCache = null
+        trambusLinesCache = null
         stopsCache = null
         metroLinesTimestamp = 0
         tramLinesTimestamp = 0
         busLinesTimestamp = 0
+        navigoneLinesTimestamp = 0
+        trambusLinesTimestamp = 0
         stopsTimestamp = 0
 
         // Clear disk cache
@@ -215,7 +230,75 @@ class TransportCache(private val context: Context) {
                 return@withLock lines
             }
         }
-        
+
+        null
+    }
+
+    /**
+     * Saves Navigone lines to cache (with disk persistence)
+     */
+    suspend fun saveNavigoneLines(lines: List<Feature>) = mutex.withLock {
+        navigoneLinesCache = lines
+        navigoneLinesTimestamp = System.currentTimeMillis()
+
+        prefs.edit().putLong(KEY_NAVIGONE_LINES_TIMESTAMP, navigoneLinesTimestamp).apply()
+        writeToCompressedFile(FILE_NAVIGONE_LINES, lines)
+    }
+
+    /**
+     * Retrieves Navigone lines from cache
+     */
+    suspend fun getNavigoneLines(): List<Feature>? = mutex.withLock {
+        // Check memory cache first
+        if (navigoneLinesCache != null && isTimestampValid(navigoneLinesTimestamp)) {
+            return@withLock navigoneLinesCache
+        }
+
+        // Otherwise, load from disk
+        val timestamp = prefs.getLong(KEY_NAVIGONE_LINES_TIMESTAMP, 0)
+        if (isTimestampValid(timestamp)) {
+            val lines = readFromCompressedFile<List<Feature>>(FILE_NAVIGONE_LINES)
+            if (lines != null) {
+                navigoneLinesCache = lines
+                navigoneLinesTimestamp = timestamp
+                return@withLock lines
+            }
+        }
+
+        null
+    }
+
+    /**
+     * Saves Trambus lines to cache (with disk persistence)
+     */
+    suspend fun saveTrambusLines(lines: List<Feature>) = mutex.withLock {
+        trambusLinesCache = lines
+        trambusLinesTimestamp = System.currentTimeMillis()
+
+        prefs.edit().putLong(KEY_TRAMBUS_LINES_TIMESTAMP, trambusLinesTimestamp).apply()
+        writeToCompressedFile(FILE_TRAMBUS_LINES, lines)
+    }
+
+    /**
+     * Retrieves Trambus lines from cache
+     */
+    suspend fun getTrambusLines(): List<Feature>? = mutex.withLock {
+        // Check memory cache first
+        if (trambusLinesCache != null && isTimestampValid(trambusLinesTimestamp)) {
+            return@withLock trambusLinesCache
+        }
+
+        // Otherwise, load from disk
+        val timestamp = prefs.getLong(KEY_TRAMBUS_LINES_TIMESTAMP, 0)
+        if (isTimestampValid(timestamp)) {
+            val lines = readFromCompressedFile<List<Feature>>(FILE_TRAMBUS_LINES)
+            if (lines != null) {
+                trambusLinesCache = lines
+                trambusLinesTimestamp = timestamp
+                return@withLock lines
+            }
+        }
+
         null
     }
     
@@ -286,13 +369,28 @@ class TransportCache(private val context: Context) {
     }
 
     /**
+     * Check if all main line caches are populated (for complete startup check)
+     */
+    fun hasFullMemoryCache(): Boolean {
+        return metroLinesCache != null && tramLinesCache != null &&
+               navigoneLinesCache != null && trambusLinesCache != null
+    }
+
+    /**
      * Preload cache from disk into memory (call on background thread at startup)
      * Now uses compressed files for faster I/O
+     * Loads all cached line types including Navigone and Trambus
      */
     suspend fun preloadFromDisk() {
-        // Trigger lazy loading from disk
-        getMetroLines()
-        getTramLines()
-        getStops()
+        // Trigger lazy loading from disk in parallel for faster startup
+        coroutineScope {
+            awaitAll(
+                async { getMetroLines() },
+                async { getTramLines() },
+                async { getNavigoneLines() },
+                async { getTrambusLines() },
+                async { getStops() }
+            )
+        }
     }
 }

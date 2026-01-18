@@ -90,14 +90,24 @@ class MainActivity : ComponentActivity() {
         // Initialize HTTP cache early for network optimization
         RetrofitInstance.initialize(applicationContext)
 
-        // Preload disk cache in background for faster data access
+        // Preload disk cache and warm up SQLite in parallel for faster startup
         // This runs before UI is shown, so data is ready when needed
         appScope.launch {
             try {
-                val cache = TransportCache.getInstance(applicationContext)
-                cache.preloadFromDisk()
+                // Parallel cache and SQLite warmup
+                val cacheJob = launch {
+                    val cache = TransportCache.getInstance(applicationContext)
+                    cache.preloadFromDisk()
+                }
+                val sqliteJob = launch {
+                    val schedulesRepo = com.pelotcl.app.data.gtfs.SchedulesRepository(applicationContext)
+                    schedulesRepo.warmupDatabase()
+                }
+                // Wait for both to complete
+                cacheJob.join()
+                sqliteJob.join()
             } catch (e: Exception) {
-                android.util.Log.w("MainActivity", "Cache preload failed: ${e.message}")
+                android.util.Log.w("MainActivity", "Startup preload failed: ${e.message}")
             }
         }
 

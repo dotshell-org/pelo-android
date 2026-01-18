@@ -236,7 +236,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     /**
      * Preloads lines and stops at launch, builds transfers index,
      * and populates StateFlows if possible. Does not block UI.
-     * Uses parallel loading for faster startup.
+     * Uses 2-phase loading strategy:
+     * - Phase 1 (immediate): Critical UI data (lines, stops, SQLite warmup)
+     * - Phase 2 (deferred): Heavy processing (connections index, Raptor preload)
      */
     private fun preloadAllData() {
         if (hasPreloaded || isPreloading) return
@@ -244,7 +246,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
         viewModelScope.launch {
             try {
-                // Load lines and stops in PARALLEL for faster startup
+                val startTime = System.currentTimeMillis()
+
+                // ===== PHASE 1: Critical UI data (parallel) =====
                 val linesDeferred = async(Dispatchers.IO) {
                     if (_uiState.value !is TransportLinesUiState.Success) {
                         repository.getAllLines()
@@ -257,7 +261,12 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     } else null
                 }
 
-                // Wait for both to complete
+                // Warm up SQLite database in parallel (non-blocking)
+                launch(Dispatchers.IO) {
+                    schedulesRepository.warmupDatabase()
+                }
+
+                // Wait for critical data to complete
                 val (linesResult, stopsResult) = awaitAll(linesDeferred, stopsDeferred)
 
                 // Process lines result
@@ -271,14 +280,12 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 }
 
                 // Process stops result
+                var stopsForIndexing: List<StopFeature>? = null
                 @Suppress("UNCHECKED_CAST")
                 (stopsResult as? Result<com.pelotcl.app.data.model.StopCollection>)?.let { result ->
                     result.onSuccess { stopCollection ->
                         cachedStops = stopCollection.features
-                        // Build connections index in background
-                        launch(Dispatchers.Default) {
-                            buildConnectionsIndex(stopCollection.features)
-                        }
+                        stopsForIndexing = stopCollection.features
                         // Publish stops state only if not already success
                         if (_stopsUiState.value !is TransportStopsUiState.Success) {
                             _stopsUiState.value = TransportStopsUiState.Success(stopCollection.features)
@@ -287,6 +294,33 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                         Log.w("TransportViewModel", "Preload: failed loading stops: ${e.message}")
                     }
                 }
+
+                val phase1Time = System.currentTimeMillis() - startTime
+                Log.d("TransportViewModel", "Phase 1 preload completed in ${phase1Time}ms")
+
+                // ===== PHASE 2: Deferred heavy processing =====
+                // Build connections index (can take time with many stops)
+                stopsForIndexing?.let { stops ->
+                    launch(Dispatchers.Default) {
+                        buildConnectionsIndex(stops)
+                        Log.d("TransportViewModel", "Connections index built")
+                    }
+                }
+
+                // Preload Raptor after a short delay to not compete with UI rendering
+                // This lazy-initializes the Raptor library in the background
+                launch(Dispatchers.IO) {
+                    kotlinx.coroutines.delay(2000) // Wait 2s for UI to stabilize
+                    if (raptorRepository.isReady()) {
+                        Log.d("TransportViewModel", "Raptor already initialized")
+                    } else {
+                        val raptorStart = System.currentTimeMillis()
+                        raptorRepository.initialize()
+                        val raptorTime = System.currentTimeMillis() - raptorStart
+                        Log.d("TransportViewModel", "Raptor preloaded in ${raptorTime}ms")
+                    }
+                }
+
             } catch (t: Throwable) {
                 Log.e("TransportViewModel", "Preload: unexpected exception: ${t.message}")
             } finally {
