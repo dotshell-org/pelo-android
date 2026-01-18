@@ -53,7 +53,9 @@ import com.pelotcl.app.ui.viewmodel.TransportStopsUiState
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LineColorHelper
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
@@ -1143,12 +1145,40 @@ private fun removeLineFromMap(
     }
 }
 
-private fun addStopsToMap(
+private suspend fun addStopsToMap(
     map: MapLibreMap,
     stops: List<com.pelotcl.app.data.model.StopFeature>,
     context: android.content.Context,
     onStationClick: (StationInfo) -> Unit = {}
 ) {
+    val (stopsGeoJson, requiredIcons, usedSlots) = withContext(Dispatchers.Default) {
+        val requiredIcons = mutableSetOf<String>()
+        val validStops = mutableListOf<com.pelotcl.app.data.model.StopFeature>()
+        val usedSlots = mutableSetOf<Int>()
+
+        stops.forEach { stop ->
+            val drawableNames = BusIconHelper.getAllDrawableNamesForStop(stop)
+            val availableNames = drawableNames.filter { name ->
+                val id = context.resources.getIdentifier(name, "drawable", context.packageName)
+                id != 0
+            }
+            if (availableNames.isNotEmpty()) {
+                requiredIcons.addAll(availableNames)
+                validStops.add(stop)
+                val n = availableNames.size
+                val start = -(n - 1)
+                var slot = start
+                repeat(n) {
+                    usedSlots.add(slot)
+                    slot += 2
+                }
+            }
+        }
+
+        val stopsGeoJson = createStopsGeoJsonFromStops(validStops, context)
+        Triple(stopsGeoJson, requiredIcons, usedSlots)
+    }
+
     map.getStyle { style ->
         val sourceId = "transport-stops"
         val priorityLayerPrefix = "transport-stops-layer-priority"
@@ -1173,29 +1203,6 @@ private fun addStopsToMap(
         }
         style.getSource(sourceId)?.let { style.removeSource(it) }
 
-        val requiredIcons = mutableSetOf<String>()
-        val validStops = mutableListOf<com.pelotcl.app.data.model.StopFeature>()
-        val usedSlots = mutableSetOf<Int>()
-
-        stops.forEach { stop ->
-            val drawableNames = BusIconHelper.getAllDrawableNamesForStop(stop)
-            val availableNames = drawableNames.filter { name ->
-                val id = context.resources.getIdentifier(name, "drawable", context.packageName)
-                id != 0
-            }
-            if (availableNames.isNotEmpty()) {
-                requiredIcons.addAll(availableNames)
-                validStops.add(stop)
-                val n = availableNames.size
-                val start = -(n - 1)
-                var slot = start
-                repeat(n) {
-                    usedSlots.add(slot)
-                    slot += 2
-                }
-            }
-        }
-
         requiredIcons.forEach { iconName ->
             try {
                 val resourceId = context.resources.getIdentifier(iconName, "drawable", context.packageName)
@@ -1210,7 +1217,6 @@ private fun addStopsToMap(
             }
         }
 
-        val stopsGeoJson = createStopsGeoJsonFromStops(validStops, context)
 
         val stopsSource = GeoJsonSource(sourceId, stopsGeoJson)
         style.addSource(stopsSource)
@@ -1419,18 +1425,6 @@ private fun createGeoJsonFromFeature(feature: com.pelotcl.app.data.model.Feature
 }
 
 private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>): List<com.pelotcl.app.data.model.StopFeature> {
-    fun isStrongLine(line: String): Boolean {
-        val upperLine = line.uppercase()
-        return when {
-            upperLine in setOf("A", "B", "C", "D") -> true
-            upperLine in setOf("F1", "F2") -> true
-            upperLine.startsWith("NAV") -> true
-            upperLine.startsWith("T") -> true
-            upperLine == "RX" -> true
-            else -> false
-        }
-    }
-
     fun normalizeStopName(name: String): String {
         return name.filter { it.isLetter() }.lowercase()
     }
@@ -1440,8 +1434,8 @@ private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>
 
     stops.forEach { stop ->
         val allLines = BusIconHelper.getAllLinesForStop(stop)
-        val strongLines = allLines.filter { isStrongLine(it) }
-        val weakLines = allLines.filter { !isStrongLine(it) }
+        val strongLines = allLines.filter { isMetroTramOrFunicular(it) }
+        val weakLines = allLines.filter { !isMetroTramOrFunicular(it) }
 
         if (strongLines.isNotEmpty()) {
             val strongDesserte = strongLines.joinToString(", ")

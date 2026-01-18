@@ -98,7 +98,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun loadHeadsigns(routeName: String) {
+    fun loadHeadsign(routeName: String) {
         viewModelScope.launch {
             // GTFS uses "NAVI1" for Navigone while the app displays "NAV1"
             val gtfsRouteName = if (routeName.equals("NAV1", ignoreCase = true)) "NAVI1" else routeName
@@ -341,7 +341,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      * Builds a transfers index for each stop
      * Allows O(1) access instead of scanning all stops each time
      */
-    private fun buildConnectionsIndex(allStops: List<StopFeature>) {
+    private suspend fun buildConnectionsIndex(allStops: List<StopFeature>) = withContext(Dispatchers.Default) {
         // Step 1: Group stops by approximate name to find a "canonical" name
         val stopGroups = mutableMapOf<String, MutableList<StopFeature>>()
         val canonicalNames = mutableMapOf<String, String>()

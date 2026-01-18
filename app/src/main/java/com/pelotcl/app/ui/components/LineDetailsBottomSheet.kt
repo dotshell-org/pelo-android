@@ -332,7 +332,7 @@ private fun NextSchedulesSection(
     val availableDirections by viewModel.availableDirections.collectAsState()
 
     LaunchedEffect(lineInfo.lineName) {
-        viewModel.loadHeadsigns(lineInfo.lineName)
+        viewModel.loadHeadsign(lineInfo.lineName)
     }
 
     // Calcule les directions disponibles à chaque changement de ligne/arrêt ou d'intitulés
