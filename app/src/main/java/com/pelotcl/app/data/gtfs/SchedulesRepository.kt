@@ -123,11 +123,10 @@ class SchedulesRepository(context: Context) {
                     ?.filter { it.properties.nom.contains(query, ignoreCase = true) }
                     ?.map { stop ->
                         val desserteRaw = stop.properties.desserte
-                        val lines = if (!desserteRaw.isNullOrBlank()) {
-                            desserteRaw.split(',').map { it.trim() }
-                        } else {
-                            emptyList()
-                        }
+                        val lines = desserteRaw?.takeIf { !it.isBlank() }
+                            ?.split(',')
+                            ?.map { it.trim() }
+                            ?: emptyList()
                         StationSearchResult(stop.properties.nom, lines, stop.properties.pmr)
                     }
                     ?.sortedWith(compareBy<StationSearchResult>({ !it.stopName.lowercase().startsWith(lowerQuery) }, { it.stopName }))

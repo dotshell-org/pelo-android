@@ -84,10 +84,11 @@ class JourneyCache private constructor(context: Context) {
 
         /**
          * Clear all caches (call when GTFS data is updated)
+         * Note: If no cache instance exists yet, this operation is silently skipped
          */
         fun clearAllCaches() {
             cacheScope.launch {
-                INSTANCE?.clearAll()
+                INSTANCE?.clearAll() ?: Log.d(TAG, "clearAllCaches: No cache instance to clear")
             }
         }
     }
