@@ -42,7 +42,6 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
-import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.pelotcl.app.ui.components.AllSchedulesSheetContent
@@ -211,11 +210,11 @@ fun PlanScreen(
     ) { permissions ->
         val granted = permissions.entries.any { it.value }
         if (granted) {
-            startLocationUpdates(fusedLocationClient, context) { location ->
-                userLocation = location
+            startLocationUpdates(fusedLocationClient) { location ->
                 if (userLocation == null) {
                     shouldCenterOnUser = true
                 }
+                userLocation = location
             }
         }
     }
@@ -231,11 +230,11 @@ fun PlanScreen(
                 ) == PackageManager.PERMISSION_GRANTED
 
         if (hasPermission) {
-            startLocationUpdates(fusedLocationClient, context) { location ->
-                userLocation = location
-                if (shouldCenterOnUser == false && userLocation == null) {
+            startLocationUpdates(fusedLocationClient) { location ->
+                if (!shouldCenterOnUser && userLocation == null) {
                     shouldCenterOnUser = true
                 }
+                userLocation = location
             }
         } else {
             locationPermissionLauncher.launch(
@@ -708,7 +707,6 @@ fun PlanScreen(
         ) {
             LinesBottomSheet(
                 allLines = viewModel.getAllAvailableLines(),
-                onDismiss = onLinesSheetDismiss,
                 onLineClick = { lineName ->
                     onLinesSheetDismiss()
 
@@ -752,8 +750,7 @@ fun PlanScreen(
                         }
                     }
                 },
-                favoriteLines = favoriteLines,
-                onToggleFavorite = { viewModel.toggleFavorite(it) }
+                favoriteLines = favoriteLines
             )
         }
     }
@@ -1215,6 +1212,7 @@ private suspend fun addStopsToMap(
 
         // Cache for resource existence check to avoid repetitive reflection calls
         val iconAvailabilityCache = mutableMapOf<String, Boolean>()
+        @Suppress("DiscouragedApi") // Dynamic resource loading for transport line icons
         fun checkIconAvailable(name: String): Boolean {
             return iconAvailabilityCache.getOrPut(name) {
                 context.resources.getIdentifier(name, "drawable", context.packageName) != 0
@@ -1269,6 +1267,7 @@ private suspend fun addStopsToMap(
 
         // Optimize image loading: Load bitmaps in background, add to style in main thread
         scope.launch(Dispatchers.IO) {
+            @Suppress("DiscouragedApi") // Dynamic resource loading for transport line icons
             val bitmaps: List<Pair<String, android.graphics.Bitmap>> = requiredIcons.mapNotNull { iconName ->
                 try {
                     val resourceId = context.resources.getIdentifier(iconName, "drawable", context.packageName)
@@ -1278,7 +1277,7 @@ private suspend fun addStopsToMap(
                             val bitmap = if (d is android.graphics.drawable.BitmapDrawable) {
                                 d.bitmap
                             } else {
-                                val bitmap = android.graphics.Bitmap.createBitmap(
+                                val bitmap = androidx.core.graphics.createBitmap(
                                     d.intrinsicWidth.coerceAtLeast(1),
                                     d.intrinsicHeight.coerceAtLeast(1),
                                     android.graphics.Bitmap.Config.ARGB_8888
@@ -1291,7 +1290,7 @@ private suspend fun addStopsToMap(
                             iconName to bitmap
                         }
                     } else null
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     null
                 }
             }
@@ -1446,7 +1445,7 @@ private suspend fun addStopsToMap(
                                 val lignes = try {
                                     val jsonArray = com.google.gson.JsonParser.parseString(lignesJson).asJsonArray
                                     jsonArray.map { it.asString }
-                                } catch (e: Exception) {
+                                } catch (_: Exception) {
                                     emptyList()
                                 }
 
@@ -1456,7 +1455,7 @@ private suspend fun addStopsToMap(
                                 )
                                 onStationClick(stationInfo)
                                 return@addOnMapClickListener true
-                            } catch (e: Exception) {
+                            } catch (_: Exception) {
                                 // Ignore parse errors
                             }
                         }
@@ -1709,9 +1708,9 @@ private fun createStopsGeoJsonFromStops(
 
 private var locationCallback: LocationCallback? = null
 
+@Suppress("MissingPermission") // Permission is checked before calling this function
 private fun startLocationUpdates(
     fusedLocationClient: FusedLocationProviderClient,
-    context: android.content.Context,
     onLocationUpdate: (LatLng) -> Unit
 ) {
     try {
@@ -1751,32 +1750,6 @@ private fun stopLocationUpdates(fusedLocationClient: FusedLocationProviderClient
     }
 }
 
-private fun getLocation(
-    context: android.content.Context,
-    onSuccess: (LatLng) -> Unit
-) {
-    try {
-        val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
-        val cancellationTokenSource = CancellationTokenSource()
-
-        fusedLocationClient.getCurrentLocation(
-            Priority.PRIORITY_HIGH_ACCURACY,
-            cancellationTokenSource.token
-        ).addOnSuccessListener { location ->
-            if (location != null) {
-                onSuccess(LatLng(location.latitude, location.longitude))
-            } else {
-                fusedLocationClient.lastLocation.addOnSuccessListener { lastLocation ->
-                    if (lastLocation != null) {
-                        onSuccess(LatLng(lastLocation.latitude, lastLocation.longitude))
-                    }
-                }
-            }
-        }
-    } catch (_: SecurityException) {
-        // Permission denied
-    }
-}
 
 
 

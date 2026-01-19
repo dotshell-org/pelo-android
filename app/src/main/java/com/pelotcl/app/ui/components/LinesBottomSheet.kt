@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -40,19 +39,16 @@ import com.pelotcl.app.utils.LineColorHelper
  * Bottom Sheet qui affiche toutes les lignes organisées par catégories
  */
 @RequiresApi(Build.VERSION_CODES.O)
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LinesBottomSheet(
     allLines: List<String>,
-    onDismiss: () -> Unit,
     onLineClick: (String) -> Unit,
-    favoriteLines: Set<String> = emptySet(),
-    onToggleFavorite: (String) -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    favoriteLines: Set<String> = emptySet()
 ) {
     val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
-    
+
     // Organize lines by category
     val categorizedLines = remember(allLines, favoriteLines) {
         // Map<String, List<String>> but we will iterate deterministically by turning to list
@@ -201,6 +197,7 @@ private fun naturalComparatorString(a: String, b: String): Int {
 /**
  * Chip pour afficher une ligne avec son icône TCL officielle
  */
+@Suppress("DiscouragedApi") // Dynamic resource loading for transport line icons
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 private fun LineChip(
@@ -266,6 +263,7 @@ private fun LineChip(
 /**
  * Vérifie si une ligne a une icône SVG disponible
  */
+@Suppress("DiscouragedApi") // Dynamic resource loading for transport line icons
 private fun hasLineIcon(lineName: String, context: android.content.Context): Boolean {
     val resourceName = lineName.lowercase()
         .replace("é", "e")
