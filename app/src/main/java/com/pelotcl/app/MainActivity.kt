@@ -104,12 +104,14 @@ class MainActivity : ComponentActivity() {
                     schedulesRepo.warmupDatabase()
                 }
                 // Preload Raptor library in background (deferred slightly to prioritize UI)
-                // Fire and forget - doesn't need to complete before UI shows
+                // Uses singleton pattern - same instance will be used everywhere
                 launch {
                     delay(300) // Small delay to let UI start rendering
-                    val raptorRepo = com.pelotcl.app.data.repository.RaptorRepository(applicationContext)
+                    val raptorRepo = com.pelotcl.app.data.repository.RaptorRepository.getInstance(applicationContext)
                     raptorRepo.initialize()
-                    android.util.Log.d("MainActivity", "Raptor preloaded at startup")
+                    // Preload journey cache from disk for faster initial queries
+                    raptorRepo.preloadJourneyCache()
+                    android.util.Log.d("MainActivity", "Raptor and journey cache preloaded at startup")
                 }
                 // Wait for cache and SQLite (critical for UI), Raptor can complete later
                 cacheJob.join()

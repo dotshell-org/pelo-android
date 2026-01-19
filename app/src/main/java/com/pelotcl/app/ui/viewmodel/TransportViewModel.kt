@@ -53,8 +53,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val repository = TransportRepository(application.applicationContext)
 
-    // Shared RaptorRepository instance - kept alive during app lifetime
-    val raptorRepository = RaptorRepository(application.applicationContext)
+    // Shared RaptorRepository singleton - kept alive during app lifetime
+    val raptorRepository = RaptorRepository.getInstance(application.applicationContext)
 
     private val _uiState = MutableStateFlow<TransportLinesUiState>(TransportLinesUiState.Loading)
     val uiState: StateFlow<TransportLinesUiState> = _uiState.asStateFlow()
@@ -320,6 +320,14 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                         val raptorTime = System.currentTimeMillis() - raptorStart
                         Log.d("TransportViewModel", "Raptor preloaded in ${raptorTime}ms")
                     }
+
+                    // Preload journey cache from disk (recent itineraries)
+                    raptorRepository.preloadJourneyCache()
+                    val cacheStats = raptorRepository.getCacheStats()
+                    Log.d("TransportViewModel", "Journey cache preloaded: ${cacheStats.memoryEntries} in memory, ${cacheStats.diskEntries} on disk (${cacheStats.diskSizeKB}KB)")
+
+                    // Cleanup expired cache entries (runs in background)
+                    raptorRepository.cleanupExpiredCache()
                 }
 
             } catch (t: Throwable) {

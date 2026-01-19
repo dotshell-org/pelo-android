@@ -3,6 +3,7 @@ package com.pelotcl.app.data.repository
 import android.content.Context
 import android.util.Log
 import android.util.LruCache
+import com.pelotcl.app.data.cache.JourneyCache
 import io.raptor.RaptorLibrary
 import io.raptor.model.Stop
 import kotlinx.coroutines.Dispatchers
@@ -20,16 +21,20 @@ import kotlin.math.sqrt
  * not at app startup, to improve initial loading time.
  *
  * Performance optimizations:
- * - LRU cache for journey results to avoid repeated calculations
+ * - Multi-level cache: Memory LRU (30min) -> Disk cache (daily) -> Raptor calculation
  * - HashMap indexes for O(1) stop lookups by ID and index
  * - Pre-computed normalized name index for fast search
  * - Buffered I/O for asset loading
+ * - Singleton pattern to avoid multiple initializations
  */
-class RaptorRepository(private val context: Context) {
+class RaptorRepository private constructor(private val context: Context) {
 
     private var raptorLibrary: RaptorLibrary? = null
     private var stopsCache: List<Stop> = emptyList()
     private val mutex = Mutex()
+
+    // Multi-level disk cache for journey persistence
+    private val journeyDiskCache: JourneyCache by lazy { JourneyCache.getInstance(context) }
 
     // Performance: HashMap index for O(1) stop lookup by index position
     private var stopsByIndex: Map<Int, Stop> = emptyMap()
@@ -38,24 +43,50 @@ class RaptorRepository(private val context: Context) {
     private var stopsByNormalizedName: Map<String, List<Stop>> = emptyMap()
 
     companion object {
+        private const val TAG = "RaptorRepository"
+
         // Set to false for production builds to reduce log overhead
         private const val DEBUG_LOGGING = false
 
         // LRU Cache for journey results: key = "origin|dest|time"
-        // Typical usage: 20-30 recent searches, each result ~5-10KB
-        private val journeyCache = LruCache<String, List<JourneyResult>>(30)
+        // Level 1 cache: 50 entries in memory with 30-minute validity
+        private val journeyCache = LruCache<String, List<JourneyResult>>(50)
 
-        // Cache validity: 5 minutes (schedules may change throughout the day)
-        private const val JOURNEY_CACHE_VALIDITY_MS = 5 * 60 * 1000L
+        // Cache validity: 30 minutes (increased from 5min for better hit rate)
+        private const val JOURNEY_CACHE_VALIDITY_MS = 30 * 60 * 1000L
         private val journeyCacheTimestamps = mutableMapOf<String, Long>()
 
+        // Singleton instance
+        @Volatile
+        private var INSTANCE: RaptorRepository? = null
+
         /**
-         * Clear journey cache (call when underlying data changes)
+         * Get singleton instance of RaptorRepository.
+         * Creates instance on first call, returns existing instance on subsequent calls.
+         */
+        fun getInstance(context: Context): RaptorRepository {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: RaptorRepository(context.applicationContext).also {
+                    INSTANCE = it
+                }
+            }
+        }
+
+        /**
+         * Clear all journey caches (memory and disk).
+         * Call when underlying GTFS data changes.
          */
         fun clearJourneyCache() {
             journeyCache.evictAll()
             journeyCacheTimestamps.clear()
+            JourneyCache.clearAllCaches()
+            Log.d(TAG, "All journey caches cleared")
         }
+
+        /**
+         * Check if instance exists without creating it
+         */
+        fun hasInstance(): Boolean = INSTANCE != null
     }
 
     @Volatile
@@ -265,14 +296,14 @@ class RaptorRepository(private val context: Context) {
                 )
             }
         } catch (e: Exception) {
-            Log.e("RaptorRepository", "Error finding closest stop: ${e.message}", e)
+            Log.e(TAG, "Error finding closest stop: ${e.message}", e)
             null
         }
     }
 
     /**
      * Calculate optimized journeys between origin and destination stops.
-     * Uses LRU cache to avoid repeated calculations for same origin/destination.
+     * Uses multi-level cache: Memory LRU -> Disk cache -> Raptor calculation.
      *
      * @param originStopIds List of origin stop IDs (to handle stops with multiple platforms)
      * @param destinationStopIds List of destination stop IDs
@@ -287,38 +318,52 @@ class RaptorRepository(private val context: Context) {
         try {
             val depTime = departureTimeSeconds ?: getCurrentTimeInSeconds()
             
-            // Round departure time to 5-minute intervals for better cache hits
-            val roundedDepTime = (depTime / 300) * 300
+            // Smart time rounding: 15 min in off-peak, 5 min in peak hours
+            val roundedDepTime = getRoundedDepartureTime(depTime)
 
-            // Check LRU cache first
+            // Build cache key
             val cacheKey = buildCacheKey(originStopIds, destinationStopIds, roundedDepTime)
-            val cachedResult = journeyCache.get(cacheKey)
+
+            // Level 1: Check in-memory LRU cache
+            val memoryCached = journeyCache.get(cacheKey)
             val cacheTimestamp = journeyCacheTimestamps[cacheKey]
 
-            if (cachedResult != null && cacheTimestamp != null) {
+            if (memoryCached != null && cacheTimestamp != null) {
                 val cacheAge = System.currentTimeMillis() - cacheTimestamp
                 if (cacheAge < JOURNEY_CACHE_VALIDITY_MS) {
                     if (DEBUG_LOGGING) {
-                        Log.d("RaptorRepository", "getOptimizedPaths: Cache HIT for $cacheKey (age: ${cacheAge}ms)")
+                        Log.d(TAG, "getOptimizedPaths: Memory cache HIT for $cacheKey (age: ${cacheAge / 1000}s)")
                     }
-                    return@withContext cachedResult
+                    return@withContext memoryCached
                 }
             }
 
+            // Level 2: Check disk cache (daily validity)
+            val diskCached = journeyDiskCache.get(cacheKey)
+            if (diskCached != null) {
+                if (DEBUG_LOGGING) {
+                    Log.d(TAG, "getOptimizedPaths: Disk cache HIT for $cacheKey")
+                }
+                // Promote to memory cache
+                journeyCache.put(cacheKey, diskCached)
+                journeyCacheTimestamps[cacheKey] = System.currentTimeMillis()
+                return@withContext diskCached
+            }
+
             if (DEBUG_LOGGING) {
-                Log.d("RaptorRepository", "getOptimizedPaths: origin=$originStopIds, dest=$destinationStopIds, time=$depTime (${formatTimeFromSeconds(depTime)})")
+                Log.d(TAG, "getOptimizedPaths: Cache MISS - calculating: origin=$originStopIds, dest=$destinationStopIds, time=$depTime (${formatTimeFromSeconds(depTime)})")
             }
 
             if (originStopIds.isEmpty()) {
-                Log.w("RaptorRepository", "getOptimizedPaths: originStopIds is empty!")
+                Log.w(TAG, "getOptimizedPaths: originStopIds is empty!")
                 return@withContext emptyList()
             }
             if (destinationStopIds.isEmpty()) {
-                Log.w("RaptorRepository", "getOptimizedPaths: destinationStopIds is empty!")
+                Log.w(TAG, "getOptimizedPaths: destinationStopIds is empty!")
                 return@withContext emptyList()
             }
 
-            // getOptimizedPaths returns List<List<JourneyLeg>> - list of journeys
+            // Level 3: Calculate with Raptor
             val journeys = raptorLibrary?.getOptimizedPaths(
                 originStopIds = originStopIds,
                 destinationStopIds = destinationStopIds,
@@ -326,7 +371,7 @@ class RaptorRepository(private val context: Context) {
             ) ?: emptyList()
 
             if (DEBUG_LOGGING) {
-                Log.d("RaptorRepository", "getOptimizedPaths: Raptor returned ${journeys.size} raw journeys")
+                Log.d(TAG, "getOptimizedPaths: Raptor returned ${journeys.size} raw journeys")
             }
 
             val results = journeys.mapNotNull { legs ->
@@ -384,19 +429,41 @@ class RaptorRepository(private val context: Context) {
                 )
             }
 
-            // Store results in cache
+            // Store results in both memory and disk cache
             if (results.isNotEmpty()) {
+                // Level 1: Memory cache
                 journeyCache.put(cacheKey, results)
                 journeyCacheTimestamps[cacheKey] = System.currentTimeMillis()
+
+                // Level 2: Disk cache (async, fire and forget)
+                journeyDiskCache.put(cacheKey, results)
             }
 
             if (DEBUG_LOGGING) {
-                Log.d("RaptorRepository", "getOptimizedPaths: Returning ${results.size} journey results")
+                Log.d(TAG, "getOptimizedPaths: Returning ${results.size} journey results")
             }
             results
         } catch (e: Exception) {
-            Log.e("RaptorRepository", "Error calculating paths: ${e.message}", e)
+            Log.e(TAG, "Error calculating paths: ${e.message}", e)
             emptyList()
+        }
+    }
+
+    /**
+     * Smart time rounding for better cache hit rate:
+     * - Peak hours (7-9, 17-19): 5 minute intervals (more precision needed)
+     * - Off-peak hours: 15 minute intervals (fewer variations, better hits)
+     */
+    private fun getRoundedDepartureTime(timeSeconds: Int): Int {
+        val hour = timeSeconds / 3600
+        val isPeakHour = (hour in 7..9) || (hour in 17..19)
+
+        return if (isPeakHour) {
+            // 5 minute rounding during peak
+            (timeSeconds / 300) * 300
+        } else {
+            // 15 minute rounding during off-peak
+            (timeSeconds / 900) * 900
         }
     }
 
@@ -416,7 +483,28 @@ class RaptorRepository(private val context: Context) {
         return "%02d:%02d".format(hours, minutes)
     }
 
+    /**
+     * Preload journey cache from disk to memory.
+     * Call at app startup for faster initial queries.
+     */
+    suspend fun preloadJourneyCache() {
+        journeyDiskCache.preloadToMemory()
+    }
 
+    /**
+     * Clean up expired cache entries.
+     * Call periodically (e.g., once per day).
+     */
+    suspend fun cleanupExpiredCache() {
+        journeyDiskCache.cleanupExpired()
+    }
+
+    /**
+     * Get cache statistics for debugging/monitoring.
+     */
+    fun getCacheStats(): JourneyCache.CacheStats {
+        return journeyDiskCache.getStats()
+    }
     private fun getCurrentTimeInSeconds(): Int {
         val calendar = Calendar.getInstance()
         val hours = calendar.get(Calendar.HOUR_OF_DAY)
