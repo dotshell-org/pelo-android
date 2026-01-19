@@ -32,7 +32,7 @@ import kotlin.math.sqrt
  * UI state for transport lines
  */
 sealed class TransportLinesUiState {
-    object Loading : TransportLinesUiState()
+    data object Loading : TransportLinesUiState()
     data class Success(val lines: List<Feature>) : TransportLinesUiState()
     data class Error(val message: String) : TransportLinesUiState()
 }
@@ -226,7 +226,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      * Clears all cached data for performance optimization.
      * Call when data sources are updated.
      */
-    @Suppress("MemberVisibilityCanBePrivate") // Public API for cache invalidation
+    @Suppress("unused") // Public API for cache invalidation when GTFS data is updated
     fun clearAllCaches() {
         lineStopsCache.evictAll()
         connectionsIndex = emptyMap()
@@ -671,8 +671,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
                     // Filter stops to keep only those that match the main direction
                     val directionStops = lineStops.filter { stop ->
-                        // Be defensive: desserte can be null/blank in some rare cases
-                        val desserte = stop.properties.desserte ?: ""
+                        // Be defensive: desserte can be blank in some rare cases
+                        val desserte = stop.properties.desserte
                         // Look for "86:A" or "86:R" (or "NAVI1:A" for NAV1) in the desserte
                         val matches = desserte.split(",").any { line ->
                             val trimmed = line.trim()

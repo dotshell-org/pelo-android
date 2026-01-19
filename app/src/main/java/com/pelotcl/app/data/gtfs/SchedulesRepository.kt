@@ -38,7 +38,7 @@ class SchedulesRepository(context: Context) {
         /**
          * Clear all caches (call when data is updated)
          */
-        @Suppress("MemberVisibilityCanBePrivate") // API for cache invalidation
+        @Suppress("unused") // Public API for cache invalidation when GTFS data is updated
         fun clearCaches() {
             schedulesCache.evictAll()
             headsignsCache.evictAll()
@@ -123,7 +123,11 @@ class SchedulesRepository(context: Context) {
                     ?.filter { it.properties.nom.contains(query, ignoreCase = true) }
                     ?.map { stop ->
                         val desserteRaw = stop.properties.desserte
-                        val lines = desserteRaw?.split(',')?.map { it.trim() } ?: emptyList()
+                        val lines = if (desserteRaw.isBlank()) {
+                            emptyList()
+                        } else {
+                            desserteRaw.split(',').map { it.trim() }
+                        }
                         StationSearchResult(stop.properties.nom, lines, stop.properties.pmr)
                     }
                     ?.sortedWith(compareBy<StationSearchResult>({ !it.stopName.lowercase().startsWith(lowerQuery) }, { it.stopName }))

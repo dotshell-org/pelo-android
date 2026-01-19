@@ -163,7 +163,6 @@ private enum class Destination(
     );
 
     companion object {
-        val entries: List<Destination> = Destination.entries
         const val ABOUT = "about"
         const val LEGAL = "legal"
         const val CREDITS = "credits"

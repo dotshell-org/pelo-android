@@ -56,7 +56,8 @@ class RaptorRepository private constructor(private val context: Context) {
         private const val JOURNEY_CACHE_VALIDITY_MS = 30 * 60 * 1000L
         private val journeyCacheTimestamps = mutableMapOf<String, Long>()
 
-        // Singleton instance
+        // Singleton instance - uses applicationContext so no memory leak
+        @Suppress("StaticFieldLeak") // Safe: we only store applicationContext, not Activity context
         @Volatile
         private var INSTANCE: RaptorRepository? = null
 
@@ -76,6 +77,7 @@ class RaptorRepository private constructor(private val context: Context) {
          * Clear all journey caches (memory and disk).
          * Call when underlying GTFS data changes.
          */
+        @Suppress("unused") // Public API for cache invalidation when GTFS data is updated
         fun clearJourneyCache() {
             journeyCache.evictAll()
             journeyCacheTimestamps.clear()
@@ -86,6 +88,7 @@ class RaptorRepository private constructor(private val context: Context) {
         /**
          * Check if instance exists without creating it
          */
+        @Suppress("unused") // Public API to check singleton state
         fun hasInstance(): Boolean = INSTANCE != null
     }
 
@@ -541,7 +544,7 @@ data class JourneyResult(
     private fun formatTime(seconds: Int): String {
         val hours = seconds / 3600
         val minutes = (seconds % 3600) / 60
-        return String.format("%02d:%02d", hours, minutes)
+        return String.format(java.util.Locale.ROOT, "%02d:%02d", hours, minutes)
     }
 }
 
@@ -555,7 +558,7 @@ data class IntermediateStop(
     fun formatArrivalTime(): String {
         val hours = arrivalTime / 3600
         val minutes = (arrivalTime % 3600) / 60
-        return String.format("%02d:%02d", hours, minutes)
+        return String.format(java.util.Locale.ROOT, "%02d:%02d", hours, minutes)
     }
 }
 
@@ -584,6 +587,6 @@ data class JourneyLeg(
     private fun formatTime(seconds: Int): String {
         val hours = seconds / 3600
         val minutes = (seconds % 3600) / 60
-        return String.format("%02d:%02d", hours, minutes)
+        return String.format(java.util.Locale.ROOT, "%02d:%02d", hours, minutes)
     }
 }

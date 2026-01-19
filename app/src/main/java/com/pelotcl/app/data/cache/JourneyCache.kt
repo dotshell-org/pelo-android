@@ -30,7 +30,7 @@ import java.util.zip.GZIPOutputStream
  * - Disk cache: Valid until midnight (journeys are day-specific due to schedules)
  * - Manual invalidation when GTFS data is updated
  */
-class JourneyCache private constructor(private val context: Context) {
+class JourneyCache private constructor(context: Context) {
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -285,7 +285,7 @@ class JourneyCache private constructor(private val context: Context) {
             }
             val serializableJourneys = json.decodeFromString<List<SerializableJourneyResult>>(jsonString)
             serializableJourneys.map { it.toJourneyResult() }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Delete corrupted file
             file.delete()
             null
