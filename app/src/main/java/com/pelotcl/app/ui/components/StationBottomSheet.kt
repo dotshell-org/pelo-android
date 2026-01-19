@@ -1,5 +1,3 @@
-@file:Suppress("ComposeLocalCurrentInLambda", "ComposeLocalContext")
-
 package com.pelotcl.app.ui.components
 
 import android.annotation.SuppressLint
@@ -218,12 +216,14 @@ fun StationBottomSheet(
  * List item for a transport line with next departure times
  */
 @SuppressLint("ComposeBackingChainViolation") // Required for dynamic resource loading
-@Suppress("DiscouragedApi") // Dynamic resource loading for transport line icons
+// Suppress warnings for dynamic resource loading and Compose local access in lambda
+@Suppress("DiscouragedApi", "ComposeLocalCurrentInLambda")
 @Composable
 private fun LineListItem(
     lineName: String,
     onClick: () -> Unit
 ) {
+    @Suppress("ComposeLocalContext") // Context access needed for dynamic resource loading
     val context = LocalContext.current
     val resources = context.resources
     val packageName = context.packageName

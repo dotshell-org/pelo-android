@@ -57,7 +57,10 @@ class RaptorRepository private constructor(private val context: Context) {
         private val journeyCacheTimestamps = mutableMapOf<String, Long>()
 
         // Singleton instance - uses applicationContext so no memory leak
-        @Suppress("StaticFieldLeak") // Safe: we only store applicationContext, not Activity context
+        // StaticFieldLeak is safe here because we only store applicationContext (not Activity context)
+        // The instance lifecycle matches the application lifecycle, and applicationContext doesn't
+        // hold references to any Activity, preventing memory leaks
+        @Suppress("StaticFieldLeak")
         @Volatile
         private var INSTANCE: RaptorRepository? = null
 
@@ -458,7 +461,7 @@ class RaptorRepository private constructor(private val context: Context) {
      * - Off-peak hours: 15 minute intervals (fewer variations, better hits)
      */
     private fun getRoundedDepartureTime(timeSeconds: Int): Int {
-        val hour = timeSeconds / 3600
+        val hour = (timeSeconds / 3600) % 24 // Handle times past midnight (e.g., hour 25 -> 1)
         val isPeakHour = (hour in 7..9) || (hour in 17..19)
 
         return if (isPeakHour) {

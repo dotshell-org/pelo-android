@@ -6,7 +6,10 @@ import android.util.LruCache
 import com.pelotcl.app.data.repository.IntermediateStop
 import com.pelotcl.app.data.repository.JourneyLeg
 import com.pelotcl.app.data.repository.JourneyResult
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -16,6 +19,8 @@ import kotlinx.serialization.json.Json
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.util.Calendar
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
@@ -66,6 +71,9 @@ class JourneyCache private constructor(context: Context) {
         @Volatile
         private var INSTANCE: JourneyCache? = null
 
+        // Coroutine scope for background operations
+        private val cacheScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
         fun getInstance(context: Context): JourneyCache {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: JourneyCache(context.applicationContext).also {
@@ -76,9 +84,18 @@ class JourneyCache private constructor(context: Context) {
 
         /**
          * Clear all caches (call when GTFS data is updated)
+         * Note: If no cache instance exists yet, this operation is silently skipped
          */
         fun clearAllCaches() {
-            INSTANCE?.clearAll()
+            cacheScope.launch {
+                // Capture instance in local variable to avoid race condition with volatile INSTANCE
+                val instance = INSTANCE
+                if (instance != null) {
+                    instance.clearAll()
+                } else {
+                    Log.d(TAG, "clearAllCaches: No cache instance to clear")
+                }
+            }
         }
     }
 
@@ -190,10 +207,12 @@ class JourneyCache private constructor(context: Context) {
     /**
      * Clear all caches (memory and disk)
      */
-    fun clearAll() {
-        memoryCache.evictAll()
-        cacheDir.listFiles()?.forEach { it.delete() }
-        Log.d(TAG, "All journey caches cleared")
+    suspend fun clearAll() = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            memoryCache.evictAll()
+            cacheDir.listFiles()?.forEach { it.delete() }
+            Log.d(TAG, "All journey caches cleared")
+        }
     }
 
     /**
@@ -243,8 +262,10 @@ class JourneyCache private constructor(context: Context) {
     }
 
     private fun getCacheFile(cacheKey: String): File {
-        // Sanitize key for filename (replace | with _)
-        val safeKey = cacheKey.replace("|", "_").replace(",", "-")
+        // Sanitize key for filename using URL encoding to handle all invalid filename characters
+        // URLEncoder converts spaces to '+', but we replace with '_' for better readability in filenames
+        val safeKey = URLEncoder.encode(cacheKey, StandardCharsets.UTF_8)
+            .replace("+", "_")
         return File(cacheDir, "$CACHE_FILE_PREFIX$safeKey$CACHE_FILE_SUFFIX")
     }
 

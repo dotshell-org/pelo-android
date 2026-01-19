@@ -47,8 +47,6 @@ fun LinesBottomSheet(
     favoriteLines: Set<String> = emptySet()
 ) {
     val context = LocalContext.current
-    @Suppress("UNUSED_VARIABLE") // Reserved for future search feature
-    var searchQuery by remember { mutableStateOf("") }
     
     // Organize lines by category
     val categorizedLines = remember(allLines, favoriteLines) {
