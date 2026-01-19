@@ -47,7 +47,8 @@ fun LinesBottomSheet(
     favoriteLines: Set<String> = emptySet()
 ) {
     val context = LocalContext.current
-    
+    var searchQuery by remember { mutableStateOf("") }
+
     // Organize lines by category
     val categorizedLines = remember(allLines, favoriteLines) {
         // Map<String, List<String>> but we will iterate deterministically by turning to list

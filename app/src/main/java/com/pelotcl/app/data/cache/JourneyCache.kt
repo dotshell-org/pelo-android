@@ -20,7 +20,6 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
 import java.util.Calendar
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
@@ -264,7 +263,8 @@ class JourneyCache private constructor(context: Context) {
     private fun getCacheFile(cacheKey: String): File {
         // Sanitize key for filename using URL encoding to handle all invalid filename characters
         // URLEncoder converts spaces to '+', but we replace with '_' for better readability in filenames
-        val safeKey = URLEncoder.encode(cacheKey, StandardCharsets.UTF_8)
+        @Suppress("DEPRECATION")
+        val safeKey = URLEncoder.encode(cacheKey, "UTF-8")
             .replace("+", "_")
         return File(cacheDir, "$CACHE_FILE_PREFIX$safeKey$CACHE_FILE_SUFFIX")
     }
