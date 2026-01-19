@@ -41,7 +41,7 @@ sealed class TransportLinesUiState {
  * UI state for transport stops
  */
 sealed class TransportStopsUiState {
-    object Loading : TransportStopsUiState()
+    data object Loading : TransportStopsUiState()
     data class Success(val stops: List<StopFeature>) : TransportStopsUiState()
     data class Error(val message: String) : TransportStopsUiState()
 }
@@ -199,7 +199,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             try {
                 repository.getAllLines()
                     .onSuccess { collection ->
-                        collection.features.count { it.properties.ligne.equals("RX", ignoreCase = true) }
                         _uiState.value = TransportLinesUiState.Success(collection.features)
                     }
                     .onFailure { e ->
@@ -227,6 +226,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      * Clears all cached data for performance optimization.
      * Call when data sources are updated.
      */
+    @Suppress("MemberVisibilityCanBePrivate") // Public API for cache invalidation
     fun clearAllCaches() {
         lineStopsCache.evictAll()
         connectionsIndex = emptyMap()
@@ -662,12 +662,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
                     // Determine main trace direction and convert it to letter (A or R)
                     // Be defensive: API may return null sens unexpectedly, avoid NPEs
-                    val sensUpper = try {
-                        mainTrace.properties.sens.uppercase()
-                    } catch (e: Exception) {
-                        Log.e("TransportViewModel", "getStopsForLine: exception ${e.message}")
-                        ""
-                    }
+                    val sensUpper = mainTrace.properties.sens?.uppercase() ?: ""
                     val mainDirection = when (sensUpper) {
                         "ALLER" -> "A"
                         "RETOUR" -> "R"
@@ -677,7 +672,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     // Filter stops to keep only those that match the main direction
                     val directionStops = lineStops.filter { stop ->
                         // Be defensive: desserte can be null/blank in some rare cases
-                        val desserte = try { stop.properties.desserte } catch (_: Exception) { "" }
+                        val desserte = stop.properties.desserte ?: ""
                         // Look for "86:A" or "86:R" (or "NAVI1:A" for NAV1) in the desserte
                         val matches = desserte.split(",").any { line ->
                             val trimmed = line.trim()

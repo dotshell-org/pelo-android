@@ -13,8 +13,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Accessible
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Accessible
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -135,8 +135,6 @@ fun StationBottomSheet(
     onDismiss: () -> Unit,
     onLineClick: (String) -> Unit = {}
 ) {
-    val context = LocalContext.current
-    
     if (stationInfo != null) {
         val content = @Composable {
             Column(
@@ -162,7 +160,7 @@ fun StationBottomSheet(
                     // PMR icon if station is accessible
                     if (stationInfo.isPmr) {
                         Icon(
-                            imageVector = Icons.Default.Accessible,
+                            imageVector = Icons.AutoMirrored.Filled.Accessible,
                             contentDescription = "Station accessible PMR",
                             tint = Color(0xFF2563EB),
                             modifier = Modifier.size(24.dp)
@@ -215,6 +213,7 @@ fun StationBottomSheet(
 /**
  * List item for a transport line with next departure times
  */
+@Suppress("DiscouragedApi") // Dynamic resource loading for transport line icons
 @Composable
 private fun LineListItem(
     lineName: String,

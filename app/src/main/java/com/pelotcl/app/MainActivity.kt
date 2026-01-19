@@ -74,7 +74,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import org.maplibre.android.geometry.LatLng
 
@@ -164,7 +163,7 @@ private enum class Destination(
     );
 
     companion object {
-        val entries: List<Destination> = values().toList()
+        val entries: List<Destination> = Destination.entries
         const val ABOUT = "about"
         const val LEGAL = "legal"
         const val CREDITS = "credits"
@@ -219,7 +218,7 @@ fun NavBar(modifier: Modifier = Modifier) {
                         userLocation = LatLng(location.latitude, location.longitude)
                     }
                 }
-            } catch (e: SecurityException) {
+            } catch (_: SecurityException) {
                 // Handle exception
             }
         }
@@ -254,7 +253,7 @@ fun NavBar(modifier: Modifier = Modifier) {
                         userLocation = LatLng(location.latitude, location.longitude)
                     }
                 }
-            } catch (e: SecurityException) {
+            } catch (_: SecurityException) {
                 // Handle exception
             }
         }
@@ -454,7 +453,6 @@ private fun AppNavHost(
             val favoriteLines by viewModel.favoriteLines.collectAsState()
             LinesBottomSheet(
                 allLines = viewModel.getAllAvailableLines(),
-                onDismiss = { /* Nothing to dismiss - full-screen */ },
                 onLineClick = { lineName ->
                     // Select line and navigate back to Plan screen where it will open the details
                     viewModel.selectLine(lineName)
@@ -464,8 +462,7 @@ private fun AppNavHost(
                         restoreState = true
                     }
                 },
-                favoriteLines = favoriteLines,
-                onToggleFavorite = { viewModel.toggleFavorite(it) }
+                favoriteLines = favoriteLines
             )
         }
         composable(Destination.PARAMETRES.route) {

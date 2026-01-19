@@ -38,6 +38,7 @@ class SchedulesRepository(context: Context) {
         /**
          * Clear all caches (call when data is updated)
          */
+        @Suppress("MemberVisibilityCanBePrivate") // API for cache invalidation
         fun clearCaches() {
             schedulesCache.evictAll()
             headsignsCache.evictAll()
@@ -116,16 +117,16 @@ class SchedulesRepository(context: Context) {
             return try {
                 val repo = TransportRepository(appContext)
                 val stopsResult = repo.getAllStops()
-                val lower = query.lowercase()
+                val lowerQuery = query.lowercase()
                 stopsResult.getOrNull()?.features
                     ?.asSequence()
                     ?.filter { it.properties.nom.contains(query, ignoreCase = true) }
                     ?.map { stop ->
                         val desserteRaw = stop.properties.desserte
-                        val lines = if (!desserteRaw.isNullOrBlank()) desserteRaw.split(',').map { it.trim() } else emptyList()
+                        val lines = desserteRaw?.split(',')?.map { it.trim() } ?: emptyList()
                         StationSearchResult(stop.properties.nom, lines, stop.properties.pmr)
                     }
-                    ?.sortedWith(compareBy<StationSearchResult>({ !it.stopName.lowercase().startsWith(lower) }, { it.stopName }))
+                    ?.sortedWith(compareBy<StationSearchResult>({ !it.stopName.lowercase().startsWith(lowerQuery) }, { it.stopName }))
                     ?.take(50)
                     ?.toList()
                     ?: emptyList()

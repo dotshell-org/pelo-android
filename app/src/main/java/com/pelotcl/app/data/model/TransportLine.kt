@@ -61,7 +61,7 @@ data class TransportLineProperties(
     @SerializedName("nom_trace")
     @SerialName("nom_trace")
     val nomTrace: String,
-    val sens: String,
+    val sens: String? = null,
     val origine: String,
     val destination: String,
     @SerializedName("nom_origine")
