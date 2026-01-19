@@ -3,11 +3,13 @@ package com.pelotcl.app.ui.viewmodel
 import android.app.Application
 import android.os.Build
 import android.util.Log
+import android.util.LruCache
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.pelotcl.app.data.model.Feature
 import com.pelotcl.app.data.model.StopFeature
+import com.pelotcl.app.data.repository.RaptorRepository
 import com.pelotcl.app.data.repository.TransportRepository
 import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.utils.Connection
@@ -15,6 +17,8 @@ import com.pelotcl.app.data.repository.FavoritesRepository
 import com.pelotcl.app.utils.ConnectionsHelper
 import com.pelotcl.app.utils.HolidayDetector
 import java.time.LocalDate
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -48,6 +52,9 @@ sealed class TransportStopsUiState {
 class TransportViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = TransportRepository(application.applicationContext)
+
+    // Shared RaptorRepository instance - kept alive during app lifetime
+    val raptorRepository = RaptorRepository(application.applicationContext)
 
     private val _uiState = MutableStateFlow<TransportLinesUiState>(TransportLinesUiState.Loading)
     val uiState: StateFlow<TransportLinesUiState> = _uiState.asStateFlow()
@@ -212,9 +219,26 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     // Key = normalized stop name, Value = list of transfer lines
     private var connectionsIndex: Map<String, List<Connection>> = emptyMap()
 
+    // LruCache for line stops to avoid expensive geometric calculations
+    // Key = "lineName|currentStopName", Value = list of LineStopInfo
+    private val lineStopsCache = LruCache<String, List<com.pelotcl.app.data.gtfs.LineStopInfo>>(30)
+
+    /**
+     * Clears all cached data for performance optimization.
+     * Call when data sources are updated.
+     */
+    fun clearAllCaches() {
+        lineStopsCache.evictAll()
+        connectionsIndex = emptyMap()
+        cachedStops = null
+    }
+
     /**
      * Preloads lines and stops at launch, builds transfers index,
      * and populates StateFlows if possible. Does not block UI.
+     * Uses 2-phase loading strategy:
+     * - Phase 1 (immediate): Critical UI data (lines, stops, SQLite warmup)
+     * - Phase 2 (deferred): Heavy processing (connections index, Raptor preload)
      */
     private fun preloadAllData() {
         if (hasPreloaded || isPreloading) return
@@ -222,32 +246,82 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
         viewModelScope.launch {
             try {
-                // 1) Load lines if not already loaded
-                if (_uiState.value !is TransportLinesUiState.Success) {
-                    repository.getAllLines()
-                        .onSuccess { featureCollection ->
-                            _uiState.value = TransportLinesUiState.Success(featureCollection.features)
-                        }
-                        .onFailure { e ->
-                            Log.w("TransportViewModel", "Preload: failed loading lines: ${e.message}")
-                        }
+                val startTime = System.currentTimeMillis()
+
+                // ===== PHASE 1: Critical UI data (parallel) =====
+                val linesDeferred = async(Dispatchers.IO) {
+                    if (_uiState.value !is TransportLinesUiState.Success) {
+                        repository.getAllLines()
+                    } else null
                 }
 
-                // 2) Load all stops, cache them and build transfers index
-                if (cachedStops == null || connectionsIndex.isEmpty()) {
-                    repository.getAllStops()
-                        .onSuccess { stopCollection ->
-                            cachedStops = stopCollection.features
-                            buildConnectionsIndex(stopCollection.features)
-                            // Publish stops state only if not already success
-                            if (_stopsUiState.value !is TransportStopsUiState.Success) {
-                                _stopsUiState.value = TransportStopsUiState.Success(stopCollection.features)
-                            }
-                        }
-                        .onFailure { e ->
-                            Log.w("TransportViewModel", "Preload: failed loading stops: ${e.message}")
-                        }
+                val stopsDeferred = async(Dispatchers.IO) {
+                    if (cachedStops == null || connectionsIndex.isEmpty()) {
+                        repository.getAllStops()
+                    } else null
                 }
+
+                // Warm up SQLite database in parallel (non-blocking)
+                launch(Dispatchers.IO) {
+                    schedulesRepository.warmupDatabase()
+                }
+
+                // Wait for critical data to complete
+                val (linesResult, stopsResult) = awaitAll(linesDeferred, stopsDeferred)
+
+                // Process lines result
+                @Suppress("UNCHECKED_CAST")
+                (linesResult as? Result<com.pelotcl.app.data.model.FeatureCollection>)?.let { result ->
+                    result.onSuccess { featureCollection ->
+                        _uiState.value = TransportLinesUiState.Success(featureCollection.features)
+                    }.onFailure { e ->
+                        Log.w("TransportViewModel", "Preload: failed loading lines: ${e.message}")
+                    }
+                }
+
+                // Process stops result
+                var stopsForIndexing: List<StopFeature>? = null
+                @Suppress("UNCHECKED_CAST")
+                (stopsResult as? Result<com.pelotcl.app.data.model.StopCollection>)?.let { result ->
+                    result.onSuccess { stopCollection ->
+                        cachedStops = stopCollection.features
+                        stopsForIndexing = stopCollection.features
+                        // Publish stops state only if not already success
+                        if (_stopsUiState.value !is TransportStopsUiState.Success) {
+                            _stopsUiState.value = TransportStopsUiState.Success(stopCollection.features)
+                        }
+                    }.onFailure { e ->
+                        Log.w("TransportViewModel", "Preload: failed loading stops: ${e.message}")
+                    }
+                }
+
+                val phase1Time = System.currentTimeMillis() - startTime
+                Log.d("TransportViewModel", "Phase 1 preload completed in ${phase1Time}ms")
+
+                // ===== PHASE 2: Deferred heavy processing =====
+                // Build connections index (can take time with many stops)
+                stopsForIndexing?.let { stops ->
+                    launch(Dispatchers.Default) {
+                        buildConnectionsIndex(stops)
+                        Log.d("TransportViewModel", "Connections index built")
+                    }
+                }
+
+                // Preload Raptor after a short delay to not compete with UI rendering
+                // This lazy-initializes the Raptor library in the background
+                // Reduced from 2000ms to 500ms for faster itinerary availability
+                launch(Dispatchers.IO) {
+                    kotlinx.coroutines.delay(500) // Wait 500ms for initial UI to render
+                    if (raptorRepository.isReady()) {
+                        Log.d("TransportViewModel", "Raptor already initialized")
+                    } else {
+                        val raptorStart = System.currentTimeMillis()
+                        raptorRepository.initialize()
+                        val raptorTime = System.currentTimeMillis() - raptorStart
+                        Log.d("TransportViewModel", "Raptor preloaded in ${raptorTime}ms")
+                    }
+                }
+
             } catch (t: Throwable) {
                 Log.e("TransportViewModel", "Preload: unexpected exception: ${t.message}")
             } finally {
@@ -486,12 +560,17 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
     /**
      * Retrieves stops served by a specific line, ordered according to the line's path
+     * Uses LruCache to avoid expensive geometric calculations on repeated calls
      * @param lineName Line name (ex: "86", "A", "T1")
      * @param currentStopName Current stop name to mark it (optional)
      * @return List of stops with their transfers, ordered according to the line's route
      */
     fun getStopsForLine(lineName: String, currentStopName: String? = null): List<com.pelotcl.app.data.gtfs.LineStopInfo> {
-        // First, try to retrieve from cache (for metros and trams)
+        // Check LruCache first for ultra-fast repeated lookups
+        val cacheKey = "$lineName|${currentStopName ?: ""}"
+        lineStopsCache.get(cacheKey)?.let { return it }
+
+        // First, try to retrieve from static cache (for metros and trams)
         val cachedStops = com.pelotcl.app.data.gtfs.LineStopsCache.getLineStops(lineName, currentStopName)
         if (cachedStops != null) {
             // Align cache labels with official GTFS labels (strict comparison required DB side)
@@ -520,7 +599,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 )
             }
             val dedup = mapped.distinctBy { normalizeStopName(it.stopName) }
-            return dedup.mapIndexed { index, stop ->
+            val result = dedup.mapIndexed { index, stop ->
                 stop.copy(
                     stopSequence = index + 1,
                     isCurrentStop = currentStopName?.let {
@@ -528,6 +607,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     } ?: stop.isCurrentStop
                 )
             }
+            // Cache the result for future lookups
+            lineStopsCache.put(cacheKey, result)
+            return result
         }
 
         // Get all stops from cache
@@ -632,7 +714,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     val dedupOrdered = orderedStops.distinctBy { normalizeStopName(it.properties.nom) }
 
                     // Convert to LineStopInfo
-                    return dedupOrdered.mapIndexed { index, stop ->
+                    val result = dedupOrdered.mapIndexed { index, stop ->
                         val connections = getConnectionsForStop(stop.properties.nom, lineName)
                         com.pelotcl.app.data.gtfs.LineStopInfo(
                             stopId = stop.properties.id.toString(),
@@ -644,6 +726,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                             connections = connections.map { it.lineName }
                         )
                     }
+                    // Cache the result for future lookups
+                    lineStopsCache.put(cacheKey, result)
+                    return result
                 }
             }
         }
@@ -653,7 +738,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             normalizeStopName(stop.properties.nom)
         }
 
-        return uniqueStops.mapIndexed { index, stop ->
+        val result = uniqueStops.mapIndexed { index, stop ->
             val connections = getConnectionsForStop(stop.properties.nom, lineName)
             com.pelotcl.app.data.gtfs.LineStopInfo(
                 stopId = stop.properties.id.toString(),
@@ -665,6 +750,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 connections = connections.map { it.lineName }
             )
         }
+        // Cache the result for future lookups
+        lineStopsCache.put(cacheKey, result)
+        return result
     }
 
     /**

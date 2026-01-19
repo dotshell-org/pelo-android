@@ -2,39 +2,98 @@ package com.pelotcl.app.data.repository
 
 import android.content.Context
 import android.util.Log
+import android.util.LruCache
 import io.raptor.RaptorLibrary
-import io.raptor.core.JourneyLeg as RaptorJourneyLeg
 import io.raptor.model.Stop
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.io.BufferedInputStream
 import java.util.Calendar
 import kotlin.math.pow
 import kotlin.math.sqrt
 
 /**
- * Repository to handle raptor-kt route calculations
+ * Repository to handle raptor-kt route calculations.
+ * Uses lazy initialization - Raptor library is only loaded when first needed,
+ * not at app startup, to improve initial loading time.
+ *
+ * Performance optimizations:
+ * - LRU cache for journey results to avoid repeated calculations
+ * - HashMap indexes for O(1) stop lookups by ID and index
+ * - Pre-computed normalized name index for fast search
+ * - Buffered I/O for asset loading
  */
 class RaptorRepository(private val context: Context) {
 
     private var raptorLibrary: RaptorLibrary? = null
     private var stopsCache: List<Stop> = emptyList()
     private val mutex = Mutex()
+
+    // Performance: HashMap index for O(1) stop lookup by index position
+    private var stopsByIndex: Map<Int, Stop> = emptyMap()
+
+    // Performance: Pre-computed normalized name index for fast search
+    private var stopsByNormalizedName: Map<String, List<Stop>> = emptyMap()
+
+    companion object {
+        // Set to false for production builds to reduce log overhead
+        private const val DEBUG_LOGGING = false
+
+        // LRU Cache for journey results: key = "origin|dest|time"
+        // Typical usage: 20-30 recent searches, each result ~5-10KB
+        private val journeyCache = LruCache<String, List<JourneyResult>>(30)
+
+        // Cache validity: 5 minutes (schedules may change throughout the day)
+        private const val JOURNEY_CACHE_VALIDITY_MS = 5 * 60 * 1000L
+        private val journeyCacheTimestamps = mutableMapOf<String, Long>()
+
+        /**
+         * Clear journey cache (call when underlying data changes)
+         */
+        fun clearJourneyCache() {
+            journeyCache.evictAll()
+            journeyCacheTimestamps.clear()
+        }
+    }
+
+    @Volatile
     private var isInitialized = false
 
+    @Volatile
+    private var isInitializing = false
+
     /**
-     * Initialize the Raptor library with stops.bin and routes.bin from assets
+     * Initialize the Raptor library with stops.bin and routes.bin from assets.
+     * This is called lazily on first use, not at startup.
+     * Uses buffered I/O and builds performance indexes.
      */
     suspend fun initialize(): Result<Unit> = withContext(Dispatchers.IO) {
+        // Fast path: already initialized
+        if (isInitialized && raptorLibrary != null) {
+            return@withContext Result.success(Unit)
+        }
+
         mutex.withLock {
+            // Double-check after acquiring lock
             if (isInitialized && raptorLibrary != null) {
                 return@withContext Result.success(Unit)
             }
 
+            if (isInitializing) {
+                // Another coroutine is initializing, wait and return
+                return@withContext Result.success(Unit)
+            }
+
+            isInitializing = true
+
             try {
-                val stopsInputStream = context.assets.open("stops.bin")
-                val routesInputStream = context.assets.open("routes.bin")
+                val startTime = System.currentTimeMillis()
+
+                // Use BufferedInputStream for faster asset loading
+                val stopsInputStream = BufferedInputStream(context.assets.open("stops.bin"), 8192)
+                val routesInputStream = BufferedInputStream(context.assets.open("routes.bin"), 8192)
 
                 raptorLibrary = RaptorLibrary(
                     stopsInputStream = stopsInputStream,
@@ -44,23 +103,79 @@ class RaptorRepository(private val context: Context) {
                 // Cache all stops for lookup
                 stopsCache = raptorLibrary?.searchStopsByName("") ?: emptyList()
 
+                // Build performance indexes
+                buildStopIndexes()
+
                 isInitialized = true
-                Log.d("RaptorRepository", "Raptor library initialized successfully with ${stopsCache.size} stops")
+
+                val elapsed = System.currentTimeMillis() - startTime
+                Log.d("RaptorRepository", "Raptor library initialized in ${elapsed}ms with ${stopsCache.size} stops")
+
+                // Debug logs only when DEBUG_LOGGING is enabled
+                if (DEBUG_LOGGING) {
+                    stopsCache.take(5).forEachIndexed { index, stop ->
+                        Log.d("RaptorRepository", "Stop at index $index: id=${stop.id}, name='${stop.name}'")
+                    }
+
+                    // Test: try a simple path calculation with first and last stops
+                    if (stopsCache.size >= 2) {
+                        val testOrigin = listOf(stopsCache.first().id)
+                        val testDest = listOf(stopsCache.last().id)
+                        Log.d("RaptorRepository", "Test path: from ${stopsCache.first().name}(${stopsCache.first().id}) to ${stopsCache.last().name}(${stopsCache.last().id}) at 9:00")
+                        val testResult = raptorLibrary?.getOptimizedPaths(testOrigin, testDest, 9 * 3600)
+                        Log.d("RaptorRepository", "Test result: ${testResult?.size ?: 0} journeys")
+                    }
+                }
+
                 Result.success(Unit)
             } catch (e: Exception) {
                 Log.e("RaptorRepository", "Failed to initialize Raptor library: ${e.message}", e)
                 Result.failure(e)
+            } finally {
+                isInitializing = false
             }
         }
     }
 
     /**
-     * Search for stops by name
+     * Build HashMap indexes for O(1) stop lookups.
+     * Called once during initialization.
+     */
+    private fun buildStopIndexes() {
+        // Index by position (for leg.fromStopIndex / leg.toStopIndex lookups)
+        stopsByIndex = stopsCache.mapIndexed { index, stop -> index to stop }.toMap()
+
+        // Index by normalized name for fast search
+        stopsByNormalizedName = stopsCache.groupBy { normalizeStopName(it.name) }
+
+        if (DEBUG_LOGGING) {
+            Log.d("RaptorRepository", "Built indexes: ${stopsByIndex.size} by index, ${stopsByNormalizedName.size} unique normalized names")
+        }
+    }
+
+    /**
+     * Check if Raptor is initialized without triggering initialization
+     */
+    fun isReady(): Boolean = isInitialized && raptorLibrary != null
+
+    /**
+     * Ensure initialized before use (internal helper)
+     */
+    private suspend fun ensureInitialized() {
+        if (!isInitialized) {
+            initialize()
+        }
+    }
+
+    /**
+     * Search for stops by name with multiple strategies for better matching.
+     * Uses pre-computed normalized name index for fast lookups.
      */
     suspend fun searchStopsByName(query: String): List<RaptorStop> = withContext(Dispatchers.IO) {
         ensureInitialized()
         try {
-            raptorLibrary?.searchStopsByName(query)?.map { stop ->
+            // First try: exact search via library
+            var results = raptorLibrary?.searchStopsByName(query)?.map { stop ->
                 RaptorStop(
                     id = stop.id,
                     name = stop.name,
@@ -68,10 +183,66 @@ class RaptorRepository(private val context: Context) {
                     lon = stop.lon
                 )
             } ?: emptyList()
+
+            if (DEBUG_LOGGING) {
+                Log.d("RaptorRepository", "searchStopsByName('$query') - library search found ${results.size} stops")
+            }
+
+            // If no results, try searching in our pre-computed index with flexible matching
+            if (results.isEmpty() && stopsByNormalizedName.isNotEmpty()) {
+                val normalizedQuery = normalizeStopName(query)
+
+                // O(1) exact normalized match using pre-computed index
+                val exactMatches = stopsByNormalizedName[normalizedQuery]
+                if (exactMatches != null) {
+                    results = exactMatches.map { stop ->
+                        RaptorStop(id = stop.id, name = stop.name, lat = stop.lat, lon = stop.lon)
+                    }
+                    if (DEBUG_LOGGING) {
+                        Log.d("RaptorRepository", "searchStopsByName('$query') - index exact match found ${results.size} stops")
+                    }
+                }
+
+                // If still no results, try contains match (fallback, slower)
+                if (results.isEmpty()) {
+                    results = stopsByNormalizedName.entries
+                        .filter { (normalizedName, _) ->
+                            normalizedName.contains(normalizedQuery) || normalizedQuery.contains(normalizedName)
+                        }
+                        .flatMap { (_, stops) -> stops }
+                        .map { stop ->
+                            RaptorStop(id = stop.id, name = stop.name, lat = stop.lat, lon = stop.lon)
+                        }
+                    if (DEBUG_LOGGING) {
+                        Log.d("RaptorRepository", "searchStopsByName('$query') - index contains match found ${results.size} stops")
+                    }
+                }
+            }
+
+            if (DEBUG_LOGGING) {
+                Log.d("RaptorRepository", "searchStopsByName('$query') final: ${results.size} stops - ${results.take(5).map { "${it.name}(${it.id})" }}")
+            }
+            results
         } catch (e: Exception) {
             Log.e("RaptorRepository", "Error searching stops: ${e.message}", e)
             emptyList()
         }
+    }
+
+    /**
+     * Normalize stop name for comparison (remove accents, lowercase, remove special chars)
+     */
+    private fun normalizeStopName(name: String): String {
+        return name
+            .lowercase()
+            .replace(Regex("[àáâãäå]"), "a")
+            .replace(Regex("[èéêë]"), "e")
+            .replace(Regex("[ìíîï]"), "i")
+            .replace(Regex("[òóôõö]"), "o")
+            .replace(Regex("[ùúûü]"), "u")
+            .replace(Regex("[ýÿ]"), "y")
+            .replace(Regex("[ç]"), "c")
+            .replace(Regex("[^a-z0-9]"), "")
     }
 
     /**
@@ -100,7 +271,9 @@ class RaptorRepository(private val context: Context) {
     }
 
     /**
-     * Calculate optimized journeys between origin and destination stops
+     * Calculate optimized journeys between origin and destination stops.
+     * Uses LRU cache to avoid repeated calculations for same origin/destination.
+     *
      * @param originStopIds List of origin stop IDs (to handle stops with multiple platforms)
      * @param destinationStopIds List of destination stop IDs
      * @param departureTimeSeconds Departure time in seconds from midnight (default: current time)
@@ -114,6 +287,37 @@ class RaptorRepository(private val context: Context) {
         try {
             val depTime = departureTimeSeconds ?: getCurrentTimeInSeconds()
             
+            // Round departure time to 5-minute intervals for better cache hits
+            val roundedDepTime = (depTime / 300) * 300
+
+            // Check LRU cache first
+            val cacheKey = buildCacheKey(originStopIds, destinationStopIds, roundedDepTime)
+            val cachedResult = journeyCache.get(cacheKey)
+            val cacheTimestamp = journeyCacheTimestamps[cacheKey]
+
+            if (cachedResult != null && cacheTimestamp != null) {
+                val cacheAge = System.currentTimeMillis() - cacheTimestamp
+                if (cacheAge < JOURNEY_CACHE_VALIDITY_MS) {
+                    if (DEBUG_LOGGING) {
+                        Log.d("RaptorRepository", "getOptimizedPaths: Cache HIT for $cacheKey (age: ${cacheAge}ms)")
+                    }
+                    return@withContext cachedResult
+                }
+            }
+
+            if (DEBUG_LOGGING) {
+                Log.d("RaptorRepository", "getOptimizedPaths: origin=$originStopIds, dest=$destinationStopIds, time=$depTime (${formatTimeFromSeconds(depTime)})")
+            }
+
+            if (originStopIds.isEmpty()) {
+                Log.w("RaptorRepository", "getOptimizedPaths: originStopIds is empty!")
+                return@withContext emptyList()
+            }
+            if (destinationStopIds.isEmpty()) {
+                Log.w("RaptorRepository", "getOptimizedPaths: destinationStopIds is empty!")
+                return@withContext emptyList()
+            }
+
             // getOptimizedPaths returns List<List<JourneyLeg>> - list of journeys
             val journeys = raptorLibrary?.getOptimizedPaths(
                 originStopIds = originStopIds,
@@ -121,23 +325,30 @@ class RaptorRepository(private val context: Context) {
                 departureTime = depTime
             ) ?: emptyList()
 
-            // Build a map from stop ID to Stop for name lookup
-            val stopById = stopsCache.associateBy { it.id }
+            if (DEBUG_LOGGING) {
+                Log.d("RaptorRepository", "getOptimizedPaths: Raptor returned ${journeys.size} raw journeys")
+            }
 
-            journeys.mapNotNull { legs ->
-                if (legs.isEmpty()) return@mapNotNull null
-                
+            val results = journeys.mapNotNull { legs ->
+                if (legs.isEmpty()) {
+                    return@mapNotNull null
+                }
+
                 val journeyLegs = legs.mapNotNull { leg ->
-                    // Find stop names from the cached stops by matching index position
-                    // The library uses stop indices, so we need to match by position in stopsCache
-                    val fromStop = stopsCache.getOrNull(leg.fromStopIndex)
-                    val toStop = stopsCache.getOrNull(leg.toStopIndex)
-                    
-                    if (fromStop == null || toStop == null) return@mapNotNull null
-                    
-                    // Map intermediate stops
+                    // Use HashMap index for O(1) stop lookup instead of list.getOrNull()
+                    val fromStop = stopsByIndex[leg.fromStopIndex]
+                    val toStop = stopsByIndex[leg.toStopIndex]
+
+                    if (fromStop == null || toStop == null) {
+                        if (DEBUG_LOGGING) {
+                            Log.w("RaptorRepository", "getOptimizedPaths: Stop not found - fromIdx=${leg.fromStopIndex}, toIdx=${leg.toStopIndex}")
+                        }
+                        return@mapNotNull null
+                    }
+
+                    // Map intermediate stops using HashMap index
                     val intermediateStops = leg.intermediateStopIndices.mapIndexedNotNull { idx, stopIndex ->
-                        val stop = stopsCache.getOrNull(stopIndex)
+                        val stop = stopsByIndex[stopIndex]
                         val arrivalTime = leg.intermediateArrivalTimes.getOrNull(idx)
                         if (stop != null && arrivalTime != null) {
                             IntermediateStop(
@@ -162,25 +373,49 @@ class RaptorRepository(private val context: Context) {
                     )
                 }
                 
-                if (journeyLegs.isEmpty()) return@mapNotNull null
-                
+                if (journeyLegs.isEmpty()) {
+                    return@mapNotNull null
+                }
+
                 JourneyResult(
                     departureTime = legs.first().departureTime,
                     arrivalTime = legs.last().arrivalTime,
                     legs = journeyLegs
                 )
             }
+
+            // Store results in cache
+            if (results.isNotEmpty()) {
+                journeyCache.put(cacheKey, results)
+                journeyCacheTimestamps[cacheKey] = System.currentTimeMillis()
+            }
+
+            if (DEBUG_LOGGING) {
+                Log.d("RaptorRepository", "getOptimizedPaths: Returning ${results.size} journey results")
+            }
+            results
         } catch (e: Exception) {
             Log.e("RaptorRepository", "Error calculating paths: ${e.message}", e)
             emptyList()
         }
     }
 
-    private suspend fun ensureInitialized() {
-        if (!isInitialized) {
-            initialize()
-        }
+    /**
+     * Build a cache key for journey results.
+     * Sorts IDs to ensure same key regardless of order.
+     */
+    private fun buildCacheKey(originIds: List<Int>, destIds: List<Int>, time: Int): String {
+        val sortedOrigin = originIds.sorted().joinToString(",")
+        val sortedDest = destIds.sorted().joinToString(",")
+        return "$sortedOrigin|$sortedDest|$time"
     }
+
+    private fun formatTimeFromSeconds(seconds: Int): String {
+        val hours = seconds / 3600
+        val minutes = (seconds % 3600) / 60
+        return "%02d:%02d".format(hours, minutes)
+    }
+
 
     private fun getCurrentTimeInSeconds(): Int {
         val calendar = Calendar.getInstance()

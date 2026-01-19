@@ -73,8 +73,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pelotcl.app.data.repository.JourneyLeg
 import com.pelotcl.app.data.repository.JourneyResult
-import com.pelotcl.app.data.repository.RaptorRepository
-import com.pelotcl.app.data.repository.RaptorStop
 import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.ui.theme.Gray200
 import com.pelotcl.app.ui.theme.Gray700
@@ -87,6 +85,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.maplibre.android.geometry.LatLng
+import android.util.Log
 
 /**
  * Represents a selected stop for the itinerary
@@ -121,12 +120,22 @@ fun ItineraryScreen(
         )
     }
     
-    val raptorRepository = remember { RaptorRepository(context) }
-    
-    // Stop selection states
+    // Use shared RaptorRepository from ViewModel (kept alive during app lifetime)
+    val raptorRepository = viewModel.raptorRepository
+
+    // Track if Raptor is ready
+    var isRaptorReady by remember { mutableStateOf(raptorRepository.isReady()) }
+
+    // Stop selection states - initialize with names immediately
     var departureStop by remember { mutableStateOf<SelectedStop?>(null) }
-    var arrivalStop by remember { mutableStateOf<SelectedStop?>(null) }
-    
+    var arrivalStop by remember {
+        mutableStateOf(
+            if (destinationStopName.isNotBlank()) {
+                SelectedStop(name = destinationStopName, stopIds = emptyList())
+            } else null
+        )
+    }
+
     // Search states
     var departureQuery by remember { mutableStateOf("") }
     var arrivalQuery by remember { mutableStateOf("") }
@@ -140,13 +149,23 @@ fun ItineraryScreen(
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     
-    // Initialize raptor and set default stops
+    // Initialize raptor (only if not already initialized) and resolve stop IDs
     LaunchedEffect(Unit) {
-        raptorRepository.initialize()
-        
-        // Set arrival stop from the destination
+        Log.d("ItineraryScreen", "Checking Raptor repository... isReady=${raptorRepository.isReady()}")
+
+        // Initialize Raptor if not ready
+        if (!raptorRepository.isReady()) {
+            Log.d("ItineraryScreen", "Initializing Raptor repository...")
+            raptorRepository.initialize()
+        }
+
+        isRaptorReady = true
+        Log.d("ItineraryScreen", "Raptor ready. Destination: '$destinationStopName', UserLocation: $userLocation")
+
+        // Resolve arrival stop IDs from the destination name
         if (destinationStopName.isNotBlank()) {
             val arrivalResults = raptorRepository.searchStopsByName(destinationStopName)
+            Log.d("ItineraryScreen", "Arrival search for '$destinationStopName': found ${arrivalResults.size} stops - ${arrivalResults.map { "${it.name}(${it.id})" }}")
             if (arrivalResults.isNotEmpty()) {
                 arrivalStop = SelectedStop(
                     name = destinationStopName,
@@ -161,9 +180,11 @@ fun ItineraryScreen(
                 latitude = userLocation.latitude,
                 longitude = userLocation.longitude
             )
+            Log.d("ItineraryScreen", "Closest stop to $userLocation: ${closestStop?.name} (id=${closestStop?.id})")
             if (closestStop != null) {
                 // Get all stop IDs with the same name
                 val allStopsWithName = raptorRepository.searchStopsByName(closestStop.name)
+                Log.d("ItineraryScreen", "Departure search for '${closestStop.name}': found ${allStopsWithName.size} stops - ${allStopsWithName.map { "${it.name}(${it.id})" }}")
                 departureStop = SelectedStop(
                     name = closestStop.name,
                     stopIds = allStopsWithName.map { it.id }
@@ -198,24 +219,41 @@ fun ItineraryScreen(
         }
     }
     
-    // Calculate journey when both stops are selected
-    LaunchedEffect(departureStop, arrivalStop) {
-        if (departureStop != null && arrivalStop != null) {
+    // Calculate journey when both stops are selected and have IDs resolved
+    LaunchedEffect(departureStop, arrivalStop, isRaptorReady) {
+        if (departureStop != null && arrivalStop != null &&
+            departureStop!!.stopIds.isNotEmpty() && arrivalStop!!.stopIds.isNotEmpty()) {
             isLoading = true
             errorMessage = null
             journeys = emptyList()
             
+            Log.d("ItineraryScreen", "Calculating journey from '${departureStop!!.name}' (ids=${departureStop!!.stopIds}) to '${arrivalStop!!.name}' (ids=${arrivalStop!!.stopIds})")
+
             scope.launch {
                 try {
-                    val results = raptorRepository.getOptimizedPaths(
+                    // Try with current time first
+                    var results = raptorRepository.getOptimizedPaths(
                         originStopIds = departureStop!!.stopIds,
                         destinationStopIds = arrivalStop!!.stopIds
                     )
+
+                    // If no results with current time, try with 9:00 AM as fallback test
+                    if (results.isEmpty()) {
+                        Log.d("ItineraryScreen", "No results with current time, trying with 9:00 AM...")
+                        results = raptorRepository.getOptimizedPaths(
+                            originStopIds = departureStop!!.stopIds,
+                            destinationStopIds = arrivalStop!!.stopIds,
+                            departureTimeSeconds = 9 * 3600 // 9:00 AM
+                        )
+                    }
+
+                    Log.d("ItineraryScreen", "Journey results: ${results.size} journeys found")
                     journeys = results
                     if (results.isEmpty()) {
                         errorMessage = "Aucun itinéraire trouvé"
                     }
                 } catch (e: Exception) {
+                    Log.e("ItineraryScreen", "Error calculating journey", e)
                     errorMessage = "Erreur lors du calcul de l'itinéraire"
                 } finally {
                     isLoading = false

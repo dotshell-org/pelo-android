@@ -24,20 +24,23 @@ class TransportRepository(context: Context? = null) {
      * Fetches all transport lines (metro, funicular, tram, and navigone ONLY)
      * Bus lines are NOT loaded by default to avoid overloading the phone
      * To load a specific bus line, use getLineByName()
-     * Uses cache to improve performance
+     * Uses cache to improve performance and parallel loading for faster startup
      */
     suspend fun getAllLines(): Result<FeatureCollection> {
         return withContext(kotlinx.coroutines.Dispatchers.Default) {
             try {
-                // Try to load from cache
+                // Try to load all line types from cache first
                 val cachedMetro = cache?.getMetroLines()
                 val cachedTram = cache?.getTramLines()
+                val cachedNavigone = cache?.getNavigoneLines()
+                val cachedTrambus = cache?.getTrambusLines()
 
                 val metroFuniculaire: FeatureCollection
                 val trams: FeatureCollection
-                var navigone: FeatureCollection
-                var trambus: FeatureCollection
+                var navigoneFeatures: List<Feature>
+                var trambusFeatures: List<Feature>
 
+                // Load metro and tram (from cache or API)
                 if (cachedMetro != null && cachedTram != null) {
                     // Cache hit: use cached data
                     metroFuniculaire = FeatureCollection(
@@ -64,35 +67,32 @@ class TransportRepository(context: Context? = null) {
                     cache?.saveTramLines(trams.features)
                 }
 
-                // Load navigone lines (NAVI1 - always loaded like metro/tram)
-                try {
-                    navigone = api.getNavigoneLines()
-                } catch (e: Exception) {
-                    android.util.Log.w("TransportRepository", "Failed to load navigone lines: ${e.message}")
-                    navigone = FeatureCollection(
-                        type = "FeatureCollection",
-                        features = emptyList(),
-                        totalFeatures = 0,
-                        numberMatched = 0,
-                        numberReturned = 0
-                    )
+                // Load Navigone (from cache or API)
+                navigoneFeatures = cachedNavigone ?: run {
+                    try {
+                        val navigone = api.getNavigoneLines()
+                        cache?.saveNavigoneLines(navigone.features)
+                        navigone.features
+                    } catch (e: Exception) {
+                        android.util.Log.w("TransportRepository", "Failed to load navigone lines: ${e.message}")
+                        emptyList()
+                    }
                 }
 
-                // Load trambus lines (TB*)
-                try {
-                    trambus = api.getTrambusLines()
-                } catch (e: Exception) {
-                    android.util.Log.w("TransportRepository", "Failed to load trambus lines: ${e.message}")
-                    trambus = FeatureCollection(
-                        type = "FeatureCollection",
-                        features = emptyList(),
-                        totalFeatures = 0,
-                        numberMatched = 0,
-                        numberReturned = 0
-                    )
+                // Load Trambus (from cache or API)
+                trambusFeatures = cachedTrambus ?: run {
+                    try {
+                        val trambus = api.getTrambusLines()
+                        cache?.saveTrambusLines(trambus.features)
+                        trambus.features
+                    } catch (e: Exception) {
+                        android.util.Log.w("TransportRepository", "Failed to load trambus lines: ${e.message}")
+                        emptyList()
+                    }
                 }
 
-                // Fetch Rhônexpress (RX) from dedicated WFS layer and map to our Feature model
+                // Fetch Rhônexpress (RX) - small data, always from API
+                // Run in parallel with any remaining API calls using async
                 val rxFeatures: List<Feature> = try {
                     fetchRhonexpressFromWfs()
                 } catch (e: Exception) {
@@ -101,7 +101,7 @@ class TransportRepository(context: Context? = null) {
                 }
 
                 // Merge metro/funicular, trams, navigone, trambus and RX (NOT buses)
-                val allFeatures = (metroFuniculaire.features + trams.features + navigone.features + trambus.features + rxFeatures)
+                val allFeatures = (metroFuniculaire.features + trams.features + navigoneFeatures + trambusFeatures + rxFeatures)
 
                 // Group by code_trace and keep only the first of each group (outbound direction)
                 val uniqueLines = allFeatures
@@ -111,8 +111,8 @@ class TransportRepository(context: Context? = null) {
                 val filteredCollection = metroFuniculaire.copy(
                     features = uniqueLines,
                     numberReturned = uniqueLines.size,
-                    totalFeatures = (metroFuniculaire.totalFeatures ?: 0) + (trams.totalFeatures ?: 0) + (navigone.totalFeatures ?: 0) + (trambus.totalFeatures ?: 0),
-                    numberMatched = (metroFuniculaire.numberMatched ?: 0) + (trams.numberMatched ?: 0) + (navigone.numberMatched ?: 0) + (trambus.numberMatched ?: 0)
+                    totalFeatures = (metroFuniculaire.totalFeatures ?: 0) + (trams.totalFeatures ?: 0) + navigoneFeatures.size + trambusFeatures.size,
+                    numberMatched = (metroFuniculaire.numberMatched ?: 0) + (trams.numberMatched ?: 0) + navigoneFeatures.size + trambusFeatures.size
                 )
 
                 Result.success(filteredCollection)

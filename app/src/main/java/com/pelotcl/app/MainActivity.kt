@@ -68,15 +68,57 @@ import com.pelotcl.app.ui.screens.SettingsScreen
 import com.pelotcl.app.ui.theme.PeloTheme
 import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
+import com.pelotcl.app.data.api.RetrofitInstance
+import com.pelotcl.app.data.cache.TransportCache
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import org.maplibre.android.geometry.LatLng
 
 class MainActivity : ComponentActivity() {
+
+    // Application-level coroutine scope for early background work
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Initialize HTTP cache early for network optimization
+        RetrofitInstance.initialize(applicationContext)
+
+        // Preload disk cache, SQLite, and Raptor in parallel for faster startup
+        // This runs before UI is shown, so data is ready when needed
+        appScope.launch {
+            try {
+                // Parallel cache, SQLite, and Raptor warmup
+                val cacheJob = launch {
+                    val cache = TransportCache.getInstance(applicationContext)
+                    cache.preloadFromDisk()
+                }
+                val sqliteJob = launch {
+                    val schedulesRepo = com.pelotcl.app.data.gtfs.SchedulesRepository(applicationContext)
+                    schedulesRepo.warmupDatabase()
+                }
+                // Preload Raptor library in background (deferred slightly to prioritize UI)
+                // Fire and forget - doesn't need to complete before UI shows
+                launch {
+                    delay(300) // Small delay to let UI start rendering
+                    val raptorRepo = com.pelotcl.app.data.repository.RaptorRepository(applicationContext)
+                    raptorRepo.initialize()
+                    android.util.Log.d("MainActivity", "Raptor preloaded at startup")
+                }
+                // Wait for cache and SQLite (critical for UI), Raptor can complete later
+                cacheJob.join()
+                sqliteJob.join()
+            } catch (e: Exception) {
+                android.util.Log.w("MainActivity", "Startup preload failed: ${e.message}")
+            }
+        }
+
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.light(
                 android.graphics.Color.TRANSPARENT,
