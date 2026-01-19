@@ -88,6 +88,7 @@ class JourneyCache private constructor(context: Context) {
          */
         fun clearAllCaches() {
             cacheScope.launch {
+                // Capture instance in local variable to avoid race condition with volatile INSTANCE
                 val instance = INSTANCE
                 if (instance != null) {
                     instance.clearAll()
@@ -261,9 +262,10 @@ class JourneyCache private constructor(context: Context) {
     }
 
     private fun getCacheFile(cacheKey: String): File {
-        // Sanitize key for filename using URL encoding to handle all invalid characters
+        // Sanitize key for filename using URL encoding to handle all invalid filename characters
+        // URLEncoder converts spaces to '+', but we replace with '_' for better readability in filenames
         val safeKey = URLEncoder.encode(cacheKey, StandardCharsets.UTF_8)
-            .replace("+", "_") // Replace + with _ for readability
+            .replace("+", "_")
         return File(cacheDir, "$CACHE_FILE_PREFIX$safeKey$CACHE_FILE_SUFFIX")
     }
 
