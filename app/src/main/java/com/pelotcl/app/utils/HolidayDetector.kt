@@ -1,5 +1,6 @@
 package com.pelotcl.app.utils
 
+import android.annotation.SuppressLint
 import android.content.Context
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -27,6 +28,7 @@ class HolidayDetector(private val context: Context) {
         return context.assets.open(fileName).bufferedReader().use { it.readText() }
     }
 
+    @SuppressLint("NewApi")
     private fun parseHolidays(jsonString: String): List<Holiday> {
         val jsonObject = JSONObject(jsonString)
         val holidaysArray = jsonObject.getJSONArray("holidays")
@@ -48,6 +50,7 @@ class HolidayDetector(private val context: Context) {
         return parsedHolidays
     }
 
+    @SuppressLint("NewApi")
     fun isSchoolHoliday(date: LocalDate): Boolean {
         return holidays.any { holiday ->
             !date.isBefore(holiday.startDate) && (holiday.endDate == null || !date.isAfter(holiday.endDate))
