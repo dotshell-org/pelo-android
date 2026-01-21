@@ -32,7 +32,7 @@ import kotlin.math.sqrt
  * UI state for transport lines
  */
 sealed class TransportLinesUiState {
-    object Loading : TransportLinesUiState()
+    data object Loading : TransportLinesUiState()
     data class Success(val lines: List<Feature>) : TransportLinesUiState()
     data class Error(val message: String) : TransportLinesUiState()
 }
@@ -41,7 +41,7 @@ sealed class TransportLinesUiState {
  * UI state for transport stops
  */
 sealed class TransportStopsUiState {
-    object Loading : TransportStopsUiState()
+    data object Loading : TransportStopsUiState()
     data class Success(val stops: List<StopFeature>) : TransportStopsUiState()
     data class Error(val message: String) : TransportStopsUiState()
 }
@@ -53,8 +53,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val repository = TransportRepository(application.applicationContext)
 
-    // Shared RaptorRepository instance - kept alive during app lifetime
-    val raptorRepository = RaptorRepository(application.applicationContext)
+    // Shared RaptorRepository singleton - kept alive during app lifetime
+    val raptorRepository = RaptorRepository.getInstance(application.applicationContext)
 
     private val _uiState = MutableStateFlow<TransportLinesUiState>(TransportLinesUiState.Loading)
     val uiState: StateFlow<TransportLinesUiState> = _uiState.asStateFlow()
@@ -199,7 +199,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             try {
                 repository.getAllLines()
                     .onSuccess { collection ->
-                        collection.features.count { it.properties.ligne.equals("RX", ignoreCase = true) }
                         _uiState.value = TransportLinesUiState.Success(collection.features)
                     }
                     .onFailure { e ->
@@ -227,6 +226,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      * Clears all cached data for performance optimization.
      * Call when data sources are updated.
      */
+    @Suppress("unused") // Public API for cache invalidation when GTFS data is updated
     fun clearAllCaches() {
         lineStopsCache.evictAll()
         connectionsIndex = emptyMap()
@@ -320,6 +320,14 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                         val raptorTime = System.currentTimeMillis() - raptorStart
                         Log.d("TransportViewModel", "Raptor preloaded in ${raptorTime}ms")
                     }
+
+                    // Preload journey cache from disk (recent itineraries)
+                    raptorRepository.preloadJourneyCache()
+                    val cacheStats = raptorRepository.getCacheStats()
+                    Log.d("TransportViewModel", "Journey cache preloaded: ${cacheStats.memoryEntries} in memory, ${cacheStats.diskEntries} on disk (${cacheStats.diskSizeKB}KB)")
+
+                    // Cleanup expired cache entries (runs in background)
+                    raptorRepository.cleanupExpiredCache()
                 }
 
             } catch (t: Throwable) {
@@ -654,12 +662,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
                     // Determine main trace direction and convert it to letter (A or R)
                     // Be defensive: API may return null sens unexpectedly, avoid NPEs
-                    val sensUpper = try {
-                        mainTrace.properties.sens.uppercase()
-                    } catch (e: Exception) {
-                        Log.e("TransportViewModel", "getStopsForLine: exception ${e.message}")
-                        ""
-                    }
+                    val sensUpper = mainTrace.properties.sens?.uppercase() ?: ""
                     val mainDirection = when (sensUpper) {
                         "ALLER" -> "A"
                         "RETOUR" -> "R"
@@ -668,8 +671,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
                     // Filter stops to keep only those that match the main direction
                     val directionStops = lineStops.filter { stop ->
-                        // Be defensive: desserte can be null/blank in some rare cases
-                        val desserte = try { stop.properties.desserte } catch (_: Exception) { "" }
+                        // Be defensive: desserte can be blank in some rare cases
+                        val desserte = stop.properties.desserte
                         // Look for "86:A" or "86:R" (or "NAVI1:A" for NAV1) in the desserte
                         val matches = desserte.split(",").any { line ->
                             val trimmed = line.trim()

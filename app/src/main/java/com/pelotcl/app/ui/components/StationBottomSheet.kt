@@ -1,5 +1,6 @@
 package com.pelotcl.app.ui.components
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -13,8 +14,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Accessible
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Accessible
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -23,6 +24,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -135,8 +137,6 @@ fun StationBottomSheet(
     onDismiss: () -> Unit,
     onLineClick: (String) -> Unit = {}
 ) {
-    val context = LocalContext.current
-    
     if (stationInfo != null) {
         val content = @Composable {
             Column(
@@ -162,7 +162,7 @@ fun StationBottomSheet(
                     // PMR icon if station is accessible
                     if (stationInfo.isPmr) {
                         Icon(
-                            imageVector = Icons.Default.Accessible,
+                            imageVector = Icons.AutoMirrored.Filled.Accessible,
                             contentDescription = "Station accessible PMR",
                             tint = Color(0xFF2563EB),
                             modifier = Modifier.size(24.dp)
@@ -215,15 +215,23 @@ fun StationBottomSheet(
 /**
  * List item for a transport line with next departure times
  */
+@SuppressLint("ComposeBackingChainViolation") // Required for dynamic resource loading
+// Suppress warnings for dynamic resource loading and Compose local access in lambda
+@Suppress("DiscouragedApi", "ComposeLocalCurrentInLambda")
 @Composable
 private fun LineListItem(
     lineName: String,
     onClick: () -> Unit
 ) {
+    @Suppress("ComposeLocalContext") // Context access needed for dynamic resource loading
     val context = LocalContext.current
-    val drawableName = getDrawableNameForLine(lineName)
-    val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
-    
+    val resources = context.resources
+    val packageName = context.packageName
+    val resourceId = remember(lineName) {
+        val drawableName = getDrawableNameForLine(lineName)
+        resources.getIdentifier(drawableName, "drawable", packageName)
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
