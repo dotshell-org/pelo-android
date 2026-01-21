@@ -75,7 +75,7 @@ import org.maplibre.android.style.sources.GeoJsonSource
 
 private const val PRIORITY_STOPS_MIN_ZOOM = 12.5f
 private const val TRAM_STOPS_MIN_ZOOM = 14.0f
-private const val SECONDARY_STOPS_MIN_ZOOM = 15f
+private const val SECONDARY_STOPS_MIN_ZOOM = 17.0f
 private const val SELECTED_STOP_MIN_ZOOM = 9.0f
 
 private fun isMetroTramOrFunicular(lineName: String): Boolean {
@@ -92,6 +92,23 @@ private fun isMetroTramOrFunicular(lineName: String): Boolean {
 
 private fun isTemporaryBus(lineName: String): Boolean {
     return !isMetroTramOrFunicular(lineName)
+}
+
+/**
+ * Returns the mode icon name for a bus line.
+ * - Chrono lines (C1, C2, etc.) -> mode_chrono
+ * - JD lines (JD...) -> mode_jd
+ * - Regular bus -> mode_bus
+ * Returns null for lignes fortes (metro, tram, funicular)
+ */
+private fun getModeIconForLine(lineName: String): String? {
+    val upperName = lineName.uppercase()
+    return when {
+        isMetroTramOrFunicular(lineName) -> null // No mode icon for lignes fortes
+        upperName.startsWith("C") && upperName.substring(1).toIntOrNull() != null -> "mode_chrono"
+        upperName.startsWith("JD") -> "mode_jd"
+        else -> "mode_bus"
+    }
 }
 
 data class AllSchedulesInfo(
@@ -1221,13 +1238,41 @@ private suspend fun addStopsToMap(
             }
         }
 
-        stops.forEach { stop ->
-            val drawableNames = BusIconHelper.getAllDrawableNamesForStop(stop)
-            val availableNames = drawableNames.filter { name -> checkIconAvailable(name) }
+        // Add mode icons to required icons
+        listOf("mode_bus", "mode_chrono", "mode_jd").forEach { modeIcon ->
+            if (checkIconAvailable(modeIcon)) {
+                requiredIcons.add(modeIcon)
+            }
+        }
 
-            if (availableNames.isNotEmpty()) {
-                requiredIcons.addAll(availableNames)
-                val n = availableNames.size
+        stops.forEach { stop ->
+            val lineNames = BusIconHelper.getAllLinesForStop(stop)
+            if (lineNames.isEmpty()) return@forEach
+
+            // Separate lignes fortes from bus lines
+            val lignesFortes = lineNames.filter { isMetroTramOrFunicular(it) }
+            val busLines = lineNames.filter { !isMetroTramOrFunicular(it) }
+
+            // Add line icons for lignes fortes only
+            lignesFortes.forEach { lineName ->
+                val drawableName = BusIconHelper.getDrawableNameForLineName(lineName)
+                if (checkIconAvailable(drawableName)) {
+                    requiredIcons.add(drawableName)
+                }
+            }
+
+            // Calculate how many icons will be displayed for this stop
+            // = valid lignes fortes icons + unique mode icons for bus lines
+            val uniqueModes = busLines.mapNotNull { getModeIconForLine(it) }.distinct()
+                .filter { checkIconAvailable(it) }
+
+            val validLignesFortes = lignesFortes.count { lineName ->
+                val drawableName = BusIconHelper.getDrawableNameForLineName(lineName)
+                checkIconAvailable(drawableName)
+            }
+
+            val n = validLignesFortes + uniqueModes.size
+            if (n > 0) {
                 val start = -(n - 1)
                 var slot = start
                 repeat(n) {
@@ -1632,31 +1677,47 @@ private fun createStopsGeoJsonFromStops(
         val lineNamesAll = BusIconHelper.getAllLinesForStop(stop)
         if (lineNamesAll.isEmpty()) return@forEach
 
-        val drawableNamesAll = BusIconHelper.getAllDrawableNamesForStop(stop)
+        val hasTram = lineNamesAll.any { it.uppercase().startsWith("T") }
 
-        val validPairs = lineNamesAll.zip(drawableNamesAll).filter { (_, drawableName) ->
-            validIcons.contains(drawableName)
+        // Separate lignes fortes from bus lines
+        val lignesFortes = lineNamesAll.filter { isMetroTramOrFunicular(it) }
+        val busLines = lineNamesAll.filter { !isMetroTramOrFunicular(it) }
+
+        // For bus lines, get unique modes (mode_bus, mode_chrono, mode_jd)
+        val uniqueModes = busLines.mapNotNull { getModeIconForLine(it) }.distinct()
+
+        // Build the list of icons to display:
+        // - For lignes fortes: individual line icons
+        // - For bus lines: unique mode icons
+        val iconsToDisplay = mutableListOf<Pair<String, Int>>() // (iconName, stopPriority)
+
+        // Add lignes fortes icons
+        lignesFortes.forEach { lineName ->
+            val upperName = lineName.uppercase()
+            val drawableName = BusIconHelper.getDrawableNameForLineName(lineName)
+            if (validIcons.contains(drawableName)) {
+                val priority = when {
+                    isMetroTramOrFunicular(upperName) && !upperName.startsWith("T") -> 2
+                    upperName.startsWith("T") -> 1
+                    else -> 0
+                }
+                iconsToDisplay.add(drawableName to priority)
+            }
         }
 
-        if (validPairs.isEmpty()) return@forEach
+        // Add mode icons for bus lines (only unique modes)
+        uniqueModes.forEach { modeIcon ->
+            if (validIcons.contains(modeIcon)) {
+                iconsToDisplay.add(modeIcon to 0) // Bus stops have priority 0
+            }
+        }
 
-        val lineNames = validPairs.map { it.first }
-        val drawableNames = validPairs.map { it.second }
+        if (iconsToDisplay.isEmpty()) return@forEach
 
-        val hasTram = lineNames.any { it.uppercase().startsWith("T") }
-
-        val n = drawableNames.size
+        val n = iconsToDisplay.size
         var slot = -(n - 1)
 
-        drawableNames.forEachIndexed { index, iconName ->
-            val lineName = lineNames[index].uppercase()
-
-            val stopPriority = when {
-                isMetroTramOrFunicular(lineName) && !lineName.startsWith("T") -> 2
-                lineName.startsWith("T") -> 1
-                else -> 0
-            }
-
+        iconsToDisplay.forEach { (iconName, stopPriority) ->
             val pointFeature = JsonObject().apply {
                 addProperty("type", "Feature")
 
