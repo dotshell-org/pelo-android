@@ -55,6 +55,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -80,6 +81,8 @@ import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LineColorHelper
+import com.pelotcl.app.utils.ListItemRecompositionCounter
+import com.pelotcl.app.utils.RecompositionCounter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -414,12 +417,14 @@ fun ItineraryScreen(
                             .padding(horizontal = 16.dp)
                     ) {
                         journeys.forEachIndexed { index, journey ->
-                            JourneyCard(journey = journey)
-                            if (index < journeys.size - 1) {
-                                HorizontalDivider(
-                                    color = Color.White.copy(alpha = 0.2f),
-                                    modifier = Modifier.padding(vertical = 32.dp)
-                                )
+                            key(journey.departureTime) {
+                                JourneyCard(journey = journey)
+                                if (index < journeys.size - 1) {
+                                    HorizontalDivider(
+                                        color = Color.White.copy(alpha = 0.2f),
+                                        modifier = Modifier.padding(vertical = 32.dp)
+                                    )
+                                }
                             }
                         }
                         Spacer(modifier = Modifier.height(16.dp))
@@ -586,6 +591,9 @@ private fun SmallLineBadge(lineName: String) {
 
 @Composable
 private fun JourneyCard(journey: JourneyResult) {
+    // Debug: mesurer les recompositions de cette card
+    ListItemRecompositionCounter("JourneyList", journey.departureTime)
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -637,11 +645,13 @@ private fun JourneyCard(journey: JourneyResult) {
         
         // Journey legs
         journey.legs.forEachIndexed { index, leg ->
-            JourneyLegItem(
-                leg = leg,
-                isFirst = index == 0,
-                isLast = index == journey.legs.size - 1
-            )
+            key("${leg.fromStopId}_${leg.departureTime}") {
+                JourneyLegItem(
+                    leg = leg,
+                    isFirst = index == 0,
+                    isLast = index == journey.legs.size - 1
+                )
+            }
         }
     }
 }
@@ -652,6 +662,9 @@ private fun JourneyLegItem(
     isFirst: Boolean,
     isLast: Boolean
 ) {
+    // Debug: mesurer les recompositions de ce leg
+    ListItemRecompositionCounter("JourneyLegs", "${leg.fromStopId}_${leg.departureTime}")
+
     val context = LocalContext.current
     val lineColor = if (leg.isWalking) Gray700 else Color(LineColorHelper.getColorForLineString(leg.routeName ?: ""))
     

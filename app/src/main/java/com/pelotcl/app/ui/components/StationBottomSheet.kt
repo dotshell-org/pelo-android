@@ -24,6 +24,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.pelotcl.app.ui.theme.Gray200
 import com.pelotcl.app.ui.theme.Gray700
+import com.pelotcl.app.utils.ListItemRecompositionCounter
 
 /**
  * Station data for display in the bottom sheet
@@ -180,17 +182,19 @@ fun StationBottomSheet(
                 ) {
                     val sortedLines = sortLines(stationInfo.lignes)
                     sortedLines.forEachIndexed { index, ligne ->
-                        LineListItem(
-                            lineName = ligne,
-                            onClick = { onLineClick(ligne) }
-                        )
-                        
-                        // Divider between lines, except after last
-                        if (index < sortedLines.size - 1) {
-                            HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 4.dp),
-                                color = Gray200
+                        key(ligne) {
+                            LineListItem(
+                                lineName = ligne,
+                                onClick = { onLineClick(ligne) }
                             )
+
+                            // Divider between lines, except after last
+                            if (index < sortedLines.size - 1) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(vertical = 4.dp),
+                                    color = Gray200
+                                )
+                            }
                         }
                     }
                 }
@@ -223,6 +227,9 @@ private fun LineListItem(
     lineName: String,
     onClick: () -> Unit
 ) {
+    // Debug: mesurer les recompositions de cet item
+    ListItemRecompositionCounter("StationLines", lineName)
+
     @Suppress("ComposeLocalContext") // Context access needed for dynamic resource loading
     val context = LocalContext.current
     val resources = context.resources

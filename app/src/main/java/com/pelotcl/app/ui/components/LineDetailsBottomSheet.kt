@@ -46,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -68,6 +69,7 @@ import com.pelotcl.app.ui.viewmodel.TransportLinesUiState
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LineColorHelper
+import com.pelotcl.app.utils.ListItemRecompositionCounter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -291,13 +293,15 @@ fun LineDetailsBottomSheet(
                             } else {
                                 val lineColor = getLineColor(lineInfo.lineName)
                                 displayedStops.forEachIndexed { index, stop ->
-                                    StopItemWithLine(
-                                        stop = stop,
-                                        lineColor = lineColor,
-                                        isFirst = index == 0,
-                                        isLast = index == displayedStops.size - 1,
-                                        onStopClick = { onStopClick(stop.stopName) }
-                                    )
+                                    key(stop.stopId) {
+                                        StopItemWithLine(
+                                            stop = stop,
+                                            lineColor = lineColor,
+                                            isFirst = index == 0,
+                                            isLast = index == displayedStops.size - 1,
+                                            onStopClick = { onStopClick(stop.stopName) }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -501,6 +505,9 @@ private fun NextSchedulesSection(
 
 @Composable
 private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Boolean, isLast: Boolean, onStopClick: () -> Unit = {}) {
+    // Debug: mesurer les recompositions de cet item
+    ListItemRecompositionCounter("LineStops", stop.stopId)
+
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).height(IntrinsicSize.Min).clickable { onStopClick() },
         verticalAlignment = Alignment.CenterVertically
