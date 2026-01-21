@@ -222,6 +222,52 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     // Key = "lineName|currentStopName", Value = list of LineStopInfo
     private val lineStopsCache = LruCache<String, List<com.pelotcl.app.data.gtfs.LineStopInfo>>(30)
 
+    // === OPTIMIZATION: Pre-computed GeoJSON cache for stops ===
+    // Cached GeoJSON string for all stops (avoids re-computation on each map display)
+    private var cachedStopsGeoJson: String? = null
+    // Set of required icon names for the cached GeoJSON
+    private var cachedRequiredIcons: Set<String>? = null
+    // Hash of stops list to detect changes and invalidate cache
+    private var cachedStopsHash: Int = 0
+
+    // === OPTIMIZATION: Pre-loaded icon bitmaps cache ===
+    // Cached bitmaps for transport line icons (loaded once, reused)
+    private var cachedIconBitmaps: Map<String, android.graphics.Bitmap>? = null
+
+    /**
+     * Returns cached stops GeoJSON data if available and valid.
+     * Returns null if cache is invalid or stops have changed.
+     */
+    fun getCachedStopsGeoJson(currentStops: List<StopFeature>): Pair<String, Set<String>>? {
+        val currentHash = currentStops.hashCode()
+        return if (cachedStopsGeoJson != null && cachedRequiredIcons != null && currentHash == cachedStopsHash) {
+            Pair(cachedStopsGeoJson!!, cachedRequiredIcons!!)
+        } else {
+            null
+        }
+    }
+
+    /**
+     * Caches the GeoJSON data for stops.
+     */
+    fun cacheStopsGeoJson(stops: List<StopFeature>, geoJson: String, requiredIcons: Set<String>) {
+        cachedStopsHash = stops.hashCode()
+        cachedStopsGeoJson = geoJson
+        cachedRequiredIcons = requiredIcons
+    }
+
+    /**
+     * Returns cached icon bitmaps if available.
+     */
+    fun getCachedIconBitmaps(): Map<String, android.graphics.Bitmap>? = cachedIconBitmaps
+
+    /**
+     * Caches icon bitmaps for reuse.
+     */
+    fun cacheIconBitmaps(bitmaps: Map<String, android.graphics.Bitmap>) {
+        cachedIconBitmaps = bitmaps
+    }
+
     /**
      * Clears all cached data for performance optimization.
      * Call when data sources are updated.
@@ -231,6 +277,12 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         lineStopsCache.evictAll()
         connectionsIndex = emptyMap()
         cachedStops = null
+        // Clear GeoJSON cache
+        cachedStopsGeoJson = null
+        cachedRequiredIcons = null
+        cachedStopsHash = 0
+        // Clear icon bitmaps cache
+        cachedIconBitmaps = null
     }
 
     /**

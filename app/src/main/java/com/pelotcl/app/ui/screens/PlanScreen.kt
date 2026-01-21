@@ -471,7 +471,7 @@ fun PlanScreen(
                             sheetContentState = SheetContentState.STATION
                         }
                     }
-                }, scope = scope)
+                }, scope = scope, viewModel = viewModel)
             }
             else -> {}
         }
@@ -913,12 +913,9 @@ private fun filterMapStops(
 
     val linePropertyName = "has_line_${selectedLineName.uppercase()}"
 
+    // Filter layers by slot
     (-25..25).forEach { idx ->
-        val priorityLayerId = "$priorityLayerPrefix-$idx"
-        val tramLayerId = "$tramLayerPrefix-$idx"
-        val secondaryLayerId = "$secondaryLayerPrefix-$idx"
-
-        (style.getLayer(priorityLayerId) as? SymbolLayer)?.setFilter(
+        (style.getLayer("$priorityLayerPrefix-$idx") as? SymbolLayer)?.setFilter(
             Expression.all(
                 Expression.eq(Expression.get("stop_priority"), 2),
                 Expression.eq(Expression.get("slot"), idx),
@@ -926,7 +923,7 @@ private fun filterMapStops(
             )
         )
 
-        (style.getLayer(tramLayerId) as? SymbolLayer)?.let { layer ->
+        (style.getLayer("$tramLayerPrefix-$idx") as? SymbolLayer)?.let { layer ->
             layer.setFilter(
                 Expression.all(
                     Expression.eq(Expression.get("stop_priority"), 1),
@@ -937,7 +934,7 @@ private fun filterMapStops(
             layer.setMinZoom(PRIORITY_STOPS_MIN_ZOOM)
         }
 
-        (style.getLayer(secondaryLayerId) as? SymbolLayer)?.let { layer ->
+        (style.getLayer("$secondaryLayerPrefix-$idx") as? SymbolLayer)?.let { layer ->
             layer.setFilter(
                 Expression.all(
                     Expression.eq(Expression.get("stop_priority"), 0),
@@ -975,12 +972,9 @@ private fun filterMapStopsWithSelectedStop(
         val secondaryLayerPrefix = "transport-stops-layer-secondary"
         val linePropertyName = "has_line_${selectedLineName.uppercase()}"
 
+        // Filter layers by slot
         (-25..25).forEach { idx ->
-            val priorityLayerId = "$priorityLayerPrefix-$idx"
-            val tramLayerId = "$tramLayerPrefix-$idx"
-            val secondaryLayerId = "$secondaryLayerPrefix-$idx"
-
-            (style.getLayer(priorityLayerId) as? SymbolLayer)?.let { layer ->
+            (style.getLayer("$priorityLayerPrefix-$idx") as? SymbolLayer)?.let { layer ->
                 layer.setFilter(
                     Expression.all(
                         Expression.eq(Expression.get("stop_priority"), 2),
@@ -992,7 +986,7 @@ private fun filterMapStopsWithSelectedStop(
                 layer.setMinZoom(SELECTED_STOP_MIN_ZOOM)
             }
 
-            (style.getLayer(tramLayerId) as? SymbolLayer)?.let { layer ->
+            (style.getLayer("$tramLayerPrefix-$idx") as? SymbolLayer)?.let { layer ->
                 layer.setFilter(
                     Expression.all(
                         Expression.eq(Expression.get("stop_priority"), 1),
@@ -1004,7 +998,7 @@ private fun filterMapStopsWithSelectedStop(
                 layer.setMinZoom(SELECTED_STOP_MIN_ZOOM)
             }
 
-            (style.getLayer(secondaryLayerId) as? SymbolLayer)?.let { layer ->
+            (style.getLayer("$secondaryLayerPrefix-$idx") as? SymbolLayer)?.let { layer ->
                 layer.setFilter(
                     Expression.all(
                         Expression.eq(Expression.get("stop_priority"), 0),
@@ -1034,9 +1028,6 @@ private fun addCircleLayerForLineStops(
     allStops: List<com.pelotcl.app.data.model.StopFeature>,
     allLines: List<com.pelotcl.app.data.model.Feature>
 ) {
-    style.getLayer("line-stops-circles")?.let { style.removeLayer(it) }
-    style.getSource("line-stops-circles-source")?.let { style.removeSource(it) }
-
     fun normalizeStopName(name: String): String {
         return name.filter { it.isLetter() }.lowercase()
     }
@@ -1085,21 +1076,33 @@ private fun addCircleLayerForLineStops(
         add("features", features)
     }
 
-    val circlesSource = GeoJsonSource("line-stops-circles-source", circlesGeoJson.toString())
-    style.addSource(circlesSource)
-
-    val circlesLayer = org.maplibre.android.style.layers.CircleLayer("line-stops-circles", "line-stops-circles-source").apply {
-        setProperties(
-            PropertyFactory.circleRadius(6f),
-            PropertyFactory.circleColor("#FFFFFF"),
-            PropertyFactory.circleStrokeWidth(4.5f),
-            PropertyFactory.circleStrokeColor(lineColor),
-            PropertyFactory.circleOpacity(1.0f),
-            PropertyFactory.circleStrokeOpacity(1.0f)
+    // OPTIMIZATION: Use setGeoJson if source exists, otherwise create new source
+    val existingSource = style.getSource("line-stops-circles-source") as? GeoJsonSource
+    if (existingSource != null) {
+        // Update existing source data without recreating
+        existingSource.setGeoJson(circlesGeoJson.toString())
+        // Update layer color (stroke color may have changed for different line)
+        (style.getLayer("line-stops-circles") as? org.maplibre.android.style.layers.CircleLayer)?.setProperties(
+            PropertyFactory.circleStrokeColor(lineColor)
         )
-        setMinZoom(SELECTED_STOP_MIN_ZOOM)
+    } else {
+        // Create new source and layer
+        val circlesSource = GeoJsonSource("line-stops-circles-source", circlesGeoJson.toString())
+        style.addSource(circlesSource)
+
+        val circlesLayer = org.maplibre.android.style.layers.CircleLayer("line-stops-circles", "line-stops-circles-source").apply {
+            setProperties(
+                PropertyFactory.circleRadius(6f),
+                PropertyFactory.circleColor("#FFFFFF"),
+                PropertyFactory.circleStrokeWidth(4.5f),
+                PropertyFactory.circleStrokeColor(lineColor),
+                PropertyFactory.circleOpacity(1.0f),
+                PropertyFactory.circleStrokeOpacity(1.0f)
+            )
+            setMinZoom(SELECTED_STOP_MIN_ZOOM)
+        }
+        style.addLayer(circlesLayer)
     }
-    style.addLayer(circlesLayer)
 }
 
 private fun showAllMapLines(
@@ -1137,6 +1140,7 @@ private fun showAllMapStops(
     val tramLayerPrefix = "transport-stops-layer-tram"
     val secondaryLayerPrefix = "transport-stops-layer-secondary"
 
+    // Reset filters to show all stops (by slot)
     (-25..25).forEach { idx ->
         (style.getLayer("$priorityLayerPrefix-$idx") as? SymbolLayer)?.let { layer ->
             layer.setFilter(
@@ -1221,68 +1225,95 @@ private suspend fun addStopsToMap(
     stops: List<com.pelotcl.app.data.model.StopFeature>,
     context: android.content.Context,
     onStationClick: (StationInfo) -> Unit = {},
-    scope: CoroutineScope
+    scope: CoroutineScope,
+    viewModel: TransportViewModel? = null
 ) {
-    val (stopsGeoJson, requiredIcons, usedSlots) = withContext(Dispatchers.Default) {
-        val requiredIcons = mutableSetOf<String>()
+    // OPTIMIZATION: Try to use cached GeoJSON if available
+    val cachedData = viewModel?.getCachedStopsGeoJson(stops)
+
+    val (stopsGeoJson, requiredIcons, usedSlots) = if (cachedData != null) {
+        // Use cached data - skip expensive GeoJSON creation
+        // We need to recalculate usedSlots since it's not cached
         val usedSlots = mutableSetOf<Int>()
-
-        // Cache for resource existence check to avoid repetitive reflection calls
-        val iconAvailabilityCache = mutableMapOf<String, Boolean>()
-        @Suppress("DiscouragedApi") // Dynamic resource loading for transport line icons
-        fun checkIconAvailable(name: String): Boolean {
-            return iconAvailabilityCache.getOrPut(name) {
-                context.resources.getIdentifier(name, "drawable", context.packageName) != 0
-            }
-        }
-
-        // Add mode icons to required icons
-        listOf("mode_bus", "mode_chrono", "mode_jd").forEach { modeIcon ->
-            if (checkIconAvailable(modeIcon)) {
-                requiredIcons.add(modeIcon)
-            }
-        }
-
         stops.forEach { stop ->
             val lineNames = BusIconHelper.getAllLinesForStop(stop)
             if (lineNames.isEmpty()) return@forEach
-
-            // Separate lignes fortes from bus lines
             val lignesFortes = lineNames.filter { isMetroTramOrFunicular(it) }
             val busLines = lineNames.filter { !isMetroTramOrFunicular(it) }
-
-            // Add line icons for lignes fortes only
-            lignesFortes.forEach { lineName ->
-                val drawableName = BusIconHelper.getDrawableNameForLineName(lineName)
-                if (checkIconAvailable(drawableName)) {
-                    requiredIcons.add(drawableName)
-                }
-            }
-
-            // Calculate how many icons will be displayed for this stop
-            // = valid lignes fortes icons + unique mode icons for bus lines
             val uniqueModes = busLines.mapNotNull { getModeIconForLine(it) }.distinct()
-                .filter { checkIconAvailable(it) }
-
-            val validLignesFortes = lignesFortes.count { lineName ->
-                val drawableName = BusIconHelper.getDrawableNameForLineName(lineName)
-                checkIconAvailable(drawableName)
-            }
-
-            val n = validLignesFortes + uniqueModes.size
+            val n = lignesFortes.size + uniqueModes.size
             if (n > 0) {
-                val start = -(n - 1)
-                var slot = start
+                var slot = -(n - 1)
                 repeat(n) {
                     usedSlots.add(slot)
                     slot += 2
                 }
             }
         }
+        Triple(cachedData.first, cachedData.second, usedSlots)
+    } else {
+        // Compute GeoJSON and cache it
+        withContext(Dispatchers.Default) {
+            val requiredIcons = mutableSetOf<String>()
+            val usedSlots = mutableSetOf<Int>()
 
-        // Pass all stops to merge function, but only use required icons for filtering in GeoJSON creation
-        val stopsGeoJson = createStopsGeoJsonFromStops(stops, requiredIcons)
-        Triple(stopsGeoJson, requiredIcons, usedSlots)
+            // Cache for resource existence check to avoid repetitive reflection calls
+            val iconAvailabilityCache = mutableMapOf<String, Boolean>()
+            @Suppress("DiscouragedApi") // Dynamic resource loading for transport line icons
+            fun checkIconAvailable(name: String): Boolean {
+                return iconAvailabilityCache.getOrPut(name) {
+                    context.resources.getIdentifier(name, "drawable", context.packageName) != 0
+                }
+            }
+
+            // Add mode icons to required icons
+            listOf("mode_bus", "mode_chrono", "mode_jd").forEach { modeIcon ->
+                if (checkIconAvailable(modeIcon)) {
+                    requiredIcons.add(modeIcon)
+                }
+            }
+
+            stops.forEach { stop ->
+                val lineNames = BusIconHelper.getAllLinesForStop(stop)
+                if (lineNames.isEmpty()) return@forEach
+
+                // Separate lignes fortes from bus lines
+                val lignesFortes = lineNames.filter { isMetroTramOrFunicular(it) }
+                val busLines = lineNames.filter { !isMetroTramOrFunicular(it) }
+
+                // Add line icons for lignes fortes only
+                lignesFortes.forEach { lineName ->
+                    val drawableName = BusIconHelper.getDrawableNameForLineName(lineName)
+                    if (checkIconAvailable(drawableName)) {
+                        requiredIcons.add(drawableName)
+                    }
+                }
+
+                // Calculate usedSlots
+                val uniqueModes = busLines.mapNotNull { getModeIconForLine(it) }.distinct()
+                    .filter { checkIconAvailable(it) }
+                val validLignesFortes = lignesFortes.count { lineName ->
+                    val drawableName = BusIconHelper.getDrawableNameForLineName(lineName)
+                    checkIconAvailable(drawableName)
+                }
+                val n = validLignesFortes + uniqueModes.size
+                if (n > 0) {
+                    var slot = -(n - 1)
+                    repeat(n) {
+                        usedSlots.add(slot)
+                        slot += 2
+                    }
+                }
+            }
+
+            // Pass all stops to merge function, but only use required icons for filtering in GeoJSON creation
+            val stopsGeoJson = createStopsGeoJsonFromStops(stops, requiredIcons)
+
+            // Cache the result for future use
+            viewModel?.cacheStopsGeoJson(stops, stopsGeoJson, requiredIcons)
+
+            Triple(stopsGeoJson, requiredIcons, usedSlots)
+        }
     }
 
     map.getStyle { style ->
@@ -1291,53 +1322,61 @@ private suspend fun addStopsToMap(
         val tramLayerPrefix = "transport-stops-layer-tram"
         val secondaryLayerPrefix = "transport-stops-layer-secondary"
 
-        // Clean up previous layers
-        // Optimization: Reduce the range if possible, or track added layers.
-        // Assuming slots are within a reasonable range [-10, 10] for most cases, but keeping safe range for now
-        // to ensure no artifacts remain.
-        val layersToRemove = mutableListOf<String>()
+        // Clean up previous layers - remove all slot-based layers
         (-25..25).forEach { idx ->
-            layersToRemove.add("$priorityLayerPrefix-$idx")
-            layersToRemove.add("$tramLayerPrefix-$idx")
-            layersToRemove.add("$secondaryLayerPrefix-$idx")
+            style.getLayer("$priorityLayerPrefix-$idx")?.let { style.removeLayer(it) }
+            style.getLayer("$tramLayerPrefix-$idx")?.let { style.removeLayer(it) }
+            style.getLayer("$secondaryLayerPrefix-$idx")?.let { style.removeLayer(it) }
         }
-        // Batch removal if possible or just fast iterate
-        layersToRemove.forEach { id ->
-            if (style.getLayer(id) != null) {
-                style.removeLayer(id)
-            }
-        }
+        style.getLayer("clusters")?.let { style.removeLayer(it) }
+        style.getLayer("cluster-count")?.let { style.removeLayer(it) }
 
         style.getSource(sourceId)?.let { style.removeSource(it) }
 
-        // Optimize image loading: Load bitmaps in background, add to style in main thread
+        // OPTIMIZATION: Use cached bitmaps if available, otherwise load and cache
         scope.launch(Dispatchers.IO) {
-            @Suppress("DiscouragedApi") // Dynamic resource loading for transport line icons
-            val bitmaps: List<Pair<String, android.graphics.Bitmap>> = requiredIcons.mapNotNull { iconName ->
-                try {
-                    val resourceId = context.resources.getIdentifier(iconName, "drawable", context.packageName)
-                    if (resourceId != 0) {
-                        val drawable = ContextCompat.getDrawable(context, resourceId)
-                        drawable?.let { d ->
-                            val bitmap = if (d is android.graphics.drawable.BitmapDrawable) {
-                                d.bitmap
-                            } else {
-                                val bitmap = androidx.core.graphics.createBitmap(
-                                    d.intrinsicWidth.coerceAtLeast(1),
-                                    d.intrinsicHeight.coerceAtLeast(1),
-                                    android.graphics.Bitmap.Config.ARGB_8888
-                                )
-                                val canvas = android.graphics.Canvas(bitmap)
-                                d.setBounds(0, 0, canvas.width, canvas.height)
-                                d.draw(canvas)
-                                bitmap
+            val cachedBitmaps = viewModel?.getCachedIconBitmaps()
+
+            val bitmaps: Map<String, android.graphics.Bitmap> = if (cachedBitmaps != null && requiredIcons.all { cachedBitmaps.containsKey(it) }) {
+                // Use cached bitmaps - filter to only required icons
+                requiredIcons.mapNotNull { iconName ->
+                    cachedBitmaps[iconName]?.let { iconName to it }
+                }.toMap()
+            } else {
+                // Load bitmaps and cache them
+                @Suppress("DiscouragedApi") // Dynamic resource loading for transport line icons
+                val loadedBitmaps = requiredIcons.mapNotNull { iconName ->
+                    try {
+                        val resourceId = context.resources.getIdentifier(iconName, "drawable", context.packageName)
+                        if (resourceId != 0) {
+                            val drawable = ContextCompat.getDrawable(context, resourceId)
+                            drawable?.let { d ->
+                                val bitmap = if (d is android.graphics.drawable.BitmapDrawable) {
+                                    d.bitmap
+                                } else {
+                                    val bitmap = androidx.core.graphics.createBitmap(
+                                        d.intrinsicWidth.coerceAtLeast(1),
+                                        d.intrinsicHeight.coerceAtLeast(1),
+                                        android.graphics.Bitmap.Config.ARGB_8888
+                                    )
+                                    val canvas = android.graphics.Canvas(bitmap)
+                                    d.setBounds(0, 0, canvas.width, canvas.height)
+                                    d.draw(canvas)
+                                    bitmap
+                                }
+                                iconName to bitmap
                             }
-                            iconName to bitmap
-                        }
-                    } else null
-                } catch (_: Exception) {
-                    null
-                }
+                        } else null
+                    } catch (_: Exception) {
+                        null
+                    }
+                }.toMap()
+
+                // Merge with existing cache and save
+                val mergedBitmaps = (cachedBitmaps ?: emptyMap()) + loadedBitmaps
+                viewModel?.cacheIconBitmaps(mergedBitmaps)
+
+                loadedBitmaps
             }
 
             withContext(Dispatchers.Main) {
@@ -1389,14 +1428,14 @@ private suspend fun addStopsToMap(
                 style.addLayer(countLayer)
 
                 // 2. Individual Stops Icons (Unclustered)
-                // Use the calculated usedSlots to create only necessary layers
+                // OPTIMIZED: Create layers only for slots that are actually used
                 val iconSizesPriority = 0.7f
                 val iconSizesSecondary = 0.62f
 
                 usedSlots.sorted().forEach { idx ->
                     val yOffset = idx * 13f
 
-                    // Priority Stops (Metro, Funiculaire, Tram stations mainly)
+                    // Priority Stops (Metro, Funiculaire - stop_priority = 2)
                     val priorityLayer = SymbolLayer("$priorityLayerPrefix-$idx", sourceId).apply {
                         setProperties(
                             PropertyFactory.iconImage(Expression.get("icon")),
@@ -1417,28 +1456,28 @@ private suspend fun addStopsToMap(
                     }
                     style.addLayerBelow(priorityLayer, "clusters")
 
-                    // Tram Stops (Specific handling if separated)
+                    // Tram Stops (stop_priority = 1)
                     val tramLayer = SymbolLayer("$tramLayerPrefix-$idx", sourceId).apply {
-                       setProperties(
+                        setProperties(
                             PropertyFactory.iconImage(Expression.get("icon")),
                             PropertyFactory.iconSize(iconSizesPriority),
                             PropertyFactory.iconAllowOverlap(true),
                             PropertyFactory.iconIgnorePlacement(true),
                             PropertyFactory.iconAnchor("center"),
                             PropertyFactory.iconOffset(arrayOf(0f, yOffset))
-                       )
-                       setFilter(
-                           Expression.all(
-                               Expression.not(Expression.has("point_count")),
-                               Expression.eq(Expression.get("stop_priority"), 1),
-                               Expression.eq(Expression.get("slot"), idx)
-                           )
-                       )
-                       minZoom = TRAM_STOPS_MIN_ZOOM
+                        )
+                        setFilter(
+                            Expression.all(
+                                Expression.not(Expression.has("point_count")),
+                                Expression.eq(Expression.get("stop_priority"), 1),
+                                Expression.eq(Expression.get("slot"), idx)
+                            )
+                        )
+                        minZoom = TRAM_STOPS_MIN_ZOOM
                     }
                     style.addLayerBelow(tramLayer, "clusters")
 
-                    // Secondary Stops (Bus, etc.)
+                    // Secondary Stops (Bus - stop_priority = 0)
                     val secondaryLayer = SymbolLayer("$secondaryLayerPrefix-$idx", sourceId).apply {
                         setProperties(
                             PropertyFactory.iconImage(Expression.get("icon")),
@@ -1472,8 +1511,7 @@ private suspend fun addStopsToMap(
                         return@addOnMapClickListener true
                     }
 
-                    // Check individual stops
-                    // We need to query all the dynamic layers we added
+                    // Check individual stops - query all created layers
                     val interactableLayers = usedSlots.flatMap { idx ->
                         listOf("$priorityLayerPrefix-$idx", "$tramLayerPrefix-$idx", "$secondaryLayerPrefix-$idx")
                     }.toTypedArray()
