@@ -7,6 +7,7 @@ import android.util.Log
 import android.util.LruCache
 import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.data.repository.TransportRepository
+import com.pelotcl.app.utils.SearchUtils
 import java.io.FileOutputStream
 import java.io.IOException
 
@@ -72,7 +73,8 @@ class SchedulesRepository(context: Context) {
 
     suspend fun searchStopsByName(query: String): List<StationSearchResult> {
         // Don't cache very short queries (too many results, not useful)
-        val cacheKey = query.lowercase().trim()
+        val normalizedQuery = SearchUtils.normalizeForSearch(query)
+        val cacheKey = normalizedQuery
         if (cacheKey.length >= 2) {
             searchCache.get(cacheKey)?.let { return it }
         }
@@ -81,35 +83,53 @@ class SchedulesRepository(context: Context) {
         try {
             val db = dbHelper.readableDatabase
 
-            // On vérifie d'abord que la table existe (gestion des mises à jour foireuses)
-            // Si la table n'existe pas, cela lèvera une exception qui sera catchée
-            val cursor = db.rawQuery(
-                """
-                SELECT nom, desserte, pmr 
-                FROM arrets 
-                WHERE nom LIKE ? 
-                ORDER BY 
-                  CASE WHEN nom LIKE ? THEN 1 ELSE 2 END, 
-                  nom
-                LIMIT 50
-                """,
-                arrayOf("%$query%", "$query%")
-            )
+            // Optimisation: utiliser SQL pour pré-filtrer largement
+            // On prend tous les arrêts qui contiennent au moins le premier mot
+            // puis le fuzzy matching en mémoire fait le travail précis (avec accents, tirets, etc.)
+            val words = query.trim().split("\\s+".toRegex()).filter { it.isNotEmpty() }
+            
+            val cursor = if (words.isEmpty()) {
+                db.rawQuery("SELECT nom, desserte, pmr FROM arrets LIMIT 50", null)
+            } else {
+                // Pré-filtre large: juste le premier mot pour réduire la liste
+                // Le fuzzy matching vérifiera tous les mots après
+                db.rawQuery(
+                    "SELECT nom, desserte, pmr FROM arrets WHERE LOWER(nom) LIKE ? LIMIT 500",
+                    arrayOf("%${words[0].lowercase()}%")
+                )
+            }
 
+            val candidateStops = mutableListOf<Triple<String, String, Boolean>>()
             while (cursor.moveToNext()) {
                 val name = cursor.getString(0)
-                val desserteRaw = cursor.getString(1)
+                val desserteRaw = cursor.getString(1) ?: ""
                 val isPmr = cursor.getInt(2) == 1
+                candidateStops.add(Triple(name, desserteRaw, isPmr))
+            }
+            cursor.close()
 
-                val lines = if (!desserteRaw.isNullOrBlank()) {
+            // Filtrer les candidats avec fuzzy matching pour une précision maximale
+            val filteredStops = candidateStops.filter { (name, _, _) ->
+                SearchUtils.fuzzyContains(name, query)
+            }
+
+            // Trier: priorité aux arrêts qui commencent par la query
+            val sorted = filteredStops.sortedWith(
+                compareBy(
+                    { !SearchUtils.fuzzyStartsWith(it.first, query) },
+                    { it.first }
+                )
+            ).take(50)
+
+            // Convertir en StationSearchResult
+            sorted.forEach { (name, desserteRaw, isPmr) ->
+                val lines = if (desserteRaw.isNotBlank()) {
                     desserteRaw.split(",").map { it.trim() }
                 } else {
                     emptyList()
                 }
-
                 results.add(StationSearchResult(name, lines, isPmr))
             }
-            cursor.close()
 
         } catch (e: Exception) {
             Log.e("SchedulesRepository", "Error searching stops: ${e.message}")
@@ -117,10 +137,9 @@ class SchedulesRepository(context: Context) {
             return try {
                 val repo = TransportRepository(appContext)
                 val stopsResult = repo.getAllStops()
-                val lowerQuery = query.lowercase()
                 stopsResult.getOrNull()?.features
                     ?.asSequence()
-                    ?.filter { it.properties.nom.contains(query, ignoreCase = true) }
+                    ?.filter { SearchUtils.fuzzyContains(it.properties.nom, query) }
                     ?.map { stop ->
                         val desserteRaw = stop.properties.desserte
                         val lines = desserteRaw?.takeIf { !it.isBlank() }
@@ -129,7 +148,7 @@ class SchedulesRepository(context: Context) {
                             ?: emptyList()
                         StationSearchResult(stop.properties.nom, lines, stop.properties.pmr)
                     }
-                    ?.sortedWith(compareBy<StationSearchResult>({ !it.stopName.lowercase().startsWith(lowerQuery) }, { it.stopName }))
+                    ?.sortedWith(compareBy<StationSearchResult>({ !SearchUtils.fuzzyStartsWith(it.stopName, query) }, { it.stopName }))
                     ?.take(50)
                     ?.toList()
                     ?: emptyList()
