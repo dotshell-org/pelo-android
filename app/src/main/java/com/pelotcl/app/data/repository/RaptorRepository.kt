@@ -26,6 +26,9 @@ import kotlin.math.sqrt
  * - Pre-computed normalized name index for fast search
  * - Buffered I/O for asset loading
  * - Singleton pattern to avoid multiple initializations
+ * - Dispatchers.Default for CPU-bound Raptor calculations (optimized thread pool)
+ * - Reusable StringBuilder for cache key building (reduces GC pressure)
+ * - Pre-allocated ArrayLists for result mapping (avoids resizing)
  */
 class RaptorRepository private constructor(private val context: Context) {
 
@@ -41,6 +44,9 @@ class RaptorRepository private constructor(private val context: Context) {
 
     // Performance: Pre-computed normalized name index for fast search
     private var stopsByNormalizedName: Map<String, List<Stop>> = emptyMap()
+
+    // Performance: Reusable StringBuilder for cache key building (ThreadLocal for thread safety)
+    private val cacheKeyBuilder = ThreadLocal.withInitial { StringBuilder(64) }
 
     companion object {
         private const val TAG = "RaptorRepository"
@@ -207,8 +213,9 @@ class RaptorRepository private constructor(private val context: Context) {
     /**
      * Search for stops by name with multiple strategies for better matching.
      * Uses pre-computed normalized name index for fast lookups.
+     * Uses Dispatchers.Default as this is CPU-bound string matching work.
      */
-    suspend fun searchStopsByName(query: String): List<RaptorStop> = withContext(Dispatchers.IO) {
+    suspend fun searchStopsByName(query: String): List<RaptorStop> = withContext(Dispatchers.Default) {
         ensureInitialized()
         try {
             // First try: exact search via library
@@ -285,7 +292,11 @@ class RaptorRepository private constructor(private val context: Context) {
     /**
      * Find the closest stop to the given GPS coordinates
      */
-    suspend fun findClosestStop(latitude: Double, longitude: Double): RaptorStop? = withContext(Dispatchers.IO) {
+        /**
+     * Find the closest stop to the given GPS coordinates.
+     * Uses Dispatchers.Default as this is CPU-bound distance calculation.
+     */
+    suspend fun findClosestStop(latitude: Double, longitude: Double): RaptorStop? = withContext(Dispatchers.Default) {
         ensureInitialized()
         try {
             // Find the closest stop by calculating distance
@@ -311,6 +322,10 @@ class RaptorRepository private constructor(private val context: Context) {
      * Calculate optimized journeys between origin and destination stops.
      * Uses multi-level cache: Memory LRU -> Disk cache -> Raptor calculation.
      *
+     * Uses Dispatchers.Default (CPU-optimized thread pool) instead of Dispatchers.IO
+     * because Raptor algorithm is CPU-bound, not I/O-bound. Default uses all CPU cores
+     * while IO is limited to 64 threads optimized for blocking I/O operations.
+     *
      * @param originStopIds List of origin stop IDs (to handle stops with multiple platforms)
      * @param destinationStopIds List of destination stop IDs
      * @param departureTimeSeconds Departure time in seconds from midnight (default: current time)
@@ -319,7 +334,7 @@ class RaptorRepository private constructor(private val context: Context) {
         originStopIds: List<Int>,
         destinationStopIds: List<Int>,
         departureTimeSeconds: Int? = null
-    ): List<JourneyResult> = withContext(Dispatchers.IO) {
+    ): List<JourneyResult> = withContext(Dispatchers.Default) {
         ensureInitialized()
         try {
             val depTime = departureTimeSeconds ?: getCurrentTimeInSeconds()
@@ -380,13 +395,19 @@ class RaptorRepository private constructor(private val context: Context) {
                 Log.d(TAG, "getOptimizedPaths: Raptor returned ${journeys.size} raw journeys")
             }
 
-            val results = journeys.mapNotNull { legs ->
-                if (legs.isEmpty()) {
-                    return@mapNotNull null
-                }
+            // Performance: Pre-allocate results list with estimated capacity
+            val results = ArrayList<JourneyResult>(journeys.size)
 
-                val journeyLegs = legs.mapNotNull { leg ->
-                    // Use HashMap index for O(1) stop lookup instead of list.getOrNull()
+            // Use explicit for loop instead of mapNotNull to reduce lambda allocations
+            for (legs in journeys) {
+                if (legs.isEmpty()) continue
+
+                // Pre-allocate journey legs list
+                val journeyLegs = ArrayList<JourneyLeg>(legs.size)
+                var hasInvalidLeg = false
+
+                for (leg in legs) {
+                    // Use HashMap index for O(1) stop lookup
                     val fromStop = stopsByIndex[leg.fromStopIndex]
                     val toStop = stopsByIndex[leg.toStopIndex]
 
@@ -394,22 +415,27 @@ class RaptorRepository private constructor(private val context: Context) {
                         if (DEBUG_LOGGING) {
                             Log.w("RaptorRepository", "getOptimizedPaths: Stop not found - fromIdx=${leg.fromStopIndex}, toIdx=${leg.toStopIndex}")
                         }
-                        return@mapNotNull null
+                        hasInvalidLeg = true
+                        break
                     }
 
-                    // Map intermediate stops using HashMap index
-                    val intermediateStops = leg.intermediateStopIndices.mapIndexedNotNull { idx, stopIndex ->
-                        val stop = stopsByIndex[stopIndex]
-                        val arrivalTime = leg.intermediateArrivalTimes.getOrNull(idx)
+                    // Map intermediate stops using explicit for loop
+                    val intermediateIndices = leg.intermediateStopIndices
+                    val intermediateTimes = leg.intermediateArrivalTimes
+                    val intermediateStops = ArrayList<IntermediateStop>(intermediateIndices.size)
+
+                    for (idx in intermediateIndices.indices) {
+                        val stop = stopsByIndex[intermediateIndices[idx]]
+                        val arrivalTime = if (idx < intermediateTimes.size) intermediateTimes[idx] else null
                         if (stop != null && arrivalTime != null) {
-                            IntermediateStop(
+                            intermediateStops.add(IntermediateStop(
                                 stopName = stop.name,
                                 arrivalTime = arrivalTime
-                            )
-                        } else null
+                            ))
+                        }
                     }
                     
-                    JourneyLeg(
+                    journeyLegs.add(JourneyLeg(
                         fromStopId = fromStop.id.toString(),
                         fromStopName = fromStop.name,
                         toStopId = toStop.id.toString(),
@@ -421,18 +447,17 @@ class RaptorRepository private constructor(private val context: Context) {
                         isWalking = leg.isTransfer,
                         direction = leg.direction,
                         intermediateStops = intermediateStops
-                    )
+                    ))
                 }
                 
-                if (journeyLegs.isEmpty()) {
-                    return@mapNotNull null
-                }
+                // Skip this journey if any leg was invalid
+                if (hasInvalidLeg || journeyLegs.isEmpty()) continue
 
-                JourneyResult(
+                results.add(JourneyResult(
                     departureTime = legs.first().departureTime,
                     arrivalTime = legs.last().arrivalTime,
                     legs = journeyLegs
-                )
+                ))
             }
 
             // Store results in both memory and disk cache
@@ -476,11 +501,32 @@ class RaptorRepository private constructor(private val context: Context) {
     /**
      * Build a cache key for journey results.
      * Sorts IDs to ensure same key regardless of order.
+     * Uses reusable StringBuilder to reduce GC pressure.
      */
     private fun buildCacheKey(originIds: List<Int>, destIds: List<Int>, time: Int): String {
-        val sortedOrigin = originIds.sorted().joinToString(",")
-        val sortedDest = destIds.sorted().joinToString(",")
-        return "$sortedOrigin|$sortedDest|$time"
+        val sb = cacheKeyBuilder.get()!!
+        sb.setLength(0) // Clear without allocation
+
+        // Sort and append origin IDs
+        val sortedOrigin = originIds.sorted()
+        for (i in sortedOrigin.indices) {
+            if (i > 0) sb.append(',')
+            sb.append(sortedOrigin[i])
+        }
+
+        sb.append('|')
+
+        // Sort and append destination IDs
+        val sortedDest = destIds.sorted()
+        for (i in sortedDest.indices) {
+            if (i > 0) sb.append(',')
+            sb.append(sortedDest[i])
+        }
+
+        sb.append('|')
+        sb.append(time)
+
+        return sb.toString()
     }
 
     private fun formatTimeFromSeconds(seconds: Int): String {
