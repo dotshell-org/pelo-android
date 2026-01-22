@@ -1,93 +1,90 @@
-Je vais créer un fichier `change.md` documentant toutes les améliorations implémentées :
+# Performance Optimizations – PlanScreen MapLibre
 
-```markdown
-# Optimisations de Performance - PlanScreen MapLibre
+## Summary of Changes
 
-## Résumé des Changements
-
-Ce document détaille les optimisations apportées à l'affichage des arrêts de transport sur la carte MapLibre.
+This document details the optimizations made to the display of transport stops on the MapLibre map.
 
 ---
 
-## 1. Cache GeoJSON des Arrêts
+## 1. GeoJSON Cache for Stops
 
-### Avant
-- Le GeoJSON des arrêts était recalculé à chaque affichage de la carte
-- Opérations de sérialisation répétées inutilement
+### Before
+- The GeoJSON for stops was recalculated every time the map was displayed
+- Unnecessary repeated serialization operations
 
-### Après
-- Le GeoJSON est mis en cache dans `TransportViewModel` via `_stopsGeoJsonCache`
-- Invalidation automatique du cache lors du rechargement des données
+### After
+- The GeoJSON is cached in `TransportViewModel` via `_stopsGeoJsonCache`
+- Automatic cache invalidation when data is reloaded
 
-### Gain de performance
-- Évite la sérialisation répétée des ~14 000 arrêts
-- Réduction du temps de chargement de la carte lors des navigations répétées
+### Performance Gain
+- Avoids repeated serialization of ~14,000 stops
+- Reduces map loading time during repeated navigation
 
 ---
 
-## 2. Cache des Bitmaps d'Icônes
+## 2. Bitmap Icon Cache
 
-### Avant
+### Before
 ```kotlin
-// Chaque icône était chargée à chaque fois
+// Each icon was loaded every time
 val bitmap = loadBitmapFromResources(context, R.drawable.icon_stop)
 style.addImage("stop-icon", bitmap)
 ```
 
-### Après
+### After
 ```kotlin
-// Cache au niveau du composable
+// Cache at the composable level
 val iconBitmapCache = remember { mutableMapOf<String, Bitmap>() }
 
-// Réutilisation des bitmaps
+// Reuse bitmaps
 val bitmap = iconBitmapCache.getOrPut(iconId) {
     loadBitmapFromResources(context, resourceId)
 }
 ```
 
-### Gain de performance
-- Chargement unique des icônes par session
-- Réduction des allocations mémoire et du travail du GC
-- ~10-15 icônes différentes chargées une seule fois au lieu de multiples fois
+### Performance Gain
+- Icons loaded once per session
+- Reduced memory allocations and GC workload
+- ~10-15 different icons loaded once instead of multiple times
 
 ---
 
-## 3. Mise à jour GeoJSON sans Recréation de Source
+## 3. GeoJSON Update Without Source Recreation
 
-### Avant
+### Before
 ```kotlin
-// Suppression et recréation complète
+// Complete removal and recreation
 style.removeLayer("line-stops-circles")
 style.removeSource("line-stops")
 style.addSource(GeoJsonSource("line-stops", FeatureCollection.fromJson(geoJson)))
 style.addLayer(CircleLayer("line-stops-circles", "line-stops"))
 ```
 
-### Après
+### After
 ```kotlin
-// Mise à jour in-place des données
+// In-place data update
 val existingSource = style.getSourceAs<GeoJsonSource>("line-stops")
 if (existingSource != null) {
     existingSource.setGeoJson(FeatureCollection.fromJson(geoJson))
 } else {
-    // Création uniquement si nécessaire
+    // Create only if necessary
     style.addSource(GeoJsonSource("line-stops", FeatureCollection.fromJson(geoJson)))
     style.addLayer(CircleLayer("line-stops-circles", "line-stops"))
 }
 ```
 
-### Gain de performance
-- Évite la destruction/reconstruction des objets natifs MapLibre
-- Mise à jour plus fluide lors du changement de ligne sélectionnée
-- Réduction des opérations GPU
+### Performance Gain
+- Avoids destruction/recreation of native MapLibre objects
+- Smoother updates when changing the selected line
+- Reduced GPU operations
 
 ---
 
-## 4. Création de Layers Uniquement pour les Slots Utilisés
+## 4. Layer Creation Only for Used Slots
 
-### Avant
+### Before
 ```kotlin
-// Création systématique de 51 layers (slots -25 à 25)
+// Systematic creation of 51 layers (slots -25 to 25)
 for (idx in -25..25) {
     style.addLayer(SymbolLayer("all-stops-$idx", "all-stops").apply {
         iconOffset = arrayOf(0f, idx * 13f)
@@ -96,9 +93,9 @@ for (idx in -25..25) {
 }
 ```
 
-### Après
+### After
 ```kotlin
-// Collecte des slots réellement utilisés
+// Collect only actually used slots
 val usedSlots = mutableSetOf<Int>()
 stops.forEach { stop ->
     stop.stopsPerLine.forEach { (_, slot) ->
@@ -106,7 +103,7 @@ stops.forEach { stop ->
     }
 }
 
-// Création uniquement des layers nécessaires
+// Create only necessary layers
 usedSlots.forEach { idx ->
     style.addLayer(SymbolLayer("all-stops-$idx", "all-stops").apply {
         iconOffset = arrayOf(0f, idx * 13f)
@@ -115,53 +112,51 @@ usedSlots.forEach { idx ->
 }
 ```
 
-### Gain de performance
-- Réduction typique de 51 layers à ~10-15 layers (selon les données)
-- Moins de travail de rendu GPU
-- Réduction de la mémoire utilisée par MapLibre
+### Performance Gain
+- Typical reduction from 51 layers to ~10-15 layers (depending on data)
+- Less GPU rendering work
+- Reduced memory usage by MapLibre
 
 ---
 
-## 5. Tentative de Consolidation des Layers (Non Retenue)
+## 5. Attempt to Consolidate Layers (Not Retained)
 
-### Approche testée
-Utilisation d'une expression MapLibre dynamique pour calculer l'offset :
+### Tested Approach
+Using a dynamic MapLibre expression to calculate the offset:
 ```kotlin
 Expression.raw("""["literal", [0, ["*", ["get", "slot"], 13]]]""")
 ```
 
-### Résultat
-**Échec** - MapLibre ne supporte pas les tableaux imbriqués dans `Expression.raw()` pour `iconOffset`.
+### Result
+**Failure** – MapLibre does not support nested arrays in `Expression.raw()` for `iconOffset`.
 
-### Alternative conservée
-L'approche par slots multiples a été conservée car c'est la seule méthode compatible avec MapLibre pour avoir des offsets différents par feature.
-
----
-
-## Tableau Récapitulatif
-
-| Optimisation | Impact Mémoire | Impact CPU | Impact GPU |
-|--------------|----------------|------------|------------|
-| Cache GeoJSON | ⬇️ Moyen | ⬇️ Élevé | - |
-| Cache Bitmaps | ⬇️ Moyen | ⬇️ Moyen | - |
-| setGeoJson() | ⬇️ Faible | ⬇️ Moyen | ⬇️ Moyen |
-| Slots utilisés uniquement | ⬇️ Élevé | ⬇️ Moyen | ⬇️ Élevé |
+### Retained Alternative
+The multi-slot approach was retained as it is the only method compatible with MapLibre for having different offsets per feature.
 
 ---
 
-## Notes Techniques
+## Summary Table
 
-### Limitation MapLibre
-`iconOffset` requiert un tableau `[x, y]` qui ne peut pas être généré dynamiquement via une expression. C'est une limitation connue du SDK MapLibre Android.
+| Optimization | Memory Impact | CPU Impact | GPU Impact |
+|--------------|---------------|------------|------------|
+| GeoJSON Cache | ⬇️ Medium | ⬇️ High | - |
+| Bitmap Cache | ⬇️ Medium | ⬇️ Medium | - |
+| setGeoJson() | ⬇️ Low | ⬇️ Medium | ⬇️ Medium |
+| Only Used Slots | ⬇️ High | ⬇️ Medium | ⬇️ High |
 
-### Compatibilité
-Ces optimisations sont compatibles avec :
+---
+
+## Technical Notes
+
+### MapLibre Limitation
+`iconOffset` requires an array `[x, y]` that cannot be dynamically generated via an expression. This is a known limitation of the MapLibre Android SDK.
+
+### Compatibility
+These optimizations are compatible with:
 - MapLibre Android SDK
 - Jetpack Compose
 - Kotlin Coroutines
 
-### Fichiers Modifiés
+### Modified Files
 - `app/src/main/java/com/pelotcl/app/ui/screens/PlanScreen.kt`
 - `app/src/main/java/com/pelotcl/app/viewmodel/TransportViewModel.kt`
-```
-
