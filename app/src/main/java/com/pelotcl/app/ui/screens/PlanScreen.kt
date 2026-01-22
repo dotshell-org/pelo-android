@@ -6,14 +6,22 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -159,6 +167,7 @@ fun PlanScreen(
     // Location state
     var userLocation by remember { mutableStateOf(initialUserLocation) }
     var shouldCenterOnUser by remember { mutableStateOf(false) }
+    var isCenteredOnUser by remember { mutableStateOf(true) }
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
     // Bottom sheet state for BottomSheetScaffold
@@ -689,6 +698,12 @@ fun PlanScreen(
                 styleUrl = "https://tiles.openfreemap.org/styles/positron",
                 onMapReady = { map ->
                     mapInstance = map
+                    // Add listener to detect when user moves the map
+                    map.addOnCameraMoveStartedListener { reason ->
+                        if (reason == org.maplibre.android.maps.MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
+                            isCenteredOnUser = false
+                        }
+                    }
                 },
                 userLocation = userLocation,
                 centerOnUserLocation = shouldCenterOnUser
@@ -698,6 +713,48 @@ fun PlanScreen(
                 CircularProgressIndicator(
                     modifier = Modifier.align(Alignment.Center)
                 )
+            }
+            
+            // Recenter button
+            AnimatedVisibility(
+                visible = userLocation != null && !isCenteredOnUser,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 120.dp, end = 16.dp)
+            ) {
+                FloatingActionButton(
+                    onClick = {
+                        userLocation?.let { location ->
+                            mapInstance?.animateCamera(
+                                CameraUpdateFactory.newLatLngZoom(location, 17.0),
+                                1000
+                            )
+                            isCenteredOnUser = true
+                        }
+                    },
+                    modifier = Modifier.size(56.dp),
+                    containerColor = Color.Black,
+                    shape = CircleShape,
+                    elevation = FloatingActionButtonDefaults.elevation(
+                        defaultElevation = 0.dp
+                    )
+                ) {
+                    Canvas(
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        drawCircle(
+                            color = Color(0xFF3B82F6),
+                            radius = size.minDimension / 2.5f
+                        )
+                        drawCircle(
+                            color = Color.White,
+                            radius = size.minDimension / 2.5f,
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 7f)
+                        )
+                    }
+                }
             }
         }
     }

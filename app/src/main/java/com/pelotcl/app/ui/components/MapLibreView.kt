@@ -103,7 +103,7 @@ fun MapLibreView(
                             PropertyFactory.circleColor("#3B82F6"),
                             PropertyFactory.circleStrokeWidth(3f),
                             PropertyFactory.circleStrokeColor("#FFFFFF"),
-                            PropertyFactory.circleOpacity(0.9f)
+                            PropertyFactory.circleOpacity(1.0f)
                         )
                     }
                     style.addLayer(userLocationLayer)
@@ -111,7 +111,7 @@ fun MapLibreView(
                     // Center on user location if requested
                     if (centerOnUserLocation) {
                         map.animateCamera(
-                            CameraUpdateFactory.newLatLngZoom(userLocation, 15.0),
+                            CameraUpdateFactory.newLatLngZoom(userLocation, 17.0),
                             1000
                         )
                     }
