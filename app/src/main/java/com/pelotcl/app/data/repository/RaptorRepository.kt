@@ -291,9 +291,6 @@ class RaptorRepository private constructor(private val context: Context) {
 
     /**
      * Find the closest stop to the given GPS coordinates
-     */
-        /**
-     * Find the closest stop to the given GPS coordinates.
      * Uses Dispatchers.Default as this is CPU-bound distance calculation.
      */
     suspend fun findClosestStop(latitude: Double, longitude: Double): RaptorStop? = withContext(Dispatchers.Default) {
