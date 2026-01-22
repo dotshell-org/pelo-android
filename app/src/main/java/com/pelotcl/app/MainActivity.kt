@@ -110,7 +110,6 @@ class MainActivity : ComponentActivity() {
                     raptorRepo.initialize()
                     // Preload journey cache from disk for faster initial queries
                     raptorRepo.preloadJourneyCache()
-                    android.util.Log.d("MainActivity", "Raptor and journey cache preloaded at startup")
                 }
                 // Wait for cache and SQLite (critical for UI), Raptor can complete later
                 cacheJob.join()

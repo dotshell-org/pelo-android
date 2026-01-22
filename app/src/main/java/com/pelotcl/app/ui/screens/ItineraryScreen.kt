@@ -151,21 +151,15 @@ fun ItineraryScreen(
     
     // Initialize raptor (only if not already initialized) and resolve stop IDs
     LaunchedEffect(Unit) {
-        Log.d("ItineraryScreen", "Checking Raptor repository... isReady=${raptorRepository.isReady()}")
-
         // Initialize Raptor if not ready
         if (!raptorRepository.isReady()) {
-            Log.d("ItineraryScreen", "Initializing Raptor repository...")
             raptorRepository.initialize()
         }
 
         isRaptorReady = true
-        Log.d("ItineraryScreen", "Raptor ready. Destination: '$destinationStopName', UserLocation: $userLocation")
-
         // Resolve arrival stop IDs from the destination name
         if (destinationStopName.isNotBlank()) {
             val arrivalResults = raptorRepository.searchStopsByName(destinationStopName)
-            Log.d("ItineraryScreen", "Arrival search for '$destinationStopName': found ${arrivalResults.size} stops - ${arrivalResults.map { "${it.name}(${it.id})" }}")
             if (arrivalResults.isNotEmpty()) {
                 arrivalStop = SelectedStop(
                     name = destinationStopName,
@@ -180,11 +174,9 @@ fun ItineraryScreen(
                 latitude = userLocation.latitude,
                 longitude = userLocation.longitude
             )
-            Log.d("ItineraryScreen", "Closest stop to $userLocation: ${closestStop?.name} (id=${closestStop?.id})")
             if (closestStop != null) {
                 // Get all stop IDs with the same name
                 val allStopsWithName = raptorRepository.searchStopsByName(closestStop.name)
-                Log.d("ItineraryScreen", "Departure search for '${closestStop.name}': found ${allStopsWithName.size} stops - ${allStopsWithName.map { "${it.name}(${it.id})" }}")
                 departureStop = SelectedStop(
                     name = closestStop.name,
                     stopIds = allStopsWithName.map { it.id }
@@ -226,8 +218,6 @@ fun ItineraryScreen(
             isLoading = true
             errorMessage = null
             journeys = emptyList()
-            
-            Log.d("ItineraryScreen", "Calculating journey from '${departureStop!!.name}' (ids=${departureStop!!.stopIds}) to '${arrivalStop!!.name}' (ids=${arrivalStop!!.stopIds})")
 
             scope.launch {
                 try {
@@ -239,7 +229,6 @@ fun ItineraryScreen(
 
                     // If no results with current time, try with 9:00 AM as fallback test
                     if (results.isEmpty()) {
-                        Log.d("ItineraryScreen", "No results with current time, trying with 9:00 AM...")
                         results = raptorRepository.getOptimizedPaths(
                             originStopIds = departureStop!!.stopIds,
                             destinationStopIds = arrivalStop!!.stopIds,
@@ -247,7 +236,6 @@ fun ItineraryScreen(
                         )
                     }
 
-                    Log.d("ItineraryScreen", "Journey results: ${results.size} journeys found")
                     journeys = results
                     if (results.isEmpty()) {
                         errorMessage = "Aucun itinéraire trouvé"

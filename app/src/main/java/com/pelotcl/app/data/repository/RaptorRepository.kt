@@ -92,7 +92,6 @@ class RaptorRepository private constructor(private val context: Context) {
             journeyCache.evictAll()
             journeyCacheTimestamps.clear()
             JourneyCache.clearAllCaches()
-            Log.d(TAG, "All journey caches cleared")
         }
 
         /**
@@ -152,25 +151,6 @@ class RaptorRepository private constructor(private val context: Context) {
 
                 isInitialized = true
 
-                val elapsed = System.currentTimeMillis() - startTime
-                Log.d("RaptorRepository", "Raptor library initialized in ${elapsed}ms with ${stopsCache.size} stops")
-
-                // Debug logs only when DEBUG_LOGGING is enabled
-                if (DEBUG_LOGGING) {
-                    stopsCache.take(5).forEachIndexed { index, stop ->
-                        Log.d("RaptorRepository", "Stop at index $index: id=${stop.id}, name='${stop.name}'")
-                    }
-
-                    // Test: try a simple path calculation with first and last stops
-                    if (stopsCache.size >= 2) {
-                        val testOrigin = listOf(stopsCache.first().id)
-                        val testDest = listOf(stopsCache.last().id)
-                        Log.d("RaptorRepository", "Test path: from ${stopsCache.first().name}(${stopsCache.first().id}) to ${stopsCache.last().name}(${stopsCache.last().id}) at 9:00")
-                        val testResult = raptorLibrary?.getOptimizedPaths(testOrigin, testDest, 9 * 3600)
-                        Log.d("RaptorRepository", "Test result: ${testResult?.size ?: 0} journeys")
-                    }
-                }
-
                 Result.success(Unit)
             } catch (e: Exception) {
                 Log.e("RaptorRepository", "Failed to initialize Raptor library: ${e.message}", e)
@@ -188,10 +168,6 @@ class RaptorRepository private constructor(private val context: Context) {
     private fun buildStopIndexes() {
         // Index by position (for leg.fromStopIndex / leg.toStopIndex lookups)
         stopsByIndex = stopsCache.mapIndexed { index, stop -> index to stop }.toMap()
-
-        if (DEBUG_LOGGING) {
-            Log.d("RaptorRepository", "Built indexes: ${stopsByIndex.size} by index")
-        }
     }
 
     /**
@@ -246,9 +222,6 @@ class RaptorRepository private constructor(private val context: Context) {
                 )
             )
 
-            if (DEBUG_LOGGING) {
-                Log.d("RaptorRepository", "searchStopsByName('$query') found ${results.size} stops - ${results.take(5).map { "${it.name}(${it.id})" }}")
-            }
             results
         } catch (e: Exception) {
             Log.e("RaptorRepository", "Error searching stops: ${e.message}", e)
@@ -316,9 +289,6 @@ class RaptorRepository private constructor(private val context: Context) {
             if (memoryCached != null && cacheTimestamp != null) {
                 val cacheAge = System.currentTimeMillis() - cacheTimestamp
                 if (cacheAge < JOURNEY_CACHE_VALIDITY_MS) {
-                    if (DEBUG_LOGGING) {
-                        Log.d(TAG, "getOptimizedPaths: Memory cache HIT for $cacheKey (age: ${cacheAge / 1000}s)")
-                    }
                     return@withContext memoryCached
                 }
             }
@@ -326,17 +296,10 @@ class RaptorRepository private constructor(private val context: Context) {
             // Level 2: Check disk cache (daily validity)
             val diskCached = journeyDiskCache.get(cacheKey)
             if (diskCached != null) {
-                if (DEBUG_LOGGING) {
-                    Log.d(TAG, "getOptimizedPaths: Disk cache HIT for $cacheKey")
-                }
                 // Promote to memory cache
                 journeyCache.put(cacheKey, diskCached)
                 journeyCacheTimestamps[cacheKey] = System.currentTimeMillis()
                 return@withContext diskCached
-            }
-
-            if (DEBUG_LOGGING) {
-                Log.d(TAG, "getOptimizedPaths: Cache MISS - calculating: origin=$originStopIds, dest=$destinationStopIds, time=$depTime (${formatTimeFromSeconds(depTime)})")
             }
 
             if (originStopIds.isEmpty()) {
@@ -354,10 +317,6 @@ class RaptorRepository private constructor(private val context: Context) {
                 destinationStopIds = destinationStopIds,
                 departureTime = depTime
             ) ?: emptyList()
-
-            if (DEBUG_LOGGING) {
-                Log.d(TAG, "getOptimizedPaths: Raptor returned ${journeys.size} raw journeys")
-            }
 
             // Performance: Pre-allocate results list with estimated capacity
             val results = ArrayList<JourneyResult>(journeys.size)
@@ -434,9 +393,6 @@ class RaptorRepository private constructor(private val context: Context) {
                 journeyDiskCache.put(cacheKey, results)
             }
 
-            if (DEBUG_LOGGING) {
-                Log.d(TAG, "getOptimizedPaths: Returning ${results.size} journey results")
-            }
             results
         } catch (e: Exception) {
             Log.e(TAG, "Error calculating paths: ${e.message}", e)

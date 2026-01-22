@@ -91,8 +91,6 @@ class JourneyCache private constructor(context: Context) {
                 val instance = INSTANCE
                 if (instance != null) {
                     instance.clearAll()
-                } else {
-                    Log.d(TAG, "clearAllCaches: No cache instance to clear")
                 }
             }
         }
@@ -111,7 +109,6 @@ class JourneyCache private constructor(context: Context) {
         if (memoryCached != null) {
             val age = System.currentTimeMillis() - memoryCached.timestamp
             if (age < MEMORY_CACHE_VALIDITY_MS) {
-                Log.d(TAG, "Memory cache HIT for $cacheKey (age: ${age / 1000}s)")
                 return memoryCached.journeys.map { it.toJourneyResult() }
             } else {
                 // Expired, remove from memory
@@ -123,7 +120,6 @@ class JourneyCache private constructor(context: Context) {
         return withContext(Dispatchers.IO) {
             val diskResult = readFromDisk(cacheKey)
             if (diskResult != null) {
-                Log.d(TAG, "Disk cache HIT for $cacheKey")
                 // Promote to memory cache
                 memoryCache.put(cacheKey, CachedJourney(
                     journeys = diskResult.map { SerializableJourneyResult.fromJourneyResult(it) },
@@ -131,7 +127,6 @@ class JourneyCache private constructor(context: Context) {
                 ))
                 diskResult
             } else {
-                Log.d(TAG, "Cache MISS for $cacheKey")
                 null
             }
         }
@@ -196,8 +191,6 @@ class JourneyCache private constructor(context: Context) {
                     Log.w(TAG, "Failed to load cache file ${file.name}: ${e.message}")
                 }
             }
-
-            Log.d(TAG, "Preloaded $loadedCount journey cache entries to memory")
         } catch (e: Exception) {
             Log.w(TAG, "Failed to preload journey cache: ${e.message}")
         }
@@ -210,7 +203,6 @@ class JourneyCache private constructor(context: Context) {
         mutex.withLock {
             memoryCache.evictAll()
             cacheDir.listFiles()?.forEach { it.delete() }
-            Log.d(TAG, "All journey caches cleared")
         }
     }
 
@@ -235,10 +227,6 @@ class JourneyCache private constructor(context: Context) {
 
                 // Also enforce size limit
                 enforceDiskSizeLimit()
-
-                if (deletedCount > 0) {
-                    Log.d(TAG, "Cleaned up $deletedCount expired cache files")
-                }
             } catch (e: Exception) {
                 Log.w(TAG, "Cleanup failed: ${e.message}")
             }
@@ -248,7 +236,6 @@ class JourneyCache private constructor(context: Context) {
     private fun checkDateChange() {
         val today = getCurrentDayOfYear()
         if (today != cachedDate) {
-            Log.d(TAG, "Date changed, invalidating memory cache")
             memoryCache.evictAll()
             cachedDate = today
             // Note: Disk cache will be cleaned up by cleanupExpired()

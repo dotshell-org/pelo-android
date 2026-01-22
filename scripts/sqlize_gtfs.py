@@ -16,15 +16,42 @@ def process_gtfs_schedules(zip_path, output_dir):
     with tempfile.TemporaryDirectory() as temp_dir:
         print(f"Unzipping '{zip_path}' to temporary directory...")
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            # List files in the zip to see the structure
+            print("Files in zip:")
+            print(zip_ref.namelist())
+
+            # Extract all files
             zip_ref.extractall(temp_dir)
+
+        # Now check the structure of the extracted files
+        print("Extracted files:")
+        for root, dirs, files in os.walk(temp_dir):
+            for file in files:
+                print(os.path.join(root, file))
+
+        # Now try to find the correct path for routes.txt
+        # We'll search for 'routes.txt' in the extracted files
+        routes_path = None
+        for root, dirs, files in os.walk(temp_dir):
+            if 'routes.txt' in files:
+                routes_path = os.path.join(root, 'routes.txt')
+                break
+
+        if not routes_path:
+            raise FileNotFoundError("routes.txt not found in the extracted files.")
+
+        print(f"Found routes.txt at: {routes_path}")
+
+        # Update the path for other files accordingly
+        base_dir = os.path.dirname(routes_path)
 
         print("Reading GTFS files...")
         id_cols_dtype = {'route_id': str, 'trip_id': str, 'stop_id': str, 'parent_station': str, 'service_id': str}
-        routes_df = pd.read_csv(os.path.join(temp_dir, 'routes.txt'), dtype=id_cols_dtype)
-        trips_df = pd.read_csv(os.path.join(temp_dir, 'trips.txt'), dtype=id_cols_dtype)
-        stop_times_df = pd.read_csv(os.path.join(temp_dir, 'stop_times.txt'), dtype=id_cols_dtype)
-        stops_df = pd.read_csv(os.path.join(temp_dir, 'stops.txt'), dtype=id_cols_dtype)
-        calendar_df = pd.read_csv(os.path.join(temp_dir, 'calendar.txt'), dtype=id_cols_dtype)
+        routes_df = pd.read_csv(routes_path, dtype=id_cols_dtype)
+        trips_df = pd.read_csv(os.path.join(base_dir, 'trips.txt'), dtype=id_cols_dtype)
+        stop_times_df = pd.read_csv(os.path.join(base_dir, 'stop_times.txt'), dtype=id_cols_dtype)
+        stops_df = pd.read_csv(os.path.join(base_dir, 'stops.txt'), dtype=id_cols_dtype)
+        calendar_df = pd.read_csv(os.path.join(base_dir, 'calendar.txt'), dtype=id_cols_dtype)
 
         print("Processing stop hierarchy...")
         stop_id_to_name = stops_df.set_index('stop_id')['stop_name'].to_dict()
@@ -238,3 +265,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

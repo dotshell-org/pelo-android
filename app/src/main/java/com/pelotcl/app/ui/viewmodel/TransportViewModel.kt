@@ -107,11 +107,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun loadHeadsign(routeName: String) {
         viewModelScope.launch {
-            Log.d("SchedulesDebug", "loadHeadsign called for routeName='$routeName'")
             // GTFS uses "NAVI1" for Navigone while the app displays "NAV1"
             val gtfsRouteName = if (routeName.equals("NAV1", ignoreCase = true)) "NAVI1" else routeName
             val headsigns = schedulesRepository.getHeadsigns(gtfsRouteName)
-            Log.d("SchedulesDebug", "loadHeadsign result: $headsigns")
             _headsigns.value = headsigns
         }
     }
@@ -123,24 +121,17 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     @RequiresApi(Build.VERSION_CODES.O)
     fun computeAvailableDirections(lineName: String, stopName: String) {
         viewModelScope.launch {
-            Log.d("SchedulesDebug", "=== computeAvailableDirections START ===")
-            Log.d("SchedulesDebug", "lineName='$lineName', stopName='$stopName'")
-
             // Determine if it is a school holiday
             val isTodayHoliday = holidayDetector.isSchoolHoliday(LocalDate.now())
             val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
-            Log.d("SchedulesDebug", "isTodayHoliday=$isTodayHoliday, gtfsLineName='$gtfsLineName'")
 
             // Candidate directions list: those exposed by _headsigns otherwise 0 and 1 by default
             val candidateDirections = _headsigns.value.keys.ifEmpty { setOf(0, 1) }.toList().sorted()
-            Log.d("SchedulesDebug", "candidateDirections=$candidateDirections, headsigns=${_headsigns.value}")
 
             val available = mutableListOf<Int>()
             for (dir in candidateDirections) {
                 try {
-                    Log.d("SchedulesDebug", "Checking direction $dir...")
                     val schedules = schedulesRepository.getSchedules(gtfsLineName, stopName, dir, isTodayHoliday)
-                    Log.d("SchedulesDebug", "Direction $dir has ${schedules.size} schedules")
                     if (schedules.isNotEmpty()) {
                         available.add(dir)
                     }
@@ -148,7 +139,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     Log.e("SchedulesDebug", "computeAvailableDirections: exception for dir $dir: ${t.message}")
                 }
             }
-            Log.d("SchedulesDebug", "=== computeAvailableDirections END === availableDirections=$available")
             _availableDirections.value = available
         }
     }
@@ -159,9 +149,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     @RequiresApi(Build.VERSION_CODES.O)
     fun loadSchedulesForDirection(lineName: String, stopName: String, directionId: Int) {
         viewModelScope.launch {
-            Log.d("SchedulesDebug", "=== loadSchedulesForDirection START ===")
-            Log.d("SchedulesDebug", "lineName='$lineName', stopName='$stopName', directionId=$directionId")
-
             _allSchedules.value = emptyList()
             _nextSchedules.value = emptyList()
 
@@ -170,10 +157,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
             // The GTFS data uses NAVI1 for the Navigone, but the app displays NAV1
             val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
-            Log.d("SchedulesDebug", "isTodayHoliday=$isTodayHoliday, gtfsLineName='$gtfsLineName'")
 
             val allSchedulesForDay = schedulesRepository.getSchedules(gtfsLineName, stopName, directionId, isTodayHoliday)
-            Log.d("SchedulesDebug", "allSchedulesForDay count: ${allSchedulesForDay.size}")
             _allSchedules.value = allSchedulesForDay
 
             if (allSchedulesForDay.isEmpty()) {
@@ -198,7 +183,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 }
 
                 val nextThree = (remainingToday + allSchedulesForDay).take(3)
-                Log.d("SchedulesDebug", "=== loadSchedulesForDirection END === nextThree=$nextThree")
 
                 _nextSchedules.value = nextThree
 
@@ -365,15 +349,11 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     }
                 }
 
-                val phase1Time = System.currentTimeMillis() - startTime
-                Log.d("TransportViewModel", "Phase 1 preload completed in ${phase1Time}ms")
-
                 // ===== PHASE 2: Deferred heavy processing =====
                 // Build connections index (can take time with many stops)
                 stopsForIndexing?.let { stops ->
                     launch(Dispatchers.Default) {
                         buildConnectionsIndex(stops)
-                        Log.d("TransportViewModel", "Connections index built")
                     }
                 }
 
@@ -382,19 +362,12 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 // Reduced from 2000ms to 500ms for faster itinerary availability
                 launch(Dispatchers.IO) {
                     kotlinx.coroutines.delay(500) // Wait 500ms for initial UI to render
-                    if (raptorRepository.isReady()) {
-                        Log.d("TransportViewModel", "Raptor already initialized")
-                    } else {
-                        val raptorStart = System.currentTimeMillis()
-                        raptorRepository.initialize()
-                        val raptorTime = System.currentTimeMillis() - raptorStart
-                        Log.d("TransportViewModel", "Raptor preloaded in ${raptorTime}ms")
-                    }
+                    val raptorStart = System.currentTimeMillis()
+                    raptorRepository.initialize()
 
                     // Preload journey cache from disk (recent itineraries)
                     raptorRepository.preloadJourneyCache()
                     val cacheStats = raptorRepository.getCacheStats()
-                    Log.d("TransportViewModel", "Journey cache preloaded: ${cacheStats.memoryEntries} in memory, ${cacheStats.diskEntries} on disk (${cacheStats.diskSizeKB}KB)")
 
                     // Cleanup expired cache entries (runs in background)
                     raptorRepository.cleanupExpiredCache()
