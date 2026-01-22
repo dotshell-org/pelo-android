@@ -26,12 +26,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Directions
-import androidx.compose.material.icons.filled.Route
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -146,7 +145,7 @@ fun LineDetailsBottomSheet(
     val loadedLineNames = remember(linesState) {
         when (linesState) {
             is TransportLinesUiState.Success -> (linesState as TransportLinesUiState.Success).lines
-                .map { it.properties.ligne.orEmpty().uppercase() }
+                .map { it.properties.ligne.uppercase() }
                 .toSet()
             else -> emptySet()
         }
@@ -505,7 +504,7 @@ private fun NextSchedulesSection(
 
 @Composable
 private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Boolean, isLast: Boolean, onStopClick: () -> Unit = {}) {
-    // Debug: mesurer les recompositions de cet item
+    // Debug: measure the recompositions of this item
     ListItemRecompositionCounter("LineStops", stop.stopId)
 
     Row(

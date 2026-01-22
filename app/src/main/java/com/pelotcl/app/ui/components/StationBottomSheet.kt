@@ -227,7 +227,7 @@ private fun LineListItem(
     lineName: String,
     onClick: () -> Unit
 ) {
-    // Debug: mesurer les recompositions de cet item
+    // Debug: measure the recompositions of this item
     ListItemRecompositionCounter("StationLines", lineName)
 
     @Suppress("ComposeLocalContext") // Context access needed for dynamic resource loading

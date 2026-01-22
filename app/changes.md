@@ -1,28 +1,27 @@
-```markdown
-# Changelog - Optimisation des Recompositions Jetpack Compose
+# Changelog – Jetpack Compose Recomposition Optimization
 
-## Date : 21 Janvier 2025
-
----
-
-## 🎯 Objectif
-
-Optimiser les performances de recomposition dans Jetpack Compose en ajoutant des clés stables (`key`) aux listes, permettant à Compose de réutiliser les compositions existantes au lieu de tout recréer.
+## Date: January 21, 2025
 
 ---
 
-## 📁 Fichiers modifiés
+## 🎯 Objective
+
+Optimize recomposition performance in Jetpack Compose by adding stable keys (`key`) to lists, allowing Compose to reuse existing compositions instead of recreating everything.
+
+---
+
+## 📁 Modified Files
 
 ### 1. `AllSchedulesSheetContent.kt`
 
-**Avant :**
+**Before:**
 ```kotlin
 itemsIndexed(schedule) { index, (hour, times) ->
     // ...
 }
 ```
 
-**Après :**
+**After:**
 ```kotlin
 itemsIndexed(
     items = schedule,
@@ -32,20 +31,20 @@ itemsIndexed(
 }
 ```
 
-**Gain :** Lors du rafraîchissement des horaires, seules les heures modifiées sont recomposées (~90% de recompositions évitées sur une liste de 24 heures).
+**Gain:** When refreshing schedules, only modified hours are recomposed (~90% fewer recompositions for a 24-hour list).
 
 ---
 
 ### 2. `LineDetailsBottomSheet.kt`
 
-**Avant :**
+**Before:**
 ```kotlin
 displayedStops.forEachIndexed { index, stop ->
     StopItemWithLine(...)
 }
 ```
 
-**Après :**
+**After:**
 ```kotlin
 displayedStops.forEachIndexed { index, stop ->
     key(stop.stopId) {
@@ -55,20 +54,20 @@ displayedStops.forEachIndexed { index, stop ->
 }
 ```
 
-**Gain :** Sur une liste de 20+ arrêts, si 1 seul arrêt change, Compose ne recompose que cet arrêt au lieu de tous (~95% de recompositions évitées).
+**Gain:** For a list of 20+ stops, if only one stop changes, Compose recomposes only that stop instead of all (~95% fewer recompositions).
 
 ---
 
 ### 3. `StationBottomSheet.kt`
 
-**Avant :**
+**Before:**
 ```kotlin
 sortedLines.forEachIndexed { index, ligne ->
     LineListItem(...)
 }
 ```
 
-**Après :**
+**After:**
 ```kotlin
 sortedLines.forEachIndexed { index, ligne ->
     key(ligne) {
@@ -78,13 +77,13 @@ sortedLines.forEachIndexed { index, ligne ->
 }
 ```
 
-**Gain :** Les lignes de transport sont identifiées de manière stable, permettant une réutilisation efficace lors des mises à jour.
+**Gain:** Transport lines are stably identified, enabling efficient reuse during updates.
 
 ---
 
 ### 4. `ItineraryScreen.kt`
 
-**Avant :**
+**Before:**
 ```kotlin
 journeys.forEachIndexed { journeyIndex, journey ->
     JourneyCard(...)
@@ -95,7 +94,7 @@ journey.legs.forEachIndexed { legIndex, leg ->
 }
 ```
 
-**Après :**
+**After:**
 ```kotlin
 journeys.forEachIndexed { journeyIndex, journey ->
     key(journey.departureTime) {
@@ -112,44 +111,40 @@ journey.legs.forEachIndexed { legIndex, leg ->
 }
 ```
 
-**Gain :** Lors de la recherche d'itinéraires, chaque trajet et étape est identifié de manière unique, évitant les recompositions inutiles.
+**Gain:** During route searches, each journey and leg is uniquely identified, avoiding unnecessary recompositions.
 
 ---
 
-## 🆕 Fichier créé
+## 🆕 New File
 
 ### `RecompositionCounter.kt`
 
-Utilitaire de débogage pour mesurer et valider les optimisations de recomposition.
+Debug utility to measure and validate recomposition optimizations.
 
-**Fonctionnalités :**
-- `RecompositionCounter(name)` : Log chaque recomposition d'un composable
-- `ListItemRecompositionCounter(listName, itemKey)` : Spécifique aux items de liste, détecte les recompositions multiples
-- `RecompositionStats` : Collecte des statistiques globales
+**Features:**
+- `RecompositionCounter(name)`: Logs each recomposition of a composable
+- `ListItemRecompositionCounter(listName, itemKey)`: Specific to list items, detects multiple recompositions
+- `RecompositionStats`: Collects global statistics
 
-**Usage :** Filtrer Logcat par tag `RecompositionCounter` pour voir les logs.
+**Usage:** Filter Logcat by tag `RecompositionCounter` to view logs.
 
-**Désactivation :** Mettre `ENABLED = false` pour la production.
-
----
-
-## 📊 Résumé des gains de performance
-
-| Scénario | Sans clé | Avec clé | Gain estimé |
-|----------|----------|----------|-------------|
-| Liste de 20 arrêts, 1 changement | 20 recompositions | 1 recomposition | **~95%** |
-| Liste de 24 heures d'horaires | 24 recompositions | Items modifiés uniquement | **~90%** |
-| Scroll sur liste d'arrêts | Recrée tous les items | Réutilise les compositions | **CPU + Mémoire** |
-| Changement de direction ligne | Recrée tout | Met à jour les paramètres | **~80%** |
+**Disable:** Set `ENABLED = false` for production.
 
 ---
 
-## ⚠️ Notes importantes
+## 📊 Performance Summary
 
-1. **Recompositions légitimes** : Certaines recompositions sont attendues (ex: changement de direction inverse `isFirst`/`isLast`). Le compteur affiche un message debug dans ce cas.
-
-2. **Clés composites** : Pour éviter les collisions, certaines clés combinent plusieurs champs (ex: `"${leg.fromStopId}_${leg.departureTime}"`).
-
-3. **`Column` vs `LazyColumn`** : Les listes courtes (<10 éléments) utilisent `Column` + `key()` au lieu de `LazyColumn` car le overhead de lazy loading annulerait le gain.
+| Scenario | Without Key | With Key | Estimated Gain |
+|----------|-------------|----------|----------------|
+| List of 20 stops, 1 change | 20 recompositions | 1 recomposition | **~95%** |
+| List of 24 hours of schedules | 24 recompositions | Only modified items | **~90%** |
+| Scrolling through stop list | Recreates all items | Reuses compositions | **CPU + Memory** |
+| Line direction change | Recreates everything | Updates parameters | **~80%** |
 
 ---
+
+## ⚠️ Important Notes
+
+1. **Legitimate Recompositions:** Some recompositions are expected (e.g., reversing direction `isFirst`/`isLast`). The counter displays a debug message in such cases.
+2. **Composite Keys:** To avoid collisions, some keys combine multiple fields (e.g., `"${leg.fromStopId}_${leg.departureTime}"`).
+3. **`Column` vs `LazyColumn`:** Short lists (<10 items) use `Column` + `key()` instead of `LazyColumn` because the lazy loading overhead would negate the gain.
