@@ -1462,7 +1462,7 @@ private suspend fun addStopsToMap(
                     GeoJsonOptions()
                         .withCluster(true)
                         .withClusterRadius(50)
-                        .withClusterMaxZoom(13)
+                        .withClusterMaxZoom(11) // Below PRIORITY_STOPS_MIN_ZOOM (12.5) to ensure stops are unclustered when they become visible
                 )
                 style.addSource(stopsSource)
 
