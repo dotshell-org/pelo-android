@@ -17,6 +17,7 @@ object LineColorHelper {
     private const val NAVIGONE_COLOR = "#14b8a6"
     private const val BUS_COLOR = "#EF4444"
     private const val TRAMBUS_COLOR = "#eab308"
+    private const val TRAMBUS_TB12_COLOR = "#92400e"
     
     /**
      * Retourne la couleur hexadécimale appropriée pour une ligne de transport
@@ -32,7 +33,9 @@ object LineColorHelper {
         return when {
             // Rhône Express
             ligne.equals("RX", ignoreCase = true) -> "#E30613"
-            // Trambus
+            // Trambus TB12 (marron)
+            ligne.equals("TB12", ignoreCase = true) -> TRAMBUS_TB12_COLOR
+            // Trambus (jaune)
             ligne.uppercase().startsWith("TB") -> TRAMBUS_COLOR
             // Metros
             ligne == "A" && familleTransport == "MET" -> METRO_A_COLOR
@@ -64,6 +67,7 @@ object LineColorHelper {
         val upperLine = lineName.uppercase()
         val hexColor = when {
             upperLine == "RX" -> "#E30613"
+            upperLine == "TB12" -> TRAMBUS_TB12_COLOR
             upperLine.startsWith("TB") -> TRAMBUS_COLOR
             upperLine == "A" -> METRO_A_COLOR
             upperLine == "B" -> METRO_B_COLOR
