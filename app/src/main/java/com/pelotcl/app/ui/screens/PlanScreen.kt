@@ -882,6 +882,17 @@ private fun filterMapLines(
                 Expression.eq(Expression.get("ligne"), selectedLineName)
             )
         }
+
+        // Also hide/show individual line layers (for lignes fortes)
+        allLines.forEach { feature ->
+            val individualLayerId = "layer-${feature.properties.ligne}-${feature.properties.codeTrace}"
+            style.getLayer(individualLayerId)?.let { layer ->
+                val shouldBeVisible = feature.properties.ligne.equals(selectedLineName, ignoreCase = true)
+                layer.setProperties(
+                    PropertyFactory.visibility(if (shouldBeVisible) "visible" else "none")
+                )
+            }
+        }
     }
     val visibleCandidates = allLines.count { it.properties.ligne.equals(selectedLineName, ignoreCase = true) }
     return visibleCandidates
