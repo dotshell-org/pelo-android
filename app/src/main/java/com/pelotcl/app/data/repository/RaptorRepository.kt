@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import android.util.LruCache
 import com.pelotcl.app.data.cache.JourneyCache
+import com.pelotcl.app.utils.SearchUtils
 import io.raptor.RaptorLibrary
 import io.raptor.model.Stop
 import kotlinx.coroutines.Dispatchers
@@ -188,11 +189,8 @@ class RaptorRepository private constructor(private val context: Context) {
         // Index by position (for leg.fromStopIndex / leg.toStopIndex lookups)
         stopsByIndex = stopsCache.mapIndexed { index, stop -> index to stop }.toMap()
 
-        // Index by normalized name for fast search
-        stopsByNormalizedName = stopsCache.groupBy { normalizeStopName(it.name) }
-
         if (DEBUG_LOGGING) {
-            Log.d("RaptorRepository", "Built indexes: ${stopsByIndex.size} by index, ${stopsByNormalizedName.size} unique normalized names")
+            Log.d("RaptorRepository", "Built indexes: ${stopsByIndex.size} by index")
         }
     }
 
@@ -218,75 +216,44 @@ class RaptorRepository private constructor(private val context: Context) {
     suspend fun searchStopsByName(query: String): List<RaptorStop> = withContext(Dispatchers.Default) {
         ensureInitialized()
         try {
-            // First try: exact search via library
-            var results = raptorLibrary?.searchStopsByName(query)?.map { stop ->
+            // Optimisation: pré-filtrage léger basé sur le premier mot
+            // puis fuzzy matching complet qui gère tout (accents, tirets, multi-mots)
+            val firstWord = query.trim().split("\\s+".toRegex()).firstOrNull()?.lowercase() ?: ""
+            
+            // Étape 1: pré-filtrage rapide sur le premier mot seulement
+            val candidates = if (firstWord.isNotEmpty()) {
+                stopsCache.filter { stop ->
+                    stop.name.lowercase().contains(firstWord)
+                }
+            } else {
+                stopsCache
+            }
+            
+            // Étape 2: fuzzy matching précis sur les candidats (gère multi-mots, accents, etc.)
+            val results = candidates.filter { stop ->
+                SearchUtils.fuzzyContains(stop.name, query)
+            }.map { stop ->
                 RaptorStop(
                     id = stop.id,
                     name = stop.name,
                     lat = stop.lat,
                     lon = stop.lon
                 )
-            } ?: emptyList()
+            }.sortedWith(
+                compareBy(
+                    { !SearchUtils.fuzzyStartsWith(it.name, query) },
+                    { it.name }
+                )
+            )
 
             if (DEBUG_LOGGING) {
-                Log.d("RaptorRepository", "searchStopsByName('$query') - library search found ${results.size} stops")
-            }
-
-            // If no results, try searching in our pre-computed index with flexible matching
-            if (results.isEmpty() && stopsByNormalizedName.isNotEmpty()) {
-                val normalizedQuery = normalizeStopName(query)
-
-                // O(1) exact normalized match using pre-computed index
-                val exactMatches = stopsByNormalizedName[normalizedQuery]
-                if (exactMatches != null) {
-                    results = exactMatches.map { stop ->
-                        RaptorStop(id = stop.id, name = stop.name, lat = stop.lat, lon = stop.lon)
-                    }
-                    if (DEBUG_LOGGING) {
-                        Log.d("RaptorRepository", "searchStopsByName('$query') - index exact match found ${results.size} stops")
-                    }
-                }
-
-                // If still no results, try contains match (fallback, slower)
-                if (results.isEmpty()) {
-                    results = stopsByNormalizedName.entries
-                        .filter { (normalizedName, _) ->
-                            normalizedName.contains(normalizedQuery) || normalizedQuery.contains(normalizedName)
-                        }
-                        .flatMap { (_, stops) -> stops }
-                        .map { stop ->
-                            RaptorStop(id = stop.id, name = stop.name, lat = stop.lat, lon = stop.lon)
-                        }
-                    if (DEBUG_LOGGING) {
-                        Log.d("RaptorRepository", "searchStopsByName('$query') - index contains match found ${results.size} stops")
-                    }
-                }
-            }
-
-            if (DEBUG_LOGGING) {
-                Log.d("RaptorRepository", "searchStopsByName('$query') final: ${results.size} stops - ${results.take(5).map { "${it.name}(${it.id})" }}")
+                Log.d("RaptorRepository", "searchStopsByName('$query') found ${results.size} stops - ${results.take(5).map { "${it.name}(${it.id})" }}")
             }
             results
         } catch (e: Exception) {
             Log.e("RaptorRepository", "Error searching stops: ${e.message}", e)
             emptyList()
         }
-    }
-
-    /**
-     * Normalize stop name for comparison (remove accents, lowercase, remove special chars)
-     */
-    private fun normalizeStopName(name: String): String {
-        return name
-            .lowercase()
-            .replace(Regex("[àáâãäå]"), "a")
-            .replace(Regex("[èéêë]"), "e")
-            .replace(Regex("[ìíîï]"), "i")
-            .replace(Regex("[òóôõö]"), "o")
-            .replace(Regex("[ùúûü]"), "u")
-            .replace(Regex("[ýÿ]"), "y")
-            .replace(Regex("[ç]"), "c")
-            .replace(Regex("[^a-z0-9]"), "")
     }
 
     /**
