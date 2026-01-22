@@ -134,9 +134,9 @@ def inject_hardcoded_navigone_schedules(conn):
     cursor = conn.cursor()
 
     navigone_calendar = [
-        ('NAVI1_WEEKDAY_MTTF', 1, 1, 0, 1, 1, 0, 0, '20250101', '20251231'),
-        ('NAVI1_WEDNESDAY', 0, 0, 1, 0, 0, 0, 0, '20250101', '20251231'),
-        ('NAVI1_WEEKEND', 0, 0, 0, 0, 0, 1, 1, '20250101', '20251231')
+        ('NAVI1_WEEKDAY_MTTF', 1, 1, 0, 1, 1, 0, 0, '20240101', '20301231'),
+        ('NAVI1_WEDNESDAY', 0, 0, 1, 0, 0, 0, 0, '20240101', '20301231'),
+        ('NAVI1_WEEKEND', 0, 0, 0, 0, 0, 1, 1, '20240101', '20301231')
     ]
 
     navigone_directions = [

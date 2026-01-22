@@ -241,20 +241,31 @@ class SchedulesRepository(context: Context) {
     }
 
     fun getSchedules(lineName: String, stopName: String, directionId: Int, isHoliday: Boolean): List<String> {
+        Log.d("SchedulesDebug", "=== getSchedules START ===")
+        Log.d("SchedulesDebug", "Params: lineName='$lineName', stopName='$stopName', directionId=$directionId, isHoliday=$isHoliday")
+
         // Build cache key
         val cacheKey = "$lineName|$stopName|$directionId|$isHoliday"
-        schedulesCache.get(cacheKey)?.let { return it }
+        schedulesCache.get(cacheKey)?.let {
+            Log.d("SchedulesDebug", "Cache HIT for key: $cacheKey, returning ${it.size} results")
+            return it
+        }
+        Log.d("SchedulesDebug", "Cache MISS for key: $cacheKey")
 
         val result = mutableListOf<String>()
         try {
             val db = dbHelper.readableDatabase
+            Log.d("SchedulesDebug", "Database opened successfully")
 
             val lineType = getLineType(lineName)
+            Log.d("SchedulesDebug", "LineType: $lineType")
+
             val effectiveIsHoliday = if (lineType == LineType.METRO || lineType == LineType.FUNICULAR) {
                 false
             } else {
                 isHoliday
             }
+            Log.d("SchedulesDebug", "effectiveIsHoliday: $effectiveIsHoliday")
 
             val calendar = java.util.Calendar.getInstance()
             val dayOfWeek = calendar.get(java.util.Calendar.DAY_OF_WEEK)
@@ -268,6 +279,17 @@ class SchedulesRepository(context: Context) {
                 else -> "sunday"
             }
             val dayColumn = if (lineType == LineType.METRO || lineType == LineType.FUNICULAR) "monday" else actualDayColumn
+            Log.d("SchedulesDebug", "dayOfWeek: $dayOfWeek, actualDayColumn: $actualDayColumn, dayColumn: $dayColumn")
+
+            // Format today's date as YYYYMMDD for GTFS calendar date comparison
+            val todayFormatted = String.format(
+                java.util.Locale.US,
+                "%04d%02d%02d",
+                calendar.get(java.util.Calendar.YEAR),
+                calendar.get(java.util.Calendar.MONTH) + 1,
+                calendar.get(java.util.Calendar.DAY_OF_MONTH)
+            )
+            Log.d("SchedulesDebug", "todayFormatted: $todayFormatted")
 
             val isWeekday = dayColumn in setOf("monday", "tuesday", "wednesday", "thursday", "friday")
             var appliedAmAvFilter = false
@@ -281,7 +303,47 @@ class SchedulesRepository(context: Context) {
                     "AND s.service_id LIKE '%AM%'"
                 }
             }
+            Log.d("SchedulesDebug", "appliedAmAvFilter: $appliedAmAvFilter, serviceIdFilter: '$serviceIdFilter'")
 
+            // Debug: Check if stop exists in DB
+            val stopCheckCursor = db.rawQuery(
+                "SELECT COUNT(*) FROM schedules WHERE station_name = ? COLLATE NOCASE",
+                arrayOf(stopName)
+            )
+            if (stopCheckCursor.moveToFirst()) {
+                Log.d("SchedulesDebug", "Stop '$stopName' total schedules count: ${stopCheckCursor.getInt(0)}")
+            }
+            stopCheckCursor.close()
+
+            // Debug: Check if line+stop combination exists
+            val lineStopCheckCursor = db.rawQuery(
+                "SELECT COUNT(*) FROM schedules WHERE route_name = ? AND station_name = ? COLLATE NOCASE",
+                arrayOf(lineName, stopName)
+            )
+            if (lineStopCheckCursor.moveToFirst()) {
+                Log.d("SchedulesDebug", "Line '$lineName' at stop '$stopName' schedules count: ${lineStopCheckCursor.getInt(0)}")
+            }
+            lineStopCheckCursor.close()
+
+            // Debug: Check calendar entries for this line
+            val calendarCheckCursor = db.rawQuery(
+                """
+                SELECT DISTINCT c.service_id, c.start_date, c.end_date, c.$dayColumn 
+                FROM schedules s
+                JOIN calendar c ON s.service_id = c.service_id
+                WHERE s.route_name = ? AND s.station_name = ? COLLATE NOCASE
+                LIMIT 5
+                """,
+                arrayOf(lineName, stopName)
+            )
+            Log.d("SchedulesDebug", "Calendar entries for line '$lineName' at '$stopName':")
+            while (calendarCheckCursor.moveToNext()) {
+                Log.d("SchedulesDebug", "  service_id=${calendarCheckCursor.getString(0)}, start=${calendarCheckCursor.getString(1)}, end=${calendarCheckCursor.getString(2)}, $dayColumn=${calendarCheckCursor.getInt(3)}")
+            }
+            calendarCheckCursor.close()
+
+            // First attempt: with date validation (strict GTFS compliance)
+            Log.d("SchedulesDebug", "Query 1: With date validation")
             var cursor = db.rawQuery(
                 """
                 SELECT DISTINCT substr(s.arrival_time, 1, 5) AS arrival_time 
@@ -290,18 +352,48 @@ class SchedulesRepository(context: Context) {
                 WHERE s.route_name = ? 
                 AND s.direction_id = ?
                 AND c.$dayColumn = 1
+                AND c.start_date <= ?
+                AND c.end_date >= ?
                 $serviceIdFilter
                 AND s.station_name = ? COLLATE NOCASE
                 ORDER BY s.arrival_time
                 """,
-                arrayOf(lineName, directionId.toString(), stopName)
+                arrayOf(lineName, directionId.toString(), todayFormatted, todayFormatted, stopName)
             )
             while (cursor.moveToNext()) {
                 result.add(cursor.getString(0))
             }
             cursor.close()
+            Log.d("SchedulesDebug", "Query 1 results: ${result.size}")
 
+            // Fallback 1: If no results with date validation, try without date filter
+            // This handles expired GTFS data gracefully
+            if (result.isEmpty()) {
+                Log.d("SchedulesDebug", "Query 2: Without date validation (fallback)")
+                cursor = db.rawQuery(
+                    """
+                    SELECT DISTINCT substr(s.arrival_time, 1, 5) AS arrival_time 
+                    FROM schedules s
+                    JOIN calendar c ON s.service_id = c.service_id
+                    WHERE s.route_name = ? 
+                    AND s.direction_id = ?
+                    AND c.$dayColumn = 1
+                    $serviceIdFilter
+                    AND s.station_name = ? COLLATE NOCASE
+                    ORDER BY s.arrival_time
+                    """,
+                    arrayOf(lineName, directionId.toString(), stopName)
+                )
+                while (cursor.moveToNext()) {
+                    result.add(cursor.getString(0))
+                }
+                cursor.close()
+                Log.d("SchedulesDebug", "Query 2 results: ${result.size}")
+            }
+
+            // Fallback 2: If still no results and AM/AV filter was applied, try without it
             if (result.isEmpty() && appliedAmAvFilter) {
+                Log.d("SchedulesDebug", "Query 3: Without AM/AV filter (fallback)")
                 serviceIdFilter = ""
                 cursor = db.rawQuery(
                     """
@@ -321,13 +413,20 @@ class SchedulesRepository(context: Context) {
                     result.add(cursor.getString(0))
                 }
                 cursor.close()
+                Log.d("SchedulesDebug", "Query 3 results: ${result.size}")
             }
 
         } catch (e: Exception) {
-            Log.e("NavigoneDebug", "Error in getSchedules: ${e.message}", e)
+            Log.e("SchedulesDebug", "EXCEPTION in getSchedules: ${e.message}", e)
         }
 
         val finalResult = result.distinct().sorted()
+        Log.d("SchedulesDebug", "=== getSchedules END === Final results: ${finalResult.size}")
+        if (finalResult.isEmpty()) {
+            Log.w("SchedulesDebug", "NO SCHEDULES FOUND for line='$lineName' stop='$stopName' dir=$directionId")
+        } else {
+            Log.d("SchedulesDebug", "First 5 schedules: ${finalResult.take(5)}")
+        }
 
         // Cache the result (even empty results to avoid repeated queries)
         schedulesCache.put(cacheKey, finalResult)
@@ -339,7 +438,7 @@ class SchedulesRepository(context: Context) {
 
         companion object {
             private const val DB_NAME = "schedules.db"
-            private const val DB_VERSION = 4
+            private const val DB_VERSION = 6  // Incremented to force re-copy from assets
         }
 
         override fun onCreate(db: SQLiteDatabase) {
@@ -347,21 +446,82 @@ class SchedulesRepository(context: Context) {
         }
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-            // Force recreation by throwing an exception, which is caught in getReadableDatabase
-            throw RuntimeException("Database upgrade required from $oldVersion to $newVersion")
+            // Database version changed - need to re-copy from assets
+            Log.d("SchedulesDebug", "onUpgrade: $oldVersion -> $newVersion, will re-copy database")
+            // Close this DB and delete it, the next getReadableDatabase call will re-copy
+            context.deleteDatabase(DB_NAME)
         }
 
         override fun getReadableDatabase(): SQLiteDatabase {
-            if (!checkDatabase()) {
+            val dbFile = context.getDatabasePath(DB_NAME)
+            Log.d("SchedulesDebug", "getReadableDatabase: dbFile=${dbFile.absolutePath}, exists=${dbFile.exists()}")
+
+            // Check if database needs to be copied or updated
+            var needsCopy = !dbFile.exists()
+            Log.d("SchedulesDebug", "getReadableDatabase: needsCopy (file missing)=$needsCopy")
+
+            if (!needsCopy && dbFile.exists()) {
+                // Check if version is outdated OR if tables are missing
+                try {
+                    val existingDb = SQLiteDatabase.openDatabase(dbFile.path, null, SQLiteDatabase.OPEN_READONLY)
+                    val existingVersion = existingDb.version
+                    Log.d("SchedulesDebug", "getReadableDatabase: existingVersion=$existingVersion, DB_VERSION=$DB_VERSION")
+
+                    // Check if schedules table exists
+                    val cursor = existingDb.rawQuery(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name='schedules'",
+                        null
+                    )
+                    val hasSchedulesTable = cursor.count > 0
+                    cursor.close()
+                    existingDb.close()
+
+                    Log.d("SchedulesDebug", "getReadableDatabase: hasSchedulesTable=$hasSchedulesTable")
+
+                    if (existingVersion < DB_VERSION || !hasSchedulesTable) {
+                        Log.d("SchedulesDebug", "Database outdated or missing tables, will re-copy")
+                        context.deleteDatabase(DB_NAME)
+                        needsCopy = true
+                    }
+                } catch (e: Exception) {
+                    Log.d("SchedulesDebug", "Error checking database, will re-copy: ${e.message}")
+                    context.deleteDatabase(DB_NAME)
+                    needsCopy = true
+                }
+            }
+
+            if (needsCopy) {
                 copyDatabase()
             }
+
             val db = try {
                 super.getReadableDatabase()
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                Log.d("SchedulesDebug", "Error opening database, will re-copy: ${e.message}")
                 context.deleteDatabase(DB_NAME)
                 copyDatabase()
                 super.getReadableDatabase()
             }
+
+            // Final verification: check if tables exist after opening
+            try {
+                val cursor = db.rawQuery(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='schedules'",
+                    null
+                )
+                val hasTable = cursor.count > 0
+                cursor.close()
+                if (!hasTable) {
+                    Log.e("SchedulesDebug", "CRITICAL: schedules table still missing after copy! Forcing re-copy...")
+                    db.close()
+                    context.deleteDatabase(DB_NAME)
+                    copyDatabase()
+                    return super.getReadableDatabase()
+                }
+            } catch (e: Exception) {
+                Log.e("SchedulesDebug", "Error verifying tables: ${e.message}")
+            }
+
             // Optimize database for read-heavy workload
             optimizeDatabase(db)
             // Ensure indexes exist for fast queries
@@ -370,9 +530,30 @@ class SchedulesRepository(context: Context) {
         }
 
         override fun getWritableDatabase(): SQLiteDatabase {
-            if (!checkDatabase()) {
+            // Use same logic as getReadableDatabase for consistency
+            val dbFile = context.getDatabasePath(DB_NAME)
+
+            var needsCopy = !dbFile.exists()
+
+            if (!needsCopy && dbFile.exists()) {
+                try {
+                    val existingDb = SQLiteDatabase.openDatabase(dbFile.path, null, SQLiteDatabase.OPEN_READONLY)
+                    val existingVersion = existingDb.version
+                    existingDb.close()
+                    if (existingVersion < DB_VERSION) {
+                        context.deleteDatabase(DB_NAME)
+                        needsCopy = true
+                    }
+                } catch (e: Exception) {
+                    context.deleteDatabase(DB_NAME)
+                    needsCopy = true
+                }
+            }
+
+            if (needsCopy) {
                 copyDatabase()
             }
+
             val db = super.getWritableDatabase()
             optimizeDatabase(db)
             ensureIndexes(db)
@@ -434,12 +615,8 @@ class SchedulesRepository(context: Context) {
             }
         }
 
-        private fun checkDatabase(): Boolean {
-            val dbFile = context.getDatabasePath(DB_NAME)
-            return dbFile.exists()
-        }
-
         private fun copyDatabase() {
+            Log.d("SchedulesDebug", "copyDatabase: Copying schedules.db from assets...")
             try {
                 val inputStream = context.assets.open("databases/$DB_NAME")
                 val outFile = context.getDatabasePath(DB_NAME)
@@ -459,12 +636,13 @@ class SchedulesRepository(context: Context) {
                     val db = SQLiteDatabase.openDatabase(outFile.path, null, SQLiteDatabase.OPEN_READWRITE)
                     db.version = DB_VERSION
                     db.close()
+                    Log.d("SchedulesDebug", "copyDatabase: Successfully copied and set version to $DB_VERSION")
                 } catch (e: Exception) {
-                    Log.e("SchedulesRepository", "Error setting database version: ${e.message}")
+                    Log.e("SchedulesDebug", "Error setting database version: ${e.message}")
                 }
             } catch (e: IOException) {
                 e.printStackTrace()
-                Log.e("SchedulesRepository", "Error copying database: ${e.message}")
+                Log.e("SchedulesDebug", "Error copying database: ${e.message}")
             }
         }
     }

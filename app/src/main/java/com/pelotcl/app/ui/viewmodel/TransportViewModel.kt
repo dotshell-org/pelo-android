@@ -107,9 +107,12 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun loadHeadsign(routeName: String) {
         viewModelScope.launch {
+            Log.d("SchedulesDebug", "loadHeadsign called for routeName='$routeName'")
             // GTFS uses "NAVI1" for Navigone while the app displays "NAV1"
             val gtfsRouteName = if (routeName.equals("NAV1", ignoreCase = true)) "NAVI1" else routeName
-            _headsigns.value = schedulesRepository.getHeadsigns(gtfsRouteName)
+            val headsigns = schedulesRepository.getHeadsigns(gtfsRouteName)
+            Log.d("SchedulesDebug", "loadHeadsign result: $headsigns")
+            _headsigns.value = headsigns
         }
     }
 
@@ -120,24 +123,32 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     @RequiresApi(Build.VERSION_CODES.O)
     fun computeAvailableDirections(lineName: String, stopName: String) {
         viewModelScope.launch {
+            Log.d("SchedulesDebug", "=== computeAvailableDirections START ===")
+            Log.d("SchedulesDebug", "lineName='$lineName', stopName='$stopName'")
+
             // Determine if it is a school holiday
             val isTodayHoliday = holidayDetector.isSchoolHoliday(LocalDate.now())
             val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
+            Log.d("SchedulesDebug", "isTodayHoliday=$isTodayHoliday, gtfsLineName='$gtfsLineName'")
 
             // Candidate directions list: those exposed by _headsigns otherwise 0 and 1 by default
             val candidateDirections = _headsigns.value.keys.ifEmpty { setOf(0, 1) }.toList().sorted()
+            Log.d("SchedulesDebug", "candidateDirections=$candidateDirections, headsigns=${_headsigns.value}")
 
             val available = mutableListOf<Int>()
             for (dir in candidateDirections) {
                 try {
+                    Log.d("SchedulesDebug", "Checking direction $dir...")
                     val schedules = schedulesRepository.getSchedules(gtfsLineName, stopName, dir, isTodayHoliday)
+                    Log.d("SchedulesDebug", "Direction $dir has ${schedules.size} schedules")
                     if (schedules.isNotEmpty()) {
                         available.add(dir)
                     }
                 } catch (t: Throwable) {
-                    Log.e("TransportViewModel", "computeAvailableDirections: exception ${t.message}")
+                    Log.e("SchedulesDebug", "computeAvailableDirections: exception for dir $dir: ${t.message}")
                 }
             }
+            Log.d("SchedulesDebug", "=== computeAvailableDirections END === availableDirections=$available")
             _availableDirections.value = available
         }
     }
@@ -148,6 +159,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     @RequiresApi(Build.VERSION_CODES.O)
     fun loadSchedulesForDirection(lineName: String, stopName: String, directionId: Int) {
         viewModelScope.launch {
+            Log.d("SchedulesDebug", "=== loadSchedulesForDirection START ===")
+            Log.d("SchedulesDebug", "lineName='$lineName', stopName='$stopName', directionId=$directionId")
+
             _allSchedules.value = emptyList()
             _nextSchedules.value = emptyList()
 
@@ -156,11 +170,14 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
             // The GTFS data uses NAVI1 for the Navigone, but the app displays NAV1
             val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
+            Log.d("SchedulesDebug", "isTodayHoliday=$isTodayHoliday, gtfsLineName='$gtfsLineName'")
 
             val allSchedulesForDay = schedulesRepository.getSchedules(gtfsLineName, stopName, directionId, isTodayHoliday)
+            Log.d("SchedulesDebug", "allSchedulesForDay count: ${allSchedulesForDay.size}")
             _allSchedules.value = allSchedulesForDay
 
             if (allSchedulesForDay.isEmpty()) {
+                Log.w("SchedulesDebug", "=== loadSchedulesForDirection END === No schedules found!")
                 return@launch
             }
 
@@ -181,11 +198,12 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 }
 
                 val nextThree = (remainingToday + allSchedulesForDay).take(3)
+                Log.d("SchedulesDebug", "=== loadSchedulesForDirection END === nextThree=$nextThree")
 
                 _nextSchedules.value = nextThree
 
             } catch (e: Exception) {
-                Log.e("TransportViewModel", "Error filtering next schedules: ${e.message}")
+                Log.e("SchedulesDebug", "Error filtering next schedules: ${e.message}")
             }
         }
     }
