@@ -819,7 +819,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         val linesFromFeatures = when (val currentState = _uiState.value) {
             is TransportLinesUiState.Success -> {
                 currentState.lines
-                    .map { it.properties.ligne }
+                    .map { it.properties.ligne.split(':').first().trim() }
                     .distinct()
             }
             else -> emptyList()
@@ -833,9 +833,10 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             }
             .distinct()
 
-        // Combine and sort
+        // Combine and deduplicate (case-insensitive) before sorting
         return (linesFromFeatures + linesFromStops)
-            .distinct()
+            .groupBy { it.uppercase() }
+            .map { (_, variants) -> variants.first() }
             .filter { it.isNotEmpty() && !it.equals("TS", ignoreCase = true) }
             .sortedWith(compareBy(
                 // Sort by type first (Metro, Funicular, Navigone, Tram, then the rest)

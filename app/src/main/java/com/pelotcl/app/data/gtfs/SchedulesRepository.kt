@@ -121,14 +121,32 @@ class SchedulesRepository(context: Context) {
                 )
             ).take(50)
 
-            // Convertir en StationSearchResult
+            // Convertir en StationSearchResult et fusionner les arrêts du même nom
+            val stopsByName = mutableMapOf<String, MutableList<String>>()
+            val pmrByName = mutableMapOf<String, Boolean>()
+            
             sorted.forEach { (name, desserteRaw, isPmr) ->
                 val lines = if (desserteRaw.isNotBlank()) {
-                    desserteRaw.split(",").map { it.trim() }
+                    // Parse pour enlever les suffixes :A et :R et extraire uniquement les noms de lignes
+                    desserteRaw.split(",")
+                        .mapNotNull { part ->
+                            val trimmed = part.trim()
+                            if (trimmed.isEmpty()) null else trimmed.substringBefore(":").trim()
+                        }
+                        .filter { it.isNotEmpty() }
                 } else {
                     emptyList()
                 }
-                results.add(StationSearchResult(name, lines, isPmr))
+                
+                // Fusionner les lignes pour le même arrêt
+                stopsByName.getOrPut(name) { mutableListOf() }.addAll(lines)
+                // Un arrêt est PMR s'il l'est dans au moins une de ses entrées
+                pmrByName[name] = pmrByName.getOrDefault(name, false) || isPmr
+            }
+            
+            // Créer les résultats avec lignes fusionnées et dédupliquées
+            stopsByName.forEach { (name, lines) ->
+                results.add(StationSearchResult(name, lines.distinct(), pmrByName[name] ?: false))
             }
 
         } catch (e: Exception) {
@@ -137,20 +155,37 @@ class SchedulesRepository(context: Context) {
             return try {
                 val repo = TransportRepository(appContext)
                 val stopsResult = repo.getAllStops()
+                
+                // Grouper les arrêts par nom et fusionner leurs lignes
+                val stopsByName = mutableMapOf<String, MutableList<String>>()
+                val pmrByName = mutableMapOf<String, Boolean>()
+                
                 stopsResult.getOrNull()?.features
                     ?.asSequence()
                     ?.filter { SearchUtils.fuzzyContains(it.properties.nom, query) }
-                    ?.map { stop ->
+                    ?.forEach { stop ->
                         val desserteRaw = stop.properties.desserte
                         val lines = desserteRaw?.takeIf { !it.isBlank() }
                             ?.split(',')
-                            ?.map { it.trim() }
+                            ?.mapNotNull { part ->
+                                val trimmed = part.trim()
+                                if (trimmed.isEmpty()) null else trimmed.substringBefore(":").trim()
+                            }
+                            ?.filter { it.isNotEmpty() }
                             ?: emptyList()
-                        StationSearchResult(stop.properties.nom, lines, stop.properties.pmr)
+                        
+                        val name = stop.properties.nom
+                        stopsByName.getOrPut(name) { mutableListOf() }.addAll(lines)
+                        pmrByName[name] = pmrByName.getOrDefault(name, false) || stop.properties.pmr
                     }
-                    ?.sortedWith(compareBy<StationSearchResult>({ !SearchUtils.fuzzyStartsWith(it.stopName, query) }, { it.stopName }))
-                    ?.take(50)
-                    ?.toList()
+                
+                // Créer les résultats avec lignes fusionnées
+                stopsByName.map { (name, lines) ->
+                    StationSearchResult(name, lines.distinct(), pmrByName[name] ?: false)
+                }
+                    .sortedWith(compareBy<StationSearchResult>({ !SearchUtils.fuzzyStartsWith(it.stopName, query) }, { it.stopName }))
+                    .take(50)
+                    .toList()
                     ?: emptyList()
             } catch (t: Throwable) {
                 Log.e("SchedulesRepository", "Fallback search failed: ${t.message}")
