@@ -224,6 +224,11 @@ object LineStopsCache {
             "Part-Dieu Jules Favre", "Thiers - Lafayette", "Charmettes", "Instit. Art Contemporain", "Verlaine",
             "Blanqui - Le Rize", "Grandclément", "Bernaix", "Cyprian - Léon Blum", "Bon Coin - Médipôle", "Laurent Bonnevay"
         ),
+        "TB12" to listOf(
+            "Gare Part-Dieu - V. Merle", "Part-Dieu Servient", "Garibaldi Paul Bert", "Bir Hakeim", "Félix Faure Vivier Merle",
+            "Archives - Parc Mandela", "Rouget de Lisle", "Maisons Neuves", "Cyrano", "Reconnaissance - Balzac",
+            "Montchat Place Ronde", "Kimmerling-Genêts"
+        ),
         "TS" to listOf(
             "Part-Dieu Villette Sud", "Vaulx-en-Velin La Soie", "Décines OL Vallée", "Meyzieu. Z.i.", "Meyzieu les Panettes"
         )

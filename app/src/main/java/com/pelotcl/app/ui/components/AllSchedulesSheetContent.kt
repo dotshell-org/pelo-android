@@ -108,7 +108,7 @@ fun AllSchedulesSheetContent(
                 .fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
-            itemsIndexed(list) { index, (hour, minutesList) ->
+            itemsIndexed(list, key = { _, (hour, _) -> hour }) { index, (hour, minutesList) ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()

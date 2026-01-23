@@ -26,12 +26,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Directions
-import androidx.compose.material.icons.filled.Route
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -46,6 +45,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -68,6 +68,7 @@ import com.pelotcl.app.ui.viewmodel.TransportLinesUiState
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LineColorHelper
+import com.pelotcl.app.utils.ListItemRecompositionCounter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -144,7 +145,7 @@ fun LineDetailsBottomSheet(
     val loadedLineNames = remember(linesState) {
         when (linesState) {
             is TransportLinesUiState.Success -> (linesState as TransportLinesUiState.Success).lines
-                .map { it.properties.ligne.orEmpty().uppercase() }
+                .map { it.properties.ligne.uppercase() }
                 .toSet()
             else -> emptySet()
         }
@@ -291,13 +292,15 @@ fun LineDetailsBottomSheet(
                             } else {
                                 val lineColor = getLineColor(lineInfo.lineName)
                                 displayedStops.forEachIndexed { index, stop ->
-                                    StopItemWithLine(
-                                        stop = stop,
-                                        lineColor = lineColor,
-                                        isFirst = index == 0,
-                                        isLast = index == displayedStops.size - 1,
-                                        onStopClick = { onStopClick(stop.stopName) }
-                                    )
+                                    key(stop.stopId) {
+                                        StopItemWithLine(
+                                            stop = stop,
+                                            lineColor = lineColor,
+                                            isFirst = index == 0,
+                                            isLast = index == displayedStops.size - 1,
+                                            onStopClick = { onStopClick(stop.stopName) }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -332,7 +335,7 @@ private fun NextSchedulesSection(
     val availableDirections by viewModel.availableDirections.collectAsState()
 
     LaunchedEffect(lineInfo.lineName) {
-        viewModel.loadHeadsigns(lineInfo.lineName)
+        viewModel.loadHeadsign(lineInfo.lineName)
     }
 
     // Calcule les directions disponibles à chaque changement de ligne/arrêt ou d'intitulés
@@ -501,6 +504,9 @@ private fun NextSchedulesSection(
 
 @Composable
 private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Boolean, isLast: Boolean, onStopClick: () -> Unit = {}) {
+    // Debug: measure the recompositions of this item
+    ListItemRecompositionCounter("LineStops", stop.stopId)
+
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).height(IntrinsicSize.Min).clickable { onStopClick() },
         verticalAlignment = Alignment.CenterVertically

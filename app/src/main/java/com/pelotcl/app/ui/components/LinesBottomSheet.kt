@@ -16,9 +16,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import com.pelotcl.app.utils.SearchUtils
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -34,25 +34,23 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.text.isDigitsOnly
 import com.pelotcl.app.utils.LineColorHelper
 
 /**
  * Bottom Sheet qui affiche toutes les lignes organisées par catégories
  */
 @RequiresApi(Build.VERSION_CODES.O)
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LinesBottomSheet(
     allLines: List<String>,
-    onDismiss: () -> Unit,
     onLineClick: (String) -> Unit,
-    favoriteLines: Set<String> = emptySet(),
-    onToggleFavorite: (String) -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    favoriteLines: Set<String> = emptySet()
 ) {
     val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
-    
+
     // Organize lines by category
     val categorizedLines = remember(allLines, favoriteLines) {
         // Map<String, List<String>> but we will iterate deterministically by turning to list
@@ -85,7 +83,7 @@ fun LinesBottomSheet(
             categorizedLines
         } else {
             categorizedLines.mapNotNull { (category, lines) ->
-                val filtered = lines.filter { it.contains(searchQuery, ignoreCase = true) }
+                val filtered = lines.filter { SearchUtils.fuzzyContains(it, searchQuery) }
                 if (filtered.isNotEmpty()) category to filtered else null
             }
         }
@@ -201,6 +199,7 @@ private fun naturalComparatorString(a: String, b: String): Int {
 /**
  * Chip pour afficher une ligne avec son icône TCL officielle
  */
+@Suppress("DiscouragedApi") // Dynamic resource loading for transport line icons
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 private fun LineChip(
@@ -266,6 +265,7 @@ private fun LineChip(
 /**
  * Vérifie si une ligne a une icône SVG disponible
  */
+@Suppress("DiscouragedApi") // Dynamic resource loading for transport line icons
 private fun hasLineIcon(lineName: String, context: android.content.Context): Boolean {
     val resourceName = lineName.lowercase()
         .replace("é", "e")
@@ -289,10 +289,15 @@ private fun categorizeLines(lines: List<String>, context: android.content.Contex
     val metros = mutableListOf<String>()
     val trams = mutableListOf<String>()
     val funiculaires = mutableListOf<String>()
-    val chrono = mutableListOf<String>() // Lignes C
-    val pleineLune = mutableListOf<String>() // Lignes PL
-    val jd = mutableListOf<String>() // Lignes JD
-    val navigone = mutableListOf<String>() // Ligne NAVI1
+    val chrono = mutableListOf<String>()
+    val pleineLune = mutableListOf<String>()
+    val jd = mutableListOf<String>()
+    val navigone = mutableListOf<String>()
+    val gareExpress = mutableListOf<String>()
+    val soyeuses = mutableListOf<String>()
+    val navettes = mutableListOf<String>()
+    val zi = mutableListOf<String>()
+    val carsDuRhone = mutableListOf<String>()
     val bus = mutableListOf<String>()
     
     linesWithIcon.forEach { line ->
@@ -300,14 +305,18 @@ private fun categorizeLines(lines: List<String>, context: android.content.Contex
         when {
             upperLine in setOf("A", "B", "C", "D") -> metros.add(line)
             upperLine.startsWith("F") && (upperLine == "F1" || upperLine == "F2") -> funiculaires.add(line)
-            // Trams: T + 1 digit (T1-T9), Tb (trambus), and RX (Rhonexpress)
             upperLine.startsWith("TB") || upperLine == "RX" || upperLine.contains("RHON") -> trams.add(line)
             upperLine.startsWith("T") && upperLine.length == 2 -> trams.add(line)
-            upperLine.startsWith("C") && upperLine.length >= 2 -> chrono.add(line) // C21, C22, etc.
-            upperLine.startsWith("PL") -> pleineLune.add(line) // PL1, PL2, etc.
-            upperLine.startsWith("JD") -> jd.add(line) // Lignes JD
-            upperLine.startsWith("NAV") -> navigone.add(line) // NAV1
-            else -> bus.add(line) // Bus normaux
+            upperLine.startsWith("C") && upperLine.length >= 2 -> chrono.add(line)
+            upperLine.startsWith("PL") -> pleineLune.add(line)
+            upperLine.startsWith("JD") -> jd.add(line)
+            upperLine.startsWith("NAV") -> navigone.add(line)
+            upperLine.startsWith("GE") -> gareExpress.add(line)
+            upperLine.startsWith("S") -> soyeuses.add(line)
+            upperLine.startsWith("ZI") -> zi.add(line)
+            upperLine.startsWith("N") -> navettes.add(line)
+            upperLine.length >= 3 && upperLine != "128" && upperLine.isDigitsOnly() -> carsDuRhone.add(line)
+            else -> bus.add(line)
         }
     }
     
@@ -350,7 +359,12 @@ private fun categorizeLines(lines: List<String>, context: android.content.Contex
     if (navigone.isNotEmpty()) result["Navigône"] = naturalSort(navigone)
     if (chrono.isNotEmpty()) result["Chrono"] = naturalSort(chrono)
     if (pleineLune.isNotEmpty()) result["Pleine Lune"] = naturalSort(pleineLune)
+    if (gareExpress.isNotEmpty()) result["Gare Express"] = naturalSort(gareExpress)
+    if (navettes.isNotEmpty()) result["Navette"] = naturalSort(navettes)
+    if (soyeuses.isNotEmpty()) result["Soyeuse"] = naturalSort(soyeuses)
+    if (zi.isNotEmpty()) result["Zone Industrielle"] = naturalSort(zi)
     if (bus.isNotEmpty()) result["Bus"] = naturalSort(bus)
+    if (carsDuRhone.isNotEmpty()) result["Cars du Rhône TCL unifié"] = naturalSort(carsDuRhone)
     if (jd.isNotEmpty()) result["Junior Direct"] = naturalSort(jd)
     
     return result

@@ -12,6 +12,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
@@ -30,6 +32,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -55,19 +58,67 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import com.pelotcl.app.ui.components.LinesBottomSheet
 import com.pelotcl.app.ui.components.SimpleSearchBar
 import com.pelotcl.app.ui.components.StationSearchResult
+import com.pelotcl.app.ui.screens.AboutScreen
+import com.pelotcl.app.ui.screens.ContactScreen
+import com.pelotcl.app.ui.screens.CreditsScreen
 import com.pelotcl.app.ui.screens.ItineraryScreen
+import com.pelotcl.app.ui.screens.LegalScreen
 import com.pelotcl.app.ui.screens.PlanScreen
+import com.pelotcl.app.ui.screens.SettingsScreen
 import com.pelotcl.app.ui.theme.PeloTheme
 import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
+import com.pelotcl.app.data.api.RetrofitInstance
+import com.pelotcl.app.data.cache.TransportCache
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import org.maplibre.android.geometry.LatLng
 
 class MainActivity : ComponentActivity() {
+
+    // Application-level coroutine scope for early background work
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Initialize HTTP cache early for network optimization
+        RetrofitInstance.initialize(applicationContext)
+
+        // Preload disk cache, SQLite, and Raptor in parallel for faster startup
+        // This runs before UI is shown, so data is ready when needed
+        appScope.launch {
+            try {
+                // Parallel cache, SQLite, and Raptor warmup
+                val cacheJob = launch {
+                    val cache = TransportCache.getInstance(applicationContext)
+                    cache.preloadFromDisk()
+                }
+                val sqliteJob = launch {
+                    val schedulesRepo = com.pelotcl.app.data.gtfs.SchedulesRepository(applicationContext)
+                    schedulesRepo.warmupDatabase()
+                }
+                // Preload Raptor library in background (deferred slightly to prioritize UI)
+                // Uses singleton pattern - same instance will be used everywhere
+                launch {
+                    delay(300) // Small delay to let UI start rendering
+                    val raptorRepo = com.pelotcl.app.data.repository.RaptorRepository.getInstance(applicationContext)
+                    raptorRepo.initialize()
+                    // Preload journey cache from disk for faster initial queries
+                    raptorRepo.preloadJourneyCache()
+                }
+                // Wait for cache and SQLite (critical for UI), Raptor can complete later
+                cacheJob.join()
+                sqliteJob.join()
+            } catch (e: Exception) {
+                android.util.Log.w("MainActivity", "Startup preload failed: ${e.message}")
+            }
+        }
+
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.light(
                 android.graphics.Color.TRANSPARENT,
@@ -111,7 +162,10 @@ private enum class Destination(
     );
 
     companion object {
-        val entries: List<Destination> = values().toList()
+        const val ABOUT = "about"
+        const val LEGAL = "legal"
+        const val CREDITS = "credits"
+        const val CONTACT = "contact"
     }
 }
 
@@ -162,7 +216,7 @@ fun NavBar(modifier: Modifier = Modifier) {
                         userLocation = LatLng(location.latitude, location.longitude)
                     }
                 }
-            } catch (e: SecurityException) {
+            } catch (_: SecurityException) {
                 // Handle exception
             }
         }
@@ -197,21 +251,52 @@ fun NavBar(modifier: Modifier = Modifier) {
                         userLocation = LatLng(location.latitude, location.longitude)
                     }
                 }
-            } catch (e: SecurityException) {
+            } catch (_: SecurityException) {
                 // Handle exception
             }
         }
     }
 
     LaunchedEffect(searchQuery) {
-        if (searchQuery.isNotEmpty()) {
-            withContext(Dispatchers.IO) {
-                val results = viewModel.searchStops(searchQuery)
+        val current = searchQuery.trim()
+        if (current.isNotEmpty()) {
+            // Debounce to avoid querying on every keystroke
+            delay(300)
+            if (current == searchQuery.trim()) {
+                val results = viewModel.searchStops(current)
                 stationSearchResults = results
             }
         } else {
             stationSearchResults = emptyList()
         }
+    }
+
+    // Gérer la barre de statut selon l'écran actif
+    DisposableEffect(selectedDestination) {
+        val activity = context as? ComponentActivity
+        if (selectedDestination == Destination.PARAMETRES.ordinal) {
+            // Barre de statut avec icônes blanches pour fond noir
+            activity?.enableEdgeToEdge(
+                statusBarStyle = SystemBarStyle.dark(
+                    android.graphics.Color.TRANSPARENT
+                ),
+                navigationBarStyle = SystemBarStyle.dark(
+                    android.graphics.Color.TRANSPARENT
+                )
+            )
+        } else {
+            // Barre de statut normale pour les autres écrans
+            activity?.enableEdgeToEdge(
+                statusBarStyle = SystemBarStyle.light(
+                    android.graphics.Color.TRANSPARENT,
+                    android.graphics.Color.TRANSPARENT
+                ),
+                navigationBarStyle = SystemBarStyle.dark(
+                    android.graphics.Color.TRANSPARENT
+                )
+            )
+        }
+        onDispose { }
     }
 
     Box(modifier = modifier) {
@@ -230,6 +315,15 @@ fun NavBar(modifier: Modifier = Modifier) {
                                 itineraryDestinationStop = null
                                 
                                 if (destination == Destination.LIGNES) {
+                                    // Si on n'est pas sur Plan, naviguer vers Plan d'abord
+                                    if (selectedDestination != Destination.PLAN.ordinal) {
+                                        navController.navigate(Destination.PLAN.route) {
+                                            launchSingleTop = true
+                                            popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                            restoreState = true
+                                        }
+                                        selectedDestination = Destination.PLAN.ordinal
+                                    }
                                     showLinesSheet = true
                                 } else if (selectedDestination != index) {
                                     navController.navigate(destination.route) {
@@ -334,7 +428,11 @@ private fun AppNavHost(
     NavHost(
         navController = navController,
         startDestination = startDestination.route,
-        modifier = modifier
+        modifier = modifier,
+        enterTransition = { EnterTransition.None },
+        exitTransition = { ExitTransition.None },
+        popEnterTransition = { EnterTransition.None },
+        popExitTransition = { ExitTransition.None }
     ) {
         composable(Destination.PLAN.route) {
             PlanScreen(
@@ -346,14 +444,13 @@ private fun AppNavHost(
                 onSearchSelectionHandled = onSearchSelectionHandled,
                 viewModel = viewModel,
                 onItineraryClick = onItineraryClick,
-                userLocation = userLocation
+                initialUserLocation = userLocation
             )
         }
         composable(Destination.LIGNES.route) {
             val favoriteLines by viewModel.favoriteLines.collectAsState()
             LinesBottomSheet(
                 allLines = viewModel.getAllAvailableLines(),
-                onDismiss = { /* Nothing to dismiss - full-screen */ },
                 onLineClick = { lineName ->
                     // Select line and navigate back to Plan screen where it will open the details
                     viewModel.selectLine(lineName)
@@ -363,17 +460,52 @@ private fun AppNavHost(
                         restoreState = true
                     }
                 },
-                favoriteLines = favoriteLines,
-                onToggleFavorite = { viewModel.toggleFavorite(it) }
+                favoriteLines = favoriteLines
             )
         }
         composable(Destination.PARAMETRES.route) {
-            SimpleScreen(title = "Paramètres")
+            SettingsScreen(
+                onAboutClick = {
+                    navController.navigate(Destination.ABOUT)
+                }
+            )
+        }
+        composable(Destination.ABOUT) {
+            AboutScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                onLegalClick = {
+                    navController.navigate(Destination.LEGAL)
+                },
+                onCreditsClick = {
+                    navController.navigate(Destination.CREDITS)
+                },
+                onContactClick = {
+                    navController.navigate(Destination.CONTACT)
+                }
+            )
+        }
+        composable(Destination.LEGAL) {
+            LegalScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        composable(Destination.CREDITS) {
+            CreditsScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        composable(Destination.CONTACT) {
+            ContactScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                }
+            )
         }
     }
-}
-
-@Composable
-private fun SimpleScreen(title: String) {
-    Text(text = title)
 }
