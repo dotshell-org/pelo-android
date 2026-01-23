@@ -1,5 +1,6 @@
 package com.pelotcl.app.ui.screens
 
+import JourneyMapView
 import android.os.Build
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -28,7 +30,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
@@ -50,8 +51,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -108,12 +107,24 @@ fun ItineraryScreen(
     val view = LocalView.current
     val scope = rememberCoroutineScope()
     
-    // Change status bar to light content (white icons) for dark background
-    SideEffect {
+    // Track selected journey for map view
+    var selectedJourney by remember { mutableStateOf<JourneyResult?>(null) }
+    
+    // Change status bar based on whether map is shown (light background) or list view (dark background)
+    LaunchedEffect(selectedJourney) {
         (view.context as? ComponentActivity)?.enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(
-                android.graphics.Color.TRANSPARENT
-            ),
+            statusBarStyle = if (selectedJourney != null) {
+                // Map view: light background, need dark icons (black)
+                SystemBarStyle.light(
+                    android.graphics.Color.TRANSPARENT,
+                    android.graphics.Color.TRANSPARENT
+                )
+            } else {
+                // List view: dark background, need light icons (white)
+                SystemBarStyle.dark(
+                    android.graphics.Color.TRANSPARENT
+                )
+            },
             navigationBarStyle = SystemBarStyle.dark(
                 android.graphics.Color.TRANSPARENT
             )
@@ -250,40 +261,46 @@ fun ItineraryScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Itinéraire", fontWeight = FontWeight.Normal, color = Color.White) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Retour",
-                            tint = Color.White
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Black
+    Scaffold { contentPadding ->
+        // Show map view when a journey is selected
+        if (selectedJourney != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+            ) {
+                // Map taking most of the screen (edge-to-edge, behind status bar)
+                JourneyMapView(
+                    journey = selectedJourney!!,
+                    onBack = { selectedJourney = null },
+                    modifier = Modifier
+                        .fillMaxSize()
                 )
-            )
-        }
-    ) { contentPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black)
-                .padding(contentPadding)
-                .verticalScroll(rememberScrollState())
-        ) {
-            // Stop selection fields directly on black background
+                
+                // Collapsed journey summary at the bottom
+                SelectedJourneySummary(
+                    journey = selectedJourney!!,
+                    onClose = { selectedJourney = null },
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                )
+            }
+        } else {
+            // Normal journey list view
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
+                    .fillMaxSize()
+                    .background(Color.Black)
+                    .padding(contentPadding)
+                    .verticalScroll(rememberScrollState())
             ) {
-                // Departure stop field
-                StopSelectionField(
+                // Stop selection fields directly on black background
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    // Departure stop field
+                    StopSelectionField(
                         selectedStop = departureStop,
                         query = departureQuery,
                         onQueryChange = { 
@@ -403,7 +420,10 @@ fun ItineraryScreen(
                     ) {
                         journeys.forEachIndexed { index, journey ->
                             key(journey.departureTime) {
-                                JourneyCard(journey = journey)
+                                JourneyCard(
+                                    journey = journey,
+                                    onClick = { selectedJourney = journey }
+                                )
                                 if (index < journeys.size - 1) {
                                     HorizontalDivider(
                                         color = Color.White.copy(alpha = 0.2f),
@@ -436,6 +456,7 @@ fun ItineraryScreen(
 
             Spacer(modifier = Modifier.height(80.dp))
         }
+        } // End of else block for selectedJourney == null
     }
 }
 
@@ -575,13 +596,18 @@ private fun SmallLineBadge(lineName: String) {
 }
 
 @Composable
-private fun JourneyCard(journey: JourneyResult) {
+private fun JourneyCard(
+    journey: JourneyResult,
+    onClick: () -> Unit = {}
+) {
     // Debug: measure the recompositions of this card
     ListItemRecompositionCounter("JourneyList", journey.departureTime)
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { onClick() }
             .padding(vertical = 8.dp)
     ) {
         // Header with times and duration
@@ -799,6 +825,180 @@ private fun JourneyLegItem(
                 Text(text = leg.formatArrivalTime(), color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
             } else {
                 Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
+}
+
+/**
+ * Summary view shown at the bottom when a journey is selected
+ * Shows a compact horizontal view of the journey with line icons
+ */
+@Composable
+private fun SelectedJourneySummary(
+    journey: JourneyResult,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(bottom = 80.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Black),
+        shape = RoundedCornerShape(0)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            // Header with times
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = journey.formatDepartureTime(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = " → ",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                    Text(
+                        text = journey.formatArrivalTime(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+                
+                Box(
+                    modifier = Modifier
+                        .background(
+                            color = Color.White.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                ) {
+                    Text(
+                        text = if (journey.durationMinutes < 60) "${journey.durationMinutes} min" else "${journey.durationMinutes / 60}h${(journey.durationMinutes % 60).toString().padStart(2, '0')}min",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Horizontal journey summary with line icons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Start,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                journey.legs.forEachIndexed { index, leg ->
+                    if (leg.isWalking) {
+                        // Walking icon
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.DirectionsWalk,
+                            contentDescription = null,
+                            tint = Gray700,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    } else {
+                        // Transport line icon
+                        val drawableName = BusIconHelper.getDrawableNameForLineName(leg.routeName ?: "")
+                        val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
+                        
+                        if (resourceId != 0) {
+                            Image(
+                                painter = painterResource(id = resourceId),
+                                contentDescription = null,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(LineColorHelper.getColorForLineString(leg.routeName ?: ""))),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = leg.routeName ?: "?",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+                    
+                    // Arrow between legs
+                    if (index < journey.legs.size - 1) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.5f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // From - To stops
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Départ",
+                        color = Color.White.copy(alpha = 0.5f),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        text = journey.legs.first().fromStopName,
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                
+                Spacer(modifier = Modifier.width(16.dp))
+                
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.End
+                ) {
+                    Text(
+                        text = "Arrivée",
+                        color = Color.White.copy(alpha = 0.5f),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        text = journey.legs.last().toStopName,
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }

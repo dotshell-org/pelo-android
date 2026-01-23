@@ -353,7 +353,9 @@ class RaptorRepository private constructor(private val context: Context) {
                         if (stop != null && arrivalTime != null) {
                             intermediateStops.add(IntermediateStop(
                                 stopName = stop.name,
-                                arrivalTime = arrivalTime
+                                arrivalTime = arrivalTime,
+                                lat = stop.lat,
+                                lon = stop.lon
                             ))
                         }
                     }
@@ -361,8 +363,12 @@ class RaptorRepository private constructor(private val context: Context) {
                     journeyLegs.add(JourneyLeg(
                         fromStopId = fromStop.id.toString(),
                         fromStopName = fromStop.name,
+                        fromLat = fromStop.lat,
+                        fromLon = fromStop.lon,
                         toStopId = toStop.id.toString(),
                         toStopName = toStop.name,
+                        toLat = toStop.lat,
+                        toLon = toStop.lon,
                         departureTime = leg.departureTime,
                         arrivalTime = leg.arrivalTime,
                         routeName = leg.routeName,
@@ -522,7 +528,9 @@ data class JourneyResult(
  */
 data class IntermediateStop(
     val stopName: String,
-    val arrivalTime: Int
+    val arrivalTime: Int,
+    val lat: Double = 0.0,
+    val lon: Double = 0.0
 ) {
     fun formatArrivalTime(): String {
         val hours = arrivalTime / 3600
@@ -537,8 +545,12 @@ data class IntermediateStop(
 data class JourneyLeg(
     val fromStopId: String,
     val fromStopName: String,
+    val fromLat: Double,
+    val fromLon: Double,
     val toStopId: String,
     val toStopName: String,
+    val toLat: Double,
+    val toLon: Double,
     val departureTime: Int,
     val arrivalTime: Int,
     val routeName: String?,

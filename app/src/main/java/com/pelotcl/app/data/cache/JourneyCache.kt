@@ -387,8 +387,12 @@ private data class SerializableJourneyResult(
 private data class SerializableJourneyLeg(
     val fromStopId: String,
     val fromStopName: String,
+    val fromLat: Double = 0.0,
+    val fromLon: Double = 0.0,
     val toStopId: String,
     val toStopName: String,
+    val toLat: Double = 0.0,
+    val toLon: Double = 0.0,
     val departureTime: Int,
     val arrivalTime: Int,
     val routeName: String?,
@@ -400,8 +404,12 @@ private data class SerializableJourneyLeg(
     fun toJourneyLeg() = JourneyLeg(
         fromStopId = fromStopId,
         fromStopName = fromStopName,
+        fromLat = fromLat,
+        fromLon = fromLon,
         toStopId = toStopId,
         toStopName = toStopName,
+        toLat = toLat,
+        toLon = toLon,
         departureTime = departureTime,
         arrivalTime = arrivalTime,
         routeName = routeName,
@@ -415,8 +423,12 @@ private data class SerializableJourneyLeg(
         fun fromJourneyLeg(leg: JourneyLeg) = SerializableJourneyLeg(
             fromStopId = leg.fromStopId,
             fromStopName = leg.fromStopName,
+            fromLat = leg.fromLat,
+            fromLon = leg.fromLon,
             toStopId = leg.toStopId,
             toStopName = leg.toStopName,
+            toLat = leg.toLat,
+            toLon = leg.toLon,
             departureTime = leg.departureTime,
             arrivalTime = leg.arrivalTime,
             routeName = leg.routeName,
@@ -431,17 +443,23 @@ private data class SerializableJourneyLeg(
 @Serializable
 private data class SerializableIntermediateStop(
     val stopName: String,
-    val arrivalTime: Int
+    val arrivalTime: Int,
+    val lat: Double = 0.0,
+    val lon: Double = 0.0
 ) {
     fun toIntermediateStop() = IntermediateStop(
         stopName = stopName,
-        arrivalTime = arrivalTime
+        arrivalTime = arrivalTime,
+        lat = lat,
+        lon = lon
     )
 
     companion object {
         fun fromIntermediateStop(stop: IntermediateStop) = SerializableIntermediateStop(
             stopName = stop.stopName,
-            arrivalTime = stop.arrivalTime
+            arrivalTime = stop.arrivalTime,
+            lat = stop.lat,
+            lon = stop.lon
         )
     }
 }
