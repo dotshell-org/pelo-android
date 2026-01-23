@@ -192,8 +192,8 @@ object ConnectionsHelper {
         return connections.sortedWith(compareBy { line ->
             when {
                 line in listOf("A", "B", "C", "D") -> line[0].code
-                line.startsWith("F") -> 100 + line.substring(1).toIntOrNull()!! 
-                line.startsWith("T") -> 200 + line.substring(1).toIntOrNull()!!
+                line.startsWith("F") -> 100 + (line.substring(1).toIntOrNull() ?: 0)
+                line.startsWith("T") -> 200 + (line.substring(1).toIntOrNull() ?: 0)
                 line.uppercase().startsWith("NAV") -> 300 + (line.substring(3).toIntOrNull() ?: 0)
                 else -> 9999
             }
