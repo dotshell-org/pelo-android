@@ -252,7 +252,7 @@ class SchedulesRepository(context: Context) {
 
             val lineType = getLineType(lineName)
 
-            val effectiveIsHoliday = if (lineType == LineType.METRO || lineType == LineType.FUNICULAR) {
+            val effectiveIsHoliday = if (lineType == LineType.METRO || lineType == LineType.FUNICULAR || lineType == LineType.TRAM) {
                 false
             } else {
                 isHoliday
@@ -269,7 +269,7 @@ class SchedulesRepository(context: Context) {
                 java.util.Calendar.SATURDAY -> "saturday"
                 else -> "sunday"
             }
-            val dayColumn = if (lineType == LineType.METRO || lineType == LineType.FUNICULAR) "monday" else actualDayColumn
+            val dayColumn = if (lineType == LineType.METRO || lineType == LineType.FUNICULAR || lineType == LineType.TRAM) "monday" else actualDayColumn
 
             // Format today's date as YYYYMMDD for GTFS calendar date comparison
             val todayFormatted = String.format(
@@ -284,7 +284,7 @@ class SchedulesRepository(context: Context) {
             var appliedAmAvFilter = false
             var serviceIdFilter = ""
 
-            if (lineType != LineType.METRO && lineType != LineType.FUNICULAR && lineType != LineType.NAVIGONE && isWeekday) {
+            if (lineType != LineType.METRO && lineType != LineType.FUNICULAR && lineType != LineType.NAVIGONE && lineType != LineType.TRAM && isWeekday) {
                 appliedAmAvFilter = true
                 serviceIdFilter = if (effectiveIsHoliday) {
                     "AND s.service_id LIKE '%AV%'"
@@ -307,18 +307,32 @@ class SchedulesRepository(context: Context) {
             )
             lineStopCheckCursor.close()
 
-            // Debug: Check calendar entries for this line
-            val calendarCheckCursor = db.rawQuery(
-                """
-                SELECT DISTINCT c.service_id, c.start_date, c.end_date, c.$dayColumn 
-                FROM schedules s
-                JOIN calendar c ON s.service_id = c.service_id
-                WHERE s.route_name = ? AND s.station_name = ? COLLATE NOCASE
-                LIMIT 5
-                """,
-                arrayOf(lineName, stopName)
-            )
-            calendarCheckCursor.close()
+            // For strong lines (metro/tram/funicular), select only ONE service_id to avoid
+            // mixing schedules from overlapping service periods (e.g., school vs vacation)
+            var strongLineServiceFilter = ""
+            if (lineType == LineType.METRO || lineType == LineType.FUNICULAR || lineType == LineType.TRAM) {
+                val serviceIdCursor = db.rawQuery(
+                    """
+                    SELECT c.service_id 
+                    FROM schedules s
+                    JOIN calendar c ON s.service_id = c.service_id
+                    WHERE s.route_name = ? 
+                    AND s.direction_id = ?
+                    AND c.$dayColumn = 1
+                    AND c.start_date <= ?
+                    AND c.end_date >= ?
+                    AND s.station_name = ? COLLATE NOCASE
+                    ORDER BY c.service_id
+                    LIMIT 1
+                    """,
+                    arrayOf(lineName, directionId.toString(), todayFormatted, todayFormatted, stopName)
+                )
+                if (serviceIdCursor.moveToFirst()) {
+                    val selectedServiceId = serviceIdCursor.getString(0)
+                    strongLineServiceFilter = "AND s.service_id = '$selectedServiceId'"
+                }
+                serviceIdCursor.close()
+            }
 
             // First attempt: with date validation (strict GTFS compliance)
             var cursor = db.rawQuery(
@@ -332,6 +346,7 @@ class SchedulesRepository(context: Context) {
                 AND c.start_date <= ?
                 AND c.end_date >= ?
                 $serviceIdFilter
+                $strongLineServiceFilter
                 AND s.station_name = ? COLLATE NOCASE
                 ORDER BY s.arrival_time
                 """,
@@ -345,6 +360,29 @@ class SchedulesRepository(context: Context) {
             // Fallback 1: If no results with date validation, try without date filter
             // This handles expired GTFS data gracefully
             if (result.isEmpty()) {
+                // For strong lines, also try to get a single service_id without date filter
+                if (strongLineServiceFilter.isEmpty() && (lineType == LineType.METRO || lineType == LineType.FUNICULAR || lineType == LineType.TRAM)) {
+                    val serviceIdCursor = db.rawQuery(
+                        """
+                        SELECT c.service_id 
+                        FROM schedules s
+                        JOIN calendar c ON s.service_id = c.service_id
+                        WHERE s.route_name = ? 
+                        AND s.direction_id = ?
+                        AND c.$dayColumn = 1
+                        AND s.station_name = ? COLLATE NOCASE
+                        ORDER BY c.service_id
+                        LIMIT 1
+                        """,
+                        arrayOf(lineName, directionId.toString(), stopName)
+                    )
+                    if (serviceIdCursor.moveToFirst()) {
+                        val selectedServiceId = serviceIdCursor.getString(0)
+                        strongLineServiceFilter = "AND s.service_id = '$selectedServiceId'"
+                    }
+                    serviceIdCursor.close()
+                }
+
                 cursor = db.rawQuery(
                     """
                     SELECT DISTINCT substr(s.arrival_time, 1, 5) AS arrival_time 
@@ -354,6 +392,7 @@ class SchedulesRepository(context: Context) {
                     AND s.direction_id = ?
                     AND c.$dayColumn = 1
                     $serviceIdFilter
+                    $strongLineServiceFilter
                     AND s.station_name = ? COLLATE NOCASE
                     ORDER BY s.arrival_time
                     """,
@@ -377,6 +416,7 @@ class SchedulesRepository(context: Context) {
                     AND s.direction_id = ?
                     AND c.$dayColumn = 1
                     $serviceIdFilter
+                    $strongLineServiceFilter
                     AND s.station_name = ? COLLATE NOCASE
                     ORDER BY s.arrival_time
                     """,
