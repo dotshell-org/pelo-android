@@ -24,3 +24,7 @@ gtfs_processed/
 app/src/main/assets/databases/
 
 scripts/.venv
+
+# Keystore files
+*.jks
+*.keystore
