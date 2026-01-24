@@ -269,7 +269,8 @@ class SchedulesRepository(context: Context) {
                 java.util.Calendar.SATURDAY -> "saturday"
                 else -> "sunday"
             }
-            val dayColumn = if (lineType == LineType.METRO || lineType == LineType.FUNICULAR || lineType == LineType.TRAM) "monday" else actualDayColumn
+            // Use the actual day of the week for all line types (metro/tram have different weekend schedules)
+            val dayColumn = actualDayColumn
 
             // Format today's date as YYYYMMDD for GTFS calendar date comparison
             val todayFormatted = String.format(
@@ -309,11 +310,12 @@ class SchedulesRepository(context: Context) {
 
             // For strong lines (metro/tram/funicular), select only ONE service_id to avoid
             // mixing schedules from overlapping service periods (e.g., school vs vacation)
+            // We select the service with the MOST schedules (main service for the day)
             var strongLineServiceFilter = ""
             if (lineType == LineType.METRO || lineType == LineType.FUNICULAR || lineType == LineType.TRAM) {
                 val serviceIdCursor = db.rawQuery(
                     """
-                    SELECT c.service_id 
+                    SELECT s.service_id, COUNT(*) as cnt
                     FROM schedules s
                     JOIN calendar c ON s.service_id = c.service_id
                     WHERE s.route_name = ? 
@@ -322,7 +324,8 @@ class SchedulesRepository(context: Context) {
                     AND c.start_date <= ?
                     AND c.end_date >= ?
                     AND s.station_name = ? COLLATE NOCASE
-                    ORDER BY c.service_id
+                    GROUP BY s.service_id
+                    ORDER BY cnt DESC
                     LIMIT 1
                     """,
                     arrayOf(lineName, directionId.toString(), todayFormatted, todayFormatted, stopName)
@@ -364,14 +367,15 @@ class SchedulesRepository(context: Context) {
                 if (strongLineServiceFilter.isEmpty() && (lineType == LineType.METRO || lineType == LineType.FUNICULAR || lineType == LineType.TRAM)) {
                     val serviceIdCursor = db.rawQuery(
                         """
-                        SELECT c.service_id 
+                        SELECT s.service_id, COUNT(*) as cnt
                         FROM schedules s
                         JOIN calendar c ON s.service_id = c.service_id
                         WHERE s.route_name = ? 
                         AND s.direction_id = ?
                         AND c.$dayColumn = 1
                         AND s.station_name = ? COLLATE NOCASE
-                        ORDER BY c.service_id
+                        GROUP BY s.service_id
+                        ORDER BY cnt DESC
                         LIMIT 1
                         """,
                         arrayOf(lineName, directionId.toString(), stopName)
