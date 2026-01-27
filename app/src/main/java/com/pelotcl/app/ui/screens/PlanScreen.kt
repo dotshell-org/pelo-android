@@ -670,7 +670,8 @@ fun PlanScreen(
                                     } else {
                                         sheetContentState = SheetContentState.LINE_DETAILS
                                     }
-                                }
+                                },
+                                onItineraryClick = onItineraryClick
                             )
                         }
                     }
@@ -835,13 +836,15 @@ fun PlanScreen(
 private fun StationSheetContent(
     stationInfo: StationInfo,
     onDismiss: () -> Unit,
-    onLineClick: (String) -> Unit
+    onLineClick: (String) -> Unit,
+    onItineraryClick: (String) -> Unit = {}
 ) {
     StationBottomSheet(
         stationInfo = stationInfo,
         sheetState = null,
         onDismiss = onDismiss,
-        onLineClick = onLineClick
+        onLineClick = onLineClick,
+        onItineraryClick = { onItineraryClick(stationInfo.nom) }
     )
 }
 
