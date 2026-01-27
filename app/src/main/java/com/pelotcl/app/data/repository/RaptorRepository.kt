@@ -46,6 +46,9 @@ class RaptorRepository private constructor(private val context: Context) {
     // Performance: Pre-computed normalized name index for fast search
     private var stopsByNormalizedName: Map<String, List<Stop>> = emptyMap()
 
+    // Performance: Cache of normalized stop names to avoid repeated normalization during search
+    private var normalizedStopNames: Map<Stop, String> = emptyMap()
+
     // Performance: Reusable StringBuilder for cache key building (ThreadLocal for thread safety)
     private val cacheKeyBuilder = ThreadLocal.withInitial { StringBuilder(64) }
 
@@ -168,6 +171,11 @@ class RaptorRepository private constructor(private val context: Context) {
     private fun buildStopIndexes() {
         // Index by position (for leg.fromStopIndex / leg.toStopIndex lookups)
         stopsByIndex = stopsCache.mapIndexed { index, stop -> index to stop }.toMap()
+
+        // Pre-compute normalized names for fast accent-insensitive search
+        normalizedStopNames = stopsCache.associateWith { stop ->
+            SearchUtils.normalizeForSearch(stop.name)
+        }
     }
 
     /**
@@ -192,14 +200,16 @@ class RaptorRepository private constructor(private val context: Context) {
     suspend fun searchStopsByName(query: String): List<RaptorStop> = withContext(Dispatchers.Default) {
         ensureInitialized()
         try {
-            // Optimisation: pré-filtrage léger basé sur le premier mot
+            // Optimisation: pré-filtrage léger basé sur le premier mot (normalisé sans accents)
             // puis fuzzy matching complet qui gère tout (accents, tirets, multi-mots)
-            val firstWord = query.trim().split("\\s+".toRegex()).firstOrNull()?.lowercase() ?: ""
-            
-            // Étape 1: pré-filtrage rapide sur le premier mot seulement
+            val normalizedQuery = SearchUtils.normalizeForSearch(query)
+            val firstWord = normalizedQuery.split(" ").firstOrNull() ?: ""
+
+            // Étape 1: pré-filtrage rapide sur le premier mot seulement (accent-insensitive)
+            // Utilise le cache pré-calculé des noms normalisés pour éviter la normalisation répétée
             val candidates = if (firstWord.isNotEmpty()) {
                 stopsCache.filter { stop ->
-                    stop.name.lowercase().contains(firstWord)
+                    (normalizedStopNames[stop] ?: SearchUtils.normalizeForSearch(stop.name)).contains(firstWord)
                 }
             } else {
                 stopsCache

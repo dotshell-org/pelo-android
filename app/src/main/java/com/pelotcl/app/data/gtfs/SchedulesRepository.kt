@@ -10,6 +10,8 @@ import com.pelotcl.app.data.repository.TransportRepository
 import com.pelotcl.app.utils.SearchUtils
 import java.io.FileOutputStream
 import java.io.IOException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 enum class LineType {
     METRO, FUNICULAR, NAVIGONE, TRAM, BUS, CHRONO
@@ -19,6 +21,11 @@ class SchedulesRepository(context: Context) {
 
     private val appContext: Context = context.applicationContext
     private val dbHelper = SchedulesDatabaseHelper(appContext)
+
+    // Mutex for thread-safe access to allStopsCache
+    private val allStopsMutex = Mutex()
+    // In-memory cache for all stops (loaded from DB)
+    private var allStopsCache: List<Triple<String, String, Boolean>>? = null
 
     companion object {
         // LRU Cache for schedules: key = "lineName|stopName|directionId|isHoliday"
@@ -84,35 +91,12 @@ class SchedulesRepository(context: Context) {
 
         val results = mutableListOf<StationSearchResult>()
         try {
-            val db = dbHelper.readableDatabase
+            // Utiliser la recherche en mémoire pour une gestion fiable des accents
+            // (SQLite LIKE ne gère pas bien les accents sur Android)
+            val allStops = getAllStops()
 
-            // Optimisation: utiliser SQL pour pré-filtrer largement
-            // On prend tous les arrêts qui contiennent au moins le premier mot
-            // puis le fuzzy matching en mémoire fait le travail précis (avec accents, tirets, etc.)
-            val words = query.trim().split("\\s+".toRegex()).filter { it.isNotEmpty() }
-            
-            val cursor = if (words.isEmpty()) {
-                db.rawQuery("SELECT nom, desserte, pmr FROM arrets LIMIT 50", null)
-            } else {
-                // Pré-filtre large: juste le premier mot pour réduire la liste
-                // Le fuzzy matching vérifiera tous les mots après
-                db.rawQuery(
-                    "SELECT nom, desserte, pmr FROM arrets WHERE LOWER(nom) LIKE ? LIMIT 500",
-                    arrayOf("%${words[0].lowercase()}%")
-                )
-            }
-
-            val candidateStops = mutableListOf<Triple<String, String, Boolean>>()
-            while (cursor.moveToNext()) {
-                val name = cursor.getString(0)
-                val desserteRaw = cursor.getString(1) ?: ""
-                val isPmr = cursor.getInt(2) == 1
-                candidateStops.add(Triple(name, desserteRaw, isPmr))
-            }
-            cursor.close()
-
-            // Filtrer les candidats avec fuzzy matching pour une précision maximale
-            val filteredStops = candidateStops.filter { (name, _, _) ->
+            // Filtrer les candidats avec fuzzy matching (gère accents, tirets, ordre des mots)
+            val filteredStops = allStops.filter { (name, _, _) ->
                 SearchUtils.fuzzyContains(name, query)
             }
 
@@ -202,6 +186,40 @@ class SchedulesRepository(context: Context) {
         }
 
         return results
+    }
+
+    /**
+     * Helper to load all stops into memory once for efficient filtering.
+     * Thread-safe using Mutex.
+     */
+    private suspend fun getAllStops(): List<Triple<String, String, Boolean>> {
+        allStopsCache?.let { return it }
+
+        return allStopsMutex.withLock {
+            allStopsCache?.let { return it }
+
+            val stops = mutableListOf<Triple<String, String, Boolean>>()
+            try {
+                val db = dbHelper.readableDatabase
+                // Load critical columns for search: name, lines served (desserte), isPMR
+                val cursor = db.rawQuery("SELECT nom, desserte, pmr FROM arrets", null)
+
+                while (cursor.moveToNext()) {
+                    val name = cursor.getString(0)
+                    val desserteRaw = cursor.getString(1) ?: ""
+                    val isPmr = cursor.getInt(2) == 1
+                    stops.add(Triple(name, desserteRaw, isPmr))
+                }
+                cursor.close()
+            } catch (e: Exception) {
+                Log.e("SchedulesRepository", "Error loading all stops: ${e.message}")
+            }
+
+            // Cache the immutable list
+            val immutableStops = stops.toList()
+            allStopsCache = immutableStops
+            immutableStops
+        }
     }
 
     private fun getLineType(lineName: String): LineType {
@@ -710,3 +728,4 @@ class SchedulesRepository(context: Context) {
         }
     }
 }
+
