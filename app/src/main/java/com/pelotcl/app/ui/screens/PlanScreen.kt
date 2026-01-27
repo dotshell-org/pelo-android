@@ -183,6 +183,9 @@ fun PlanScreen(
 
     var allSchedulesInfo by remember { mutableStateOf<AllSchedulesInfo?>(null) }
 
+    // Preserve selected direction when navigating to/from schedule details
+    var selectedDirection by remember { mutableStateOf(0) }
+
     var temporaryLoadedBusLines by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     var sheetContentState by remember { mutableStateOf<SheetContentState?>(null) }
@@ -499,6 +502,11 @@ fun PlanScreen(
         }
     }
 
+    // Reset direction when line or stop changes (not when navigating to/from schedule details)
+    LaunchedEffect(selectedLine?.lineName, selectedLine?.currentStationName) {
+        selectedDirection = 0
+    }
+
     LaunchedEffect(sheetContentState) {
         if (sheetContentState != SheetContentState.LINE_DETAILS && sheetContentState != SheetContentState.ALL_SCHEDULES && temporaryLoadedBusLines.isNotEmpty()) {
             temporaryLoadedBusLines.forEach { busLine ->
@@ -608,6 +616,8 @@ fun PlanScreen(
                             LineDetailsSheetContent(
                                 lineInfo = selectedLine!!,
                                 viewModel = viewModel,
+                                selectedDirection = selectedDirection,
+                                onDirectionChange = { newDirection -> selectedDirection = newDirection },
                                 onBackToStation = {
                                     selectedLine?.let { lineInfo ->
                                         val lineName = lineInfo.lineName
@@ -854,15 +864,19 @@ private fun StationSheetContent(
 private fun LineDetailsSheetContent(
     lineInfo: LineInfo,
     viewModel: TransportViewModel,
+    selectedDirection: Int,
+    onDirectionChange: (Int) -> Unit,
     onBackToStation: () -> Unit,
     onStopClick: (String) -> Unit = {},
     onShowAllSchedules: (lineName: String, directionName: String, schedules: List<String>) -> Unit,
     onItineraryClick: (stopName: String) -> Unit = {}
 ) {
     LineDetailsBottomSheet(
+        viewModel = viewModel,
         lineInfo = lineInfo,
         sheetState = null,
-        viewModel = viewModel,
+        selectedDirection = selectedDirection,
+        onDirectionChange = onDirectionChange,
         onDismiss = {},
         onBackToStation = onBackToStation,
         onStopClick = onStopClick,

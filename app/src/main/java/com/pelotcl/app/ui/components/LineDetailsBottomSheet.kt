@@ -126,6 +126,8 @@ fun LineDetailsBottomSheet(
     viewModel: TransportViewModel,
     lineInfo: LineInfo?,
     sheetState: SheetState?,
+    selectedDirection: Int,
+    onDirectionChange: (Int) -> Unit,
     onDismiss: () -> Unit,
     onBackToStation: () -> Unit,
     onStopClick: (String) -> Unit = {},
@@ -136,7 +138,6 @@ fun LineDetailsBottomSheet(
     var lineStops by remember { mutableStateOf<List<LineStopInfo>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
-    var selectedDirection by remember { mutableStateOf(0) }
 
     val linesState by viewModel.uiState.collectAsState()
 
@@ -244,7 +245,7 @@ fun LineDetailsBottomSheet(
                             viewModel = viewModel,
                             lineInfo = lineInfo,
                             selectedDirection = selectedDirection,
-                            onDirectionChange = { newDirection -> selectedDirection = newDirection },
+                            onDirectionChange = onDirectionChange,
                             onShowAllSchedules = onShowAllSchedules,
                             onItineraryClick = { onItineraryClick(lineInfo.currentStationName) }
                         )
