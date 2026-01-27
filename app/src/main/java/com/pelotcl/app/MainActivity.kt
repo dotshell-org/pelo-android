@@ -51,6 +51,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.google.android.gms.location.LocationServices
 import com.pelotcl.app.ui.components.LinesBottomSheet
@@ -260,10 +261,23 @@ fun NavBar(modifier: Modifier = Modifier) {
         }
     }
 
+    // Observer la route courante pour gérer la barre de statut
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+
     // Gérer la barre de statut selon l'écran actif
-    DisposableEffect(selectedDestination) {
+    // Les écrans Settings et ses sous-écrans (About, Legal, Credits, Contact) ont un fond noir
+    DisposableEffect(currentRoute) {
         val activity = context as? ComponentActivity
-        if (selectedDestination == Destination.PARAMETRES.ordinal) {
+        val darkBackgroundRoutes = listOf(
+            Destination.PARAMETRES.route,
+            Destination.ABOUT,
+            Destination.LEGAL,
+            Destination.CREDITS,
+            Destination.CONTACT
+        )
+
+        if (currentRoute in darkBackgroundRoutes) {
             // Barre de statut avec icônes blanches pour fond noir
             activity?.enableEdgeToEdge(
                 statusBarStyle = SystemBarStyle.dark(
@@ -274,7 +288,7 @@ fun NavBar(modifier: Modifier = Modifier) {
                 )
             )
         } else {
-            // Barre de statut normale pour les autres écrans
+            // Barre de statut normale pour les autres écrans (fond clair)
             activity?.enableEdgeToEdge(
                 statusBarStyle = SystemBarStyle.light(
                     android.graphics.Color.TRANSPARENT,
