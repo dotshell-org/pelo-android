@@ -35,6 +35,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Refresh
@@ -78,6 +79,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pelotcl.app.data.repository.JourneyLeg
 import com.pelotcl.app.data.repository.JourneyResult
+import com.pelotcl.app.data.repository.RaptorStop
 import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.ui.theme.Gray200
 import com.pelotcl.app.ui.theme.Gray700
@@ -165,12 +167,16 @@ fun ItineraryScreen(
     var journeys by remember { mutableStateOf<List<JourneyResult>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    
+    var fallbackInfoMessage by remember { mutableStateOf<String?>(null) }
+
     // Track if user has manually selected a departure stop (to avoid auto-override)
     var hasManuallySelectedDeparture by remember { mutableStateOf(false) }
 
     // Track last location used for departure stop calculation
     var lastLocationUsedForDeparture by remember { mutableStateOf<LatLng?>(null) }
+
+    // Store nearby stops for fallback when no itinerary is found
+    var nearbyDepartureStops by remember { mutableStateOf<List<RaptorStop>>(emptyList()) }
 
     // Initialize raptor (only if not already initialized) and resolve arrival stop IDs
     LaunchedEffect(Unit) {
@@ -204,11 +210,16 @@ fun ItineraryScreen(
             LocationHelper.isSignificantlyDifferent(lastLocationUsedForDeparture, userLocation, 100.0)
 
         if (shouldUpdate) {
-            val closestStop = raptorRepository.findClosestStop(
+            // Get multiple nearby stops for fallback capability
+            val nearestStops = raptorRepository.findNearestStops(
                 latitude = userLocation.latitude,
-                longitude = userLocation.longitude
+                longitude = userLocation.longitude,
+                limit = 5
             )
-            if (closestStop != null) {
+            nearbyDepartureStops = nearestStops
+
+            if (nearestStops.isNotEmpty()) {
+                val closestStop = nearestStops.first()
                 val allStopsWithName = raptorRepository.searchStopsByName(closestStop.name)
                 departureStop = SelectedStop(
                     name = closestStop.name,
@@ -251,6 +262,7 @@ fun ItineraryScreen(
             departureStop!!.stopIds.isNotEmpty() && arrivalStop!!.stopIds.isNotEmpty()) {
             isLoading = true
             errorMessage = null
+            fallbackInfoMessage = null
             journeys = emptyList()
 
             scope.launch {
@@ -270,9 +282,47 @@ fun ItineraryScreen(
                         )
                     }
 
+                    // If still no results and we have nearby stops for fallback, try them
+                    if (results.isEmpty() && nearbyDepartureStops.isNotEmpty() && !hasManuallySelectedDeparture) {
+                        // Skip the first stop (already tried) and try the others
+                        val fallbackStops = nearbyDepartureStops.drop(1)
+
+                        for (fallbackStop in fallbackStops) {
+                            val fallbackStopIds = raptorRepository.searchStopsByName(fallbackStop.name)
+                                .map { it.id }
+
+                            if (fallbackStopIds.isEmpty()) continue
+
+                            // Try current time
+                            results = raptorRepository.getOptimizedPaths(
+                                originStopIds = fallbackStopIds,
+                                destinationStopIds = arrivalStop!!.stopIds
+                            )
+
+                            // If no results, try 9:00 AM
+                            if (results.isEmpty()) {
+                                results = raptorRepository.getOptimizedPaths(
+                                    originStopIds = fallbackStopIds,
+                                    destinationStopIds = arrivalStop!!.stopIds,
+                                    departureTimeSeconds = 9 * 3600
+                                )
+                            }
+
+                            if (results.isNotEmpty()) {
+                                // Found a route from a fallback stop - update departure
+                                departureStop = SelectedStop(
+                                    name = fallbackStop.name,
+                                    stopIds = fallbackStopIds
+                                )
+                                fallbackInfoMessage = "Itinéraire depuis ${ fallbackStop.name } (arrêt proche avec service)"
+                                break
+                            }
+                        }
+                    }
+
                     journeys = results
                     if (results.isEmpty()) {
-                        errorMessage = "Aucun itinéraire trouvé"
+                        errorMessage = "Aucun itinéraire trouvé depuis les arrêts proches"
                     }
                 } catch (e: Exception) {
                     Log.e("ItineraryScreen", "Error calculating journey", e)
@@ -398,11 +448,18 @@ fun ItineraryScreen(
                                 scope.launch {
                                     // Force recalculation from current GPS location
                                     hasManuallySelectedDeparture = false
-                                    val closestStop = raptorRepository.findClosestStop(
+                                    fallbackInfoMessage = null
+
+                                    // Get multiple nearby stops for fallback capability
+                                    val nearestStops = raptorRepository.findNearestStops(
                                         latitude = userLocation.latitude,
-                                        longitude = userLocation.longitude
+                                        longitude = userLocation.longitude,
+                                        limit = 5
                                     )
-                                    if (closestStop != null) {
+                                    nearbyDepartureStops = nearestStops
+
+                                    if (nearestStops.isNotEmpty()) {
+                                        val closestStop = nearestStops.first()
                                         val allStopsWithName = raptorRepository.searchStopsByName(closestStop.name)
                                         departureStop = SelectedStop(
                                             name = closestStop.name,
@@ -504,6 +561,35 @@ fun ItineraryScreen(
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp)
                     ) {
+                        // Show fallback info message if an alternative stop was used
+                        if (fallbackInfoMessage != null) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 16.dp)
+                                    .background(
+                                        color = Color(0xFF2A5298).copy(alpha = 0.6f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .padding(12.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = fallbackInfoMessage!!,
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+
                         journeys.forEachIndexed { index, journey ->
                             key(journey.departureTime) {
                                 JourneyCard(

@@ -263,6 +263,44 @@ class RaptorRepository private constructor(private val context: Context) {
     }
 
     /**
+     * Find the N nearest stops to the given GPS coordinates, sorted by distance.
+     * Uses Dispatchers.Default as this is CPU-bound distance calculation.
+     *
+     * @param latitude GPS latitude
+     * @param longitude GPS longitude
+     * @param limit Maximum number of stops to return (default 5)
+     * @return List of RaptorStop sorted by distance (closest first), with unique names
+     */
+    suspend fun findNearestStops(latitude: Double, longitude: Double, limit: Int = 5): List<RaptorStop> = withContext(Dispatchers.Default) {
+        ensureInitialized()
+        try {
+            // Calculate distance for each stop and sort by distance
+            stopsCache
+                .map { stop ->
+                    val latDiff = stop.lat - latitude
+                    val lonDiff = stop.lon - longitude
+                    val distance = sqrt(latDiff.pow(2) + lonDiff.pow(2))
+                    stop to distance
+                }
+                .sortedBy { it.second }
+                // Group by stop name to get unique stop names (different platforms have same name)
+                .distinctBy { it.first.name }
+                .take(limit)
+                .map { (stop, _) ->
+                    RaptorStop(
+                        id = stop.id,
+                        name = stop.name,
+                        lat = stop.lat,
+                        lon = stop.lon
+                    )
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error finding nearest stops: ${e.message}", e)
+            emptyList()
+        }
+    }
+
+    /**
      * Calculate optimized journeys between origin and destination stops.
      * Uses multi-level cache: Memory LRU -> Disk cache -> Raptor calculation.
      *
