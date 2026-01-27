@@ -32,6 +32,9 @@ class SchedulesRepository(context: Context) {
         // Increased size for better search responsiveness
         private val searchCache = LruCache<String, List<StationSearchResult>>(50)
 
+        // LRU Cache for stop sequences: key = "routeName|directionId"
+        private val stopSequencesCache = LruCache<String, List<Pair<String, Int>>>(100)
+
         // Track if database has been warmed up
         @Volatile
         private var isDatabaseWarmedUp = false
@@ -44,6 +47,7 @@ class SchedulesRepository(context: Context) {
             schedulesCache.evictAll()
             headsignsCache.evictAll()
             searchCache.evictAll()
+            stopSequencesCache.evictAll()
         }
     }
 
@@ -235,6 +239,61 @@ class SchedulesRepository(context: Context) {
             }
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+        return result
+    }
+
+    /**
+     * Retrieves the canonical stop sequence for a line and direction from GTFS data.
+     * @param routeName The route/line name (e.g., "86", "A", "T1")
+     * @param directionId The direction ID (0 or 1)
+     * @return List of pairs (station_name, stop_sequence) ordered by sequence, or empty if not found
+     */
+    fun getStopSequences(routeName: String, directionId: Int): List<Pair<String, Int>> {
+        val cacheKey = "$routeName|$directionId"
+        stopSequencesCache.get(cacheKey)?.let { return it }
+
+        val result = mutableListOf<Pair<String, Int>>()
+        try {
+            val db = dbHelper.readableDatabase
+            val cursor = db.rawQuery(
+                """
+                SELECT station_name, stop_sequence 
+                FROM stop_sequences 
+                WHERE route_name = ? AND direction_id = ?
+                ORDER BY stop_sequence ASC
+                """.trimIndent(),
+                arrayOf(routeName, directionId.toString())
+            )
+            while (cursor.moveToNext()) {
+                val stationName = cursor.getString(0)
+                val stopSequence = cursor.getInt(1)
+                result.add(Pair(stationName, stopSequence))
+            }
+            cursor.close()
+
+            if (result.isNotEmpty()) {
+                stopSequencesCache.put(cacheKey, result)
+            }
+        } catch (e: Exception) {
+            Log.e("SchedulesRepository", "Error getting stop sequences for $routeName dir $directionId", e)
+        }
+        return result
+    }
+
+    /**
+     * Retrieves all available stop sequences for a line (both directions).
+     * @param routeName The route/line name
+     * @return Map of directionId to list of (station_name, stop_sequence)
+     */
+    fun getAllStopSequences(routeName: String): Map<Int, List<Pair<String, Int>>> {
+        val result = mutableMapOf<Int, List<Pair<String, Int>>>()
+        // Try both directions
+        for (directionId in listOf(0, 1)) {
+            val sequences = getStopSequences(routeName, directionId)
+            if (sequences.isNotEmpty()) {
+                result[directionId] = sequences
+            }
         }
         return result
     }

@@ -139,8 +139,6 @@ fun LineDetailsBottomSheet(
     var selectedDirection by remember { mutableStateOf(0) }
 
     val linesState by viewModel.uiState.collectAsState()
-    // Intitulés de terminus par direction (ex: 0 -> "Aéroport St Exupéry -RX")
-    val headsigns by viewModel.headsigns.collectAsState()
 
     val loadedLineNames = remember(linesState) {
         when (linesState) {
@@ -151,18 +149,19 @@ fun LineDetailsBottomSheet(
         }
     }
 
-    LaunchedEffect(lineInfo?.lineName, lineInfo?.currentStationName, loadedLineNames) {
+    // Load stops when lineInfo, loadedLineNames, or selectedDirection changes
+    LaunchedEffect(lineInfo?.lineName, lineInfo?.currentStationName, loadedLineNames, selectedDirection) {
         if (lineInfo != null) {
             isLoading = true
             // Toujours tenter de charger les arrêts, même si la ligne n'est pas encore
             // présente dans uiState (cas des lignes bus/Chrono/JD ajoutées à la volée).
-            // getStopsForLine saura quand même retourner un fallback non ordonné, puis
-            // l'ordre s'améliorera automatiquement quand la ligne sera disponible.
+            // getStopsForLine utilise maintenant la table stop_sequences GTFS pour l'ordre.
             withContext(Dispatchers.IO) {
                 try {
                     val stops = viewModel.getStopsForLine(
                         lineName = lineInfo.lineName,
-                        currentStopName = lineInfo.currentStationName.takeIf { it.isNotBlank() }
+                        currentStopName = lineInfo.currentStationName.takeIf { it.isNotBlank() },
+                        directionId = selectedDirection
                     )
                     if (stops.isEmpty()) {
                         // Recharge du cache si besoin puis nouvelle tentative rapide
@@ -170,7 +169,8 @@ fun LineDetailsBottomSheet(
                         delay(500)
                         lineStops = viewModel.getStopsForLine(
                             lineName = lineInfo.lineName,
-                            currentStopName = lineInfo.currentStationName.takeIf { it.isNotBlank() }
+                            currentStopName = lineInfo.currentStationName.takeIf { it.isNotBlank() },
+                            directionId = selectedDirection
                         )
                     } else {
                         lineStops = stops
@@ -183,20 +183,8 @@ fun LineDetailsBottomSheet(
         }
     }
 
-    val displayedStops = remember(lineStops, selectedDirection, headsigns) {
-        // Aligner l'orientation de la liste d'arrêts avec le terminus (headsign) sélectionné.
-        // Si le headsign correspond au dernier arrêt, on garde l'ordre tel quel.
-        // S'il correspond au premier arrêt, on inverse la liste.
-        val first = lineStops.firstOrNull()?.stopName?.uppercase()
-        val last = lineStops.lastOrNull()?.stopName?.uppercase()
-        val currentHeadsign = headsigns[selectedDirection]?.uppercase()
-
-        when {
-            currentHeadsign != null && last != null && currentHeadsign.contains(last) -> lineStops
-            currentHeadsign != null && first != null && currentHeadsign.contains(first) -> lineStops.reversed()
-            else -> lineStops
-        }
-    }
+    // Utilise directement lineStops car l'ordre est déjà correct depuis getStopsForLine avec directionId
+    val displayedStops = lineStops
 
     if (lineInfo != null) {
         val content = @Composable {

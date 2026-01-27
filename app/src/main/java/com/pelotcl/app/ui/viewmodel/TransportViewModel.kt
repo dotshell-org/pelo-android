@@ -611,17 +611,54 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
     /**
      * Retrieves stops served by a specific line, ordered according to the line's path
-     * Uses LruCache to avoid expensive geometric calculations on repeated calls
+     * Uses GTFS stop_sequences table as primary source for ordering
+     * Falls back to static cache (metros/trams) then geometric ordering
      * @param lineName Line name (ex: "86", "A", "T1")
      * @param currentStopName Current stop name to mark it (optional)
+     * @param directionId Direction ID (0 or 1) for GTFS ordering, defaults to 0
      * @return List of stops with their transfers, ordered according to the line's route
      */
-    fun getStopsForLine(lineName: String, currentStopName: String? = null): List<com.pelotcl.app.data.gtfs.LineStopInfo> {
+    fun getStopsForLine(lineName: String, currentStopName: String? = null, directionId: Int = 0): List<com.pelotcl.app.data.gtfs.LineStopInfo> {
         // Check LruCache first for ultra-fast repeated lookups
-        val cacheKey = "$lineName|${currentStopName ?: ""}"
+        val cacheKey = "$lineName|${currentStopName ?: ""}|$directionId"
         lineStopsCache.get(cacheKey)?.let { return it }
 
-        // First, try to retrieve from static cache (for metros and trams)
+        // GTFS uses "NAVI1" for Navigone while the app displays "NAV1"
+        val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
+
+        // First, try to retrieve from GTFS stop_sequences table (most accurate)
+        val gtfsSequences = schedulesRepository.getStopSequences(gtfsLineName, directionId)
+        if (gtfsSequences.isNotEmpty()) {
+            val allStops = getCachedStopsSync()
+            // Build a map of normalized name -> official stop name and connections
+            val normalizedToStop = allStops.associateBy { normalizeStopName(it.properties.nom) }
+
+            val result = gtfsSequences.mapNotNull { (stationName, sequence) ->
+                // Try to find the matching stop in allStops
+                val normalizedGtfsName = normalizeStopName(stationName)
+                val matchingStop = normalizedToStop[normalizedGtfsName]
+
+                val officialName = matchingStop?.properties?.nom ?: stationName
+                val connections = getConnectionsForStop(officialName, lineName)
+
+                com.pelotcl.app.data.gtfs.LineStopInfo(
+                    stopId = matchingStop?.properties?.id?.toString() ?: "gtfs_${lineName}_${sequence}",
+                    stopName = officialName,
+                    stopSequence = sequence,
+                    isCurrentStop = currentStopName?.let {
+                        normalizeStopName(officialName) == normalizeStopName(it)
+                    } ?: false,
+                    connections = connections.map { it.lineName }
+                )
+            }.distinctBy { normalizeStopName(it.stopName) }
+
+            if (result.isNotEmpty()) {
+                lineStopsCache.put(cacheKey, result)
+                return result
+            }
+        }
+
+        // Second, try to retrieve from static cache (for metros and trams)
         val cachedStops = com.pelotcl.app.data.gtfs.LineStopsCache.getLineStops(lineName, currentStopName)
         if (cachedStops != null) {
             // Align cache labels with official GTFS labels (strict comparison required DB side)

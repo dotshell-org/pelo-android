@@ -149,6 +149,54 @@ def process_gtfs_schedules(zip_path, output_dir):
         )
         conn.execute("CREATE INDEX idx_calendar ON calendar (service_id)")
 
+        print("Generating stop_sequences table...")
+        # For each route and direction, find the canonical stop sequence from a representative trip
+        # We pick the trip with the most stops (longest variant) for each (route_name, direction_id)
+        stop_times_with_route = pd.merge(stop_times_df, trips_df[['trip_id', 'route_id', 'direction_id']], on='trip_id')
+        stop_times_with_route = pd.merge(stop_times_with_route, routes_df[['route_id', 'route_short_name']], on='route_id')
+        stop_times_with_route.rename(columns={'route_short_name': 'route_name'}, inplace=True)
+
+        # Map stop_id to station_id (parent station if exists)
+        stop_times_with_route['station_id'] = stop_times_with_route['stop_id'].map(child_to_parent).fillna(stop_times_with_route['stop_id'])
+        stop_times_with_route['station_name'] = stop_times_with_route['station_id'].map(stop_id_to_name)
+        stop_times_with_route = stop_times_with_route.dropna(subset=['station_name'])
+        stop_times_with_route['direction_id'] = stop_times_with_route['direction_id'].astype(int)
+        stop_times_with_route['stop_sequence'] = stop_times_with_route['stop_sequence'].astype(int)
+
+        # Count stops per trip
+        trip_stop_counts = stop_times_with_route.groupby('trip_id').size().reset_index(name='stop_count')
+        stop_times_with_route = pd.merge(stop_times_with_route, trip_stop_counts, on='trip_id')
+
+        # For each (route_name, direction_id), find the trip with the most stops
+        idx = stop_times_with_route.groupby(['route_name', 'direction_id'])['stop_count'].idxmax()
+        representative_trips = stop_times_with_route.loc[idx][['route_name', 'direction_id', 'trip_id']].drop_duplicates()
+
+        # Get all stops for representative trips, ordered by stop_sequence
+        stop_sequences_data = []
+        for _, row in representative_trips.iterrows():
+            route_name = row['route_name']
+            direction_id = row['direction_id']
+            trip_id = row['trip_id']
+
+            trip_stops = stop_times_with_route[stop_times_with_route['trip_id'] == trip_id][['station_name', 'stop_sequence']].drop_duplicates(subset=['station_name'])
+            trip_stops = trip_stops.sort_values('stop_sequence')
+
+            for seq_idx, (_, stop_row) in enumerate(trip_stops.iterrows(), start=1):
+                stop_sequences_data.append({
+                    'route_name': route_name,
+                    'direction_id': direction_id,
+                    'station_name': stop_row['station_name'],
+                    'stop_sequence': seq_idx
+                })
+
+        stop_sequences_df = pd.DataFrame(stop_sequences_data)
+        stop_sequences_df.to_sql(
+            'stop_sequences', conn, if_exists='replace', index=False,
+            dtype={'route_name': 'TEXT', 'direction_id': 'INTEGER', 'station_name': 'TEXT', 'stop_sequence': 'INTEGER'}
+        )
+        print("Creating index on 'stop_sequences'...")
+        conn.execute("CREATE INDEX idx_stop_sequences ON stop_sequences (route_name, direction_id)")
+
         print("Injecting hardcoded NAVI1 schedules...")
         inject_hardcoded_navigone_schedules(conn)
 
@@ -246,6 +294,22 @@ def inject_hardcoded_navigone_schedules(conn):
                 cursor.execute("UPDATE arrets SET desserte = ? WHERE nom = ?", (new_desserte, stop_name))
         else:
             cursor.execute("INSERT INTO arrets (nom, desserte, pmr) VALUES (?, ?, 0)", (stop_name, "NAVI1"))
+
+    # Inject NAVI1 stop sequences
+    cursor.execute("DELETE FROM stop_sequences WHERE route_name = 'NAVI1'")
+    navi_sequences_dir0 = [
+        ('NAVI1', 0, "VAISE - INDUSTRIE", 1),
+        ('NAVI1', 0, "SUBSISTANCES", 2),
+        ('NAVI1', 0, "TERRASSES PRESQU'ÎLE", 3),
+        ('NAVI1', 0, "CONFLUENCE", 4)
+    ]
+    navi_sequences_dir1 = [
+        ('NAVI1', 1, "CONFLUENCE", 1),
+        ('NAVI1', 1, "TERRASSES PRESQU'ÎLE", 2),
+        ('NAVI1', 1, "SUBSISTANCES", 3),
+        ('NAVI1', 1, "VAISE - INDUSTRIE", 4)
+    ]
+    cursor.executemany("INSERT INTO stop_sequences (route_name, direction_id, station_name, stop_sequence) VALUES (?, ?, ?, ?)", navi_sequences_dir0 + navi_sequences_dir1)
 
     conn.commit()
 
