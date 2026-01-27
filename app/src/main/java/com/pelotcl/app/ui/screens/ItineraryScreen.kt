@@ -5,6 +5,7 @@ import android.os.Build
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
+import androidx.activity.compose.BackHandler
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
@@ -30,6 +31,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
@@ -51,6 +53,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -261,7 +265,45 @@ fun ItineraryScreen(
         }
     }
 
-    Scaffold { contentPadding ->
+    // Handle back button press
+    BackHandler {
+        if (selectedJourney != null) {
+            // If viewing journey map, go back to journey list
+            selectedJourney = null
+        } else {
+            // Otherwise, exit the itinerary screen
+            onBack()
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            // Only show TopAppBar when not viewing the map (map has its own back button)
+            if (selectedJourney == null) {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = "Itinéraire",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Retour",
+                                tint = Color.White
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Black
+                    )
+                )
+            }
+        }
+    ) { contentPadding ->
         // Show map view when a journey is selected
         if (selectedJourney != null) {
             Box(
