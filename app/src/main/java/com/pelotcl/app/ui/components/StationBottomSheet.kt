@@ -11,16 +11,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Accessible
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Directions
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -37,7 +37,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.pelotcl.app.ui.theme.Gray200
 import com.pelotcl.app.ui.theme.Gray700
 import com.pelotcl.app.utils.ListItemRecompositionCounter
@@ -167,45 +166,36 @@ fun StationBottomSheet(
                         modifier = Modifier.weight(1f)
                     )
                     
-                    // PMR icon if station is accessible
-                    if (stationInfo.isPmr) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Accessible,
-                            contentDescription = "Station accessible PMR",
-                            tint = Color(0xFF2563EB),
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Itinéraire button
-                Button(
-                    onClick = onItineraryClick,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Black,
-                        contentColor = Color.White
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                ) {
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Directions,
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Itinéraire",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        // PMR icon if station is accessible
+                        if (stationInfo.isPmr) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Accessible,
+                                contentDescription = "Station accessible PMR",
+                                tint = Color(0xFF2563EB),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+
+                        // Itinerary circular button
+                        FilledIconButton(
+                            onClick = onItineraryClick,
+                            modifier = Modifier.size(40.dp),
+                            shape = CircleShape,
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = Color.Black,
+                                contentColor = Color.White
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Directions,
+                                contentDescription = "Itinéraire",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                 }
 
