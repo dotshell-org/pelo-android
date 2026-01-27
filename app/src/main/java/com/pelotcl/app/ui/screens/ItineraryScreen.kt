@@ -71,7 +71,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -114,7 +116,8 @@ fun ItineraryScreen(
 ) {
     val view = LocalView.current
     val scope = rememberCoroutineScope()
-    
+    val keyboardController = LocalSoftwareKeyboardController.current
+
     // Track selected journey for map view
     var selectedJourney by remember { mutableStateOf<JourneyResult?>(null) }
     
@@ -469,7 +472,8 @@ fun ItineraryScreen(
                                     }
                                 }
                             }
-                        } else null
+                        } else null,
+                        keyboardController = keyboardController
                     )
                     
                     // Swap button
@@ -519,7 +523,8 @@ fun ItineraryScreen(
                             arrivalQuery = ""
                             isSearchingArrival = false
                         },
-                        icon = Icons.Default.Search
+                        icon = Icons.Default.Search,
+                        keyboardController = keyboardController
                     )
             }
 
@@ -642,7 +647,8 @@ private fun StopSelectionField(
     onStopSelected: (StationSearchResult) -> Unit,
     onClear: () -> Unit,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onRefresh: (() -> Unit)? = null
+    onRefresh: (() -> Unit)? = null,
+    keyboardController: SoftwareKeyboardController? = null
 ) {
     Column {
         OutlinedTextField(
@@ -737,7 +743,10 @@ private fun StopSelectionField(
                                     }
                                 }
                             },
-                            modifier = Modifier.clickable { onStopSelected(result) },
+                            modifier = Modifier.clickable {
+                                keyboardController?.hide()
+                                onStopSelected(result)
+                            },
                             colors = ListItemDefaults.colors(containerColor = Color.White)
                         )
                         if (result != searchResults.last())
