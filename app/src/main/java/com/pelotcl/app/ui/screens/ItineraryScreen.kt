@@ -37,6 +37,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.Card
@@ -85,6 +86,7 @@ import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LineColorHelper
 import com.pelotcl.app.utils.ListItemRecompositionCounter
+import com.pelotcl.app.utils.LocationHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -164,7 +166,13 @@ fun ItineraryScreen(
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     
-    // Initialize raptor (only if not already initialized) and resolve stop IDs
+    // Track if user has manually selected a departure stop (to avoid auto-override)
+    var hasManuallySelectedDeparture by remember { mutableStateOf(false) }
+
+    // Track last location used for departure stop calculation
+    var lastLocationUsedForDeparture by remember { mutableStateOf<LatLng?>(null) }
+
+    // Initialize raptor (only if not already initialized) and resolve arrival stop IDs
     LaunchedEffect(Unit) {
         // Initialize Raptor if not ready
         if (!raptorRepository.isReady()) {
@@ -182,20 +190,31 @@ fun ItineraryScreen(
                 )
             }
         }
-        
-        // Find closest stop for departure based on GPS
-        if (userLocation != null) {
+    }
+
+    // Recalculate nearest departure stop when location changes significantly
+    LaunchedEffect(userLocation, isRaptorReady) {
+        if (!isRaptorReady || userLocation == null) return@LaunchedEffect
+
+        // Only auto-update if user hasn't manually selected a departure
+        if (hasManuallySelectedDeparture) return@LaunchedEffect
+
+        // Check if location has changed significantly (more than 100 meters)
+        val shouldUpdate = lastLocationUsedForDeparture == null ||
+            LocationHelper.isSignificantlyDifferent(lastLocationUsedForDeparture, userLocation, 100.0)
+
+        if (shouldUpdate) {
             val closestStop = raptorRepository.findClosestStop(
                 latitude = userLocation.latitude,
                 longitude = userLocation.longitude
             )
             if (closestStop != null) {
-                // Get all stop IDs with the same name
                 val allStopsWithName = raptorRepository.searchStopsByName(closestStop.name)
                 departureStop = SelectedStop(
                     name = closestStop.name,
                     stopIds = allStopsWithName.map { it.id }
                 )
+                lastLocationUsedForDeparture = userLocation
             }
         }
     }
@@ -361,14 +380,39 @@ fun ItineraryScreen(
                                 departureQuery = ""
                                 isSearchingDeparture = false
                                 departureSearchResults = emptyList()
+                                // Mark as manually selected to prevent auto-override
+                                hasManuallySelectedDeparture = true
                             }
                         },
                         onClear = {
                             departureStop = null
                             departureQuery = ""
                             isSearchingDeparture = false
+                            // Reset manual selection flag to allow auto-detection
+                            hasManuallySelectedDeparture = false
+                            lastLocationUsedForDeparture = null
                         },
-                        icon = Icons.Default.MyLocation
+                        icon = Icons.Default.MyLocation,
+                        onRefresh = if (userLocation != null) {
+                            {
+                                scope.launch {
+                                    // Force recalculation from current GPS location
+                                    hasManuallySelectedDeparture = false
+                                    val closestStop = raptorRepository.findClosestStop(
+                                        latitude = userLocation.latitude,
+                                        longitude = userLocation.longitude
+                                    )
+                                    if (closestStop != null) {
+                                        val allStopsWithName = raptorRepository.searchStopsByName(closestStop.name)
+                                        departureStop = SelectedStop(
+                                            name = closestStop.name,
+                                            stopIds = allStopsWithName.map { it.id }
+                                        )
+                                        lastLocationUsedForDeparture = userLocation
+                                    }
+                                }
+                            }
+                        } else null
                     )
                     
                     // Swap button
@@ -511,7 +555,8 @@ private fun StopSelectionField(
     searchResults: List<StationSearchResult>,
     onStopSelected: (StationSearchResult) -> Unit,
     onClear: () -> Unit,
-    icon: androidx.compose.ui.graphics.vector.ImageVector
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onRefresh: (() -> Unit)? = null
 ) {
     Column {
         OutlinedTextField(
@@ -525,13 +570,26 @@ private fun StopSelectionField(
                 )
             },
             trailingIcon = {
-                if (selectedStop != null || query.isNotEmpty()) {
-                    IconButton(onClick = onClear) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Effacer",
-                            tint = Gray700
-                        )
+                Row {
+                    // Refresh button (recalculate from GPS)
+                    if (onRefresh != null && selectedStop != null && !isSearching) {
+                        IconButton(onClick = onRefresh) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Recalculer depuis ma position",
+                                tint = Gray700
+                            )
+                        }
+                    }
+                    // Clear button
+                    if (selectedStop != null || query.isNotEmpty()) {
+                        IconButton(onClick = onClear) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Effacer",
+                                tint = Gray700
+                            )
+                        }
                     }
                 }
             },
