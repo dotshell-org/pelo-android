@@ -10,6 +10,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -491,6 +493,7 @@ private fun NextSchedulesSection(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Boolean, isLast: Boolean, onStopClick: () -> Unit = {}) {
     // Debug: measure the recompositions of this item
@@ -514,19 +517,6 @@ private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Bool
             )
         }
 
-        Row(
-            modifier = Modifier.weight(1f).padding(start = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = stop.stopName,
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (stop.isCurrentStop) lineColor else Color.Black,
-                fontWeight = if (stop.isCurrentStop) FontWeight.Bold else FontWeight.Normal
-            )
-        }
-
         val filteredConnections = stop.connections.filter { connection ->
             val upperCaseConnection = connection.uppercase()
 
@@ -537,14 +527,30 @@ private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Bool
             upperCaseConnection == "RX" // Rhone Express
         }
 
-        if (filteredConnections.isNotEmpty()) {
-            Spacer(modifier = Modifier.width(8.dp))
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                filteredConnections.forEach { connectionLine ->
-                    ConnectionBadge(lineName = connectionLine)
+        Row(
+            modifier = Modifier.weight(1f).padding(start = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stop.stopName,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (stop.isCurrentStop) lineColor else Color.Black,
+                fontWeight = if (stop.isCurrentStop) FontWeight.Bold else FontWeight.Normal,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+
+            if (filteredConnections.isNotEmpty()) {
+                Spacer(modifier = Modifier.width(8.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    maxLines = 2,
+                    maxItemsInEachRow = 4
+                ) {
+                    filteredConnections.forEach { connectionLine ->
+                        ConnectionBadge(lineName = connectionLine)
+                    }
                 }
             }
         }
@@ -568,7 +574,7 @@ private fun ConnectionBadge(lineName: String) {
         Image(
             painter = painterResource(id = resourceId),
             contentDescription = "Ligne $lineName",
-            modifier = Modifier.size(40.dp)
+            modifier = Modifier.size(32.dp)
         )
     } else {
         // Fallback: colored circle if image doesn't exist
