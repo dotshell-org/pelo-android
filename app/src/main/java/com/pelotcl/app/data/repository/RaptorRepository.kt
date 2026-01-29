@@ -43,9 +43,6 @@ class RaptorRepository private constructor(private val context: Context) {
     // Performance: HashMap index for O(1) stop lookup by index position
     private var stopsByIndex: Map<Int, Stop> = emptyMap()
 
-    // Performance: Pre-computed normalized name index for fast search
-    private var stopsByNormalizedName: Map<String, List<Stop>> = emptyMap()
-
     // Performance: Cache of normalized stop names to avoid repeated normalization during search
     private var normalizedStopNames: Map<Stop, String> = emptyMap()
 
@@ -200,13 +197,11 @@ class RaptorRepository private constructor(private val context: Context) {
     suspend fun searchStopsByName(query: String): List<RaptorStop> = withContext(Dispatchers.Default) {
         ensureInitialized()
         try {
-            // Optimisation: pré-filtrage léger basé sur le premier mot (normalisé sans accents)
-            // puis fuzzy matching complet qui gère tout (accents, tirets, multi-mots)
+            // Pré-calcul unique de la query normalisée
             val normalizedQuery = SearchUtils.normalizeForSearch(query)
             val firstWord = normalizedQuery.split(" ").firstOrNull() ?: ""
 
-            // Étape 1: pré-filtrage rapide sur le premier mot seulement (accent-insensitive)
-            // Utilise le cache pré-calculé des noms normalisés pour éviter la normalisation répétée
+            // Étape 1: pré-filtrage rapide sur le premier mot (utilise le cache)
             val candidates = if (firstWord.isNotEmpty()) {
                 stopsCache.filter { stop ->
                     (normalizedStopNames[stop] ?: SearchUtils.normalizeForSearch(stop.name)).contains(firstWord)
@@ -215,22 +210,24 @@ class RaptorRepository private constructor(private val context: Context) {
                 stopsCache
             }
             
-            // Étape 2: fuzzy matching précis sur les candidats (gère multi-mots, accents, etc.)
+            // Étape 2: fuzzy matching précis avec valeurs pré-normalisées (évite les recalculs)
             val results = candidates.filter { stop ->
-                SearchUtils.fuzzyContains(stop.name, query)
+                val normalizedName = normalizedStopNames[stop] ?: SearchUtils.normalizeForSearch(stop.name)
+                SearchUtils.fuzzyContainsNormalized(normalizedName, normalizedQuery)
             }.map { stop ->
+                val normalizedName = normalizedStopNames[stop] ?: SearchUtils.normalizeForSearch(stop.name)
                 RaptorStop(
                     id = stop.id,
                     name = stop.name,
                     lat = stop.lat,
                     lon = stop.lon
-                )
+                ) to normalizedName
             }.sortedWith(
                 compareBy(
-                    { !SearchUtils.fuzzyStartsWith(it.name, query) },
-                    { it.name }
+                    { !SearchUtils.fuzzyStartsWithNormalized(it.second, normalizedQuery) },
+                    { it.first.name }
                 )
-            )
+            ).map { it.first }
 
             results
         } catch (e: Exception) {
@@ -262,6 +259,44 @@ class RaptorRepository private constructor(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "Error finding closest stop: ${e.message}", e)
             null
+        }
+    }
+
+    /**
+     * Find the N nearest stops to the given GPS coordinates, sorted by distance.
+     * Uses Dispatchers.Default as this is CPU-bound distance calculation.
+     *
+     * @param latitude GPS latitude
+     * @param longitude GPS longitude
+     * @param limit Maximum number of stops to return (default 5)
+     * @return List of RaptorStop sorted by distance (closest first), with unique names
+     */
+    suspend fun findNearestStops(latitude: Double, longitude: Double, limit: Int = 5): List<RaptorStop> = withContext(Dispatchers.Default) {
+        ensureInitialized()
+        try {
+            // Calculate distance for each stop and sort by distance
+            stopsCache
+                .map { stop ->
+                    val latDiff = stop.lat - latitude
+                    val lonDiff = stop.lon - longitude
+                    val distance = sqrt(latDiff.pow(2) + lonDiff.pow(2))
+                    stop to distance
+                }
+                .sortedBy { it.second }
+                // Group by stop name to get unique stop names (different platforms have same name)
+                .distinctBy { it.first.name }
+                .take(limit)
+                .map { (stop, _) ->
+                    RaptorStop(
+                        id = stop.id,
+                        name = stop.name,
+                        lat = stop.lat,
+                        lon = stop.lon
+                    )
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error finding nearest stops: ${e.message}", e)
+            emptyList()
         }
     }
 

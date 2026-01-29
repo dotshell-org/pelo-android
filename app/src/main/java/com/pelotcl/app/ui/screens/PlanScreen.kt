@@ -3,6 +3,7 @@ package com.pelotcl.app.ui.screens
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
@@ -591,6 +592,48 @@ fun PlanScreen(
     }
 
     val bottomPadding = contentPadding.calculateBottomPadding()
+
+    // Handle back button press - close sheets/selections before exiting app
+    BackHandler(enabled = sheetContentState != null || selectedLine != null || selectedStation != null) {
+        when {
+            // If viewing all schedules, go back to line details
+            sheetContentState == SheetContentState.ALL_SCHEDULES -> {
+                allSchedulesInfo = null
+                sheetContentState = SheetContentState.LINE_DETAILS
+            }
+            // If viewing line details, go back to station (if came from station) or close
+            sheetContentState == SheetContentState.LINE_DETAILS -> {
+                // Clean up temporary bus lines
+                selectedLine?.let { lineInfo ->
+                    val lineName = lineInfo.lineName
+                    if (!isMetroTramOrFunicular(lineName)) {
+                        viewModel.removeLineFromLoaded(lineName)
+                    }
+                }
+                if (selectedStation != null && (selectedStation?.lignes?.size ?: 0) > 1) {
+                    // Go back to station view if station has multiple lines
+                    selectedLine = null
+                    sheetContentState = SheetContentState.STATION
+                } else {
+                    // Close everything
+                    selectedLine = null
+                    selectedStation = null
+                    sheetContentState = null
+                }
+            }
+            // If viewing station, close it
+            sheetContentState == SheetContentState.STATION -> {
+                selectedStation = null
+                sheetContentState = null
+            }
+            // Default: close any selection
+            else -> {
+                selectedLine = null
+                selectedStation = null
+                sheetContentState = null
+            }
+        }
+    }
 
     val peekHeight = when(sheetContentState) {
         SheetContentState.LINE_DETAILS, SheetContentState.ALL_SCHEDULES -> bottomPadding + 150.dp

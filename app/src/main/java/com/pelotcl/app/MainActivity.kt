@@ -51,10 +51,9 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
-import com.google.android.gms.tasks.CancellationTokenSource
 import com.pelotcl.app.ui.components.LinesBottomSheet
 import com.pelotcl.app.ui.components.SimpleSearchBar
 import com.pelotcl.app.ui.components.StationSearchResult
@@ -70,6 +69,7 @@ import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.data.api.RetrofitInstance
 import com.pelotcl.app.data.cache.TransportCache
+import com.pelotcl.app.utils.LocationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -194,9 +194,12 @@ fun NavBar(modifier: Modifier = Modifier) {
     var stationSearchResults by remember { mutableStateOf<List<StationSearchResult>>(emptyList()) }
     var selectedStationFromSearch by remember { mutableStateOf<StationSearchResult?>(null) }
     
-    // User location for itinerary
+    // User location for itinerary (continuously updated)
     var userLocation by remember { mutableStateOf<LatLng?>(null) }
     
+    // Fused location client for continuous updates
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+
     // Itinerary destination stop
     var itineraryDestinationStop by remember { mutableStateOf<String?>(null) }
 
@@ -205,19 +208,9 @@ fun NavBar(modifier: Modifier = Modifier) {
     ) { permissions ->
         val granted = permissions.entries.any { it.value }
         if (granted) {
-            // Get location when permission granted
-            try {
-                val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
-                fusedLocationClient.getCurrentLocation(
-                    Priority.PRIORITY_HIGH_ACCURACY,
-                    CancellationTokenSource().token
-                ).addOnSuccessListener { location ->
-                    if (location != null) {
-                        userLocation = LatLng(location.latitude, location.longitude)
-                    }
-                }
-            } catch (_: SecurityException) {
-                // Handle exception
+            // Start continuous location updates when permission granted
+            LocationHelper.startLocationUpdates(fusedLocationClient) { location ->
+                userLocation = location
             }
         }
     }
@@ -240,20 +233,17 @@ fun NavBar(modifier: Modifier = Modifier) {
                 )
             )
         } else {
-            // Get location if permission already granted
-            try {
-                val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
-                fusedLocationClient.getCurrentLocation(
-                    Priority.PRIORITY_HIGH_ACCURACY,
-                    CancellationTokenSource().token
-                ).addOnSuccessListener { location ->
-                    if (location != null) {
-                        userLocation = LatLng(location.latitude, location.longitude)
-                    }
-                }
-            } catch (_: SecurityException) {
-                // Handle exception
+            // Start continuous location updates if permission already granted
+            LocationHelper.startLocationUpdates(fusedLocationClient) { location ->
+                userLocation = location
             }
+        }
+    }
+
+    // Stop location updates when composable is disposed
+    DisposableEffect(Unit) {
+        onDispose {
+            LocationHelper.stopLocationUpdates(fusedLocationClient)
         }
     }
 
@@ -271,10 +261,23 @@ fun NavBar(modifier: Modifier = Modifier) {
         }
     }
 
+    // Observer la route courante pour gérer la barre de statut
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+
     // Gérer la barre de statut selon l'écran actif
-    DisposableEffect(selectedDestination) {
+    // Les écrans Settings et ses sous-écrans (About, Legal, Credits, Contact) ont un fond noir
+    DisposableEffect(currentRoute) {
         val activity = context as? ComponentActivity
-        if (selectedDestination == Destination.PARAMETRES.ordinal) {
+        val darkBackgroundRoutes = listOf(
+            Destination.PARAMETRES.route,
+            Destination.ABOUT,
+            Destination.LEGAL,
+            Destination.CREDITS,
+            Destination.CONTACT
+        )
+
+        if (currentRoute in darkBackgroundRoutes) {
             // Barre de statut avec icônes blanches pour fond noir
             activity?.enableEdgeToEdge(
                 statusBarStyle = SystemBarStyle.dark(
@@ -285,7 +288,7 @@ fun NavBar(modifier: Modifier = Modifier) {
                 )
             )
         } else {
-            // Barre de statut normale pour les autres écrans
+            // Barre de statut normale pour les autres écrans (fond clair)
             activity?.enableEdgeToEdge(
                 statusBarStyle = SystemBarStyle.light(
                     android.graphics.Color.TRANSPARENT,

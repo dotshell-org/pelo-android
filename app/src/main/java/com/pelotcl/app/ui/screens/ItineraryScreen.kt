@@ -5,6 +5,7 @@ import android.os.Build
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
+import androidx.activity.compose.BackHandler
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
@@ -30,11 +31,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.Card
@@ -51,6 +55,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -65,7 +71,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -73,6 +81,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pelotcl.app.data.repository.JourneyLeg
 import com.pelotcl.app.data.repository.JourneyResult
+import com.pelotcl.app.data.repository.RaptorStop
 import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.ui.theme.Gray200
 import com.pelotcl.app.ui.theme.Gray700
@@ -81,6 +90,7 @@ import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LineColorHelper
 import com.pelotcl.app.utils.ListItemRecompositionCounter
+import com.pelotcl.app.utils.LocationHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -106,7 +116,8 @@ fun ItineraryScreen(
 ) {
     val view = LocalView.current
     val scope = rememberCoroutineScope()
-    
+    val keyboardController = LocalSoftwareKeyboardController.current
+
     // Track selected journey for map view
     var selectedJourney by remember { mutableStateOf<JourneyResult?>(null) }
     
@@ -159,8 +170,18 @@ fun ItineraryScreen(
     var journeys by remember { mutableStateOf<List<JourneyResult>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    
-    // Initialize raptor (only if not already initialized) and resolve stop IDs
+    var fallbackInfoMessage by remember { mutableStateOf<String?>(null) }
+
+    // Track if user has manually selected a departure stop (to avoid auto-override)
+    var hasManuallySelectedDeparture by remember { mutableStateOf(false) }
+
+    // Track last location used for departure stop calculation
+    var lastLocationUsedForDeparture by remember { mutableStateOf<LatLng?>(null) }
+
+    // Store nearby stops for fallback when no itinerary is found
+    var nearbyDepartureStops by remember { mutableStateOf<List<RaptorStop>>(emptyList()) }
+
+    // Initialize raptor (only if not already initialized) and resolve arrival stop IDs
     LaunchedEffect(Unit) {
         // Initialize Raptor if not ready
         if (!raptorRepository.isReady()) {
@@ -178,20 +199,36 @@ fun ItineraryScreen(
                 )
             }
         }
-        
-        // Find closest stop for departure based on GPS
-        if (userLocation != null) {
-            val closestStop = raptorRepository.findClosestStop(
+    }
+
+    // Recalculate nearest departure stop when location changes significantly
+    LaunchedEffect(userLocation, isRaptorReady) {
+        if (!isRaptorReady || userLocation == null) return@LaunchedEffect
+
+        // Only auto-update if user hasn't manually selected a departure
+        if (hasManuallySelectedDeparture) return@LaunchedEffect
+
+        // Check if location has changed significantly (more than 100 meters)
+        val shouldUpdate = lastLocationUsedForDeparture == null ||
+            LocationHelper.isSignificantlyDifferent(lastLocationUsedForDeparture, userLocation, 100.0)
+
+        if (shouldUpdate) {
+            // Get multiple nearby stops for fallback capability
+            val nearestStops = raptorRepository.findNearestStops(
                 latitude = userLocation.latitude,
-                longitude = userLocation.longitude
+                longitude = userLocation.longitude,
+                limit = 5
             )
-            if (closestStop != null) {
-                // Get all stop IDs with the same name
+            nearbyDepartureStops = nearestStops
+
+            if (nearestStops.isNotEmpty()) {
+                val closestStop = nearestStops.first()
                 val allStopsWithName = raptorRepository.searchStopsByName(closestStop.name)
                 departureStop = SelectedStop(
                     name = closestStop.name,
                     stopIds = allStopsWithName.map { it.id }
                 )
+                lastLocationUsedForDeparture = userLocation
             }
         }
     }
@@ -228,6 +265,7 @@ fun ItineraryScreen(
             departureStop!!.stopIds.isNotEmpty() && arrivalStop!!.stopIds.isNotEmpty()) {
             isLoading = true
             errorMessage = null
+            fallbackInfoMessage = null
             journeys = emptyList()
 
             scope.launch {
@@ -247,9 +285,47 @@ fun ItineraryScreen(
                         )
                     }
 
+                    // If still no results and we have nearby stops for fallback, try them
+                    if (results.isEmpty() && nearbyDepartureStops.isNotEmpty() && !hasManuallySelectedDeparture) {
+                        // Skip the first stop (already tried) and try the others
+                        val fallbackStops = nearbyDepartureStops.drop(1)
+
+                        for (fallbackStop in fallbackStops) {
+                            val fallbackStopIds = raptorRepository.searchStopsByName(fallbackStop.name)
+                                .map { it.id }
+
+                            if (fallbackStopIds.isEmpty()) continue
+
+                            // Try current time
+                            results = raptorRepository.getOptimizedPaths(
+                                originStopIds = fallbackStopIds,
+                                destinationStopIds = arrivalStop!!.stopIds
+                            )
+
+                            // If no results, try 9:00 AM
+                            if (results.isEmpty()) {
+                                results = raptorRepository.getOptimizedPaths(
+                                    originStopIds = fallbackStopIds,
+                                    destinationStopIds = arrivalStop!!.stopIds,
+                                    departureTimeSeconds = 9 * 3600
+                                )
+                            }
+
+                            if (results.isNotEmpty()) {
+                                // Found a route from a fallback stop - update departure
+                                departureStop = SelectedStop(
+                                    name = fallbackStop.name,
+                                    stopIds = fallbackStopIds
+                                )
+                                fallbackInfoMessage = "Itinéraire depuis ${ fallbackStop.name } (arrêt proche avec service)"
+                                break
+                            }
+                        }
+                    }
+
                     journeys = results
                     if (results.isEmpty()) {
-                        errorMessage = "Aucun itinéraire trouvé"
+                        errorMessage = "Aucun itinéraire trouvé depuis les arrêts proches"
                     }
                 } catch (e: Exception) {
                     Log.e("ItineraryScreen", "Error calculating journey", e)
@@ -261,7 +337,45 @@ fun ItineraryScreen(
         }
     }
 
-    Scaffold { contentPadding ->
+    // Handle back button press
+    BackHandler {
+        if (selectedJourney != null) {
+            // If viewing journey map, go back to journey list
+            selectedJourney = null
+        } else {
+            // Otherwise, exit the itinerary screen
+            onBack()
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            // Only show TopAppBar when not viewing the map (map has its own back button)
+            if (selectedJourney == null) {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = "Itinéraire",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Retour",
+                                tint = Color.White
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Black
+                    )
+                )
+            }
+        }
+    ) { contentPadding ->
         // Show map view when a journey is selected
         if (selectedJourney != null) {
             Box(
@@ -319,14 +433,47 @@ fun ItineraryScreen(
                                 departureQuery = ""
                                 isSearchingDeparture = false
                                 departureSearchResults = emptyList()
+                                // Mark as manually selected to prevent auto-override
+                                hasManuallySelectedDeparture = true
                             }
                         },
                         onClear = {
                             departureStop = null
                             departureQuery = ""
                             isSearchingDeparture = false
+                            // Reset manual selection flag to allow auto-detection
+                            hasManuallySelectedDeparture = false
+                            lastLocationUsedForDeparture = null
                         },
-                        icon = Icons.Default.MyLocation
+                        icon = Icons.Default.MyLocation,
+                        onRefresh = if (userLocation != null) {
+                            {
+                                scope.launch {
+                                    // Force recalculation from current GPS location
+                                    hasManuallySelectedDeparture = false
+                                    fallbackInfoMessage = null
+
+                                    // Get multiple nearby stops for fallback capability
+                                    val nearestStops = raptorRepository.findNearestStops(
+                                        latitude = userLocation.latitude,
+                                        longitude = userLocation.longitude,
+                                        limit = 5
+                                    )
+                                    nearbyDepartureStops = nearestStops
+
+                                    if (nearestStops.isNotEmpty()) {
+                                        val closestStop = nearestStops.first()
+                                        val allStopsWithName = raptorRepository.searchStopsByName(closestStop.name)
+                                        departureStop = SelectedStop(
+                                            name = closestStop.name,
+                                            stopIds = allStopsWithName.map { it.id }
+                                        )
+                                        lastLocationUsedForDeparture = userLocation
+                                    }
+                                }
+                            }
+                        } else null,
+                        keyboardController = keyboardController
                     )
                     
                     // Swap button
@@ -376,7 +523,8 @@ fun ItineraryScreen(
                             arrivalQuery = ""
                             isSearchingArrival = false
                         },
-                        icon = Icons.Default.Search
+                        icon = Icons.Default.Search,
+                        keyboardController = keyboardController
                     )
             }
 
@@ -418,6 +566,35 @@ fun ItineraryScreen(
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp)
                     ) {
+                        // Show fallback info message if an alternative stop was used
+                        if (fallbackInfoMessage != null) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 16.dp)
+                                    .background(
+                                        color = Color(0xFF2A5298).copy(alpha = 0.6f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .padding(12.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = fallbackInfoMessage!!,
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+
                         journeys.forEachIndexed { index, journey ->
                             key(journey.departureTime) {
                                 JourneyCard(
@@ -469,7 +646,9 @@ private fun StopSelectionField(
     searchResults: List<StationSearchResult>,
     onStopSelected: (StationSearchResult) -> Unit,
     onClear: () -> Unit,
-    icon: androidx.compose.ui.graphics.vector.ImageVector
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onRefresh: (() -> Unit)? = null,
+    keyboardController: SoftwareKeyboardController? = null
 ) {
     Column {
         OutlinedTextField(
@@ -483,13 +662,26 @@ private fun StopSelectionField(
                 )
             },
             trailingIcon = {
-                if (selectedStop != null || query.isNotEmpty()) {
-                    IconButton(onClick = onClear) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Effacer",
-                            tint = Gray700
-                        )
+                Row {
+                    // Refresh button (recalculate from GPS)
+                    if (onRefresh != null && selectedStop != null && !isSearching) {
+                        IconButton(onClick = onRefresh) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Recalculer depuis ma position",
+                                tint = Gray700
+                            )
+                        }
+                    }
+                    // Clear button
+                    if (selectedStop != null || query.isNotEmpty()) {
+                        IconButton(onClick = onClear) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Effacer",
+                                tint = Gray700
+                            )
+                        }
                     }
                 }
             },
@@ -551,7 +743,10 @@ private fun StopSelectionField(
                                     }
                                 }
                             },
-                            modifier = Modifier.clickable { onStopSelected(result) },
+                            modifier = Modifier.clickable {
+                                keyboardController?.hide()
+                                onStopSelected(result)
+                            },
                             colors = ListItemDefaults.colors(containerColor = Color.White)
                         )
                         if (result != searchResults.last())

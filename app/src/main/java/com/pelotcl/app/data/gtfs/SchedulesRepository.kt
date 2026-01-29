@@ -26,6 +26,8 @@ class SchedulesRepository(context: Context) {
     private val allStopsMutex = Mutex()
     // In-memory cache for all stops (loaded from DB)
     private var allStopsCache: List<Triple<String, String, Boolean>>? = null
+    // Cache of normalized stop names for fast search (indexed same as allStopsCache)
+    private var normalizedNamesCache: List<String>? = null
 
     companion object {
         // LRU Cache for schedules: key = "lineName|stopName|directionId|isHoliday"
@@ -94,19 +96,20 @@ class SchedulesRepository(context: Context) {
             // Utiliser la recherche en mémoire pour une gestion fiable des accents
             // (SQLite LIKE ne gère pas bien les accents sur Android)
             val allStops = getAllStops()
+            val normalizedNames = normalizedNamesCache ?: return emptyList()
 
-            // Filtrer les candidats avec fuzzy matching (gère accents, tirets, ordre des mots)
-            val filteredStops = allStops.filter { (name, _, _) ->
-                SearchUtils.fuzzyContains(name, query)
-            }
+            // Filtrer les candidats avec fuzzy matching optimisé (utilise le cache des noms normalisés)
+            val filteredWithIndex = allStops.indices.filter { index ->
+                SearchUtils.fuzzyContainsNormalized(normalizedNames[index], normalizedQuery)
+            }.map { index -> allStops[index] to normalizedNames[index] }
 
-            // Trier: priorité aux arrêts qui commencent par la query
-            val sorted = filteredStops.sortedWith(
+            // Trier: priorité aux arrêts qui commencent par la query (avec noms pré-normalisés)
+            val sorted = filteredWithIndex.sortedWith(
                 compareBy(
-                    { !SearchUtils.fuzzyStartsWith(it.first, query) },
-                    { it.first }
+                    { !SearchUtils.fuzzyStartsWithNormalized(it.second, normalizedQuery) },
+                    { it.first.first }
                 )
-            ).take(50)
+            ).take(50).map { it.first }
 
             // Convertir en StationSearchResult et fusionner les arrêts du même nom
             val stopsByName = mutableMapOf<String, MutableList<String>>()
@@ -190,7 +193,7 @@ class SchedulesRepository(context: Context) {
 
     /**
      * Helper to load all stops into memory once for efficient filtering.
-     * Thread-safe using Mutex.
+     * Thread-safe using Mutex. Also builds the normalized names cache.
      */
     private suspend fun getAllStops(): List<Triple<String, String, Boolean>> {
         allStopsCache?.let { return it }
@@ -199,6 +202,7 @@ class SchedulesRepository(context: Context) {
             allStopsCache?.let { return it }
 
             val stops = mutableListOf<Triple<String, String, Boolean>>()
+            val normalizedNames = mutableListOf<String>()
             try {
                 val db = dbHelper.readableDatabase
                 // Load critical columns for search: name, lines served (desserte), isPMR
@@ -209,15 +213,17 @@ class SchedulesRepository(context: Context) {
                     val desserteRaw = cursor.getString(1) ?: ""
                     val isPmr = cursor.getInt(2) == 1
                     stops.add(Triple(name, desserteRaw, isPmr))
+                    normalizedNames.add(SearchUtils.normalizeForSearch(name))
                 }
                 cursor.close()
             } catch (e: Exception) {
                 Log.e("SchedulesRepository", "Error loading all stops: ${e.message}")
             }
 
-            // Cache the immutable list
+            // Cache the immutable lists
             val immutableStops = stops.toList()
             allStopsCache = immutableStops
+            normalizedNamesCache = normalizedNames.toList()
             immutableStops
         }
     }
