@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -57,11 +58,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pelotcl.app.data.gtfs.LineStopInfo
+import com.pelotcl.app.data.model.AlertSeverity
+import com.pelotcl.app.data.model.TrafficAlert
 import com.pelotcl.app.ui.theme.Gray700
 import com.pelotcl.app.ui.theme.Green500
 import com.pelotcl.app.ui.theme.Orange500
@@ -139,6 +143,18 @@ fun LineDetailsBottomSheet(
     val context = LocalContext.current
     var lineStops by remember { mutableStateOf<List<LineStopInfo>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    var lineAlerts by remember { mutableStateOf<List<com.pelotcl.app.data.model.TrafficAlert>>(emptyList()) }
+    
+    // Load alerts for the line using the new state-based approach
+    LaunchedEffect(lineInfo?.lineName) {
+        if (lineInfo != null && lineInfo.lineName.isNotBlank()) {
+            try {
+                lineAlerts = viewModel.getAlertsForLine(lineInfo.lineName)
+            } catch (e: Exception) {
+                Log.e("LineDetailsBottomSheet", "Error loading alerts for line ${lineInfo.lineName}", e)
+            }
+        }
+    }
 
 
     val linesState by viewModel.uiState.collectAsState()
@@ -241,7 +257,16 @@ fun LineDetailsBottomSheet(
                         .verticalScroll(rememberScrollState())
                 ) {
 
-                    // Part 1: Next Schedules
+                    // Part 1: Traffic Alerts (if any)
+                    if (lineAlerts.isNotEmpty()) {
+                        TrafficAlertsSection(
+                            alerts = lineAlerts,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+                    
+                    // Part 2: Next Schedules
                     if (lineInfo.currentStationName.isNotBlank()) {
                         NextSchedulesSection(
                             viewModel = viewModel,
@@ -306,6 +331,97 @@ fun LineDetailsBottomSheet(
             }
         } else {
             content()
+        }
+    }
+}
+
+/**
+ * Composable pour afficher les alertes de trafic pour une ligne
+ */
+@Composable
+private fun TrafficAlertsSection(
+    alerts: List<com.pelotcl.app.data.model.TrafficAlert>,
+    modifier: Modifier = Modifier
+) {
+    if (alerts.isEmpty()) {
+        return
+    }
+    
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 16.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFFF5F5F5))
+            .padding(16.dp)
+    ) {
+        Text(
+            text = "Alertes de trafic",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = Color.Black,
+            modifier = Modifier.fillMaxWidth()
+        )
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        alerts.forEach { alert ->
+            val severity = com.pelotcl.app.data.model.AlertSeverity.fromSeverityType(alert.severityType, alert.severityLevel)
+            val severityColor = Color(severity.color)
+            
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(severityColor)
+                    )
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    Text(
+                        text = alert.title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                Text(
+                    text = alert.message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.DarkGray
+                )
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                Text(
+                    text = "Du ${alert.startDate} au ${alert.endDate}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray,
+                    fontStyle = FontStyle.Italic
+                )
+            }
+            
+            if (alert != alerts.last()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                androidx.compose.material3.Divider(
+                    color = Color.LightGray,
+                    thickness = 1.dp,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
         }
     }
 }

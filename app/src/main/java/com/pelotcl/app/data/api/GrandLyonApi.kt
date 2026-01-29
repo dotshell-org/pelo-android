@@ -3,6 +3,8 @@ package com.pelotcl.app.data.api
 import com.pelotcl.app.data.model.FeatureCollection
 import com.google.gson.JsonObject
 import com.pelotcl.app.data.model.StopCollection
+import com.pelotcl.app.data.model.TrafficAlertsResponse
+import com.pelotcl.app.data.model.TrafficStatusResponse
 import retrofit2.http.GET
 import retrofit2.http.Query
 
@@ -163,4 +165,16 @@ interface GrandLyonApi {
         @Query("sortby") sortBy: String = "gid",
         @Query("count") count: Int = 1000
     ): JsonObject
+
+    /**
+     * Récupère le statut du trafic (nombre d'alertes)
+     */
+    @GET("https://api.dotshell.eu/pelo/v1/traffic/status")
+    suspend fun getTrafficStatus(): TrafficStatusResponse
+
+    /**
+     * Récupère les alertes de trafic pour toutes les lignes
+     */
+    @GET("https://api.dotshell.eu/pelo/v1/traffic/alerts")
+    suspend fun getTrafficAlerts(): TrafficAlertsResponse
 }

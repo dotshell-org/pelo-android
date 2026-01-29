@@ -11,6 +11,7 @@ import com.pelotcl.app.data.model.Feature
 import com.pelotcl.app.data.model.StopFeature
 import com.pelotcl.app.data.repository.RaptorRepository
 import com.pelotcl.app.data.repository.TransportRepository
+import com.pelotcl.app.data.repository.TrafficAlertsRepository
 import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.utils.Connection
 import com.pelotcl.app.data.repository.FavoritesRepository
@@ -20,6 +21,7 @@ import java.time.LocalDate
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -52,6 +54,7 @@ sealed class TransportStopsUiState {
 class TransportViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = TransportRepository(application.applicationContext)
+    private val trafficAlertsRepository = TrafficAlertsRepository(application.applicationContext)
 
     // Shared RaptorRepository singleton - kept alive during app lifetime
     val raptorRepository = RaptorRepository.getInstance(application.applicationContext)
@@ -83,6 +86,10 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     val favoriteLines: StateFlow<Set<String>> = _favoriteLines.asStateFlow()
     private val _selectedLineName = MutableStateFlow<String?>(null)
     val selectedLineName: StateFlow<String?> = _selectedLineName.asStateFlow()
+    
+    // Traffic alerts state
+    private val _trafficAlerts = MutableStateFlow<Map<String, List<com.pelotcl.app.data.model.TrafficAlert>>>(emptyMap())
+    val trafficAlerts: StateFlow<Map<String, List<com.pelotcl.app.data.model.TrafficAlert>>> = _trafficAlerts.asStateFlow()
 
     // Preloading flags to avoid multiple reloads
     private var isPreloading: Boolean = false
@@ -93,6 +100,26 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         preloadAllData()
         // Load favorites
         _favoriteLines.value = favoritesRepository.getFavorites().map { it.uppercase() }.toSet()
+        // Preload traffic alerts
+        refreshTrafficAlerts()
+        // Set up periodic refresh for traffic alerts (every 5 minutes)
+        startPeriodicAlertsRefresh()
+    }
+
+    /**
+     * Starts periodic refresh of traffic alerts (every 5 minutes)
+     */
+    private fun startPeriodicAlertsRefresh() {
+        viewModelScope.launch {
+            while (true) {
+                delay(5 * 60 * 1000) // 5 minutes
+                try {
+                    refreshTrafficAlerts()
+                } catch (e: Exception) {
+                    Log.e("TransportViewModel", "Error refreshing traffic alerts periodically", e)
+                }
+            }
+        }
     }
 
     /**
@@ -883,5 +910,73 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 },
                 { line -> line }
             ))
+    }
+
+    /**
+     * Traffic Alerts Management
+     */
+
+    /**
+     * Gets traffic status (alert count and last update)
+     */
+    fun getTrafficStatus() = viewModelScope.launch {
+        trafficAlertsRepository.getTrafficStatus()
+    }
+
+    /**
+     * Gets all traffic alerts
+     */
+    fun getAllTrafficAlerts() = viewModelScope.launch {
+        trafficAlertsRepository.getTrafficAlerts()
+    }
+
+    /**
+     * Gets alerts for a specific line (uses cached state first)
+     */
+    fun getAlertsForLine(lineCode: String): List<com.pelotcl.app.data.model.TrafficAlert> {
+        val upperCaseLineCode = lineCode.uppercase()
+        return _trafficAlerts.value[upperCaseLineCode] ?: emptyList()
+    }
+
+    /**
+     * Gets the most severe alert for a specific line (uses cached state first)
+     */
+    fun getMostSevereAlertForLine(lineCode: String): com.pelotcl.app.data.model.TrafficAlert? {
+        val alerts = getAlertsForLine(lineCode)
+        return if (alerts.isEmpty()) {
+            null
+        } else {
+            // Find the alert with the highest severity (lowest severityLevel value)
+            alerts.minByOrNull { it.severityLevel }
+        }
+    }
+
+    /**
+     * Gets the alert severity for a specific line (or null if no alerts)
+     */
+    fun getAlertSeverityForLine(lineCode: String): com.pelotcl.app.data.model.AlertSeverity? {
+        val alert = getMostSevereAlertForLine(lineCode)
+        return alert?.let {
+            com.pelotcl.app.data.model.AlertSeverity.fromSeverityType(it.severityType, it.severityLevel)
+        }
+    }
+
+    /**
+     * Refreshes traffic alerts cache and updates state
+     */
+    fun refreshTrafficAlerts() = viewModelScope.launch {
+        try {
+            val result = trafficAlertsRepository.getTrafficAlerts()
+            if (result.isSuccess) {
+                val alerts = result.getOrDefault(emptyList())
+                // Group alerts by line code
+                val alertsByLine = alerts.groupBy { alert: com.pelotcl.app.data.model.TrafficAlert ->
+                    alert.lineCode.uppercase()
+                }
+                _trafficAlerts.value = alertsByLine
+            }
+        } catch (e: Exception) {
+            Log.e("TransportViewModel", "Error refreshing traffic alerts", e)
+        }
     }
 }

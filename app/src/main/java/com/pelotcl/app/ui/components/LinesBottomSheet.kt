@@ -1,6 +1,7 @@
 package com.pelotcl.app.ui.components
 
 import android.os.Build
+import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -13,14 +14,21 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import com.pelotcl.app.utils.SearchUtils
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +43,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.text.isDigitsOnly
+import com.pelotcl.app.data.model.AlertSeverity
+import com.pelotcl.app.data.model.AlertSeverity as TrafficAlertSeverity
+import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.utils.LineColorHelper
 
 /**
@@ -46,10 +57,35 @@ fun LinesBottomSheet(
     allLines: List<String>,
     onLineClick: (String) -> Unit,
     modifier: Modifier = Modifier,
-    favoriteLines: Set<String> = emptySet()
+    favoriteLines: Set<String> = emptySet(),
+    viewModel: TransportViewModel? = null
 ) {
     val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
+    
+    // State for line alerts
+    var lineAlerts by remember { mutableStateOf<Map<String, TrafficAlertSeverity>>(emptyMap()) }
+    
+    // Load alerts when viewModel is available
+    LaunchedEffect(viewModel, allLines) {
+        if (viewModel != null && allLines.isNotEmpty()) {
+            // Load alerts for all lines using the new state-based approach
+            val alertsMap = mutableMapOf<String, AlertSeverity>()
+            
+            allLines.forEach { lineName ->
+                try {
+                    val severity = viewModel.getAlertSeverityForLine(lineName)
+                    if (severity != null) {
+                        alertsMap[lineName.uppercase()] = severity
+                    }
+                } catch (e: Exception) {
+                    Log.e("LinesBottomSheet", "Error loading alerts for line $lineName", e)
+                }
+            }
+            
+            lineAlerts = alertsMap
+        }
+    }
 
     // Organize lines by category
     val categorizedLines = remember(allLines, favoriteLines) {
@@ -130,10 +166,12 @@ fun LinesBottomSheet(
                         // Up to 4 chips per row
                         rowLines.forEach { line ->
                             // Each chip now also accepts an optional favorite status & toggle
+                            val alertSeverity = lineAlerts[line.uppercase()]
                             LineChip(
                                 lineName = line,
                                 onClick = { onLineClick(line) },
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
+                                alertSeverity = alertSeverity
                             )
                         }
                         // Fill remaining columns for alignment consistency
@@ -205,7 +243,8 @@ private fun naturalComparatorString(a: String, b: String): Int {
 private fun LineChip(
     lineName: String,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    alertSeverity: TrafficAlertSeverity? = null
 ) {
     val context = LocalContext.current
     
@@ -230,36 +269,65 @@ private fun LineChip(
             .padding(2.dp), // Reduced from 4dp to 2dp
         contentAlignment = Alignment.Center
     ) {
-        if (drawableId != 0) {
-            // Use official TCL icon
-            Icon(
-                painter = painterResource(id = drawableId),
-                contentDescription = "Ligne $lineName",
-                modifier = Modifier.fillMaxSize(),
-                tint = Color.Unspecified // Garde les couleurs d'origine du SVG
-            )
-        } else {
-            // Fallback if icon doesn't exist
-            val backgroundColor = Color(LineColorHelper.getColorForLineString(lineName))
-            val textColor = if (lineName.uppercase() == "T3") Color.Black else Color.White
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (drawableId != 0) {
+                // Use official TCL icon
+                Icon(
+                    painter = painterResource(id = drawableId),
+                    contentDescription = "Ligne $lineName",
+                    modifier = Modifier.fillMaxSize(),
+                    tint = Color.Unspecified // Garde les couleurs d'origine du SVG
+                )
+            } else {
+                // Fallback if icon doesn't exist
+                val backgroundColor = Color(LineColorHelper.getColorForLineString(lineName))
+                val textColor = if (lineName.uppercase() == "T3") Color.Black else Color.White
+                
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(backgroundColor)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = lineName,
+                        color = textColor,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
+            }
             
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(backgroundColor)
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = lineName,
-                    color = textColor,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
+            // Alert badge (top-right corner)
+            if (alertSeverity != null) {
+                AlertBadge(
+                    severity = alertSeverity,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = (-4).dp, y = 4.dp)
                 )
             }
         }
     }
+}
+
+/**
+ * Composable pour afficher une pastille d'alerte
+ */
+@Composable
+private fun AlertBadge(severity: TrafficAlertSeverity, modifier: Modifier = Modifier) {
+    val badgeColor = Color(severity.color)
+    val badgeSize = 12.dp
+    
+    Box(
+        modifier = modifier
+            .size(badgeSize)
+            .clip(CircleShape)
+            .background(badgeColor)
+            .border(1.dp, Color.White, CircleShape)
+    )
 }
 
 /**
