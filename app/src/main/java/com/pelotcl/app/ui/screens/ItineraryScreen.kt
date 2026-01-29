@@ -120,7 +120,7 @@ fun ItineraryScreen(
 
     // Track selected journey for map view
     var selectedJourney by remember { mutableStateOf<JourneyResult?>(null) }
-    
+
     // Change status bar based on whether map is shown (light background) or list view (dark background)
     LaunchedEffect(selectedJourney) {
         (view.context as? ComponentActivity)?.enableEdgeToEdge(
@@ -141,7 +141,7 @@ fun ItineraryScreen(
             )
         )
     }
-    
+
     // Use shared RaptorRepository from ViewModel (kept alive during app lifetime)
     val raptorRepository = viewModel.raptorRepository
 
@@ -165,7 +165,7 @@ fun ItineraryScreen(
     var arrivalSearchResults by remember { mutableStateOf<List<StationSearchResult>>(emptyList()) }
     var isSearchingDeparture by remember { mutableStateOf(false) }
     var isSearchingArrival by remember { mutableStateOf(false) }
-    
+
     // Journey results
     var journeys by remember { mutableStateOf<List<JourneyResult>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
@@ -210,7 +210,7 @@ fun ItineraryScreen(
 
         // Check if location has changed significantly (more than 100 meters)
         val shouldUpdate = lastLocationUsedForDeparture == null ||
-            LocationHelper.isSignificantlyDifferent(lastLocationUsedForDeparture, userLocation, 100.0)
+                LocationHelper.isSignificantlyDifferent(lastLocationUsedForDeparture, userLocation, 100.0)
 
         if (shouldUpdate) {
             // Get multiple nearby stops for fallback capability
@@ -232,7 +232,7 @@ fun ItineraryScreen(
             }
         }
     }
-    
+
     // Search for departure stops when query changes
     LaunchedEffect(departureQuery) {
         if (departureQuery.length >= 2) {
@@ -245,7 +245,7 @@ fun ItineraryScreen(
             departureSearchResults = emptyList()
         }
     }
-    
+
     // Search for arrival stops when query changes
     LaunchedEffect(arrivalQuery) {
         if (arrivalQuery.length >= 2) {
@@ -258,7 +258,7 @@ fun ItineraryScreen(
             arrivalSearchResults = emptyList()
         }
     }
-    
+
     // Calculate journey when both stops are selected and have IDs resolved
     LaunchedEffect(departureStop, arrivalStop, isRaptorReady) {
         if (departureStop != null && arrivalStop != null &&
@@ -387,10 +387,11 @@ fun ItineraryScreen(
                 JourneyMapView(
                     journey = selectedJourney!!,
                     onBack = { selectedJourney = null },
+                    userLocation = userLocation,
                     modifier = Modifier
                         .fillMaxSize()
                 )
-                
+
                 // Collapsed journey summary at the bottom
                 SelectedJourneySummary(
                     journey = selectedJourney!!,
@@ -417,7 +418,7 @@ fun ItineraryScreen(
                     StopSelectionField(
                         selectedStop = departureStop,
                         query = departureQuery,
-                        onQueryChange = { 
+                        onQueryChange = {
                             departureQuery = it
                             isSearchingDeparture = it.isNotEmpty()
                         },
@@ -475,7 +476,7 @@ fun ItineraryScreen(
                         } else null,
                         keyboardController = keyboardController
                     )
-                    
+
                     // Swap button
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -495,12 +496,12 @@ fun ItineraryScreen(
                             )
                         }
                     }
-                    
+
                     // Arrival stop field
                     StopSelectionField(
                         selectedStop = arrivalStop,
                         query = arrivalQuery,
-                        onQueryChange = { 
+                        onQueryChange = {
                             arrivalQuery = it
                             isSearchingArrival = it.isNotEmpty()
                         },
@@ -526,113 +527,113 @@ fun ItineraryScreen(
                         icon = Icons.Default.Search,
                         keyboardController = keyboardController
                     )
-            }
+                }
 
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            // Results section
-            when {
-                isLoading -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 32.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator(color = Color.White)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("Calcul de l'itinéraire...", color = Color.White.copy(alpha = 0.7f))
-                        }
-                    }
-                }
-                errorMessage != null -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 32.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = errorMessage!!,
-                            color = Color.White.copy(alpha = 0.7f),
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                    }
-                }
-                journeys.isNotEmpty() -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                    ) {
-                        // Show fallback info message if an alternative stop was used
-                        if (fallbackInfoMessage != null) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = 16.dp)
-                                    .background(
-                                        color = Color(0xFF2A5298).copy(alpha = 0.6f),
-                                        shape = RoundedCornerShape(8.dp)
-                                    )
-                                    .padding(12.dp)
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.Info,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = fallbackInfoMessage!!,
-                                        color = Color.White,
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                }
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Results section
+                when {
+                    isLoading -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(color = Color.White)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("Calcul de l'itinéraire...", color = Color.White.copy(alpha = 0.7f))
                             }
                         }
-
-                        journeys.forEachIndexed { index, journey ->
-                            key(journey.departureTime) {
-                                JourneyCard(
-                                    journey = journey,
-                                    onClick = { selectedJourney = journey }
-                                )
-                                if (index < journeys.size - 1) {
-                                    HorizontalDivider(
-                                        color = Color.White.copy(alpha = 0.2f),
-                                        modifier = Modifier.padding(vertical = 32.dp)
-                                    )
+                    }
+                    errorMessage != null -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = errorMessage!!,
+                                color = Color.White.copy(alpha = 0.7f),
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+                    journeys.isNotEmpty() -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                        ) {
+                            // Show fallback info message if an alternative stop was used
+                            if (fallbackInfoMessage != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 16.dp)
+                                        .background(
+                                            color = Color(0xFF2A5298).copy(alpha = 0.6f),
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                        .padding(12.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Info,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = fallbackInfoMessage!!,
+                                            color = Color.White,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
                                 }
                             }
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
-                }
-                departureStop != null && arrivalStop != null -> {
-                    // Both stops selected but no results yet
-                }
-                else -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 32.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Sélectionnez un arrêt de départ et d'arrivée",
-                            color = Color.White.copy(alpha = 0.7f),
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                    }
-                }
-            }
 
-            Spacer(modifier = Modifier.height(80.dp))
-        }
+                            journeys.forEachIndexed { index, journey ->
+                                key(journey.departureTime) {
+                                    JourneyCard(
+                                        journey = journey,
+                                        onClick = { selectedJourney = journey }
+                                    )
+                                    if (index < journeys.size - 1) {
+                                        HorizontalDivider(
+                                            color = Color.White.copy(alpha = 0.2f),
+                                            modifier = Modifier.padding(vertical = 32.dp)
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
+                    }
+                    departureStop != null && arrivalStop != null -> {
+                        // Both stops selected but no results yet
+                    }
+                    else -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Sélectionnez un arrêt de départ et d'arrivée",
+                                color = Color.White.copy(alpha = 0.7f),
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(80.dp))
+            }
         } // End of else block for selectedJourney == null
     }
 }
@@ -700,7 +701,7 @@ private fun StopSelectionField(
             ),
             shape = RoundedCornerShape(12.dp)
         )
-        
+
         // Search results dropdown
         if (isSearching && searchResults.isNotEmpty()) {
             Card(
@@ -830,7 +831,7 @@ private fun JourneyCard(
                     color = Color.White
                 )
             }
-            
+
             Box(
                 modifier = Modifier
                     .background(
@@ -846,9 +847,9 @@ private fun JourneyCard(
                 )
             }
         }
-            
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         // Journey legs
         journey.legs.forEachIndexed { index, leg ->
             key("${leg.fromStopId}_${leg.departureTime}") {
@@ -873,7 +874,7 @@ private fun JourneyLegItem(
 
     val context = LocalContext.current
     val lineColor = if (leg.isWalking) Gray700 else Color(LineColorHelper.getColorForLineString(leg.routeName ?: ""))
-    
+
     // State for expanding intermediate stops
     var isExpanded by remember { mutableStateOf(false) }
     val hasIntermediateStops = !leg.isWalking && leg.intermediateStops.isNotEmpty()
@@ -959,11 +960,11 @@ private fun JourneyLegItem(
                 color = Color.White.copy(alpha = 0.7f),
                 style = MaterialTheme.typography.bodySmall
             )
-            
+
             // Expandable intermediate stops section
             if (hasIntermediateStops) {
                 Spacer(modifier = Modifier.height(4.dp))
-                
+
                 Row(
                     modifier = Modifier
                         .clickable { isExpanded = !isExpanded }
@@ -983,7 +984,7 @@ private fun JourneyLegItem(
                         modifier = Modifier.padding(start = 4.dp)
                     )
                 }
-                
+
                 // Expanded intermediate stops list
                 if (isExpanded) {
                     Column(
@@ -1036,7 +1037,7 @@ private fun SelectedJourneySummary(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    
+
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -1075,7 +1076,7 @@ private fun SelectedJourneySummary(
                         color = Color.White
                     )
                 }
-                
+
                 Box(
                     modifier = Modifier
                         .background(
@@ -1092,9 +1093,9 @@ private fun SelectedJourneySummary(
                     )
                 }
             }
-            
+
             Spacer(modifier = Modifier.height(12.dp))
-            
+
             // Horizontal journey summary with line icons
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1114,7 +1115,7 @@ private fun SelectedJourneySummary(
                         // Transport line icon
                         val drawableName = BusIconHelper.getDrawableNameForLineName(leg.routeName ?: "")
                         val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
-                        
+
                         if (resourceId != 0) {
                             Image(
                                 painter = painterResource(id = resourceId),
@@ -1138,7 +1139,7 @@ private fun SelectedJourneySummary(
                             }
                         }
                     }
-                    
+
                     // Arrow between legs
                     if (index < journey.legs.size - 1) {
                         Icon(
