@@ -23,12 +23,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PriorityHigh
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import com.pelotcl.app.utils.SearchUtils
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -63,27 +69,31 @@ fun LinesBottomSheet(
     val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
     
-    // State for line alerts
-    var lineAlerts by remember { mutableStateOf<Map<String, TrafficAlertSeverity>>(emptyMap()) }
+    // Observe traffic alerts from ViewModel
+    val trafficAlerts by viewModel?.trafficAlerts?.collectAsState() ?: remember { mutableStateOf(emptyMap()) }
     
-    // Load alerts when viewModel is available
-    LaunchedEffect(viewModel, allLines) {
+    // Compute a map of alerts for all lines to be used by Chips
+    val lineAlerts = remember(trafficAlerts, allLines) {
+        Log.d("AlertCheck", "Recomputing lineAlerts map. trafficAlerts size: ${trafficAlerts.size}, allLines size: ${allLines.size}")
         if (viewModel != null && allLines.isNotEmpty()) {
-            // Load alerts for all lines using the new state-based approach
-            val alertsMap = mutableMapOf<String, AlertSeverity>()
-            
+            val alertsMap = mutableMapOf<String, TrafficAlertSeverity>()
             allLines.forEach { lineName ->
+                // Log each line check to see why it might be missing
                 try {
                     val severity = viewModel.getAlertSeverityForLine(lineName)
                     if (severity != null) {
+                        Log.d("AlertCheck", "Line $lineName has alert severity: ${severity.name}")
                         alertsMap[lineName.uppercase()] = severity
                     }
                 } catch (e: Exception) {
                     Log.e("LinesBottomSheet", "Error loading alerts for line $lineName", e)
                 }
             }
-            
-            lineAlerts = alertsMap
+            Log.d("AlertCheck", "Computed alertsMap size: ${alertsMap.size}")
+            alertsMap
+        } else {
+            Log.d("AlertCheck", "viewModel is null or allLines is empty")
+            emptyMap()
         }
     }
 
@@ -263,20 +273,25 @@ private fun LineChip(
     
     Box(
         modifier = modifier
-            .height(36.dp) // Reduced from 48dp to 36dp
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
-            .padding(2.dp), // Reduced from 4dp to 2dp
+            .height(48.dp)
+            .padding(4.dp),
         contentAlignment = Alignment.Center
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+        // Content Box with clipping and click
+        Box(
+            modifier = Modifier
+                .size(80.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
             if (drawableId != 0) {
                 // Use official TCL icon
                 Icon(
                     painter = painterResource(id = drawableId),
                     contentDescription = "Ligne $lineName",
-                    modifier = Modifier.fillMaxSize(),
-                    tint = Color.Unspecified // Garde les couleurs d'origine du SVG
+                    modifier = Modifier.size(80.dp),
+                    tint = Color.Unspecified
                 )
             } else {
                 // Fallback if icon doesn't exist
@@ -286,9 +301,8 @@ private fun LineChip(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .clip(RoundedCornerShape(8.dp))
                         .background(backgroundColor)
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -299,35 +313,42 @@ private fun LineChip(
                     )
                 }
             }
-            
-            // Alert badge (top-right corner)
-            if (alertSeverity != null) {
-                AlertBadge(
-                    severity = alertSeverity,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .offset(x = (-4).dp, y = 4.dp)
-                )
-            }
+        }
+
+        // Alert badge (bottom-right corner) - Placed outside the clipped box
+        if (alertSeverity != null) {
+            AlertBadge(
+                severity = alertSeverity,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .offset(x = (5).dp, y = (2).dp)
+            )
         }
     }
 }
 
 /**
- * Composable pour afficher une pastille d'alerte
+ * Composable pour afficher une pastille d'alerte (cercle de couleur)
  */
 @Composable
 private fun AlertBadge(severity: TrafficAlertSeverity, modifier: Modifier = Modifier) {
     val badgeColor = Color(severity.color)
-    val badgeSize = 12.dp
-    
+    val badgeSize = 16.dp
+
     Box(
         modifier = modifier
             .size(badgeSize)
             .clip(CircleShape)
-            .background(badgeColor)
-            .border(1.dp, Color.White, CircleShape)
-    )
+            .background(badgeColor),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = if (severity == AlertSeverity.INFORMATION) Icons.Default.Info else Icons.Default.PriorityHigh,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(10.dp)
+        )
+    }
 }
 
 /**

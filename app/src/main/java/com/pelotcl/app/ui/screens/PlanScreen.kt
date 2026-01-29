@@ -878,7 +878,8 @@ fun PlanScreen(
                         }
                     }
                 },
-                favoriteLines = favoriteLines
+                favoriteLines = favoriteLines,
+                viewModel = viewModel
             )
         }
     }

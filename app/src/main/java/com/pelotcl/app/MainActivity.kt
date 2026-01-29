@@ -463,7 +463,8 @@ private fun AppNavHost(
                         restoreState = true
                     }
                 },
-                favoriteLines = favoriteLines
+                favoriteLines = favoriteLines,
+                viewModel = viewModel
             )
         }
         composable(Destination.PARAMETRES.route) {

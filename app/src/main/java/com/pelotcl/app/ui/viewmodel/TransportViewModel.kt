@@ -427,6 +427,18 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
+     * Normalizes a line name for alert matching (removes spaces and hyphens)
+     */
+    private fun normalizeLineForAlerts(line: String): String {
+        return line.uppercase()
+            .replace(" ", "")
+            .replace("-", "")
+            .replace("TRAM", "")
+            .replace("METRO", "")
+            .trim()
+    }
+
+    /**
      * Retrieves transfers for a given stop from the pre-calculated index
      * Ultra-fast method (O(1))
      */
@@ -934,8 +946,13 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      * Gets alerts for a specific line (uses cached state first)
      */
     fun getAlertsForLine(lineCode: String): List<com.pelotcl.app.data.model.TrafficAlert> {
-        val upperCaseLineCode = lineCode.uppercase()
-        return _trafficAlerts.value[upperCaseLineCode] ?: emptyList()
+        val normalizedLineCode = normalizeLineForAlerts(lineCode)
+        val alerts = _trafficAlerts.value[normalizedLineCode] ?: emptyList()
+        if (alerts.isEmpty() && _trafficAlerts.value.isNotEmpty()) {
+            // Log known keys to help debug mapping
+            Log.d("AlertCheck", "No alerts for $normalizedLineCode. Available keys: ${_trafficAlerts.value.keys.take(5)}...")
+        }
+        return alerts
     }
 
     /**
@@ -956,9 +973,11 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      */
     fun getAlertSeverityForLine(lineCode: String): com.pelotcl.app.data.model.AlertSeverity? {
         val alert = getMostSevereAlertForLine(lineCode)
-        return alert?.let {
+        val severity = alert?.let {
             com.pelotcl.app.data.model.AlertSeverity.fromSeverityType(it.severityType, it.severityLevel)
         }
+        Log.d("AlertCheck", "getAlertSeverityForLine($lineCode) -> normalized: ${normalizeLineForAlerts(lineCode)}, hasAlert: ${alert != null}, severity: ${severity?.name}")
+        return severity
     }
 
     /**
@@ -969,11 +988,17 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             val result = trafficAlertsRepository.getTrafficAlerts()
             if (result.isSuccess) {
                 val alerts = result.getOrDefault(emptyList())
-                // Group alerts by line code
+                Log.d("AlertCheck", "Fetched ${alerts.size} alerts from repository")
+                // Group alerts by line code (normalized for robust matching)
                 val alertsByLine = alerts.groupBy { alert: com.pelotcl.app.data.model.TrafficAlert ->
-                    alert.lineCode.uppercase()
+                    val normalized = normalizeLineForAlerts(alert.lineCode)
+                    Log.d("AlertCheck", "Mapping alert for ${alert.lineCode} to $normalized")
+                    normalized
                 }
                 _trafficAlerts.value = alertsByLine
+                Log.d("AlertCheck", "Updated _trafficAlerts with ${alertsByLine.size} unique normalized lines")
+            } else {
+                Log.e("AlertCheck", "Failed to fetch alerts: ${result.exceptionOrNull()?.message}")
             }
         } catch (e: Exception) {
             Log.e("TransportViewModel", "Error refreshing traffic alerts", e)
