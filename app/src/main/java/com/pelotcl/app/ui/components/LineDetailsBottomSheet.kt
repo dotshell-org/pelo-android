@@ -26,12 +26,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Directions
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.Button
@@ -64,8 +65,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pelotcl.app.data.gtfs.LineStopInfo
-import com.pelotcl.app.data.model.AlertSeverity
-import com.pelotcl.app.data.model.TrafficAlert
 import com.pelotcl.app.ui.theme.Gray700
 import com.pelotcl.app.ui.theme.Green500
 import com.pelotcl.app.ui.theme.Orange500
@@ -256,18 +255,17 @@ fun LineDetailsBottomSheet(
                         .weight(1f)
                         .verticalScroll(rememberScrollState())
                 ) {
-
-                    // Part 1: Traffic Alerts (if any)
                     if (lineAlerts.isNotEmpty()) {
                         TrafficAlertsSection(
                             alerts = lineAlerts,
                             modifier = Modifier.fillMaxWidth()
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(20.dp))
                     }
-                    
-                    // Part 2: Next Schedules
+
+                    // Part 1: Next Schedules (contains Itinerary button)
                     if (lineInfo.currentStationName.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(10.dp))
                         NextSchedulesSection(
                             viewModel = viewModel,
                             lineInfo = lineInfo,
@@ -350,28 +348,18 @@ private fun TrafficAlertsSection(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 16.dp)
-            .clip(RoundedCornerShape(8.dp))
             .background(Color(0xFFF5F5F5))
-            .padding(16.dp)
+            .padding(horizontal = 24.dp, vertical = 16.dp)
     ) {
-        Text(
-            text = "Alertes de trafic",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color.Black,
-            modifier = Modifier.fillMaxWidth()
-        )
-        
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        alerts.forEach { alert ->
+        alerts.forEachIndexed { index, alert ->
+            var isExpanded by remember { mutableStateOf(false) }
             val severity = com.pelotcl.app.data.model.AlertSeverity.fromSeverityType(alert.severityType, alert.severityLevel)
             val severityColor = Color(severity.color)
             
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clickable { isExpanded = !isExpanded }
                     .padding(vertical = 8.dp)
             ) {
                 Row(
@@ -391,36 +379,44 @@ private fun TrafficAlertsSection(
                         text = alert.title,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.Black
+                        color = Color.Black,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (isExpanded) "Réduire" else "Développer",
+                        tint = Color.Gray,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
                 
-                Spacer(modifier = Modifier.height(4.dp))
-                
-                Text(
-                    text = alert.message,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.DarkGray
-                )
-                
-                Spacer(modifier = Modifier.height(4.dp))
-                
-                Text(
-                    text = "Du ${alert.startDate} au ${alert.endDate}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.Gray,
-                    fontStyle = FontStyle.Italic
-                )
+                if (isExpanded) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Text(
+                        text = alert.message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.DarkGray
+                    )
+                    
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    Text(
+                        text = "Du ${alert.startDate} au ${alert.endDate}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray,
+                        fontStyle = FontStyle.Italic
+                    )
+                }
             }
             
-            if (alert != alerts.last()) {
-                Spacer(modifier = Modifier.height(12.dp))
-                androidx.compose.material3.Divider(
+            if (index < alerts.size - 1) {
+                androidx.compose.material3.HorizontalDivider(
                     color = Color.LightGray,
                     thickness = 1.dp,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp)
                 )
-                Spacer(modifier = Modifier.height(12.dp))
             }
         }
     }
