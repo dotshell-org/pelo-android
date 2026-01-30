@@ -86,7 +86,8 @@ import java.time.temporal.ChronoUnit
 
 data class LineInfo(
     val lineName: String,
-    val currentStationName: String
+    val currentStationName: String,
+    val showFavoriteIcon: Boolean = true
 )
 
 private fun getLineColor(lineName: String): Color {
@@ -251,11 +252,13 @@ fun LineDetailsBottomSheet(
                         modifier = Modifier.weight(1f)
                     )
                     // Favorite button
-                    val favorites by viewModel.favoriteLines.collectAsState()
-                    val isFav = favorites.contains(lineInfo.lineName.uppercase())
-                    IconButton(onClick = { viewModel.toggleFavorite(lineInfo.lineName) }) {
-                        val starIcon = if (isFav) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder
-                        Icon(imageVector = starIcon, contentDescription = if (isFav) "Unfavorite" else "Favorite", tint = if (isFav) Red500 else Color.Gray)
+                    if (lineInfo.currentStationName == "") {
+                        val favorites by viewModel.favoriteLines.collectAsState()
+                        val isFav = favorites.contains(lineInfo.lineName.uppercase())
+                        IconButton(onClick = { viewModel.toggleFavorite(lineInfo.lineName) }) {
+                            val starIcon = if (isFav) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder
+                            Icon(imageVector = starIcon, contentDescription = if (isFav) "Unfavorite" else "Favorite", tint = if (isFav) Red500 else Color.Gray)
+                        }
                     }
                 }
 
