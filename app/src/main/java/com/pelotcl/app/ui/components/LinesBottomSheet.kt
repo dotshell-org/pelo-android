@@ -21,6 +21,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -43,6 +46,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.gestures.FlingBehavior
+import androidx.compose.foundation.gestures.ScrollableDefaults
+import androidx.compose.runtime.Stable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
@@ -69,10 +79,65 @@ fun LinesBottomSheet(
 ) {
     val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
-    
+
+    // State pour gérer le scroll
+    val listState = rememberLazyListState()
+
+    // Détecte si on est en bas de la liste
+    val isAtBottom by remember {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
+            val isLastItemVisible = lastVisibleItem?.index == layoutInfo.totalItemsCount - 1
+            val isLastItemFullyVisible = lastVisibleItem?.let {
+                it.offset + it.size <= layoutInfo.viewportEndOffset
+            } ?: false
+            isLastItemVisible && isLastItemFullyVisible
+        }
+    }
+
+    // Détecte si on est en haut de la liste
+    val isAtTop by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+        }
+    }
+
+    // NestedScrollConnection pour arrêter le scroll aux limites
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                // Si on scrolle vers le bas (available.y < 0) et qu'on est déjà en bas, bloquer
+                if (available.y < 0 && isAtBottom) {
+                    return Offset(0f, available.y)
+                }
+                // Si on scrolle vers le haut (available.y > 0) et qu'on est déjà en haut, bloquer
+                if (available.y > 0 && isAtTop) {
+                    return Offset(0f, available.y)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                // Consommer tout le scroll restant si on est aux limites
+                if (isAtBottom && available.y < 0) {
+                    return Offset(0f, available.y)
+                }
+                if (isAtTop && available.y > 0) {
+                    return Offset(0f, available.y)
+                }
+                return Offset.Zero
+            }
+        }
+    }
+
     // Observe traffic alerts from ViewModel
     val trafficAlerts by viewModel?.trafficAlerts?.collectAsState() ?: remember { mutableStateOf(emptyMap()) }
-    
+
     // Compute a map of alerts for all lines to be used by Chips
     val lineAlerts = remember(trafficAlerts, allLines) {
         Log.d("AlertCheck", "Recomputing lineAlerts map. trafficAlerts size: ${trafficAlerts.size}, allLines size: ${allLines.size}")
@@ -123,7 +188,7 @@ fun LinesBottomSheet(
             base.toList()
         }
     }
-    
+
     // Filtrer les lignes selon la recherche
     val filteredCategories = remember(categorizedLines, searchQuery) {
         if (searchQuery.isEmpty()) {
@@ -135,7 +200,25 @@ fun LinesBottomSheet(
             }
         }
     }
-    
+
+    // Flatten the structure for LazyColumn items
+    data class CategoryItem(val category: String)
+    data class LineRowItem(val category: String, val rowIndex: Int, val lines: List<String>)
+
+    val flattenedItems = remember(filteredCategories) {
+        buildList {
+            filteredCategories.forEach { (category, lines) ->
+                // Add category header
+                add(CategoryItem(category))
+
+                // Add line rows (chunked by 4)
+                lines.chunked(4).forEachIndexed { rowIndex, rowLines ->
+                    add(LineRowItem(category, rowIndex, rowLines))
+                }
+            }
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -145,57 +228,76 @@ fun LinesBottomSheet(
     ) {
         // List of lines by category
         LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            state = listState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .nestedScroll(nestedScrollConnection),
+            userScrollEnabled = true
         ) {
-            // We lazily compose rows per category to avoid inflating hundreds of chips at once
-            filteredCategories.forEach { (category, lines) ->
-                val chunks = lines.chunked(4)
-
-                // Category header
-                item(key = "header_$" + category) {
-                    Text(
-                        text = category,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp, bottom = 8.dp)
-                    )
+            items(
+                items = flattenedItems,
+                key = { item ->
+                    when (item) {
+                        is CategoryItem -> "header_${item.category}"
+                        is LineRowItem -> "${item.category}_row_${item.rowIndex}"
+                        else -> item.hashCode()
+                    }
+                },
+                contentType = { item ->
+                    when (item) {
+                        is CategoryItem -> "header"
+                        is LineRowItem -> "linerow"
+                        else -> null
+                    }
                 }
-
-                // One lazy item per row
-                items(count = chunks.size, key = { rowIndex -> "${category}_row_$rowIndex" }) { rowIndex ->
-                    val rowLines = chunks[rowIndex]
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        // Up to 4 chips per row
-                        rowLines.forEach { line ->
-                            // Each chip now also accepts an optional favorite status & toggle
-                            val alertSeverity = lineAlerts[line.uppercase()]
-                            LineChip(
-                                lineName = line,
-                                onClick = { onLineClick(line) },
-                                modifier = Modifier.weight(1f),
-                                alertSeverity = alertSeverity
+            ) { item ->
+                when (item) {
+                    is CategoryItem -> {
+                        // Category header
+                        Column {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = item.category,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp, bottom = 8.dp)
                             )
                         }
-                        // Fill remaining columns for alignment consistency
-                        repeat(4 - rowLines.size) {
-                            Spacer(modifier = Modifier.weight(1f))
+                    }
+                    is LineRowItem -> {
+                        // Row of line chips
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Up to 4 chips per row
+                            item.lines.forEach { line ->
+                                val alertSeverity = lineAlerts[line.uppercase()]
+                                LineChip(
+                                    lineName = line,
+                                    onClick = { onLineClick(line) },
+                                    modifier = Modifier.weight(1f),
+                                    alertSeverity = alertSeverity
+                                )
+                            }
+                            // Fill remaining columns for alignment consistency
+                            repeat(4 - item.lines.size) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
                         }
                     }
                 }
             }
-            
+
             // Message if no results
             if (filteredCategories.isEmpty() && searchQuery.isNotEmpty()) {
-                item {
+                item(key = "no_results") {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -253,7 +355,7 @@ private fun LineChip(
     alertSeverity: TrafficAlertSeverity? = null
 ) {
     val context = LocalContext.current
-    
+
     // Get icon resource ID
     val drawableId = remember(lineName) {
         val resourceName = lineName.lowercase()
@@ -263,10 +365,10 @@ private fun LineChip(
             .replace("-", "")
             .replace(" ", "")
             .let { if (it.first().isDigit()) "_$it" else it } // Prefix _ if starts with digit
-        
+
         context.resources.getIdentifier(resourceName, "drawable", context.packageName)
     }
-    
+
     Box(
         modifier = modifier
             .height(48.dp)
@@ -293,7 +395,7 @@ private fun LineChip(
                 // Fallback if icon doesn't exist
                 val backgroundColor = Color(LineColorHelper.getColorForLineString(lineName))
                 val textColor = if (lineName.uppercase() == "T3") Color.Black else Color.White
-                
+
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -377,7 +479,7 @@ private fun hasLineIcon(lineName: String, context: android.content.Context): Boo
         .replace("-", "")
         .replace(" ", "")
         .let { if (it.firstOrNull()?.isDigit() == true) "_$it" else it }
-    
+
     val drawableId = context.resources.getIdentifier(resourceName, "drawable", context.packageName)
     return drawableId != 0
 }
@@ -388,7 +490,7 @@ private fun hasLineIcon(lineName: String, context: android.content.Context): Boo
 private fun categorizeLines(lines: List<String>, context: android.content.Context): Map<String, List<String>> {
     // First filter lines that don't have icons
     val linesWithIcon = lines.filter { hasLineIcon(it, context) }
-    
+
     val metros = mutableListOf<String>()
     val trams = mutableListOf<String>()
     val funiculaires = mutableListOf<String>()
@@ -402,7 +504,7 @@ private fun categorizeLines(lines: List<String>, context: android.content.Contex
     val zi = mutableListOf<String>()
     val carsDuRhone = mutableListOf<String>()
     val bus = mutableListOf<String>()
-    
+
     linesWithIcon.forEach { line ->
         val upperLine = line.uppercase()
         when {
@@ -422,7 +524,7 @@ private fun categorizeLines(lines: List<String>, context: android.content.Contex
             else -> bus.add(line)
         }
     }
-    
+
     // Natural sort that correctly handles numbers in strings
     val naturalComparator = Comparator<String> { a, b ->
         val partsA = a.split(Regex("(?<=\\D)(?=\\d)|(?<=\\d)(?=\\D)"))
@@ -453,9 +555,9 @@ private fun categorizeLines(lines: List<String>, context: android.content.Contex
     fun naturalSort(lines: List<String>): List<String> {
         return lines.sortedWith(naturalComparator)
     }
-    
+
     val result = mutableMapOf<String, List<String>>()
-    
+
     if (metros.isNotEmpty()) result["Métro"] = naturalSort(metros)
     if (funiculaires.isNotEmpty()) result["Funiculaire"] = naturalSort(funiculaires)
     if (trams.isNotEmpty()) result["Tramway"] = naturalSort(trams)
@@ -469,6 +571,6 @@ private fun categorizeLines(lines: List<String>, context: android.content.Contex
     if (bus.isNotEmpty()) result["Bus"] = naturalSort(bus)
     if (carsDuRhone.isNotEmpty()) result["Cars du Rhône TCL unifié"] = naturalSort(carsDuRhone)
     if (jd.isNotEmpty()) result["Junior Direct"] = naturalSort(jd)
-    
+
     return result
 }
