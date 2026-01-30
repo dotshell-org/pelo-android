@@ -99,9 +99,9 @@ data class TrafficStatusData(
  */
 enum class AlertSeverity(val level: Int, val displayName: String, val color: Long) {
     SIGNIFICANT_DELAYS(20, "Retards significatifs", 0xFFFF5722), // Orange
-    OTHER_EFFECT(30, "Autres effets", 0xFF2196F3), // Bleu
-    INFORMATION(40, "Information", 0xFF4CAF50), // Vert
-    UNKNOWN(0, "Inconnu", 0xFF9E9E9E); // Gris
+    OTHER_EFFECT(30, "Autres effets", 0xFF2196F3), // Blue
+    INFORMATION(40, "Information", 0xFF4CAF50), // Green
+    UNKNOWN(0, "Inconnu", 0xFF9E9E9E); // Gray
 
     companion object {
         fun fromSeverityType(severityType: String, severityLevel: Int): AlertSeverity {

@@ -45,6 +45,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -240,12 +241,7 @@ private fun naturalComparatorString(a: String, b: String): Int {
 }
 
 /**
- * Section pour une catégorie de lignes
- */
-// CategorySection removed in favor of a fully lazy layout within LazyColumn to avoid initial lag
-
-/**
- * Chip pour afficher une ligne avec son icône TCL officielle
+ * Chip to show a line with the official TCL icon
  */
 @Suppress("DiscouragedApi") // Dynamic resource loading for transport line icons
 @RequiresApi(Build.VERSION_CODES.O)
@@ -328,10 +324,13 @@ private fun LineChip(
 }
 
 /**
- * Composable pour afficher une pastille d'alerte (cercle de couleur)
+ * Composable for displaying an alert pastilla (color circle)
  */
 @Composable
-private fun AlertBadge(severity: TrafficAlertSeverity, modifier: Modifier = Modifier) {
+private fun AlertBadge(
+    severity: TrafficAlertSeverity,
+    modifier: Modifier = Modifier
+) {
     val badgeColor = Color(severity.color)
     val badgeSize = 16.dp
 
@@ -342,17 +341,32 @@ private fun AlertBadge(severity: TrafficAlertSeverity, modifier: Modifier = Modi
             .background(badgeColor),
         contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = if (severity == AlertSeverity.INFORMATION) Icons.Default.Info else Icons.Default.PriorityHigh,
-            contentDescription = null,
-            tint = Color.White,
-            modifier = Modifier.size(10.dp)
-        )
+        if (severity == AlertSeverity.INFORMATION || severity == AlertSeverity.OTHER_EFFECT) {
+            // Use a text-based "i" to avoid the double circle from Icons.Default.Info
+            Text(
+                text = "i",
+                color = Color.White,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Serif
+                ),
+                modifier = Modifier.padding(bottom = 1.dp)
+            )
+        } else {
+            // PriorityHigh is a plain "!" without a surrounding circle
+            Icon(
+                imageVector = Icons.Default.PriorityHigh,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(12.dp)
+            )
+        }
     }
 }
 
 /**
- * Vérifie si une ligne a une icône SVG disponible
+ * Checks if a line has an available SVG icon
  */
 @Suppress("DiscouragedApi") // Dynamic resource loading for transport line icons
 private fun hasLineIcon(lineName: String, context: android.content.Context): Boolean {
@@ -369,7 +383,7 @@ private fun hasLineIcon(lineName: String, context: android.content.Context): Boo
 }
 
 /**
- * Organise les lignes par catégorie et filtre celles qui n'ont pas d'icône
+ * Organises lines by category and filters those which haven't icon.
  */
 private fun categorizeLines(lines: List<String>, context: android.content.Context): Map<String, List<String>> {
     // First filter lines that don't have icons
