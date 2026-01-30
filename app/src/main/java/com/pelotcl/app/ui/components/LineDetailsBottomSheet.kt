@@ -149,7 +149,7 @@ fun LineDetailsBottomSheet(
     var lineStops by remember { mutableStateOf<List<LineStopInfo>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var lineAlerts by remember { mutableStateOf<List<com.pelotcl.app.data.model.TrafficAlert>>(emptyList()) }
-    
+
     val connections = remember(lineInfo?.currentStationName, lineInfo?.lineName) {
         if (lineInfo != null) {
             viewModel.getConnectionsForStop(lineInfo.currentStationName, lineInfo.lineName)
@@ -368,7 +368,7 @@ private fun TrafficAlertsSection(
     if (alerts.isEmpty()) {
         return
     }
-    
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -379,7 +379,7 @@ private fun TrafficAlertsSection(
             var isExpanded by remember { mutableStateOf(false) }
             val severity = com.pelotcl.app.data.model.AlertSeverity.fromSeverityType(alert.severityType, alert.severityLevel)
             val severityColor = Color(severity.color)
-            
+
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -396,9 +396,9 @@ private fun TrafficAlertsSection(
                             .clip(CircleShape)
                             .background(severityColor)
                     )
-                    
+
                     Spacer(modifier = Modifier.width(8.dp))
-                    
+
                     Text(
                         text = alert.title,
                         style = MaterialTheme.typography.bodyMedium,
@@ -414,16 +414,16 @@ private fun TrafficAlertsSection(
                         modifier = Modifier.size(20.dp)
                     )
                 }
-                
+
                 if (isExpanded) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    
+
                     Text(
                         text = alert.message,
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.DarkGray
                     )
-                    
+
                     Spacer(modifier = Modifier.height(4.dp))
 
                     fun formatDate(input: String): String {
@@ -440,7 +440,7 @@ private fun TrafficAlertsSection(
                     )
                 }
             }
-            
+
             if (index < alerts.size - 1) {
                 androidx.compose.material3.HorizontalDivider(
                     color = Color.LightGray,
@@ -493,7 +493,7 @@ private fun NextSchedulesSection(
         }
     }
 
-    LaunchedEffect(selectedDirection, lineInfo.currentStationName) {
+    LaunchedEffect(lineInfo.lineName, selectedDirection, lineInfo.currentStationName) {
         viewModel.loadSchedulesForDirection(
             lineName = lineInfo.lineName,
             stopName = lineInfo.currentStationName,
@@ -735,10 +735,10 @@ private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Bool
             val upperCaseConnection = connection.uppercase()
 
             upperCaseConnection in listOf("A", "B", "C", "D") || // Metro
-            (upperCaseConnection.startsWith("T") && !upperCaseConnection.endsWith("36")) || // Tram & Trambus
-            upperCaseConnection in listOf("F1", "F2") || // Funicular
-            upperCaseConnection.startsWith("NAV") || // Navigone
-            upperCaseConnection == "RX" // Rhone Express
+                    (upperCaseConnection.startsWith("T") && !upperCaseConnection.endsWith("36")) || // Tram & Trambus
+                    upperCaseConnection in listOf("F1", "F2") || // Funicular
+                    upperCaseConnection.startsWith("NAV") || // Navigone
+                    upperCaseConnection == "RX" // Rhone Express
         }
 
         Row(
