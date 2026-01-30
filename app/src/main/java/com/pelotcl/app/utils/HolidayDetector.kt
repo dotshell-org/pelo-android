@@ -93,14 +93,7 @@ class HolidayDetector(private val context: Context) {
         return date == easterMonday || date == ascensionDay || date == whitMonday
     }
 
-    /**
-     * Check if a given date should use holiday/Sunday schedules
-     * Returns true if the date is either a school holiday OR a French public holiday
-     */
-    @SuppressLint("NewApi")
-    fun isHoliday(date: LocalDate): Boolean {
-        return isSchoolHoliday(date) || isFrenchPublicHoliday(date)
-    }
+
 
     /**
      * Calculate Easter date for a given year using the Computus algorithm (Meeus/Jones/Butcher)

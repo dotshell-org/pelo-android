@@ -114,7 +114,7 @@ class SchedulesRepository(context: Context) {
             // Convertir en StationSearchResult et fusionner les arrêts du même nom
             val stopsByName = mutableMapOf<String, MutableList<String>>()
             val pmrByName = mutableMapOf<String, Boolean>()
-            
+
             sorted.forEach { (name, desserteRaw, isPmr) ->
                 val lines = if (desserteRaw.isNotBlank()) {
                     // Parse pour enlever les suffixes :A et :R et extraire uniquement les noms de lignes
@@ -127,13 +127,13 @@ class SchedulesRepository(context: Context) {
                 } else {
                     emptyList()
                 }
-                
+
                 // Fusionner les lignes pour le même arrêt
                 stopsByName.getOrPut(name) { mutableListOf() }.addAll(lines)
                 // Un arrêt est PMR s'il l'est dans au moins une de ses entrées
                 pmrByName[name] = pmrByName.getOrDefault(name, false) || isPmr
             }
-            
+
             // Créer les résultats avec lignes fusionnées et dédupliquées
             stopsByName.forEach { (name, lines) ->
                 results.add(StationSearchResult(name, lines.distinct(), pmrByName[name] ?: false))
@@ -145,11 +145,11 @@ class SchedulesRepository(context: Context) {
             return try {
                 val repo = TransportRepository(appContext)
                 val stopsResult = repo.getAllStops()
-                
+
                 // Grouper les arrêts par nom et fusionner leurs lignes
                 val stopsByName = mutableMapOf<String, MutableList<String>>()
                 val pmrByName = mutableMapOf<String, Boolean>()
-                
+
                 stopsResult.getOrNull()?.features
                     ?.asSequence()
                     ?.filter { SearchUtils.fuzzyContains(it.properties.nom, query) }
@@ -163,12 +163,12 @@ class SchedulesRepository(context: Context) {
                             }
                             ?.filter { it.isNotEmpty() }
                             ?: emptyList()
-                        
+
                         val name = stop.properties.nom
                         stopsByName.getOrPut(name) { mutableListOf() }.addAll(lines)
                         pmrByName[name] = pmrByName.getOrDefault(name, false) || stop.properties.pmr
                     }
-                
+
                 // Créer les résultats avec lignes fusionnées
                 stopsByName.map { (name, lines) ->
                     StationSearchResult(name, lines.distinct(), pmrByName[name] ?: false)
@@ -322,9 +322,9 @@ class SchedulesRepository(context: Context) {
         return result
     }
 
-    fun getSchedules(lineName: String, stopName: String, directionId: Int, isHoliday: Boolean): List<String> {
+    fun getSchedules(lineName: String, stopName: String, directionId: Int, isSchoolHoliday: Boolean, isPublicHoliday: Boolean): List<String> {
         // Build cache key
-        val cacheKey = "$lineName|$stopName|$directionId|$isHoliday"
+        val cacheKey = "$lineName|$stopName|$directionId|$isSchoolHoliday|$isPublicHoliday"
         schedulesCache.get(cacheKey)?.let {
             return it
         }
@@ -335,10 +335,11 @@ class SchedulesRepository(context: Context) {
 
             val lineType = getLineType(lineName)
 
-            val effectiveIsHoliday = if (lineType == LineType.METRO || lineType == LineType.FUNICULAR || lineType == LineType.TRAM) {
+            // School holidays only affect bus schedules (AM vs AV)
+            val effectiveIsSchoolHoliday = if (lineType == LineType.METRO || lineType == LineType.FUNICULAR || lineType == LineType.TRAM) {
                 false
             } else {
-                isHoliday
+                isSchoolHoliday
             }
 
             val calendar = java.util.Calendar.getInstance()
@@ -352,8 +353,13 @@ class SchedulesRepository(context: Context) {
                 java.util.Calendar.SATURDAY -> "saturday"
                 else -> "sunday"
             }
-            // Use the actual day of the week for all line types (metro/tram have different weekend schedules)
-            val dayColumn = actualDayColumn
+
+            // CRITICAL: Public holidays always use Sunday schedules, regardless of actual day
+            val dayColumn = if (isPublicHoliday) {
+                "sunday"
+            } else {
+                actualDayColumn
+            }
 
             // Format today's date as YYYYMMDD for GTFS calendar date comparison
             val todayFormatted = String.format(
@@ -364,13 +370,15 @@ class SchedulesRepository(context: Context) {
                 calendar.get(java.util.Calendar.DAY_OF_MONTH)
             )
 
-            val isWeekday = dayColumn in setOf("monday", "tuesday", "wednesday", "thursday", "friday")
+            val isWeekday = actualDayColumn in setOf("monday", "tuesday", "wednesday", "thursday", "friday")
             var appliedAmAvFilter = false
             var serviceIdFilter = ""
 
-            if (lineType != LineType.METRO && lineType != LineType.FUNICULAR && lineType != LineType.NAVIGONE && lineType != LineType.TRAM && isWeekday) {
+            // For bus lines on weekdays: use AM (normal) or AV (school holiday) schedules
+            // Note: This is separate from public holidays which override the dayColumn to Sunday
+            if (lineType != LineType.METRO && lineType != LineType.FUNICULAR && lineType != LineType.NAVIGONE && lineType != LineType.TRAM && isWeekday && !isPublicHoliday) {
                 appliedAmAvFilter = true
-                serviceIdFilter = if (effectiveIsHoliday) {
+                serviceIdFilter = if (effectiveIsSchoolHoliday) {
                     "AND s.service_id LIKE '%AV%'"
                 } else {
                     "AND s.service_id LIKE '%AM%'"
@@ -734,4 +742,3 @@ class SchedulesRepository(context: Context) {
         }
     }
 }
-

@@ -148,8 +148,10 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     @RequiresApi(Build.VERSION_CODES.O)
     fun computeAvailableDirections(lineName: String, stopName: String) {
         viewModelScope.launch {
-            // Determine if it is a holiday (school holiday or French public holiday)
-            val isTodayHoliday = holidayDetector.isHoliday(LocalDate.now())
+            // Check for school holidays and French public holidays separately
+            val today = LocalDate.now()
+            val isSchoolHoliday = holidayDetector.isSchoolHoliday(today)
+            val isPublicHoliday = holidayDetector.isFrenchPublicHoliday(today)
             val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
 
             // Candidate directions list: those exposed by _headsigns otherwise 0 and 1 by default
@@ -158,7 +160,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             val available = mutableListOf<Int>()
             for (dir in candidateDirections) {
                 try {
-                    val schedules = schedulesRepository.getSchedules(gtfsLineName, stopName, dir, isTodayHoliday)
+                    val schedules = schedulesRepository.getSchedules(gtfsLineName, stopName, dir, isSchoolHoliday, isPublicHoliday)
                     if (schedules.isNotEmpty()) {
                         available.add(dir)
                     }
@@ -179,13 +181,15 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             _allSchedules.value = emptyList()
             _nextSchedules.value = emptyList()
 
-            // Determine if today is a holiday (school holiday or French public holiday)
-            val isTodayHoliday = holidayDetector.isHoliday(LocalDate.now())
+            // Check for school holidays and French public holidays separately
+            val today = LocalDate.now()
+            val isSchoolHoliday = holidayDetector.isSchoolHoliday(today)
+            val isPublicHoliday = holidayDetector.isFrenchPublicHoliday(today)
 
             // The GTFS data uses NAVI1 for the Navigone, but the app displays NAV1
             val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
 
-            val allSchedulesForDay = schedulesRepository.getSchedules(gtfsLineName, stopName, directionId, isTodayHoliday)
+            val allSchedulesForDay = schedulesRepository.getSchedules(gtfsLineName, stopName, directionId, isSchoolHoliday, isPublicHoliday)
             _allSchedules.value = allSchedulesForDay
 
             if (allSchedulesForDay.isEmpty()) {
