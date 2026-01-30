@@ -79,7 +79,9 @@ import com.pelotcl.app.utils.TransportType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import java.time.LocalDateTime
 import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
 data class LineInfo(
@@ -420,9 +422,15 @@ private fun TrafficAlertsSection(
                     )
                     
                     Spacer(modifier = Modifier.height(4.dp))
-                    
+
+                    fun formatDate(input: String): String {
+                        val inputFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+                        val outputFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss")
+                        val date = LocalDateTime.parse(input, inputFormatter)
+                        return date.format(outputFormatter)
+                    }
                     Text(
-                        text = "Du ${alert.startDate} au ${alert.endDate}",
+                        text = "Du ${formatDate(alert.startDate)} au ${formatDate(alert.endDate)}",
                         style = MaterialTheme.typography.labelSmall,
                         color = Color.Gray,
                         fontStyle = FontStyle.Italic
