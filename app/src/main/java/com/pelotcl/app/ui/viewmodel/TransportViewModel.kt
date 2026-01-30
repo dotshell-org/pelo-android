@@ -447,7 +447,18 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         val connections = connectionsIndex[normalized] ?: emptyList()
         // Exclude the current line (with normalization to handle NAVI1 vs NAV1)
         val normalizedCurrentLine = normalizeLineName(currentLine)
-        return connections.filter { normalizeLineName(it.lineName) != normalizedCurrentLine }
+        return connections
+            .filter { normalizeLineName(it.lineName) != normalizedCurrentLine }
+            .sortedWith(compareBy<Connection> {
+                when (it.transportType) {
+                    com.pelotcl.app.utils.TransportType.METRO -> 1
+                    com.pelotcl.app.utils.TransportType.TRAM -> 2
+                    com.pelotcl.app.utils.TransportType.FUNICULAR -> 3
+                    com.pelotcl.app.utils.TransportType.NAVIGONE -> 4
+                    com.pelotcl.app.utils.TransportType.BUS -> 5
+                    com.pelotcl.app.utils.TransportType.UNKNOWN -> 6
+                }
+            }.thenBy { it.lineName })
     }
 
     /**

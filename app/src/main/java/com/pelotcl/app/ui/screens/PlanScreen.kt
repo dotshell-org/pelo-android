@@ -676,6 +676,25 @@ fun PlanScreen(
                                     selectedStation = null
                                     sheetContentState = null
                                 },
+                                onLineClick = { lineName ->
+                                    selectedLine = LineInfo(
+                                        lineName = lineName,
+                                        currentStationName = selectedLine?.currentStationName ?: ""
+                                    )
+
+                                    if (!isMetroTramOrFunicular(lineName)) {
+                                        scope.launch {
+                                            viewModel.addLineToLoaded(lineName)
+                                            if (isTemporaryBus(lineName)) {
+                                                temporaryLoadedBusLines = temporaryLoadedBusLines + lineName
+                                            }
+                                            kotlinx.coroutines.delay(100)
+                                            sheetContentState = SheetContentState.LINE_DETAILS
+                                        }
+                                    } else {
+                                        sheetContentState = SheetContentState.LINE_DETAILS
+                                    }
+                                },
                                 onStopClick = { stopName ->
                                     selectedLine = LineInfo(
                                         lineName = selectedLine!!.lineName,
@@ -911,6 +930,7 @@ private fun LineDetailsSheetContent(
     selectedDirection: Int,
     onDirectionChange: (Int) -> Unit,
     onBackToStation: () -> Unit,
+    onLineClick: (String) -> Unit = {},
     onStopClick: (String) -> Unit = {},
     onShowAllSchedules: (lineName: String, directionName: String, schedules: List<String>) -> Unit,
     onItineraryClick: (stopName: String) -> Unit = {}
@@ -923,6 +943,7 @@ private fun LineDetailsSheetContent(
         onDirectionChange = onDirectionChange,
         onDismiss = {},
         onBackToStation = onBackToStation,
+        onLineClick = onLineClick,
         onStopClick = onStopClick,
         onShowAllSchedules = onShowAllSchedules,
         onItineraryClick = onItineraryClick

@@ -72,8 +72,10 @@ import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportLinesUiState
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.utils.BusIconHelper
+import com.pelotcl.app.utils.Connection
 import com.pelotcl.app.utils.LineColorHelper
 import com.pelotcl.app.utils.ListItemRecompositionCounter
+import com.pelotcl.app.utils.TransportType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -135,6 +137,7 @@ fun LineDetailsBottomSheet(
     onDirectionChange: (Int) -> Unit,
     onDismiss: () -> Unit,
     onBackToStation: () -> Unit,
+    onLineClick: (String) -> Unit = {},
     onStopClick: (String) -> Unit = {},
     onShowAllSchedules: (lineName: String, directionName: String, schedules: List<String>) -> Unit,
     onItineraryClick: (stopName: String) -> Unit = {}
@@ -144,6 +147,14 @@ fun LineDetailsBottomSheet(
     var isLoading by remember { mutableStateOf(true) }
     var lineAlerts by remember { mutableStateOf<List<com.pelotcl.app.data.model.TrafficAlert>>(emptyList()) }
     
+    val connections = remember(lineInfo?.currentStationName, lineInfo?.lineName) {
+        if (lineInfo != null) {
+            viewModel.getConnectionsForStop(lineInfo.currentStationName, lineInfo.lineName)
+        } else {
+            emptyList()
+        }
+    }
+
     // Load alerts for the line using the new state-based approach
     LaunchedEffect(lineInfo?.lineName) {
         if (lineInfo != null && lineInfo.lineName.isNotBlank()) {
@@ -277,7 +288,15 @@ fun LineDetailsBottomSheet(
                         Spacer(modifier = Modifier.height(20.dp))
                     }
 
-                    // Part 2: Stops or Loader
+                    // Part 2: Connections
+                    if (connections.isNotEmpty()) {
+                        ConnectionsSection(
+                            connections = connections,
+                            onLineClick = onLineClick
+                        )
+                    }
+
+                    // Part 3: Stops or Loader
                     if (isLoading) {
                         Box(
                             modifier = Modifier
@@ -607,6 +626,78 @@ private fun NextSchedulesSection(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
+private fun ConnectionsSection(
+    connections: List<Connection>,
+    onLineClick: (String) -> Unit
+) {
+    if (connections.isEmpty()) return
+
+    val strongLines = connections.filter {
+        val isStrongType = it.transportType in listOf(
+            TransportType.METRO,
+            TransportType.TRAM,
+            TransportType.FUNICULAR,
+            TransportType.NAVIGONE,
+        )
+
+        isStrongType || it.lineName == "RX"
+    }
+    val weakLines = connections.filter { it !in strongLines }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .padding(bottom = 16.dp)
+    ) {
+        Text(
+            text = "Correspondances",
+            textAlign = TextAlign.Left,
+            fontSize = 22.sp,
+            color = Color.Black,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 12.dp, top = 30.dp, bottom = 12.dp)
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+
+        if (strongLines.isNotEmpty()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.padding(horizontal = 12.dp)
+            ) {
+                strongLines.forEach { connection ->
+                    ConnectionBadge(
+                        lineName = connection.lineName,
+                        size = 48.dp,
+                        onClick = { onLineClick(connection.lineName) }
+                    )
+                }
+            }
+        }
+
+        if (weakLines.isNotEmpty()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy((-20).dp),
+                modifier = Modifier.padding(horizontal = 12.dp)
+            ) {
+                weakLines.forEach { connection ->
+                    ConnectionBadge(
+                        lineName = connection.lineName,
+                        size = 48.dp,
+                        onClick = { onLineClick(connection.lineName) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
 private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Boolean, isLast: Boolean, onStopClick: () -> Unit = {}) {
     // Debug: measure the recompositions of this item
     ListItemRecompositionCounter("LineStops", stop.stopId)
@@ -661,7 +752,7 @@ private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Bool
                     maxItemsInEachRow = 4
                 ) {
                     filteredConnections.forEach { connectionLine ->
-                        ConnectionBadge(lineName = connectionLine)
+                        ConnectionBadge(lineName = connectionLine, size = 32.dp)
                     }
                 }
             }
@@ -674,45 +765,29 @@ private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Bool
  * Uses TCL images like on the map
  */
 @Composable
-private fun ConnectionBadge(lineName: String) {
+private fun ConnectionBadge(
+    lineName: String,
+    size: androidx.compose.ui.unit.Dp = 32.dp,
+    onClick: (() -> Unit)? = null
+) {
     val context = LocalContext.current
 
     // Convert line name to drawable name using BusIconHelper for consistency
     val drawableName = BusIconHelper.getDrawableNameForLineName(lineName)
     val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
 
+    val modifier = if (onClick != null) {
+        Modifier.size(size).clickable { onClick() }
+    } else {
+        Modifier.size(size)
+    }
+
     if (resourceId != 0) {
         // Display TCL image
         Image(
             painter = painterResource(id = resourceId),
             contentDescription = "Ligne $lineName",
-            modifier = Modifier.size(32.dp)
+            modifier = modifier
         )
-    } else {
-        // Fallback: colored circle if image doesn't exist
-        val backgroundColor = when (lineName) {
-            "A" -> Color(0xFFEC4899) // Pink
-            "B" -> Color(0xFF3B82F6) // Blue
-            "C" -> Color(0xFFF59E0B) // Orange
-            "D" -> Color(0xFF22C55E) // Green
-            "F1", "F2" -> Color(0xFF84CC16) // Lime green
-            else -> Color.Gray
-        }
-
-        Box(
-            modifier = Modifier
-                .size(24.dp)
-                .clip(CircleShape)
-                .background(backgroundColor),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = lineName,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                fontSize = if (lineName.length > 1) 9.sp else 11.sp
-            )
-        }
     }
 }
