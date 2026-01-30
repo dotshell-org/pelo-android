@@ -86,7 +86,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     val favoriteLines: StateFlow<Set<String>> = _favoriteLines.asStateFlow()
     private val _selectedLineName = MutableStateFlow<String?>(null)
     val selectedLineName: StateFlow<String?> = _selectedLineName.asStateFlow()
-    
+
     // Traffic alerts state
     private val _trafficAlerts = MutableStateFlow<Map<String, List<com.pelotcl.app.data.model.TrafficAlert>>>(emptyMap())
     val trafficAlerts: StateFlow<Map<String, List<com.pelotcl.app.data.model.TrafficAlert>>> = _trafficAlerts.asStateFlow()
@@ -148,8 +148,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     @RequiresApi(Build.VERSION_CODES.O)
     fun computeAvailableDirections(lineName: String, stopName: String) {
         viewModelScope.launch {
-            // Determine if it is a school holiday
-            val isTodayHoliday = holidayDetector.isSchoolHoliday(LocalDate.now())
+            // Determine if it is a holiday (school holiday or French public holiday)
+            val isTodayHoliday = holidayDetector.isHoliday(LocalDate.now())
             val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
 
             // Candidate directions list: those exposed by _headsigns otherwise 0 and 1 by default
@@ -179,8 +179,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             _allSchedules.value = emptyList()
             _nextSchedules.value = emptyList()
 
-            // Determine if today is a school holiday
-            val isTodayHoliday = holidayDetector.isSchoolHoliday(LocalDate.now())
+            // Determine if today is a holiday (school holiday or French public holiday)
+            val isTodayHoliday = holidayDetector.isHoliday(LocalDate.now())
 
             // The GTFS data uses NAVI1 for the Navigone, but the app displays NAV1
             val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
