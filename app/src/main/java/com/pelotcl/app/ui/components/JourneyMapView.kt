@@ -393,6 +393,39 @@ fun JourneyMapView(
         }
     }
 
+    // Animate camera when bottom padding changes (sheet expansion/collapse)
+    LaunchedEffect(bottomPadding) {
+        mapView.getMapAsync { map ->
+            map.getStyle { _ ->
+                // Recalculate bounds with new padding
+                val boundsBuilder = LatLngBounds.Builder()
+                journey.legs.forEach { leg ->
+                    boundsBuilder.include(LatLng(leg.fromLat, leg.fromLon))
+                    boundsBuilder.include(LatLng(leg.toLat, leg.toLon))
+                    leg.intermediateStops.forEach { stop ->
+                        boundsBuilder.include(LatLng(stop.lat, stop.lon))
+                    }
+                }
+
+                try {
+                    val bounds = boundsBuilder.build()
+                    map.animateCamera(
+                        CameraUpdateFactory.newLatLngBounds(
+                            bounds,
+                            60,    // left padding
+                            100,   // top padding
+                            60,    // right padding
+                            bottomPadding  // dynamic bottom padding
+                        ),
+                        300  // 300ms animation
+                    )
+                } catch (_: Exception) {
+                    // Fallback handled during initial map setup
+                }
+            }
+        }
+    }
+
     // Manage MapView lifecycle
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->

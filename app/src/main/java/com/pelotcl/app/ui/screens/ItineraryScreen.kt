@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -58,9 +59,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -126,8 +130,14 @@ fun ItineraryScreen(
     // Track selected journey for map view
     var selectedJourney by remember { mutableStateOf<JourneyResult?>(null) }
 
-    // Track if bottom sheet is expanded
-    var isBottomSheetExpanded by remember { mutableStateOf(false) }
+    // Bottom sheet state for swipable journey details
+    val journeySheetState = rememberStandardBottomSheetState(
+        initialValue = SheetValue.PartiallyExpanded,
+        skipHiddenState = true  // User must use back button to close
+    )
+    val journeyScaffoldState = rememberBottomSheetScaffoldState(
+        bottomSheetState = journeySheetState
+    )
 
     // Change status bar based on whether map is shown (light background) or list view (dark background)
     LaunchedEffect(selectedJourney) {
@@ -347,12 +357,18 @@ fun ItineraryScreen(
 
     // Handle back button press
     BackHandler {
-        if (selectedJourney != null) {
-            // If viewing journey map, go back to journey list
-            selectedJourney = null
-        } else {
+        when {
+            // If sheet is expanded, collapse it first
+            selectedJourney != null &&
+                    journeyScaffoldState.bottomSheetState.currentValue == SheetValue.Expanded -> {
+                scope.launch { journeyScaffoldState.bottomSheetState.partialExpand() }
+            }
+            // If viewing journey map (sheet collapsed), go back to journey list
+            selectedJourney != null -> {
+                selectedJourney = null
+            }
             // Otherwise, exit the itinerary screen
-            onBack()
+            else -> onBack()
         }
     }
 
@@ -386,34 +402,62 @@ fun ItineraryScreen(
     ) { contentPadding ->
         // Show map view when a journey is selected
         if (selectedJourney != null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black)
-            ) {
-                // Map taking most of the screen (edge-to-edge, behind status bar)
-                JourneyMapView(
-                    journey = selectedJourney!!,
-                    onBack = {
-                        selectedJourney = null
-                        isBottomSheetExpanded = false
-                    },
-                    bottomPadding = if (isBottomSheetExpanded) 450 else 180,
+            // Calculate map padding based on sheet state
+            val mapBottomPadding by remember {
+                derivedStateOf {
+                    when (journeyScaffoldState.bottomSheetState.currentValue) {
+                        SheetValue.Expanded -> 450
+                        else -> 180
+                    }
+                }
+            }
+
+            BottomSheetScaffold(
+                scaffoldState = journeyScaffoldState,
+                sheetPeekHeight = 180.dp,
+                sheetContainerColor = Color.Black,
+                sheetShape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+                sheetDragHandle = {
+                    // Drag handle bar
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .width(32.dp)
+                                .height(4.dp)
+                                .background(
+                                    Color.White.copy(alpha = 0.4f),
+                                    RoundedCornerShape(2.dp)
+                                )
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                },
+                sheetContent = {
+                    JourneyDetailsSheetContent(
+                        journey = selectedJourney!!,
+                        isExpanded = journeyScaffoldState.bottomSheetState.currentValue == SheetValue.Expanded,
+                        modifier = Modifier
+                            .navigationBarsPadding()
+                            .padding(bottom = 80.dp)
+                    )
+                }
+            ) { _ ->
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
-                )
-
-                // Expandable journey summary at the bottom
-                SelectedJourneySummary(
-                    journey = selectedJourney!!,
-                    isExpanded = isBottomSheetExpanded,
-                    onExpandChange = { isBottomSheetExpanded = it },
-                    onClose = {
-                        selectedJourney = null
-                        isBottomSheetExpanded = false
-                    },
-                    modifier = Modifier.align(Alignment.BottomCenter)
-                )
+                        .background(Color.Black)
+                ) {
+                    JourneyMapView(
+                        journey = selectedJourney!!,
+                        onBack = { selectedJourney = null },
+                        bottomPadding = mapBottomPadding,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
         } else {
             // Normal journey list view - using LazyColumn for performance
@@ -631,7 +675,6 @@ fun ItineraryScreen(
                                     journey = journey,
                                     onClick = {
                                         selectedJourney = journey
-                                        isBottomSheetExpanded = false
                                     }
                                 )
                                 if (index < journeys.size - 1) {
@@ -1076,16 +1119,14 @@ private fun JourneyLegItem(
 }
 
 /**
- * Summary view shown at the bottom when a journey is selected
+ * Sheet content for journey details shown in BottomSheetScaffold
  * Shows a compact horizontal view of the journey with line icons
- * Can be expanded to show full itinerary details
+ * Expands to show full itinerary details when sheet is expanded
  */
 @Composable
-private fun SelectedJourneySummary(
+private fun JourneyDetailsSheetContent(
     journey: JourneyResult,
     isExpanded: Boolean,
-    onExpandChange: (Boolean) -> Unit,
-    onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -1101,159 +1142,135 @@ private fun SelectedJourneySummary(
         }
     }
 
-    Card(
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(bottom = 80.dp)
-            .clickable { onExpandChange(!isExpanded) },
-        colors = CardDefaults.cardColors(containerColor = Color.Black),
-        shape = RoundedCornerShape(0)
+            .padding(horizontal = 16.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
+        // Header with times
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Header with times
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = journey.formatDepartureTime(),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        text = " → ",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color.White.copy(alpha = 0.7f)
-                    )
-                    Text(
-                        text = journey.formatArrivalTime(),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .background(
-                            color = Color.White.copy(alpha = 0.15f),
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                ) {
-                    Text(
-                        text = formattedDuration,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp
-                    )
-                }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = journey.formatDepartureTime(),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Text(
+                    text = " → ",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+                Text(
+                    text = journey.formatArrivalTime(),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Horizontal journey summary with line icons
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Start,
-                verticalAlignment = Alignment.CenterVertically
+            Box(
+                modifier = Modifier
+                    .background(
+                        color = Color.White.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(8.dp)
+                    )
             ) {
-                journey.legs.forEachIndexed { index, leg ->
-                    if (leg.isWalking) {
-                        // Walking icon
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.DirectionsWalk,
+                Text(
+                    text = formattedDuration,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Horizontal journey summary with line icons
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            journey.legs.forEachIndexed { index, leg ->
+                if (leg.isWalking) {
+                    // Walking icon
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.DirectionsWalk,
+                        contentDescription = null,
+                        tint = Gray700,
+                        modifier = Modifier.size(24.dp)
+                    )
+                } else {
+                    // Transport line icon
+                    val drawableName = BusIconHelper.getDrawableNameForLineName(leg.routeName ?: "")
+                    val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
+
+                    if (resourceId != 0) {
+                        Image(
+                            painter = painterResource(id = resourceId),
                             contentDescription = null,
-                            tint = Gray700,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(32.dp)
                         )
                     } else {
-                        // Transport line icon
-                        val drawableName = BusIconHelper.getDrawableNameForLineName(leg.routeName ?: "")
-                        val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
-
-                        if (resourceId != 0) {
-                            Image(
-                                painter = painterResource(id = resourceId),
-                                contentDescription = null,
-                                modifier = Modifier.size(32.dp)
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(Color(LineColorHelper.getColorForLineString(leg.routeName ?: ""))),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = leg.routeName ?: "?",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
                             )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(28.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(LineColorHelper.getColorForLineString(leg.routeName ?: ""))),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = leg.routeName ?: "?",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                            }
                         }
-                    }
-
-                    // Arrow between legs
-                    if (index < journey.legs.size - 1) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.5f),
-                            modifier = Modifier.size(20.dp)
-                        )
                     }
                 }
-            }
 
-            // Chevron icon to indicate expandability
-            Spacer(modifier = Modifier.height(8.dp))
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center
+                // Arrow between legs
+                if (index < journey.legs.size - 1) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.5f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
+
+        // Expanded view with full journey details
+        if (isExpanded) {
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider(
+                color = Color.White.copy(alpha = 0.2f),
+                thickness = 1.dp
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Full journey legs (reuse the same component from JourneyCard)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 300.dp)
+                    .verticalScroll(rememberScrollState())
             ) {
-                Icon(
-                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.ExpandLess,
-                    contentDescription = if (isExpanded) "Réduire" else "Développer",
-                    tint = Color.White.copy(alpha = 0.6f),
-                    modifier = Modifier.size(28.dp)
-                )
-            }
-
-            // Expanded view with full journey details
-            if (isExpanded) {
-                Spacer(modifier = Modifier.height(16.dp))
-                androidx.compose.material3.HorizontalDivider(
-                    color = Color.White.copy(alpha = 0.2f),
-                    thickness = 1.dp
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Full journey legs (reuse the same component from JourneyCard)
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 300.dp)
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    journey.legs.forEachIndexed { index, leg ->
-                        key("${leg.fromStopId}_${leg.departureTime}") {
-                            JourneyLegItem(
-                                leg = leg,
-                                isFirst = index == 0,
-                                isLast = index == journey.legs.size - 1
-                            )
-                        }
+                journey.legs.forEachIndexed { index, leg ->
+                    key("${leg.fromStopId}_${leg.departureTime}") {
+                        JourneyLegItem(
+                            leg = leg,
+                            isFirst = index == 0,
+                            isLast = index == journey.legs.size - 1
+                        )
                     }
                 }
             }
