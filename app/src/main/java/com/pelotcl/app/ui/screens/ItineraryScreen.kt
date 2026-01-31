@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -35,6 +36,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MyLocation
@@ -120,6 +122,9 @@ fun ItineraryScreen(
 
     // Track selected journey for map view
     var selectedJourney by remember { mutableStateOf<JourneyResult?>(null) }
+
+    // Track if bottom sheet is expanded
+    var isBottomSheetExpanded by remember { mutableStateOf(false) }
 
     // Change status bar based on whether map is shown (light background) or list view (dark background)
     LaunchedEffect(selectedJourney) {
@@ -386,16 +391,24 @@ fun ItineraryScreen(
                 // Map taking most of the screen (edge-to-edge, behind status bar)
                 JourneyMapView(
                     journey = selectedJourney!!,
-                    onBack = { selectedJourney = null },
-                    userLocation = userLocation,
+                    onBack = {
+                        selectedJourney = null
+                        isBottomSheetExpanded = false
+                    },
+                    bottomPadding = if (isBottomSheetExpanded) 450 else 180,
                     modifier = Modifier
                         .fillMaxSize()
                 )
 
-                // Collapsed journey summary at the bottom
+                // Expandable journey summary at the bottom
                 SelectedJourneySummary(
                     journey = selectedJourney!!,
-                    onClose = { selectedJourney = null },
+                    isExpanded = isBottomSheetExpanded,
+                    onExpandChange = { isBottomSheetExpanded = it },
+                    onClose = {
+                        selectedJourney = null
+                        isBottomSheetExpanded = false
+                    },
                     modifier = Modifier.align(Alignment.BottomCenter)
                 )
             }
@@ -600,7 +613,10 @@ fun ItineraryScreen(
                                 key(journey.departureTime) {
                                     JourneyCard(
                                         journey = journey,
-                                        onClick = { selectedJourney = journey }
+                                        onClick = {
+                                            selectedJourney = journey
+                                            isBottomSheetExpanded = false
+                                        }
                                     )
                                     if (index < journeys.size - 1) {
                                         HorizontalDivider(
@@ -1029,10 +1045,13 @@ private fun JourneyLegItem(
 /**
  * Summary view shown at the bottom when a journey is selected
  * Shows a compact horizontal view of the journey with line icons
+ * Can be expanded to show full itinerary details
  */
 @Composable
 private fun SelectedJourneySummary(
     journey: JourneyResult,
+    isExpanded: Boolean,
+    onExpandChange: (Boolean) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -1042,7 +1061,8 @@ private fun SelectedJourneySummary(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(bottom = 80.dp),
+            .padding(bottom = 80.dp)
+            .clickable { onExpandChange(!isExpanded) },
         colors = CardDefaults.cardColors(containerColor = Color.Black),
         shape = RoundedCornerShape(0)
     ) {
@@ -1148,6 +1168,48 @@ private fun SelectedJourneySummary(
                             tint = Color.White.copy(alpha = 0.5f),
                             modifier = Modifier.size(20.dp)
                         )
+                    }
+                }
+            }
+
+            // Chevron icon to indicate expandability
+            Spacer(modifier = Modifier.height(8.dp))
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.ExpandLess,
+                    contentDescription = if (isExpanded) "Réduire" else "Développer",
+                    tint = Color.White.copy(alpha = 0.6f),
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+
+            // Expanded view with full journey details
+            if (isExpanded) {
+                Spacer(modifier = Modifier.height(16.dp))
+                androidx.compose.material3.HorizontalDivider(
+                    color = Color.White.copy(alpha = 0.2f),
+                    thickness = 1.dp
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Full journey legs (reuse the same component from JourneyCard)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 300.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    journey.legs.forEachIndexed { index, leg ->
+                        key("${leg.fromStopId}_${leg.departureTime}") {
+                            JourneyLegItem(
+                                leg = leg,
+                                isFirst = index == 0,
+                                isLast = index == journey.legs.size - 1
+                            )
+                        }
                     }
                 }
             }

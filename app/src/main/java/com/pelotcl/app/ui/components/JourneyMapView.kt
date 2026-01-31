@@ -46,6 +46,7 @@ fun JourneyMapView(
     journey: JourneyResult,
     onBack: () -> Unit,
     userLocation: LatLng? = null,
+    bottomPadding: Int = 180,
     styleUrl: String = "https://tiles.openfreemap.org/styles/positron"
 ) {
     val context = LocalContext.current
@@ -76,10 +77,17 @@ fun JourneyMapView(
                     }
 
                     // Fit camera to bounds with padding
+                    // Use asymmetric padding to account for bottom sheet
                     try {
                         val bounds = boundsBuilder.build()
                         map.moveCamera(
-                            CameraUpdateFactory.newLatLngBounds(bounds, 60)
+                            CameraUpdateFactory.newLatLngBounds(
+                                bounds,
+                                60,    // left padding
+                                100,   // top padding
+                                60,    // right padding
+                                bottomPadding  // bottom padding (adjusts for expanded/collapsed state)
+                            )
                         )
                     } catch (e: Exception) {
                         // Fallback to Lyon center if bounds calculation fails
@@ -267,33 +275,15 @@ fun JourneyMapView(
                     val stopsSource = GeoJsonSource("journey-stops", stopsGeoJson.toString())
                     style.addSource(stopsSource)
 
-                    var isZoomedIn = map.cameraPosition.zoom >= 14.0
-
-                    map.addOnCameraMoveListener {
-                        val currentZoom = map.cameraPosition.zoom
-                        if (isZoomedIn && currentZoom < 13.0) {
-                            isZoomedIn = false
-                            style.getLayer("journey-intermediate-stops")?.setProperties(
-                                PropertyFactory.visibility(org.maplibre.android.style.layers.Property.NONE)
-                            )
-                        } else if (!isZoomedIn && currentZoom >= 14.0) {
-                            isZoomedIn = true
-                            style.getLayer("journey-intermediate-stops")?.setProperties(
-                                PropertyFactory.visibility(org.maplibre.android.style.layers.Property.VISIBLE)
-                            )
-                        }
-                    }
-
-                    // Intermediate stops layer (smaller circles)
+                    // Intermediate stops layer (smaller circles) - no filter, show all first
                     val intermediateStopsLayer = CircleLayer("journey-intermediate-stops", "journey-stops").apply {
                         setProperties(
                             PropertyFactory.circleRadius(4f),
                             PropertyFactory.circleColor("#FFFFFF"),
                             PropertyFactory.circleStrokeWidth(2f),
                             PropertyFactory.circleStrokeColor("#6B7280"),
-                            PropertyFactory.circleOpacity(1f),
-                            PropertyFactory.circleStrokeOpacity(0.8f),
-                            PropertyFactory.visibility(if (isZoomedIn) org.maplibre.android.style.layers.Property.VISIBLE else org.maplibre.android.style.layers.Property.NONE)
+                            PropertyFactory.circleOpacity(1.0f),
+                            PropertyFactory.circleStrokeOpacity(1.0f)
                         )
                         setFilter(org.maplibre.android.style.expressions.Expression.eq(
                             org.maplibre.android.style.expressions.Expression.get("isMain"),
@@ -309,22 +299,8 @@ fun JourneyMapView(
                             PropertyFactory.circleColor("#FFFFFF"),
                             PropertyFactory.circleStrokeWidth(4f),
                             PropertyFactory.circleStrokeColor("#000000"),
-                            PropertyFactory.circleOpacity(
-                                org.maplibre.android.style.expressions.Expression.interpolate(
-                                    org.maplibre.android.style.expressions.Expression.linear(),
-                                    org.maplibre.android.style.expressions.Expression.zoom(),
-                                    org.maplibre.android.style.expressions.Expression.stop(10.0f, 0f),
-                                    org.maplibre.android.style.expressions.Expression.stop(11.0f, 1f)
-                                )
-                            ),
-                            PropertyFactory.circleStrokeOpacity(
-                                org.maplibre.android.style.expressions.Expression.interpolate(
-                                    org.maplibre.android.style.expressions.Expression.linear(),
-                                    org.maplibre.android.style.expressions.Expression.zoom(),
-                                    org.maplibre.android.style.expressions.Expression.stop(10.0f, 0f),
-                                    org.maplibre.android.style.expressions.Expression.stop(11.0f, 1f)
-                                )
-                            )
+                            PropertyFactory.circleOpacity(1.0f),
+                            PropertyFactory.circleStrokeOpacity(1.0f)
                         )
                         setFilter(org.maplibre.android.style.expressions.Expression.eq(
                             org.maplibre.android.style.expressions.Expression.get("isMain"),
@@ -348,15 +324,7 @@ fun JourneyMapView(
                             PropertyFactory.textMaxWidth(10f),
                             PropertyFactory.textFont(arrayOf("Open Sans Bold", "Arial Unicode MS Bold")),
                             PropertyFactory.textAllowOverlap(false),
-                            PropertyFactory.textIgnorePlacement(false),
-                            PropertyFactory.textOpacity(
-                                org.maplibre.android.style.expressions.Expression.interpolate(
-                                    org.maplibre.android.style.expressions.Expression.linear(),
-                                    org.maplibre.android.style.expressions.Expression.zoom(),
-                                    org.maplibre.android.style.expressions.Expression.stop(11.0f, 0f),
-                                    org.maplibre.android.style.expressions.Expression.stop(12.0f, 1f)
-                                )
-                            )
+                            PropertyFactory.textIgnorePlacement(false)
                         )
                         setFilter(org.maplibre.android.style.expressions.Expression.eq(
                             org.maplibre.android.style.expressions.Expression.get("isMain"),
