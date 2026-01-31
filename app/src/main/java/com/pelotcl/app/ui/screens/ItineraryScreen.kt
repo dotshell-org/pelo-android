@@ -27,6 +27,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -62,6 +64,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -413,178 +416,182 @@ fun ItineraryScreen(
                 )
             }
         } else {
-            // Normal journey list view
-            Column(
+            // Normal journey list view - using LazyColumn for performance
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black)
                     .padding(contentPadding)
-                    .verticalScroll(rememberScrollState())
             ) {
-                // Stop selection fields directly on black background
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                ) {
-                    // Departure stop field
-                    StopSelectionField(
-                        selectedStop = departureStop,
-                        query = departureQuery,
-                        onQueryChange = {
-                            departureQuery = it
-                            isSearchingDeparture = it.isNotEmpty()
-                        },
-                        isSearching = isSearchingDeparture,
-                        searchResults = departureSearchResults,
-                        onStopSelected = { result ->
-                            scope.launch {
-                                val raptorStops = raptorRepository.searchStopsByName(result.stopName)
-                                departureStop = SelectedStop(
-                                    name = result.stopName,
-                                    stopIds = raptorStops.map { it.id }
-                                )
+                // Stop selection fields (sticky header-like behavior)
+                item(key = "stop_selection") {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        // Departure stop field
+                        StopSelectionField(
+                            selectedStop = departureStop,
+                            query = departureQuery,
+                            onQueryChange = {
+                                departureQuery = it
+                                isSearchingDeparture = it.isNotEmpty()
+                            },
+                            isSearching = isSearchingDeparture,
+                            searchResults = departureSearchResults,
+                            onStopSelected = { result ->
+                                scope.launch {
+                                    val raptorStops = raptorRepository.searchStopsByName(result.stopName)
+                                    departureStop = SelectedStop(
+                                        name = result.stopName,
+                                        stopIds = raptorStops.map { it.id }
+                                    )
+                                    departureQuery = ""
+                                    isSearchingDeparture = false
+                                    departureSearchResults = emptyList()
+                                    // Mark as manually selected to prevent auto-override
+                                    hasManuallySelectedDeparture = true
+                                }
+                            },
+                            onClear = {
+                                departureStop = null
                                 departureQuery = ""
                                 isSearchingDeparture = false
-                                departureSearchResults = emptyList()
-                                // Mark as manually selected to prevent auto-override
-                                hasManuallySelectedDeparture = true
-                            }
-                        },
-                        onClear = {
-                            departureStop = null
-                            departureQuery = ""
-                            isSearchingDeparture = false
-                            // Reset manual selection flag to allow auto-detection
-                            hasManuallySelectedDeparture = false
-                            lastLocationUsedForDeparture = null
-                        },
-                        icon = Icons.Default.MyLocation,
-                        onRefresh = if (userLocation != null) {
-                            {
-                                scope.launch {
-                                    // Force recalculation from current GPS location
-                                    hasManuallySelectedDeparture = false
-                                    fallbackInfoMessage = null
+                                // Reset manual selection flag to allow auto-detection
+                                hasManuallySelectedDeparture = false
+                                lastLocationUsedForDeparture = null
+                            },
+                            icon = Icons.Default.MyLocation,
+                            onRefresh = if (userLocation != null) {
+                                {
+                                    scope.launch {
+                                        // Force recalculation from current GPS location
+                                        hasManuallySelectedDeparture = false
+                                        fallbackInfoMessage = null
 
-                                    // Get multiple nearby stops for fallback capability
-                                    val nearestStops = raptorRepository.findNearestStops(
-                                        latitude = userLocation.latitude,
-                                        longitude = userLocation.longitude,
-                                        limit = 5
-                                    )
-                                    nearbyDepartureStops = nearestStops
-
-                                    if (nearestStops.isNotEmpty()) {
-                                        val closestStop = nearestStops.first()
-                                        val allStopsWithName = raptorRepository.searchStopsByName(closestStop.name)
-                                        departureStop = SelectedStop(
-                                            name = closestStop.name,
-                                            stopIds = allStopsWithName.map { it.id }
+                                        // Get multiple nearby stops for fallback capability
+                                        val nearestStops = raptorRepository.findNearestStops(
+                                            latitude = userLocation.latitude,
+                                            longitude = userLocation.longitude,
+                                            limit = 5
                                         )
-                                        lastLocationUsedForDeparture = userLocation
+                                        nearbyDepartureStops = nearestStops
+
+                                        if (nearestStops.isNotEmpty()) {
+                                            val closestStop = nearestStops.first()
+                                            val allStopsWithName = raptorRepository.searchStopsByName(closestStop.name)
+                                            departureStop = SelectedStop(
+                                                name = closestStop.name,
+                                                stopIds = allStopsWithName.map { it.id }
+                                            )
+                                            lastLocationUsedForDeparture = userLocation
+                                        }
                                     }
                                 }
-                            }
-                        } else null,
-                        keyboardController = keyboardController
-                    )
+                            } else null,
+                            keyboardController = keyboardController
+                        )
 
-                    // Swap button
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        IconButton(
-                            onClick = {
-                                val temp = departureStop
-                                departureStop = arrivalStop
-                                arrivalStop = temp
-                            }
+                        // Swap button
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.SwapVert,
-                                contentDescription = "Inverser",
-                                tint = Color.White
-                            )
-                        }
-                    }
-
-                    // Arrival stop field
-                    StopSelectionField(
-                        selectedStop = arrivalStop,
-                        query = arrivalQuery,
-                        onQueryChange = {
-                            arrivalQuery = it
-                            isSearchingArrival = it.isNotEmpty()
-                        },
-                        isSearching = isSearchingArrival,
-                        searchResults = arrivalSearchResults,
-                        onStopSelected = { result ->
-                            scope.launch {
-                                val raptorStops = raptorRepository.searchStopsByName(result.stopName)
-                                arrivalStop = SelectedStop(
-                                    name = result.stopName,
-                                    stopIds = raptorStops.map { it.id }
+                            IconButton(
+                                onClick = {
+                                    val temp = departureStop
+                                    departureStop = arrivalStop
+                                    arrivalStop = temp
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.SwapVert,
+                                    contentDescription = "Inverser",
+                                    tint = Color.White
                                 )
+                            }
+                        }
+
+                        // Arrival stop field
+                        StopSelectionField(
+                            selectedStop = arrivalStop,
+                            query = arrivalQuery,
+                            onQueryChange = {
+                                arrivalQuery = it
+                                isSearchingArrival = it.isNotEmpty()
+                            },
+                            isSearching = isSearchingArrival,
+                            searchResults = arrivalSearchResults,
+                            onStopSelected = { result ->
+                                scope.launch {
+                                    val raptorStops = raptorRepository.searchStopsByName(result.stopName)
+                                    arrivalStop = SelectedStop(
+                                        name = result.stopName,
+                                        stopIds = raptorStops.map { it.id }
+                                    )
+                                    arrivalQuery = ""
+                                    isSearchingArrival = false
+                                    arrivalSearchResults = emptyList()
+                                }
+                            },
+                            onClear = {
+                                arrivalStop = null
                                 arrivalQuery = ""
                                 isSearchingArrival = false
-                                arrivalSearchResults = emptyList()
-                            }
-                        },
-                        onClear = {
-                            arrivalStop = null
-                            arrivalQuery = ""
-                            isSearchingArrival = false
-                        },
-                        icon = Icons.Default.Search,
-                        keyboardController = keyboardController
-                    )
+                            },
+                            icon = Icons.Default.Search,
+                            keyboardController = keyboardController
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                item(key = "spacer_top") {
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
 
                 // Results section
                 when {
                     isLoading -> {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 32.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                CircularProgressIndicator(color = Color.White)
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text("Calcul de l'itinéraire...", color = Color.White.copy(alpha = 0.7f))
+                        item(key = "loading") {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 32.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    CircularProgressIndicator(color = Color.White)
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text("Calcul de l'itinéraire...", color = Color.White.copy(alpha = 0.7f))
+                                }
                             }
                         }
                     }
                     errorMessage != null -> {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 32.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = errorMessage!!,
-                                color = Color.White.copy(alpha = 0.7f),
-                                style = MaterialTheme.typography.bodyLarge
-                            )
+                        item(key = "error") {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 32.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = errorMessage!!,
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                            }
                         }
                     }
                     journeys.isNotEmpty() -> {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp)
-                        ) {
-                            // Show fallback info message if an alternative stop was used
-                            if (fallbackInfoMessage != null) {
+                        // Show fallback info message if an alternative stop was used
+                        if (fallbackInfoMessage != null) {
+                            item(key = "fallback_message") {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
+                                        .padding(horizontal = 16.dp)
                                         .padding(bottom = 16.dp)
                                         .background(
                                             color = Color(0xFF2A5298).copy(alpha = 0.6f),
@@ -608,24 +615,35 @@ fun ItineraryScreen(
                                     }
                                 }
                             }
+                        }
 
-                            journeys.forEachIndexed { index, journey ->
-                                key(journey.departureTime) {
-                                    JourneyCard(
-                                        journey = journey,
-                                        onClick = {
-                                            selectedJourney = journey
-                                            isBottomSheetExpanded = false
-                                        }
-                                    )
-                                    if (index < journeys.size - 1) {
-                                        HorizontalDivider(
-                                            color = Color.White.copy(alpha = 0.2f),
-                                            modifier = Modifier.padding(vertical = 32.dp)
-                                        )
+                        // Journey cards with stable keys for efficient recomposition
+                        itemsIndexed(
+                            items = journeys,
+                            key = { _, journey -> "${journey.departureTime}_${journey.arrivalTime}" }
+                        ) { index, journey ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp)
+                            ) {
+                                JourneyCard(
+                                    journey = journey,
+                                    onClick = {
+                                        selectedJourney = journey
+                                        isBottomSheetExpanded = false
                                     }
+                                )
+                                if (index < journeys.size - 1) {
+                                    HorizontalDivider(
+                                        color = Color.White.copy(alpha = 0.2f),
+                                        modifier = Modifier.padding(vertical = 32.dp)
+                                    )
                                 }
                             }
+                        }
+
+                        item(key = "spacer_bottom") {
                             Spacer(modifier = Modifier.height(16.dp))
                         }
                     }
@@ -633,22 +651,26 @@ fun ItineraryScreen(
                         // Both stops selected but no results yet
                     }
                     else -> {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 32.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Sélectionnez un arrêt de départ et d'arrivée",
-                                color = Color.White.copy(alpha = 0.7f),
-                                style = MaterialTheme.typography.bodyLarge
-                            )
+                        item(key = "empty_state") {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 32.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "Sélectionnez un arrêt de départ et d'arrivée",
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                            }
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(80.dp))
+                item(key = "navigation_spacer") {
+                    Spacer(modifier = Modifier.height(80.dp))
+                }
             }
         } // End of else block for selectedJourney == null
     }
@@ -815,6 +837,17 @@ private fun JourneyCard(
     // Debug: measure the recompositions of this card
     ListItemRecompositionCounter("JourneyList", journey.departureTime)
 
+    // Memoize formatted duration to avoid recalculation on recomposition
+    val formattedDuration by remember(journey.durationMinutes) {
+        derivedStateOf {
+            if (journey.durationMinutes < 60) {
+                "${journey.durationMinutes} min"
+            } else {
+                "${journey.durationMinutes / 60}h${(journey.durationMinutes % 60).toString().padStart(2, '0')}min"
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -856,7 +889,7 @@ private fun JourneyCard(
                     )
             ) {
                 Text(
-                    text = if (journey.durationMinutes < 60) "${journey.durationMinutes} min" else "${journey.durationMinutes / 60}h${(journey.durationMinutes % 60).toString().padStart(2, '0')}min",
+                    text = formattedDuration,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                     color = Color.White,
                     fontWeight = FontWeight.Bold
@@ -1057,6 +1090,17 @@ private fun SelectedJourneySummary(
 ) {
     val context = LocalContext.current
 
+    // Memoize formatted duration to avoid recalculation on recomposition
+    val formattedDuration by remember(journey.durationMinutes) {
+        derivedStateOf {
+            if (journey.durationMinutes < 60) {
+                "${journey.durationMinutes} min"
+            } else {
+                "${journey.durationMinutes / 60}h${(journey.durationMinutes % 60).toString().padStart(2, '0')}min"
+            }
+        }
+    }
+
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -1105,7 +1149,7 @@ private fun SelectedJourneySummary(
                         )
                 ) {
                     Text(
-                        text = if (journey.durationMinutes < 60) "${journey.durationMinutes} min" else "${journey.durationMinutes / 60}h${(journey.durationMinutes % 60).toString().padStart(2, '0')}min",
+                        text = formattedDuration,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         color = Color.White,
                         fontWeight = FontWeight.Bold,

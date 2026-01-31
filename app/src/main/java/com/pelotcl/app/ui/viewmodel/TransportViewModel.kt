@@ -18,6 +18,7 @@ import com.pelotcl.app.data.repository.FavoritesRepository
 import com.pelotcl.app.utils.ConnectionsHelper
 import com.pelotcl.app.utils.HolidayDetector
 import java.time.LocalDate
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.Dispatchers
@@ -26,6 +27,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.math.pow
 import kotlin.math.sqrt
@@ -100,26 +103,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         preloadAllData()
         // Load favorites
         _favoriteLines.value = favoritesRepository.getFavorites().map { it.uppercase() }.toSet()
-        // Preload traffic alerts
+        // Preload traffic alerts (initial load only, periodic refresh is lifecycle-aware in PlanScreen)
         refreshTrafficAlerts()
-        // Set up periodic refresh for traffic alerts (every 5 minutes)
-        startPeriodicAlertsRefresh()
-    }
-
-    /**
-     * Starts periodic refresh of traffic alerts (every 5 minutes)
-     */
-    private fun startPeriodicAlertsRefresh() {
-        viewModelScope.launch {
-            while (true) {
-                delay(5 * 60 * 1000) // 5 minutes
-                try {
-                    refreshTrafficAlerts()
-                } catch (e: Exception) {
-                    Log.e("TransportViewModel", "Error refreshing traffic alerts periodically", e)
-                }
-            }
-        }
     }
 
     /**
@@ -245,7 +230,10 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
     // Stops cache to avoid reloading them each time
     private var cachedStops: List<StopFeature>? = null
-    private var stopsLoadingJob: kotlinx.coroutines.Job? = null
+    private var stopsLoadingJob: Job? = null
+
+    // Lines loading job to prevent duplicate concurrent loads
+    private var linesLoadingJob: Job? = null
 
     // Pre-calculated transfers index by stop name
     // Key = normalized stop name, Value = list of transfer lines
@@ -263,9 +251,13 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     // Hash of stops list to detect changes and invalidate cache
     private var cachedStopsHash: Int = 0
 
-    // === OPTIMIZATION: Pre-loaded icon bitmaps cache ===
-    // Cached bitmaps for transport line icons (loaded once, reused)
-    private var cachedIconBitmaps: Map<String, android.graphics.Bitmap>? = null
+    // === OPTIMIZATION: Pre-loaded icon bitmaps cache with memory management ===
+    // LruCache with 10MB max size for bitmap icons, responds to memory pressure
+    private val iconBitmapCache = object : LruCache<String, android.graphics.Bitmap>(10 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: android.graphics.Bitmap): Int {
+            return value.allocationByteCount
+        }
+    }
 
     /**
      * Returns cached stops GeoJSON data if available and valid.
@@ -290,15 +282,40 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
-     * Returns cached icon bitmaps if available.
+     * Returns cached icon bitmaps as a snapshot map.
+     * The underlying cache uses LruCache for automatic memory management.
      */
-    fun getCachedIconBitmaps(): Map<String, android.graphics.Bitmap>? = cachedIconBitmaps
+    fun getCachedIconBitmaps(): Map<String, android.graphics.Bitmap>? {
+        val snapshot = iconBitmapCache.snapshot()
+        return if (snapshot.isEmpty()) null else snapshot
+    }
 
     /**
-     * Caches icon bitmaps for reuse.
+     * Caches icon bitmaps for reuse using memory-aware LruCache.
      */
     fun cacheIconBitmaps(bitmaps: Map<String, android.graphics.Bitmap>) {
-        cachedIconBitmaps = bitmaps
+        bitmaps.forEach { (key, bitmap) ->
+            iconBitmapCache.put(key, bitmap)
+        }
+    }
+
+    /**
+     * Reduces bitmap cache size based on memory pressure level.
+     * Call from Application.onTrimMemory() to respond to system memory pressure.
+     * @param level The trim level from ComponentCallbacks2 (TRIM_MEMORY_*)
+     */
+    fun trimBitmapCache(level: Int) {
+        when {
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> {
+                iconBitmapCache.evictAll()
+            }
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_MODERATE -> {
+                iconBitmapCache.trimToSize(iconBitmapCache.maxSize() / 2)
+            }
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> {
+                iconBitmapCache.trimToSize(iconBitmapCache.maxSize() * 3 / 4)
+            }
+        }
     }
 
     /**
@@ -308,14 +325,13 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     @Suppress("unused") // Public API for cache invalidation when GTFS data is updated
     fun clearAllCaches() {
         lineStopsCache.evictAll()
+        iconBitmapCache.evictAll()
         connectionsIndex = emptyMap()
         cachedStops = null
         // Clear GeoJSON cache
         cachedStopsGeoJson = null
         cachedRequiredIcons = null
         cachedStopsHash = 0
-        // Clear icon bitmaps cache
-        cachedIconBitmaps = null
     }
 
     /**
@@ -559,10 +575,15 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
-     * Loads all transport lines
+     * Loads all transport lines with request coalescing.
+     * Prevents duplicate concurrent API calls when called multiple times.
      */
     fun loadAllLines() {
-        viewModelScope.launch {
+        // Skip if already loaded successfully or currently loading
+        if (_uiState.value is TransportLinesUiState.Success) return
+        if (linesLoadingJob?.isActive == true) return
+
+        linesLoadingJob = viewModelScope.launch {
             _uiState.value = TransportLinesUiState.Loading
             repository.getAllLines()
                 .onSuccess { featureCollection ->

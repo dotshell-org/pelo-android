@@ -42,7 +42,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.CreationExtras
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -68,6 +71,7 @@ import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LineColorHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -164,6 +168,21 @@ fun PlanScreen(
     var mapInstance by remember { mutableStateOf<MapLibreMap?>(null) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Lifecycle-aware periodic refresh for traffic alerts (every 5 minutes while app is visible)
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                delay(5 * 60 * 1000L) // 5 minutes
+                try {
+                    viewModel.refreshTrafficAlerts()
+                } catch (e: Exception) {
+                    android.util.Log.e("PlanScreen", "Error refreshing traffic alerts", e)
+                }
+            }
+        }
+    }
 
     // Location state
     var userLocation by remember { mutableStateOf(initialUserLocation) }
@@ -206,10 +225,10 @@ fun PlanScreen(
         // - from STATION (clicked on a line from station details)
         // - or from null but with a station selected (clicked on a stop with only one line)
         // Don't auto-expand when coming from lines menu (currentStationName is empty)
-        if (sheetContentState == SheetContentState.LINE_DETAILS && 
+        if (sheetContentState == SheetContentState.LINE_DETAILS &&
             previousSheetContentState != SheetContentState.LINE_DETAILS &&
-            (previousSheetContentState == SheetContentState.STATION || 
-             selectedLine?.currentStationName?.isNotBlank() == true)) {
+            (previousSheetContentState == SheetContentState.STATION ||
+                    selectedLine?.currentStationName?.isNotBlank() == true)) {
             scope.launch {
                 scaffoldSheetState.bottomSheetState.expand()
             }
@@ -668,7 +687,7 @@ fun PlanScreen(
                                             viewModel.removeLineFromLoaded(lineName)
                                         }
                                     }
-                                    
+
                                     scope.launch {
                                         scaffoldSheetState.bottomSheetState.hide()
                                     }
@@ -787,7 +806,7 @@ fun PlanScreen(
                     modifier = Modifier.align(Alignment.Center)
                 )
             }
-            
+
             // Recenter button
             AnimatedVisibility(
                 visible = userLocation != null && !isCenteredOnUser,
@@ -847,7 +866,7 @@ fun PlanScreen(
             }
         }
 
-            androidx.compose.material3.ModalBottomSheet(
+        androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = onLinesSheetDismiss,
             containerColor = Color.White,
             sheetState = modalBottomSheetState
@@ -1671,9 +1690,9 @@ private suspend fun addStopsToMap(
                         val feature = stopFeatures.first()
                         val props = feature.properties()
                         if (props != null) {
-                                try {
-                                    val stopName = if (props.has("nom")) props.get("nom").asString else ""
-                                    val lignesJson = if (props.has("lignes")) props.get("lignes").asString else "[]"
+                            try {
+                                val stopName = if (props.has("nom")) props.get("nom").asString else ""
+                                val lignesJson = if (props.has("lignes")) props.get("lignes").asString else "[]"
 
                                 val lignes = try {
                                     val jsonArray = com.google.gson.JsonParser.parseString(lignesJson).asJsonArray
