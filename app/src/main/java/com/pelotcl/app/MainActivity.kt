@@ -281,7 +281,7 @@ fun NavBar(modifier: Modifier = Modifier) {
             // Barre de statut avec icônes blanches pour fond noir
             activity?.enableEdgeToEdge(
                 statusBarStyle = SystemBarStyle.dark(
-                    android.graphics.Color.TRANSPARENT
+                    android.graphics.Color.BLACK
                 ),
                 navigationBarStyle = SystemBarStyle.dark(
                     android.graphics.Color.TRANSPARENT
