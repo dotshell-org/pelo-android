@@ -29,24 +29,24 @@ HSPLcom/pelotcl/app/data/gtfs/SchedulesRepository;->warmupDatabase()V
 HSPLcom/pelotcl/app/data/api/RetrofitInstance;->initialize(Landroid/content/Context;)V
 
 # MapLibre
-HSPLcom/pelotcl/app/ui/components/MapLibreViewKt;->MapLibreView*(**)V
+Lcom/pelotcl/app/ui/components/MapLibreViewKt;
 
 # Compose runtime (critical)
-HSPLandroidx/compose/runtime/**
-HSPLandroidx/compose/ui/**
-HSPLandroidx/compose/foundation/**
-HSPLandroidx/compose/material3/**
+Landroidx/compose/runtime/**;
+Landroidx/compose/ui/**;
+Landroidx/compose/foundation/**;
+Landroidx/compose/material3/**;
 
 # Navigation
-HSPLandroidx/navigation/compose/**
+Landroidx/navigation/compose/**;
 
 # Kotlin coroutines
-HSPLkotlinx/coroutines/**
+Lkotlinx/coroutines/**;
 
 # OkHttp/Retrofit
-HSPLokhttp3/**
-HSPLretrofit2/**
+Lokhttp3/**;
+Lretrofit2/**;
 
 # JSON parsing
-HSPLcom/google/gson/**
-HSPLkotlinx/serialization/**
+Lcom/google/gson/**;
+Lkotlinx/serialization/**;
