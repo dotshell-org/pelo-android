@@ -29,7 +29,7 @@ HSPLcom/pelotcl/app/data/gtfs/SchedulesRepository;->warmupDatabase()V
 HSPLcom/pelotcl/app/data/api/RetrofitInstance;->initialize(Landroid/content/Context;)V
 
 # MapLibre
-HSPLcom/pelotcl/app/ui/components/MapLibreViewKt;->MapLibreView**
+HSPLcom/pelotcl/app/ui/components/MapLibreViewKt;->MapLibreView*(**)V
 
 # Compose runtime (critical)
 HSPLandroidx/compose/runtime/**
