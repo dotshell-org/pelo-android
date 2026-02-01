@@ -1,0 +1,52 @@
+# Baseline Profile for Pelo TCL App
+# This profile includes critical startup paths for AOT compilation
+
+# MainActivity and main entry points
+HSPLcom/pelotcl/app/MainActivity;->onCreate(Landroid/os/Bundle;)V
+HSPLcom/pelotcl/app/MainActivityKt;->NavBar(Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
+
+# ViewModel initialization
+HSPLcom/pelotcl/app/ui/viewmodel/TransportViewModel;-><init>(Landroid/app/Application;)V
+HSPLcom/pelotcl/app/ui/viewmodel/TransportViewModel;->preloadAllData()V
+
+# Repository classes
+HSPLcom/pelotcl/app/data/repository/TransportRepository;-><init>(Landroid/content/Context;)V
+HSPLcom/pelotcl/app/data/repository/TransportRepository;->getAllLines()Ljava/lang/Object;
+HSPLcom/pelotcl/app/data/repository/TransportRepository;->getAllStops()Ljava/lang/Object;
+
+# Cache classes
+HSPLcom/pelotcl/app/data/cache/TransportCache;->getInstance(Landroid/content/Context;)Lcom/pelotcl/app/data/cache/TransportCache;
+HSPLcom/pelotcl/app/data/cache/TransportCache;->preloadFromDisk()V
+HSPLcom/pelotcl/app/data/cache/TransportCache;->getMetroLines()Ljava/util/List;
+HSPLcom/pelotcl/app/data/cache/TransportCache;->getTramLines()Ljava/util/List;
+HSPLcom/pelotcl/app/data/cache/TransportCache;->getStops()Ljava/util/List;
+
+# GTFS/Schedules
+HSPLcom/pelotcl/app/data/gtfs/SchedulesRepository;-><init>(Landroid/content/Context;)V
+HSPLcom/pelotcl/app/data/gtfs/SchedulesRepository;->warmupDatabase()V
+
+# Retrofit/API
+HSPLcom/pelotcl/app/data/api/RetrofitInstance;->initialize(Landroid/content/Context;)V
+
+# MapLibre
+HSPLcom/pelotcl/app/ui/components/MapLibreViewKt;->MapLibreView**
+
+# Compose runtime (critical)
+HSPLandroidx/compose/runtime/**
+HSPLandroidx/compose/ui/**
+HSPLandroidx/compose/foundation/**
+HSPLandroidx/compose/material3/**
+
+# Navigation
+HSPLandroidx/navigation/compose/**
+
+# Kotlin coroutines
+HSPLkotlinx/coroutines/**
+
+# OkHttp/Retrofit
+HSPLokhttp3/**
+HSPLretrofit2/**
+
+# JSON parsing
+HSPLcom/google/gson/**
+HSPLkotlinx/serialization/**

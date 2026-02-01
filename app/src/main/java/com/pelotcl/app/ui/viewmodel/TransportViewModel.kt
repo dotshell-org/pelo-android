@@ -108,10 +108,18 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     init {
         // Start non-blocking preload on creation to have lines, stops, and connection index ready
         preloadAllData()
-        // Load favorites
-        _favoriteLines.value = favoritesRepository.getFavorites().map { it.uppercase() }.toSet()
-        // Preload traffic alerts (initial load only, periodic refresh is lifecycle-aware in PlanScreen)
-        refreshTrafficAlerts()
+
+        // Load favorites asynchronously (SharedPreferences read can be slow on some devices)
+        viewModelScope.launch(Dispatchers.IO) {
+            val favorites = favoritesRepository.getFavorites().map { it.uppercase() }.toSet()
+            _favoriteLines.value = favorites
+        }
+
+        // Defer traffic alerts - not critical for initial display
+        viewModelScope.launch {
+            delay(1000) // Wait for UI to stabilize
+            refreshTrafficAlerts()
+        }
     }
 
     /**

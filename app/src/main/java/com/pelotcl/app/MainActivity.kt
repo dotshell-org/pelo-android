@@ -75,6 +75,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import org.maplibre.android.MapLibre
 import org.maplibre.android.geometry.LatLng
 
 class MainActivity : ComponentActivity() {
@@ -86,14 +87,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Initialize HTTP cache early for network optimization
-        RetrofitInstance.initialize(applicationContext)
-
-        // Preload disk cache, SQLite, and Raptor in parallel for faster startup
-        // This runs before UI is shown, so data is ready when needed
+        // Preload disk cache and SQLite in parallel BEFORE UI (critical for first render)
+        // Retrofit initialization is deferred to after setContent
         appScope.launch {
             try {
-                // Parallel cache, SQLite, and Raptor warmup
+                // Parallel cache and SQLite warmup - these are needed for initial UI
                 val cacheJob = launch {
                     val cache = TransportCache.getInstance(applicationContext)
                     cache.preloadFromDisk()
@@ -102,16 +100,7 @@ class MainActivity : ComponentActivity() {
                     val schedulesRepo = com.pelotcl.app.data.gtfs.SchedulesRepository(applicationContext)
                     schedulesRepo.warmupDatabase()
                 }
-                // Preload Raptor library in background (deferred slightly to prioritize UI)
-                // Uses singleton pattern - same instance will be used everywhere
-                launch {
-                    delay(300) // Small delay to let UI start rendering
-                    val raptorRepo = com.pelotcl.app.data.repository.RaptorRepository.getInstance(applicationContext)
-                    raptorRepo.initialize()
-                    // Preload journey cache from disk for faster initial queries
-                    raptorRepo.preloadJourneyCache()
-                }
-                // Wait for cache and SQLite (critical for UI), Raptor can complete later
+                // Wait for cache and SQLite (critical for UI)
                 cacheJob.join()
                 sqliteJob.join()
             } catch (e: Exception) {
@@ -128,9 +117,27 @@ class MainActivity : ComponentActivity() {
                 android.graphics.Color.TRANSPARENT
             )
         )
+
         setContent {
             PeloTheme {
                 NavBar(modifier = Modifier.fillMaxSize())
+            }
+        }
+
+        // Deferred initialization - run AFTER setContent to not block first frame
+        // These are not needed for initial UI display
+        appScope.launch {
+            // Initialize HTTP cache for network requests (not needed for cached data display)
+            RetrofitInstance.initialize(applicationContext)
+
+            // Preload Raptor library in background (only needed for itinerary calculations)
+            delay(500) // Let UI stabilize first
+            try {
+                val raptorRepo = com.pelotcl.app.data.repository.RaptorRepository.getInstance(applicationContext)
+                raptorRepo.initialize()
+                raptorRepo.preloadJourneyCache()
+            } catch (e: Exception) {
+                android.util.Log.w("MainActivity", "Raptor preload failed: ${e.message}")
             }
         }
     }
@@ -179,16 +186,18 @@ fun NavBar(modifier: Modifier = Modifier) {
     var showLinesSheet by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
-    val application = context.applicationContext as android.app.Application
+    val application = remember(context) { context.applicationContext as android.app.Application }
 
-    val viewModel: TransportViewModel = viewModel(
-        factory = object : ViewModelProvider.Factory {
+    // Memoize the factory to avoid recreation on recomposition
+    val viewModelFactory = remember(application) {
+        object : ViewModelProvider.Factory {
             override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
                 @Suppress("UNCHECKED_CAST")
                 return TransportViewModel(application) as T
             }
         }
-    )
+    }
+    val viewModel: TransportViewModel = viewModel(factory = viewModelFactory)
 
     var searchQuery by remember { mutableStateOf("") }
     var stationSearchResults by remember { mutableStateOf<List<StationSearchResult>>(emptyList()) }
@@ -216,6 +225,9 @@ fun NavBar(modifier: Modifier = Modifier) {
     }
 
     LaunchedEffect(Unit) {
+        // Defer location permission check to not block first frame
+        delay(500)
+
         val hasPermission = ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.ACCESS_FINE_LOCATION
