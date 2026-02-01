@@ -85,6 +85,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -201,6 +202,9 @@ fun ItineraryScreen(
     // Store nearby stops for fallback when no itinerary is found
     var nearbyDepartureStops by remember { mutableStateOf<List<RaptorStop>>(emptyList()) }
 
+    // Track if this is the initial screen opening (to allow fallback only on first load)
+    var isInitialLoad by remember { mutableStateOf(true) }
+
     // Initialize raptor (only if not already initialized) and resolve arrival stop IDs
     LaunchedEffect(Unit) {
         // Initialize Raptor if not ready
@@ -306,7 +310,8 @@ fun ItineraryScreen(
                     }
 
                     // If still no results and we have nearby stops for fallback, try them
-                    if (results.isEmpty() && nearbyDepartureStops.isNotEmpty() && !hasManuallySelectedDeparture) {
+                    // But only during initial load, not when user makes changes
+                    if (results.isEmpty() && nearbyDepartureStops.isNotEmpty() && !hasManuallySelectedDeparture && isInitialLoad) {
                         // Skip the first stop (already tried) and try the others
                         val fallbackStops = nearbyDepartureStops.drop(1)
 
@@ -342,6 +347,9 @@ fun ItineraryScreen(
                             }
                         }
                     }
+
+                    // Mark that initial load is complete
+                    isInitialLoad = false
 
                     journeys = results
                     if (results.isEmpty()) {
@@ -504,8 +512,9 @@ fun ItineraryScreen(
                                 departureStop = null
                                 departureQuery = ""
                                 isSearchingDeparture = false
-                                // Reset manual selection flag to allow auto-detection
-                                hasManuallySelectedDeparture = false
+                                // Don't reset manual selection flag - user manually cleared
+                                // This prevents automatic fallback when field is empty
+                                hasManuallySelectedDeparture = true
                                 lastLocationUsedForDeparture = null
                             },
                             icon = Icons.Default.MyLocation,
@@ -515,6 +524,7 @@ fun ItineraryScreen(
                                         // Force recalculation from current GPS location
                                         hasManuallySelectedDeparture = false
                                         fallbackInfoMessage = null
+                                        isInitialLoad = true // Allow fallback on refresh
 
                                         // Get multiple nearby stops for fallback capability
                                         val nearestStops = raptorRepository.findNearestStops(
@@ -625,7 +635,10 @@ fun ItineraryScreen(
                                 Text(
                                     text = errorMessage!!,
                                     color = Color.White.copy(alpha = 0.7f),
-                                    style = MaterialTheme.typography.bodyLarge
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier
+                                        .padding(horizontal = 10.dp)
                                 )
                             }
                         }
