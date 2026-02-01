@@ -393,4 +393,121 @@ class TransportCache(private val context: Context) {
             )
         }
     }
+
+    // ===== STALE CACHE METHODS FOR CACHE-FIRST STRATEGY =====
+    // These methods return cached data even if expired, for immediate display
+    // The caller should then refresh from network in the background
+
+    /**
+     * Returns metro lines from cache even if expired (stale).
+     * Use this for immediate display, then refresh from network.
+     */
+    suspend fun getMetroLinesStale(): List<Feature>? = mutex.withLock {
+        // Return memory cache if available (regardless of expiration)
+        if (metroLinesCache != null) {
+            return@withLock metroLinesCache
+        }
+
+        // Try to load from disk (regardless of expiration)
+        val lines = readFromCompressedFile<List<Feature>>(FILE_METRO_LINES)
+        if (lines != null) {
+            metroLinesCache = lines
+            metroLinesTimestamp = prefs.getLong(KEY_METRO_LINES_TIMESTAMP, 0)
+            return@withLock lines
+        }
+
+        null
+    }
+
+    /**
+     * Returns tram lines from cache even if expired (stale).
+     */
+    suspend fun getTramLinesStale(): List<Feature>? = mutex.withLock {
+        if (tramLinesCache != null) {
+            return@withLock tramLinesCache
+        }
+
+        val lines = readFromCompressedFile<List<Feature>>(FILE_TRAM_LINES)
+        if (lines != null) {
+            tramLinesCache = lines
+            tramLinesTimestamp = prefs.getLong(KEY_TRAM_LINES_TIMESTAMP, 0)
+            return@withLock lines
+        }
+
+        null
+    }
+
+    /**
+     * Returns Navigone lines from cache even if expired (stale).
+     */
+    suspend fun getNavigoneLinesStale(): List<Feature>? = mutex.withLock {
+        if (navigoneLinesCache != null) {
+            return@withLock navigoneLinesCache
+        }
+
+        val lines = readFromCompressedFile<List<Feature>>(FILE_NAVIGONE_LINES)
+        if (lines != null) {
+            navigoneLinesCache = lines
+            navigoneLinesTimestamp = prefs.getLong(KEY_NAVIGONE_LINES_TIMESTAMP, 0)
+            return@withLock lines
+        }
+
+        null
+    }
+
+    /**
+     * Returns Trambus lines from cache even if expired (stale).
+     */
+    suspend fun getTrambusLinesStale(): List<Feature>? = mutex.withLock {
+        if (trambusLinesCache != null) {
+            return@withLock trambusLinesCache
+        }
+
+        val lines = readFromCompressedFile<List<Feature>>(FILE_TRAMBUS_LINES)
+        if (lines != null) {
+            trambusLinesCache = lines
+            trambusLinesTimestamp = prefs.getLong(KEY_TRAMBUS_LINES_TIMESTAMP, 0)
+            return@withLock lines
+        }
+
+        null
+    }
+
+    /**
+     * Returns stops from cache even if expired (stale).
+     */
+    suspend fun getStopsStale(): List<StopFeature>? = mutex.withLock {
+        if (stopsCache != null) {
+            return@withLock stopsCache
+        }
+
+        val stops = readFromCompressedFile<List<StopFeature>>(FILE_STOPS)
+        if (stops != null) {
+            stopsCache = stops
+            stopsTimestamp = prefs.getLong(KEY_STOPS_TIMESTAMP, 0)
+            return@withLock stops
+        }
+
+        null
+    }
+
+    /**
+     * Check if the cache needs refresh (expired but has data).
+     * Returns true if cache exists but is stale.
+     */
+    fun needsRefresh(): Boolean {
+        val metroExpired = metroLinesCache != null && !isTimestampValid(metroLinesTimestamp)
+        val tramExpired = tramLinesCache != null && !isTimestampValid(tramLinesTimestamp)
+        val navigoneExpired = navigoneLinesCache != null && !isTimestampValid(navigoneLinesTimestamp)
+        val trambusExpired = trambusLinesCache != null && !isTimestampValid(trambusLinesTimestamp)
+
+        return metroExpired || tramExpired || navigoneExpired || trambusExpired
+    }
+
+    /**
+     * Check if we have any cached data available (stale or fresh).
+     */
+    fun hasAnyCachedData(): Boolean {
+        return metroLinesCache != null || tramLinesCache != null
+    }
 }

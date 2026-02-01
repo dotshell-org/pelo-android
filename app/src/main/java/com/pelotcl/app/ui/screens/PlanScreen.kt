@@ -325,94 +325,112 @@ fun PlanScreen(
 
 // deleted
 
+    // Track the number of lines currently displayed to avoid unnecessary map updates
+    var lastDisplayedLinesCount by remember { mutableStateOf(0) }
+
     LaunchedEffect(uiState, mapInstance) {
         val map = mapInstance ?: return@LaunchedEffect
 
-        when (val state = uiState) {
-            is TransportLinesUiState.Success -> {
-                // Prepare GeoJSON in background
-                val allLinesGeoJson = withContext(Dispatchers.Default) {
-                    val featuresMeta = JsonObject().apply {
-                        addProperty("type", "FeatureCollection")
-                        val featuresArray = JsonArray()
-                        state.lines.forEach { lineFeature ->
-                            val featObj = JsonObject()
-                            featObj.addProperty("type", "Feature")
+        // Extract lines from both Success and PartialSuccess states
+        val lines: List<com.pelotcl.app.data.model.Feature> = when (val state = uiState) {
+            is TransportLinesUiState.Success -> state.lines
+            is TransportLinesUiState.PartialSuccess -> state.lines
+            else -> return@LaunchedEffect
+        }
 
-                            val geomObj = JsonObject()
-                            geomObj.addProperty("type", lineFeature.geometry.type)
-                            val coordsArray = JsonArray()
-                            lineFeature.geometry.coordinates.forEach { segment ->
-                                val segmentArray = JsonArray()
-                                segment.forEach { point ->
-                                    val pointArray = JsonArray()
-                                    point.forEach { c -> pointArray.add(c) }
-                                    segmentArray.add(pointArray)
-                                }
-                                coordsArray.add(segmentArray)
-                            }
-                            geomObj.add("coordinates", coordsArray)
-                            featObj.add("geometry", geomObj)
+        // Skip if no new lines to display
+        if (lines.isEmpty()) return@LaunchedEffect
 
-                            val propsObj = JsonObject()
-                            propsObj.addProperty("ligne", lineFeature.properties.ligne)
-                            propsObj.addProperty("nom_trace", lineFeature.properties.nomTrace)
-                            propsObj.addProperty("couleur", LineColorHelper.getColorForLine(lineFeature))
-                            // Determine line width property based on type
-                            val upperName = lineFeature.properties.ligne.uppercase()
-                            val width = when {
-                                lineFeature.properties.familleTransport == "BAT" || upperName.startsWith("NAV") -> 2f
-                                lineFeature.properties.familleTransport == "TRA" || lineFeature.properties.familleTransport == "TRAM" || upperName.startsWith("TB") -> 2f
-                                else -> 4f
-                            }
-                            propsObj.addProperty("line_width", width)
-                            featObj.add("properties", propsObj)
+        // Only update map if we have new lines (optimization to avoid redundant updates)
+        if (lines.size == lastDisplayedLinesCount) return@LaunchedEffect
+        lastDisplayedLinesCount = lines.size
 
-                            featuresArray.add(featObj)
+        // Prepare GeoJSON in background
+        val allLinesGeoJson = withContext(Dispatchers.Default) {
+            val featuresMeta = JsonObject().apply {
+                addProperty("type", "FeatureCollection")
+                val featuresArray = JsonArray()
+                lines.forEach { lineFeature ->
+                    val featObj = JsonObject()
+                    featObj.addProperty("type", "Feature")
+
+                    val geomObj = JsonObject()
+                    geomObj.addProperty("type", lineFeature.geometry.type)
+                    val coordsArray = JsonArray()
+                    lineFeature.geometry.coordinates.forEach { segment ->
+                        val segmentArray = JsonArray()
+                        segment.forEach { point ->
+                            val pointArray = JsonArray()
+                            point.forEach { c -> pointArray.add(c) }
+                            segmentArray.add(pointArray)
                         }
-                        add("features", featuresArray)
+                        coordsArray.add(segmentArray)
                     }
-                    featuresMeta.toString()
+                    geomObj.add("coordinates", coordsArray)
+                    featObj.add("geometry", geomObj)
+
+                    val propsObj = JsonObject()
+                    propsObj.addProperty("ligne", lineFeature.properties.ligne)
+                    propsObj.addProperty("nom_trace", lineFeature.properties.nomTrace)
+                    propsObj.addProperty("couleur", LineColorHelper.getColorForLine(lineFeature))
+                    // Determine line width property based on type
+                    val upperName = lineFeature.properties.ligne.uppercase()
+                    val width = when {
+                        lineFeature.properties.familleTransport == "BAT" || upperName.startsWith("NAV") -> 2f
+                        lineFeature.properties.familleTransport == "TRA" || lineFeature.properties.familleTransport == "TRAM" || upperName.startsWith("TB") -> 2f
+                        else -> 4f
+                    }
+                    propsObj.addProperty("line_width", width)
+                    featObj.add("properties", propsObj)
+
+                    featuresArray.add(featObj)
+                }
+                add("features", featuresArray)
+            }
+            featuresMeta.toString()
+        }
+
+        // Update Map on Main Thread
+        map.getStyle { style ->
+            val sourceId = "all-lines-source"
+            val layerId = "all-lines-layer"
+
+            // Clean up individual layers if they exist (migration)
+            lines.forEach { feature ->
+                val oldLayerId = "layer-${feature.properties.ligne}-${feature.properties.codeTrace}"
+                val oldSourceId = "line-${feature.properties.ligne}-${feature.properties.codeTrace}"
+                style.getLayer(oldLayerId)?.let { style.removeLayer(it) }
+                style.getSource(oldSourceId)?.let { style.removeSource(it) }
+            }
+
+            // Check if source already exists (for incremental updates)
+            val existingSource = style.getSource(sourceId) as? GeoJsonSource
+            if (existingSource != null) {
+                // Update existing source with new GeoJSON (incremental update)
+                existingSource.setGeoJson(allLinesGeoJson)
+            } else {
+                // First time: create source and layer
+                style.getLayer(layerId)?.let { style.removeLayer(it) }
+                style.addSource(GeoJsonSource(sourceId, allLinesGeoJson))
+
+                val lineLayer = LineLayer(layerId, sourceId).apply {
+                    setProperties(
+                        PropertyFactory.lineColor(Expression.get("couleur")),
+                        PropertyFactory.lineWidth(Expression.get("line_width")),
+                        PropertyFactory.lineOpacity(0.8f),
+                        PropertyFactory.lineCap("round"),
+                        PropertyFactory.lineJoin("round")
+                    )
                 }
 
-                // Update Map on Main Thread
-                map.getStyle { style ->
-                    val sourceId = "all-lines-source"
-                    val layerId = "all-lines-layer"
-
-                    // Clean up individual layers if they exist (migration)
-                    state.lines.forEach { feature ->
-                        val oldLayerId = "layer-${feature.properties.ligne}-${feature.properties.codeTrace}"
-                        val oldSourceId = "line-${feature.properties.ligne}-${feature.properties.codeTrace}"
-                        style.getLayer(oldLayerId)?.let { style.removeLayer(it) }
-                        style.getSource(oldSourceId)?.let { style.removeSource(it) }
-                    }
-
-                    style.getLayer(layerId)?.let { style.removeLayer(it) }
-                    style.getSource(sourceId)?.let { style.removeSource(it) }
-
-                    style.addSource(GeoJsonSource(sourceId, allLinesGeoJson))
-
-                    val lineLayer = LineLayer(layerId, sourceId).apply {
-                        setProperties(
-                            PropertyFactory.lineColor(Expression.get("couleur")),
-                            PropertyFactory.lineWidth(Expression.get("line_width")),
-                            PropertyFactory.lineOpacity(0.8f),
-                            PropertyFactory.lineCap("round"),
-                            PropertyFactory.lineJoin("round")
-                        )
-                    }
-
-                    // Ensure lines are below stops
-                    val firstStopLayer = style.layers.find { it.id.startsWith("transport-stops-layer") }
-                    if (firstStopLayer != null) {
-                        style.addLayerBelow(lineLayer, firstStopLayer.id)
-                    } else {
-                        style.addLayer(lineLayer)
-                    }
+                // Ensure lines are below stops
+                val firstStopLayer = style.layers.find { it.id.startsWith("transport-stops-layer") }
+                if (firstStopLayer != null) {
+                    style.addLayerBelow(lineLayer, firstStopLayer.id)
+                } else {
+                    style.addLayer(lineLayer)
                 }
             }
-            else -> {}
         }
     }
 
@@ -580,46 +598,48 @@ fun PlanScreen(
             .distinctUntilChanged() // Skip redundant emissions
             .collectLatest { filterState ->
                 // This block is automatically cancelled if a new state arrives
-                when (val state = filterState.uiState) {
-                    is TransportLinesUiState.Success -> {
-                        val currentSelectedLine = filterState.selectedLine
-                        val currentSheetState = filterState.sheetContentState
+                // Extract lines from both Success and PartialSuccess states
+                val lines: List<com.pelotcl.app.data.model.Feature> = when (val state = filterState.uiState) {
+                    is TransportLinesUiState.Success -> state.lines
+                    is TransportLinesUiState.PartialSuccess -> state.lines
+                    else -> return@collectLatest
+                }
 
-                        if ((currentSheetState == SheetContentState.LINE_DETAILS || currentSheetState == SheetContentState.ALL_SCHEDULES) && currentSelectedLine != null) {
-                            val selectedName = currentSelectedLine.lineName
-                            val hasSelectedInState = state.lines.any { it.properties.ligne.equals(selectedName, ignoreCase = true) }
+                val currentSelectedLine = filterState.selectedLine
+                val currentSheetState = filterState.sheetContentState
 
-                            if (!hasSelectedInState && isMetroTramOrFunicular(selectedName)) {
-                                viewModel.reloadStrongLines()
-                            }
+                if ((currentSheetState == SheetContentState.LINE_DETAILS || currentSheetState == SheetContentState.ALL_SCHEDULES) && currentSelectedLine != null) {
+                    val selectedName = currentSelectedLine.lineName
+                    val hasSelectedInState = lines.any { it.properties.ligne.equals(selectedName, ignoreCase = true) }
 
-                            filterMapLines(map, state.lines, currentSelectedLine.lineName)
-
-                            val selectedStopName = currentSelectedLine.currentStationName.takeIf { it.isNotBlank() }
-                            when (val stopsState = filterState.stopsUiState) {
-                                is TransportStopsUiState.Success -> {
-                                    filterMapStopsWithSelectedStop(
-                                        map,
-                                        currentSelectedLine.lineName,
-                                        selectedStopName,
-                                        stopsState.stops,
-                                        state.lines,
-                                        viewModel
-                                    )
-
-                                    if (selectedStopName != null) {
-                                        zoomToStop(map, selectedStopName, stopsState.stops)
-                                    } else {
-                                        zoomToLine(map, state.lines, currentSelectedLine.lineName)
-                                    }
-                                }
-                                else -> {}
-                            }
-                        } else {
-                            showAllMapLines(map, state.lines)
-                        }
+                    if (!hasSelectedInState && isMetroTramOrFunicular(selectedName)) {
+                        viewModel.reloadStrongLines()
                     }
-                    else -> {}
+
+                    filterMapLines(map, lines, currentSelectedLine.lineName)
+
+                    val selectedStopName = currentSelectedLine.currentStationName.takeIf { it.isNotBlank() }
+                    when (val stopsState = filterState.stopsUiState) {
+                        is TransportStopsUiState.Success -> {
+                            filterMapStopsWithSelectedStop(
+                                map,
+                                currentSelectedLine.lineName,
+                                selectedStopName,
+                                stopsState.stops,
+                                lines,
+                                viewModel
+                            )
+
+                            if (selectedStopName != null) {
+                                zoomToStop(map, selectedStopName, stopsState.stops)
+                            } else {
+                                zoomToLine(map, lines, currentSelectedLine.lineName)
+                            }
+                        }
+                        else -> {}
+                    }
+                } else {
+                    showAllMapLines(map, lines)
                 }
             }
     }
@@ -845,9 +865,16 @@ fun PlanScreen(
             )
 
             if (uiState is TransportLinesUiState.Loading || stopsUiState is TransportStopsUiState.Loading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center)
-                )
+                // Show skeleton loading instead of spinner for better UX
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(32.dp)
+                ) {
+                    CircularProgressIndicator(
+                        color = Color(0xFF3B82F6)
+                    )
+                }
             }
 
             // Recenter button
@@ -941,11 +968,12 @@ fun PlanScreen(
                     } else {
                         scope.launch {
                             val currentState = uiState
-                            val isLoaded = if (currentState is TransportLinesUiState.Success) {
-                                currentState.lines.any { it.properties.ligne.equals(lineName, ignoreCase = true) }
-                            } else {
-                                false
+                            val currentLines = when (currentState) {
+                                is TransportLinesUiState.Success -> currentState.lines
+                                is TransportLinesUiState.PartialSuccess -> currentState.lines
+                                else -> emptyList()
                             }
+                            val isLoaded = currentLines.any { it.properties.ligne.equals(lineName, ignoreCase = true) }
 
                             if (!isLoaded) {
                                 viewModel.addLineToLoaded(lineName)

@@ -39,6 +39,7 @@ import kotlin.math.sqrt
  */
 sealed class TransportLinesUiState {
     data object Loading : TransportLinesUiState()
+    data class PartialSuccess(val lines: List<Feature>, val source: String) : TransportLinesUiState()
     data class Success(val lines: List<Feature>) : TransportLinesUiState()
     data class Error(val message: String) : TransportLinesUiState()
 }
@@ -108,10 +109,18 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     init {
         // Start non-blocking preload on creation to have lines, stops, and connection index ready
         preloadAllData()
-        // Load favorites
-        _favoriteLines.value = favoritesRepository.getFavorites().map { it.uppercase() }.toSet()
-        // Preload traffic alerts (initial load only, periodic refresh is lifecycle-aware in PlanScreen)
-        refreshTrafficAlerts()
+
+        // Load favorites asynchronously (SharedPreferences read can be slow on some devices)
+        viewModelScope.launch(Dispatchers.IO) {
+            val favorites = favoritesRepository.getFavorites().map { it.uppercase() }.toSet()
+            _favoriteLines.value = favorites
+        }
+
+        // Defer traffic alerts - not critical for initial display
+        viewModelScope.launch {
+            delay(1000) // Wait for UI to stabilize
+            refreshTrafficAlerts()
+        }
     }
 
     /**
@@ -392,7 +401,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     /**
      * Preloads lines and stops at launch, builds transfers index,
      * and populates StateFlows if possible. Does not block UI.
-     * Uses 2-phase loading strategy:
+     * Uses 3-phase loading strategy for optimal UX:
+     * - Phase 0 (instant): Show stale cache immediately if available
      * - Phase 1 (immediate): Critical UI data (lines, stops, SQLite warmup)
      * - Phase 2 (deferred): Heavy processing (connections index, Raptor preload)
      */
@@ -404,11 +414,24 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             try {
                 val startTime = System.currentTimeMillis()
 
+                // ===== PHASE 0: Show stale cache instantly =====
+                // This allows the UI to display immediately with cached data
+                // while fresh data loads in the background
+                val currentLinesState = _uiState.value
+                if (currentLinesState !is TransportLinesUiState.Success && currentLinesState !is TransportLinesUiState.PartialSuccess) {
+                    val staleResult = repository.getAllLinesStale()
+                    staleResult?.onSuccess { featureCollection ->
+                        if (featureCollection.features.isNotEmpty()) {
+                            _uiState.value = TransportLinesUiState.Success(featureCollection.features)
+                            Log.d("TransportViewModel", "Phase 0: Displayed ${featureCollection.features.size} lines from stale cache in ${System.currentTimeMillis() - startTime}ms")
+                        }
+                    }
+                }
+
                 // ===== PHASE 1: Critical UI data (parallel) =====
                 val linesDeferred = async(Dispatchers.IO) {
-                    if (_uiState.value !is TransportLinesUiState.Success) {
-                        repository.getAllLines()
-                    } else null
+                    // Always try to refresh from network for fresh data
+                    repository.getAllLines()
                 }
 
                 val stopsDeferred = async(Dispatchers.IO) {
@@ -425,13 +448,20 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 // Wait for critical data to complete
                 val (linesResult, stopsResult) = awaitAll(linesDeferred, stopsDeferred)
 
-                // Process lines result
+                // Process lines result - update with fresh data
                 @Suppress("UNCHECKED_CAST")
                 (linesResult as? Result<com.pelotcl.app.data.model.FeatureCollection>)?.let { result ->
                     result.onSuccess { featureCollection ->
+                        // Update with fresh data (may be same as stale cache if not expired)
                         _uiState.value = TransportLinesUiState.Success(featureCollection.features)
+                        Log.d("TransportViewModel", "Phase 1: Refreshed with ${featureCollection.features.size} lines in ${System.currentTimeMillis() - startTime}ms")
                     }.onFailure { e ->
                         Log.w("TransportViewModel", "Preload: failed loading lines: ${e.message}")
+                        // Keep stale cache if refresh failed and we had cached data
+                        val linesAfterFailure = _uiState.value
+                        if (linesAfterFailure !is TransportLinesUiState.Success && linesAfterFailure !is TransportLinesUiState.PartialSuccess) {
+                            _uiState.value = TransportLinesUiState.Error(e.message ?: "Failed to load lines")
+                        }
                     }
                 }
 
@@ -680,7 +710,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     fun isStopsByLineIndexReady(): Boolean = stopsByLineIndex.isNotEmpty()
 
     /**
-     * Loads all transport lines with request coalescing.
+     * Loads all transport lines progressively with request coalescing.
+     * Emits partial states as lines become available for better UX.
      * Prevents duplicate concurrent API calls when called multiple times.
      */
     fun loadAllLines() {
@@ -690,15 +721,31 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
         linesLoadingJob = viewModelScope.launch {
             _uiState.value = TransportLinesUiState.Loading
-            repository.getAllLines()
-                .onSuccess { featureCollection ->
-                    _uiState.value = TransportLinesUiState.Success(featureCollection.features)
+
+            try {
+                repository.getAllLinesFlow().collect { progress ->
+                    if (progress.isComplete) {
+                        _uiState.value = TransportLinesUiState.Success(progress.lines)
+                        Log.d("TransportViewModel", "Lines loading complete: ${progress.lines.size} lines")
+                    } else {
+                        _uiState.value = TransportLinesUiState.PartialSuccess(progress.lines, progress.source)
+                        Log.d("TransportViewModel", "Lines partial load (${progress.source}): ${progress.lines.size} lines")
+                    }
                 }
-                .onFailure { exception ->
+            } catch (e: Exception) {
+                Log.e("TransportViewModel", "Error loading lines: ${e.message}")
+                // If we have partial data, keep it and log the error
+                val currentState = _uiState.value
+                if (currentState is TransportLinesUiState.PartialSuccess && currentState.lines.isNotEmpty()) {
+                    // Convert partial to success with what we have
+                    _uiState.value = TransportLinesUiState.Success(currentState.lines)
+                    Log.w("TransportViewModel", "Keeping partial data due to error: ${currentState.lines.size} lines")
+                } else {
                     _uiState.value = TransportLinesUiState.Error(
-                        exception.message ?: "An error occurred"
+                        e.message ?: "An error occurred"
                     )
                 }
+            }
         }
     }
 
@@ -738,14 +785,18 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         lineLoadJob = viewModelScope.launch {
             val currentState = _uiState.value
 
-            // Do nothing if not in Success state
-            if (currentState !is TransportLinesUiState.Success) {
-                Log.w("TransportViewModel", "Current state is not Success, cannot add line")
-                return@launch
+            // Get current lines from Success or PartialSuccess state
+            val currentLines = when (currentState) {
+                is TransportLinesUiState.Success -> currentState.lines
+                is TransportLinesUiState.PartialSuccess -> currentState.lines
+                else -> {
+                    Log.w("TransportViewModel", "Current state is not Success/PartialSuccess, cannot add line")
+                    return@launch
+                }
             }
 
             // Check if line is already loaded
-            val isAlreadyLoaded = currentState.lines.any {
+            val isAlreadyLoaded = currentLines.any {
                 lineName.equals(it.properties.ligne, ignoreCase = true)
             }
 
@@ -758,7 +809,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 .onSuccess { feature ->
                     if (feature != null) {
                         // Add the new line to existing lines
-                        val updatedLines = currentState.lines + feature
+                        val updatedLines = currentLines + feature
                         _uiState.value = TransportLinesUiState.Success(updatedLines)
                     } else {
                         Log.w("TransportViewModel", "getLineByName returned null for $lineName")
@@ -777,14 +828,18 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     fun removeLineFromLoaded(lineName: String) {
         val currentState = _uiState.value
 
-        // Do nothing if not in Success state
-        if (currentState !is TransportLinesUiState.Success) {
-            Log.w("TransportViewModel", "Current state is not Success, cannot remove line")
-            return
+        // Get current lines from Success or PartialSuccess state
+        val currentLines = when (currentState) {
+            is TransportLinesUiState.Success -> currentState.lines
+            is TransportLinesUiState.PartialSuccess -> currentState.lines
+            else -> {
+                Log.w("TransportViewModel", "Current state is not Success/PartialSuccess, cannot remove line")
+                return
+            }
         }
 
         // Filter to remove the line
-        val updatedLines = currentState.lines.filter {
+        val updatedLines = currentLines.filter {
             !lineName.equals(it.properties.ligne, ignoreCase = true)
         }
 
@@ -903,9 +958,15 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
         // Get all line traces to order stops
         val currentState = _uiState.value
-        if (currentState is TransportLinesUiState.Success) {
+        val currentLines = when (currentState) {
+            is TransportLinesUiState.Success -> currentState.lines
+            is TransportLinesUiState.PartialSuccess -> currentState.lines
+            else -> null
+        }
+
+        if (currentLines != null) {
             // Get ALL traces of this line (may have multiple directions)
-            val lineFeatures = currentState.lines.filter {
+            val lineFeatures = currentLines.filter {
                 lineName.equals(it.properties.ligne, ignoreCase = true)
             }
 
@@ -1028,6 +1089,11 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         // First, try to extract from loaded lines
         val linesFromFeatures = when (val currentState = _uiState.value) {
             is TransportLinesUiState.Success -> {
+                currentState.lines
+                    .map { it.properties.ligne.split(':').first().trim() }
+                    .distinct()
+            }
+            is TransportLinesUiState.PartialSuccess -> {
                 currentState.lines
                     .map { it.properties.ligne.split(':').first().trim() }
                     .distinct()

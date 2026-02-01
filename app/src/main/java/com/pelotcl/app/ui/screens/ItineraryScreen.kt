@@ -664,7 +664,8 @@ fun ItineraryScreen(
                         // Journey cards with stable keys for efficient recomposition
                         itemsIndexed(
                             items = journeys,
-                            key = { _, journey -> "${journey.departureTime}_${journey.arrivalTime}" }
+                            key = { _, journey -> "${journey.departureTime}_${journey.arrivalTime}" },
+                            contentType = { _, _ -> "journey_card" }
                         ) { index, journey ->
                             Column(
                                 modifier = Modifier
