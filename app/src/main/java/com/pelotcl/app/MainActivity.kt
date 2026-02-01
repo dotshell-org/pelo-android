@@ -278,10 +278,10 @@ fun NavBar(modifier: Modifier = Modifier) {
         )
 
         if (currentRoute in darkBackgroundRoutes) {
-            // Barre de statut avec icônes blanches pour fond noir
+            // Barre de statut avec icônes blanches pour fond noir (fond transparent)
             activity?.enableEdgeToEdge(
                 statusBarStyle = SystemBarStyle.dark(
-                    android.graphics.Color.BLACK
+                    android.graphics.Color.TRANSPARENT
                 ),
                 navigationBarStyle = SystemBarStyle.dark(
                     android.graphics.Color.TRANSPARENT
