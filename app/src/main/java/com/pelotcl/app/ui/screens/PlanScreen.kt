@@ -71,9 +71,13 @@ import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LineColorHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.runtime.snapshotFlow
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
@@ -134,6 +138,17 @@ enum class SheetContentState {
     LINE_DETAILS,
     ALL_SCHEDULES
 }
+
+/**
+ * Data class to hold map filter state for snapshotFlow.
+ * Used to batch state changes and avoid excessive recompositions.
+ */
+private data class MapFilterState(
+    val sheetContentState: SheetContentState?,
+    val selectedLine: LineInfo?,
+    val uiState: TransportLinesUiState,
+    val stopsUiState: TransportStopsUiState
+)
 
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
@@ -545,46 +560,66 @@ fun PlanScreen(
         }
     }
 
-    LaunchedEffect(sheetContentState, selectedLine, uiState, mapInstance, stopsUiState) {
+    // Use snapshotFlow with debounce to avoid overwhelming the map when user changes stations rapidly.
+    // collectLatest automatically cancels previous collection when new values arrive.
+    @OptIn(FlowPreview::class)
+    LaunchedEffect(mapInstance) {
         val map = mapInstance ?: return@LaunchedEffect
 
-        when (val state = uiState) {
-            is TransportLinesUiState.Success -> {
-                if ((sheetContentState == SheetContentState.LINE_DETAILS || sheetContentState == SheetContentState.ALL_SCHEDULES) && selectedLine != null) {
-                    val selectedName = selectedLine!!.lineName
-                    val hasSelectedInState = state.lines.any { it.properties.ligne.equals(selectedName, ignoreCase = true) }
+        snapshotFlow {
+            // Capture all relevant state as a tuple
+            MapFilterState(
+                sheetContentState = sheetContentState,
+                selectedLine = selectedLine,
+                uiState = uiState,
+                stopsUiState = stopsUiState
+            )
+        }
+            .debounce(150) // Wait 150ms before processing to batch rapid changes
+            .collectLatest { filterState ->
+                // This block is automatically cancelled if a new state arrives
+                when (val state = filterState.uiState) {
+                    is TransportLinesUiState.Success -> {
+                        val currentSelectedLine = filterState.selectedLine
+                        val currentSheetState = filterState.sheetContentState
 
-                    if (!hasSelectedInState && isMetroTramOrFunicular(selectedName)) {
-                        viewModel.reloadStrongLines()
-                    }
+                        if ((currentSheetState == SheetContentState.LINE_DETAILS || currentSheetState == SheetContentState.ALL_SCHEDULES) && currentSelectedLine != null) {
+                            val selectedName = currentSelectedLine.lineName
+                            val hasSelectedInState = state.lines.any { it.properties.ligne.equals(selectedName, ignoreCase = true) }
 
-                    filterMapLines(map, state.lines, selectedLine!!.lineName)
-
-                    val selectedStopName = selectedLine!!.currentStationName.takeIf { it.isNotBlank() }
-                    when (val stopsState = stopsUiState) {
-                        is TransportStopsUiState.Success -> {
-                            filterMapStopsWithSelectedStop(
-                                map,
-                                selectedLine!!.lineName,
-                                selectedStopName,
-                                stopsState.stops,
-                                state.lines
-                            )
-
-                            if (selectedStopName != null) {
-                                zoomToStop(map, selectedStopName, stopsState.stops)
-                            } else {
-                                zoomToLine(map, state.lines, selectedLine!!.lineName)
+                            if (!hasSelectedInState && isMetroTramOrFunicular(selectedName)) {
+                                viewModel.reloadStrongLines()
                             }
+
+                            filterMapLines(map, state.lines, currentSelectedLine.lineName)
+
+                            val selectedStopName = currentSelectedLine.currentStationName.takeIf { it.isNotBlank() }
+                            when (val stopsState = filterState.stopsUiState) {
+                                is TransportStopsUiState.Success -> {
+                                    filterMapStopsWithSelectedStop(
+                                        map,
+                                        currentSelectedLine.lineName,
+                                        selectedStopName,
+                                        stopsState.stops,
+                                        state.lines,
+                                        viewModel
+                                    )
+
+                                    if (selectedStopName != null) {
+                                        zoomToStop(map, selectedStopName, stopsState.stops)
+                                    } else {
+                                        zoomToLine(map, state.lines, currentSelectedLine.lineName)
+                                    }
+                                }
+                                else -> {}
+                            }
+                        } else {
+                            showAllMapLines(map, state.lines)
                         }
-                        else -> {}
                     }
-                } else {
-                    showAllMapLines(map, state.lines)
+                    else -> {}
                 }
             }
-            else -> {}
-        }
     }
 
     // Observe selection from viewModel (e.g. when Lines screen clicks a line)
@@ -1121,7 +1156,8 @@ private fun filterMapStopsWithSelectedStop(
     selectedLineName: String,
     selectedStopName: String?,
     allStops: List<com.pelotcl.app.data.model.StopFeature>,
-    allLines: List<com.pelotcl.app.data.model.Feature>
+    allLines: List<com.pelotcl.app.data.model.Feature>,
+    viewModel: TransportViewModel? = null
 ) {
     map.getStyle { style ->
         if (selectedStopName.isNullOrBlank()) {
@@ -1185,7 +1221,8 @@ private fun filterMapStopsWithSelectedStop(
             selectedLineName,
             selectedStopName,
             allStops,
-            allLines
+            allLines,
+            viewModel
         )
     }
 }
@@ -1195,7 +1232,8 @@ private fun addCircleLayerForLineStops(
     selectedLineName: String,
     selectedStopName: String,
     allStops: List<com.pelotcl.app.data.model.StopFeature>,
-    allLines: List<com.pelotcl.app.data.model.Feature>
+    allLines: List<com.pelotcl.app.data.model.Feature>,
+    viewModel: TransportViewModel? = null
 ) {
     fun normalizeStopName(name: String): String {
         return name.filter { it.isLetter() }.lowercase()
@@ -1208,11 +1246,20 @@ private fun addCircleLayerForLineStops(
         ?.let { LineColorHelper.getColorForLine(it) }
         ?: "#EF4444"
 
-    val lineStops = allStops.filter { stop ->
-        val lines = BusIconHelper.getAllLinesForStop(stop)
-        val hasLine = lines.any { it.equals(selectedLineName, ignoreCase = true) }
-        val isNotSelected = normalizeStopName(stop.properties.nom) != normalizedSelectedStop
-        hasLine && isNotSelected
+    // OPTIMIZATION: Use pre-computed index from ViewModel if available (O(1) lookup)
+    // Falls back to filtering all stops if index is not ready
+    val lineStops = if (viewModel != null && viewModel.isStopsByLineIndexReady()) {
+        // O(1) lookup from index, then filter only the selected stop
+        viewModel.getStopsFeaturesForLine(selectedLineName)
+            .filter { stop -> normalizeStopName(stop.properties.nom) != normalizedSelectedStop }
+    } else {
+        // Fallback: filter all stops (slower, but works if index not ready)
+        allStops.filter { stop ->
+            val lines = BusIconHelper.getAllLinesForStop(stop)
+            val hasLine = lines.any { it.equals(selectedLineName, ignoreCase = true) }
+            val isNotSelected = normalizeStopName(stop.properties.nom) != normalizedSelectedStop
+            hasLine && isNotSelected
+        }
     }
 
     val circlesGeoJson = JsonObject().apply {

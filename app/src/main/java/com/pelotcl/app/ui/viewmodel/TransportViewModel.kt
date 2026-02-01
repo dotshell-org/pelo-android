@@ -15,6 +15,7 @@ import com.pelotcl.app.data.repository.TrafficAlertsRepository
 import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.utils.Connection
 import com.pelotcl.app.data.repository.FavoritesRepository
+import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.ConnectionsHelper
 import com.pelotcl.app.utils.HolidayDetector
 import java.time.LocalDate
@@ -239,6 +240,11 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     // Key = normalized stop name, Value = list of transfer lines
     private var connectionsIndex: Map<String, List<Connection>> = emptyMap()
 
+    // Pre-calculated index of stops by line name for O(1) lookups
+    // Key = line name (uppercase), Value = list of StopFeatures serving that line
+    private var stopsByLineIndex: Map<String, List<StopFeature>> = emptyMap()
+    private val stopsByLineIndexMutex = Mutex()
+
     // LruCache for line stops to avoid expensive geometric calculations
     // Key = "lineName|currentStopName", Value = list of LineStopInfo
     private val lineStopsCache = LruCache<String, List<com.pelotcl.app.data.gtfs.LineStopInfo>>(30)
@@ -327,11 +333,14 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         lineStopsCache.evictAll()
         iconBitmapCache.evictAll()
         connectionsIndex = emptyMap()
+        stopsByLineIndex = emptyMap()
         cachedStops = null
         // Clear GeoJSON cache
         cachedStopsGeoJson = null
         cachedRequiredIcons = null
         cachedStopsHash = 0
+        // Clear BusIconHelper cache
+        BusIconHelper.clearCache()
     }
 
     /**
@@ -572,7 +581,57 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
         connectionsIndex = index
+
+        // Also build the stops-by-line index for fast filtering in map operations
+        buildStopsByLineIndex(allStops)
     }
+
+    /**
+     * Builds an index mapping line names to their stops for O(1) lookups.
+     * Called after stops are loaded and when connections index is built.
+     */
+    private suspend fun buildStopsByLineIndex(allStops: List<StopFeature>) = withContext(Dispatchers.Default) {
+        val index = mutableMapOf<String, MutableList<StopFeature>>()
+
+        for (stop in allStops) {
+            val lines = BusIconHelper.getAllLinesForStop(stop)
+            for (line in lines) {
+                val key = line.uppercase()
+                index.getOrPut(key) { mutableListOf() }.add(stop)
+            }
+        }
+
+        stopsByLineIndexMutex.withLock {
+            stopsByLineIndex = index
+        }
+    }
+
+    /**
+     * Gets all stops serving a specific line in O(1) time.
+     * Uses pre-computed index for fast access during map filtering.
+     *
+     * @param lineName The line name (case-insensitive)
+     * @return List of StopFeatures serving that line, or empty list if not found
+     */
+    fun getStopsFeaturesForLine(lineName: String): List<StopFeature> {
+        // Handle NAV1/NAVI1 normalization
+        val searchKeys = if (lineName.equals("NAV1", ignoreCase = true)) {
+            listOf("NAV1", "NAVI1")
+        } else {
+            listOf(lineName.uppercase())
+        }
+
+        // Return first match from index
+        for (key in searchKeys) {
+            stopsByLineIndex[key]?.let { return it }
+        }
+        return emptyList()
+    }
+
+    /**
+     * Checks if the stops-by-line index is ready for use.
+     */
+    fun isStopsByLineIndexReady(): Boolean = stopsByLineIndex.isNotEmpty()
 
     /**
      * Loads all transport lines with request coalescing.
