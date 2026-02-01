@@ -489,15 +489,24 @@ private fun NextSchedulesSection(
     // Key for tracking line changes - used to trigger cleanup
     val lineKey = lineInfo.lineName to lineInfo.currentStationName
 
-    // Single LaunchedEffect that handles all loading in sequence when line changes
-    // This replaces multiple separate LaunchedEffects to prevent race conditions
+    // Load headsigns when line changes, and compute directions when stop changes
     LaunchedEffect(lineKey) {
-        // Load headsigns first
-        viewModel.loadHeadsign(lineInfo.lineName)
+        // Load headsigns if not already loaded for this line
+        if (headsigns.isEmpty()) {
+            viewModel.loadHeadsign(lineInfo.lineName)
+        }
+        // Always compute available directions when stop changes
+        if (lineInfo.currentStationName.isNotBlank()) {
+            // Wait briefly for headsigns if they were just requested
+            if (headsigns.isEmpty()) {
+                kotlinx.coroutines.delay(100)
+            }
+            viewModel.computeAvailableDirections(lineInfo.lineName, lineInfo.currentStationName)
+        }
     }
 
-    // Compute directions when headsigns are loaded
-    LaunchedEffect(lineKey, headsigns) {
+    // Recompute directions when headsigns become available (for initial load)
+    LaunchedEffect(headsigns) {
         if (lineInfo.currentStationName.isNotBlank() && headsigns.isNotEmpty()) {
             viewModel.computeAvailableDirections(lineInfo.lineName, lineInfo.currentStationName)
         }

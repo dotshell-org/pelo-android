@@ -264,6 +264,19 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
+     * Clears schedule-related states (schedules, directions) but keeps headsigns.
+     * Call this when switching stops on the same line to ensure fresh schedule data
+     * while preserving direction labels.
+     */
+    fun clearScheduleState() {
+        directionsJob?.cancel()
+        schedulesJob?.cancel()
+        _allSchedules.value = emptyList()
+        _nextSchedules.value = emptyList()
+        _availableDirections.value = emptyList()
+    }
+
+    /**
      * Reloads all strong lines (metro/tram/funicular/navigone + RX)
      * and updates UI state. Used as fallback if a strong line is missing.
      */

@@ -775,6 +775,9 @@ fun PlanScreen(
                                     }
                                 },
                                 onStopClick = { stopName ->
+                                    // Clear schedule state to prevent stale "Aucun horaire" message
+                                    viewModel.clearScheduleState()
+
                                     selectedLine = LineInfo(
                                         lineName = selectedLine!!.lineName,
                                         currentStationName = stopName
