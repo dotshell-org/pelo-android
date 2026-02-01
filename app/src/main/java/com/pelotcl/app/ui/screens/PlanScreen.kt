@@ -845,9 +845,16 @@ fun PlanScreen(
             )
 
             if (uiState is TransportLinesUiState.Loading || stopsUiState is TransportStopsUiState.Loading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center)
-                )
+                // Show skeleton loading instead of spinner for better UX
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(32.dp)
+                ) {
+                    CircularProgressIndicator(
+                        color = Color(0xFF3B82F6)
+                    )
+                }
             }
 
             // Recenter button

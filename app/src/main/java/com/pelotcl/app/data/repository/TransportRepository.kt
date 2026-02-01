@@ -541,4 +541,62 @@ class TransportRepository(context: Context? = null) {
             }
         }
     }
+
+    /**
+     * Returns cached lines immediately (even if stale/expired).
+     * Use this for instant UI display, then call getAllLines() to refresh.
+     * Returns null if no cache exists at all.
+     */
+    suspend fun getAllLinesStale(): Result<FeatureCollection>? {
+        return withContext(kotlinx.coroutines.Dispatchers.Default) {
+            try {
+                // Try to load stale cache data (even if expired)
+                val cachedMetro = cache?.getMetroLinesStale()
+                val cachedTram = cache?.getTramLinesStale()
+
+                // If no cache at all, return null to indicate fresh load needed
+                if (cachedMetro == null || cachedTram == null) {
+                    return@withContext null
+                }
+
+                val cachedNavigone = cache.getNavigoneLinesStale() ?: emptyList()
+                val cachedTrambus = cache.getTrambusLinesStale() ?: emptyList()
+
+                // Build collection from stale cache
+                val allFeatures = cachedMetro + cachedTram + cachedNavigone + cachedTrambus
+
+                // Group by code_trace and keep only the first of each group
+                val uniqueLines = allFeatures
+                    .groupBy { it.properties.codeTrace }
+                    .map { (_, features) -> features.first() }
+
+                val collection = FeatureCollection(
+                    type = "FeatureCollection",
+                    features = uniqueLines,
+                    totalFeatures = uniqueLines.size,
+                    numberMatched = uniqueLines.size,
+                    numberReturned = uniqueLines.size
+                )
+
+                Result.success(collection)
+            } catch (e: Exception) {
+                android.util.Log.w("TransportRepository", "getAllLinesStale failed: ${e.message}")
+                null
+            }
+        }
+    }
+
+    /**
+     * Check if cache needs refresh (has data but expired).
+     */
+    fun needsCacheRefresh(): Boolean {
+        return cache?.needsRefresh() ?: false
+    }
+
+    /**
+     * Check if any cached data is available.
+     */
+    fun hasAnyCachedData(): Boolean {
+        return cache?.hasAnyCachedData() ?: false
+    }
 }

@@ -392,7 +392,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     /**
      * Preloads lines and stops at launch, builds transfers index,
      * and populates StateFlows if possible. Does not block UI.
-     * Uses 2-phase loading strategy:
+     * Uses 3-phase loading strategy for optimal UX:
+     * - Phase 0 (instant): Show stale cache immediately if available
      * - Phase 1 (immediate): Critical UI data (lines, stops, SQLite warmup)
      * - Phase 2 (deferred): Heavy processing (connections index, Raptor preload)
      */
@@ -404,11 +405,23 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             try {
                 val startTime = System.currentTimeMillis()
 
+                // ===== PHASE 0: Show stale cache instantly =====
+                // This allows the UI to display immediately with cached data
+                // while fresh data loads in the background
+                if (_uiState.value !is TransportLinesUiState.Success) {
+                    val staleResult = repository.getAllLinesStale()
+                    staleResult?.onSuccess { featureCollection ->
+                        if (featureCollection.features.isNotEmpty()) {
+                            _uiState.value = TransportLinesUiState.Success(featureCollection.features)
+                            Log.d("TransportViewModel", "Phase 0: Displayed ${featureCollection.features.size} lines from stale cache in ${System.currentTimeMillis() - startTime}ms")
+                        }
+                    }
+                }
+
                 // ===== PHASE 1: Critical UI data (parallel) =====
                 val linesDeferred = async(Dispatchers.IO) {
-                    if (_uiState.value !is TransportLinesUiState.Success) {
-                        repository.getAllLines()
-                    } else null
+                    // Always try to refresh from network for fresh data
+                    repository.getAllLines()
                 }
 
                 val stopsDeferred = async(Dispatchers.IO) {
@@ -425,13 +438,19 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 // Wait for critical data to complete
                 val (linesResult, stopsResult) = awaitAll(linesDeferred, stopsDeferred)
 
-                // Process lines result
+                // Process lines result - update with fresh data
                 @Suppress("UNCHECKED_CAST")
                 (linesResult as? Result<com.pelotcl.app.data.model.FeatureCollection>)?.let { result ->
                     result.onSuccess { featureCollection ->
+                        // Update with fresh data (may be same as stale cache if not expired)
                         _uiState.value = TransportLinesUiState.Success(featureCollection.features)
+                        Log.d("TransportViewModel", "Phase 1: Refreshed with ${featureCollection.features.size} lines in ${System.currentTimeMillis() - startTime}ms")
                     }.onFailure { e ->
                         Log.w("TransportViewModel", "Preload: failed loading lines: ${e.message}")
+                        // Keep stale cache if refresh failed and we had cached data
+                        if (_uiState.value !is TransportLinesUiState.Success) {
+                            _uiState.value = TransportLinesUiState.Error(e.message ?: "Failed to load lines")
+                        }
                     }
                 }
 
