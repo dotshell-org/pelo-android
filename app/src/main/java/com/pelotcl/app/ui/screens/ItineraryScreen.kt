@@ -27,6 +27,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
@@ -402,6 +405,9 @@ fun ItineraryScreen(
     ) { contentPadding ->
         // Show map view when a journey is selected
         if (selectedJourney != null) {
+            // Get navigation bar height for proper bottom sheet positioning
+            val navBarHeight = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
             // Calculate map padding based on sheet state
             val mapBottomPadding by remember {
                 derivedStateOf {
@@ -414,7 +420,7 @@ fun ItineraryScreen(
 
             BottomSheetScaffold(
                 scaffoldState = journeyScaffoldState,
-                sheetPeekHeight = 180.dp,
+                sheetPeekHeight = 140.dp + navBarHeight,
                 sheetContainerColor = Color.Black,
                 sheetShape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
                 sheetDragHandle = {
@@ -442,7 +448,6 @@ fun ItineraryScreen(
                         isExpanded = journeyScaffoldState.bottomSheetState.currentValue == SheetValue.Expanded,
                         modifier = Modifier
                             .navigationBarsPadding()
-                            .padding(bottom = 80.dp)
                     )
                 }
             ) { _ ->
