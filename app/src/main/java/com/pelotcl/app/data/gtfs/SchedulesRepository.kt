@@ -31,18 +31,19 @@ class SchedulesRepository(context: Context) {
 
     companion object {
         // LRU Cache for schedules: key = "lineName|stopName|directionId|isHoliday"
-        // Max 100 entries (typical usage pattern is viewing ~10-20 stops per session)
-        private val schedulesCache = LruCache<String, List<String>>(100)
+        // Reduced from 100 to 50 entries to limit memory during rapid navigation
+        private val schedulesCache = LruCache<String, List<String>>(50)
 
         // LRU Cache for headsigns: key = routeName
-        private val headsignsCache = LruCache<String, Map<Int, String>>(50)
+        // Reduced from 50 to 30 entries
+        private val headsignsCache = LruCache<String, Map<Int, String>>(30)
 
         // LRU Cache for search results: key = normalized query (3+ chars)
-        // Increased size for better search responsiveness
-        private val searchCache = LruCache<String, List<StationSearchResult>>(50)
+        private val searchCache = LruCache<String, List<StationSearchResult>>(30)
 
         // LRU Cache for stop sequences: key = "routeName|directionId"
-        private val stopSequencesCache = LruCache<String, List<Pair<String, Int>>>(100)
+        // Reduced from 100 to 40 entries
+        private val stopSequencesCache = LruCache<String, List<Pair<String, Int>>>(40)
 
         // Track if database has been warmed up
         @Volatile

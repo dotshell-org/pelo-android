@@ -234,6 +234,27 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
+     * Clears all line detail states (headsigns, schedules, directions).
+     * Call this when switching to a new line to ensure fresh state and prevent
+     * stale data from accumulating in memory.
+     */
+    fun clearLineDetailStates() {
+        _headsigns.value = emptyMap()
+        _allSchedules.value = emptyList()
+        _nextSchedules.value = emptyList()
+        _availableDirections.value = emptyList()
+    }
+
+    /**
+     * Combined operation: cancel pending operations and clear states.
+     * Use this when rapidly switching between lines.
+     */
+    fun resetLineDetailState() {
+        cancelPendingLineOperations()
+        clearLineDetailStates()
+    }
+
+    /**
      * Reloads all strong lines (metro/tram/funicular/navigone + RX)
      * and updates UI state. Used as fallback if a strong line is missing.
      */
@@ -271,7 +292,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
     // LruCache for line stops to avoid expensive geometric calculations
     // Key = "lineName|currentStopName", Value = list of LineStopInfo
-    private val lineStopsCache = LruCache<String, List<com.pelotcl.app.data.gtfs.LineStopInfo>>(30)
+    // Reduced from 30 to 15 entries to limit memory usage during rapid navigation
+    private val lineStopsCache = LruCache<String, List<com.pelotcl.app.data.gtfs.LineStopInfo>>(15)
 
     // === OPTIMIZATION: Pre-computed GeoJSON cache for stops ===
     // Cached GeoJSON string for all stops (avoids re-computation on each map display)

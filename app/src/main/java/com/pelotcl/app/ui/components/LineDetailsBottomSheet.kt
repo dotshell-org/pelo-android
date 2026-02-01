@@ -46,6 +46,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -146,9 +147,20 @@ fun LineDetailsBottomSheet(
     onItineraryClick: (stopName: String) -> Unit = {}
 ) {
     val context = LocalContext.current
-    var lineStops by remember { mutableStateOf<List<LineStopInfo>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var lineAlerts by remember { mutableStateOf<List<com.pelotcl.app.data.model.TrafficAlert>>(emptyList()) }
+
+    // Key states on lineInfo to reset when switching lines - prevents stale data accumulation
+    val lineKey = lineInfo?.lineName to lineInfo?.currentStationName
+    var lineStops by remember(lineKey) { mutableStateOf<List<LineStopInfo>>(emptyList()) }
+    var isLoading by remember(lineKey) { mutableStateOf(true) }
+    var lineAlerts by remember(lineKey) { mutableStateOf<List<com.pelotcl.app.data.model.TrafficAlert>>(emptyList()) }
+
+    // Cleanup when lineInfo changes or component leaves composition
+    DisposableEffect(lineKey) {
+        onDispose {
+            // Cancel any pending coroutines and clear stale states when switching lines
+            viewModel.resetLineDetailState()
+        }
+    }
 
     val connections = remember(lineInfo?.currentStationName, lineInfo?.lineName) {
         if (lineInfo != null) {
@@ -188,8 +200,8 @@ fun LineDetailsBottomSheet(
             // Toujours tenter de charger les arrêts, même si la ligne n'est pas encore
             // présente dans uiState (cas des lignes bus/Chrono/JD ajoutées à la volée).
             // getStopsForLine utilise maintenant la table stop_sequences GTFS pour l'ordre.
-            withContext(Dispatchers.IO) {
-                try {
+            try {
+                withContext(Dispatchers.IO) {
                     val stops = viewModel.getStopsForLine(
                         lineName = lineInfo.lineName,
                         currentStopName = lineInfo.currentStationName.takeIf { it.isNotBlank() },
@@ -207,11 +219,15 @@ fun LineDetailsBottomSheet(
                     } else {
                         lineStops = stops
                     }
-                } catch (e: Exception) {
-                    Log.e("LineDetailsBottomSheet", "Error loading stops: ${e.message}", e)
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Coroutine was cancelled (e.g., user switched lines) - don't log as error
+                throw e
+            } catch (e: Exception) {
+                Log.e("LineDetailsBottomSheet", "Error loading stops: ${e.message}", e)
+            } finally {
+                isLoading = false
             }
-            isLoading = false
         }
     }
 
@@ -467,13 +483,19 @@ private fun NextSchedulesSection(
     val nextSchedules by viewModel.nextSchedules.collectAsState()
     val availableDirections by viewModel.availableDirections.collectAsState()
 
-    LaunchedEffect(lineInfo.lineName) {
+    // Key for tracking line changes - used to trigger cleanup
+    val lineKey = lineInfo.lineName to lineInfo.currentStationName
+
+    // Single LaunchedEffect that handles all loading in sequence when line changes
+    // This replaces multiple separate LaunchedEffects to prevent race conditions
+    LaunchedEffect(lineKey) {
+        // Load headsigns first
         viewModel.loadHeadsign(lineInfo.lineName)
     }
 
-    // Calcule les directions disponibles à chaque changement de ligne/arrêt ou d'intitulés
-    LaunchedEffect(lineInfo.lineName, lineInfo.currentStationName, headsigns) {
-        if (lineInfo.currentStationName.isNotBlank()) {
+    // Compute directions when headsigns are loaded
+    LaunchedEffect(lineKey, headsigns) {
+        if (lineInfo.currentStationName.isNotBlank() && headsigns.isNotEmpty()) {
             viewModel.computeAvailableDirections(lineInfo.lineName, lineInfo.currentStationName)
         }
     }
@@ -493,12 +515,15 @@ private fun NextSchedulesSection(
         }
     }
 
-    LaunchedEffect(lineInfo.lineName, selectedDirection, lineInfo.currentStationName) {
-        viewModel.loadSchedulesForDirection(
-            lineName = lineInfo.lineName,
-            stopName = lineInfo.currentStationName,
-            directionId = selectedDirection
-        )
+    // Load schedules when direction changes
+    LaunchedEffect(lineKey, selectedDirection) {
+        if (lineInfo.currentStationName.isNotBlank()) {
+            viewModel.loadSchedulesForDirection(
+                lineName = lineInfo.lineName,
+                stopName = lineInfo.currentStationName,
+                directionId = selectedDirection
+            )
+        }
     }
 
     val lineColor = getLineColor(lineInfo.lineName)

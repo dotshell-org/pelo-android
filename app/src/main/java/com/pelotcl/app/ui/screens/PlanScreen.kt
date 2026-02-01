@@ -733,8 +733,8 @@ fun PlanScreen(
                                     sheetContentState = null
                                 },
                                 onLineClick = { lineName ->
-                                    // Cancel pending operations from previous line to prevent OOM
-                                    viewModel.cancelPendingLineOperations()
+                                    // Cancel pending operations and clear states from previous line to prevent OOM
+                                    viewModel.resetLineDetailState()
 
                                     selectedLine = LineInfo(
                                         lineName = lineName,
@@ -784,8 +784,8 @@ fun PlanScreen(
                                     sheetContentState = null
                                 },
                                 onLineClick = { lineName ->
-                                    // Cancel pending operations from previous line to prevent OOM
-                                    viewModel.cancelPendingLineOperations()
+                                    // Cancel pending operations and clear states from previous line to prevent OOM
+                                    viewModel.resetLineDetailState()
 
                                     selectedLine = LineInfo(
                                         lineName = lineName,
@@ -917,8 +917,8 @@ fun PlanScreen(
             LinesBottomSheet(
                 allLines = viewModel.getAllAvailableLines(),
                 onLineClick = { lineName ->
-                    // Cancel pending operations from previous line to prevent OOM
-                    viewModel.cancelPendingLineOperations()
+                    // Cancel pending operations and clear states from previous line to prevent OOM
+                    viewModel.resetLineDetailState()
 
                     onLinesSheetDismiss()
 
