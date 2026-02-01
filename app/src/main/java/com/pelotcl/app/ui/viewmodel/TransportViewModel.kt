@@ -99,6 +99,12 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     private var isPreloading: Boolean = false
     private var hasPreloaded: Boolean = false
 
+    // Cancellable jobs for line detail operations to prevent accumulation during rapid changes
+    private var headsignJob: Job? = null
+    private var directionsJob: Job? = null
+    private var schedulesJob: Job? = null
+    private var lineLoadJob: Job? = null
+
     init {
         // Start non-blocking preload on creation to have lines, stops, and connection index ready
         preloadAllData()
@@ -119,7 +125,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun loadHeadsign(routeName: String) {
-        viewModelScope.launch {
+        // Cancel previous job to prevent accumulation during rapid line changes
+        headsignJob?.cancel()
+        headsignJob = viewModelScope.launch {
             // GTFS uses "NAVI1" for Navigone while the app displays "NAV1"
             val gtfsRouteName = if (routeName.equals("NAV1", ignoreCase = true)) "NAVI1" else routeName
             val headsigns = schedulesRepository.getHeadsigns(gtfsRouteName)
@@ -133,7 +141,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      */
     @RequiresApi(Build.VERSION_CODES.O)
     fun computeAvailableDirections(lineName: String, stopName: String) {
-        viewModelScope.launch {
+        // Cancel previous job to prevent accumulation during rapid line changes
+        directionsJob?.cancel()
+        directionsJob = viewModelScope.launch {
             // Check for school holidays and French public holidays separately
             val today = LocalDate.now()
             val isSchoolHoliday = holidayDetector.isSchoolHoliday(today)
@@ -163,7 +173,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      */
     @RequiresApi(Build.VERSION_CODES.O)
     fun loadSchedulesForDirection(lineName: String, stopName: String, directionId: Int) {
-        viewModelScope.launch {
+        // Cancel previous job to prevent accumulation during rapid line changes
+        schedulesJob?.cancel()
+        schedulesJob = viewModelScope.launch {
             _allSchedules.value = emptyList()
             _nextSchedules.value = emptyList()
 
@@ -207,6 +219,18 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 Log.e("SchedulesDebug", "Error filtering next schedules: ${e.message}")
             }
         }
+    }
+
+    /**
+     * Cancels all pending line detail operations (headsign, directions, schedules, line load).
+     * Call this when the user rapidly changes between lines/connections to prevent
+     * accumulation of concurrent operations that can cause OutOfMemoryError.
+     */
+    fun cancelPendingLineOperations() {
+        headsignJob?.cancel()
+        directionsJob?.cancel()
+        schedulesJob?.cancel()
+        lineLoadJob?.cancel()
     }
 
     /**
@@ -687,7 +711,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      * Does not modify state if the line is already present
      */
     fun addLineToLoaded(lineName: String) {
-        viewModelScope.launch {
+        // Cancel previous line load job to prevent accumulation during rapid changes
+        lineLoadJob?.cancel()
+        lineLoadJob = viewModelScope.launch {
             val currentState = _uiState.value
 
             // Do nothing if not in Success state

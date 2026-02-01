@@ -75,6 +75,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.runtime.snapshotFlow
@@ -575,7 +576,8 @@ fun PlanScreen(
                 stopsUiState = stopsUiState
             )
         }
-            .debounce(150) // Wait 150ms before processing to batch rapid changes
+            .debounce(300) // Wait 300ms before processing to batch rapid changes
+            .distinctUntilChanged() // Skip redundant emissions
             .collectLatest { filterState ->
                 // This block is automatically cancelled if a new state arrives
                 when (val state = filterState.uiState) {
@@ -731,6 +733,9 @@ fun PlanScreen(
                                     sheetContentState = null
                                 },
                                 onLineClick = { lineName ->
+                                    // Cancel pending operations from previous line to prevent OOM
+                                    viewModel.cancelPendingLineOperations()
+
                                     selectedLine = LineInfo(
                                         lineName = lineName,
                                         currentStationName = selectedLine?.currentStationName ?: ""
@@ -779,6 +784,9 @@ fun PlanScreen(
                                     sheetContentState = null
                                 },
                                 onLineClick = { lineName ->
+                                    // Cancel pending operations from previous line to prevent OOM
+                                    viewModel.cancelPendingLineOperations()
+
                                     selectedLine = LineInfo(
                                         lineName = lineName,
                                         currentStationName = selectedStation?.nom ?: ""
@@ -909,6 +917,9 @@ fun PlanScreen(
             LinesBottomSheet(
                 allLines = viewModel.getAllAvailableLines(),
                 onLineClick = { lineName ->
+                    // Cancel pending operations from previous line to prevent OOM
+                    viewModel.cancelPendingLineOperations()
+
                     onLinesSheetDismiss()
 
                     if (!isMetroTramOrFunicular(lineName)) {
