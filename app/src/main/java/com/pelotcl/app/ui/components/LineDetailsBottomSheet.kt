@@ -189,6 +189,9 @@ fun LineDetailsBottomSheet(
             is TransportLinesUiState.Success -> (linesState as TransportLinesUiState.Success).lines
                 .map { it.properties.ligne.uppercase() }
                 .toSet()
+            is TransportLinesUiState.PartialSuccess -> (linesState as TransportLinesUiState.PartialSuccess).lines
+                .map { it.properties.ligne.uppercase() }
+                .toSet()
             else -> emptySet()
         }
     }
