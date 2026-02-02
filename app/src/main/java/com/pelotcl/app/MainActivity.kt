@@ -62,6 +62,7 @@ import com.pelotcl.app.ui.screens.ContactScreen
 import com.pelotcl.app.ui.screens.CreditsScreen
 import com.pelotcl.app.ui.screens.ItineraryScreen
 import com.pelotcl.app.ui.screens.LegalScreen
+import com.pelotcl.app.ui.screens.MapStyleScreen
 import com.pelotcl.app.ui.screens.PlanScreen
 import com.pelotcl.app.ui.screens.SettingsScreen
 import com.pelotcl.app.ui.theme.PeloTheme
@@ -173,6 +174,7 @@ private enum class Destination(
         const val LEGAL = "legal"
         const val CREDITS = "credits"
         const val CONTACT = "contact"
+        const val MAP_STYLE = "map_style"
     }
 }
 
@@ -278,7 +280,7 @@ fun NavBar(modifier: Modifier = Modifier) {
     val currentRoute = navBackStackEntry?.destination?.route
 
     // Gérer la barre de statut selon l'écran actif
-    // Les écrans Settings et ses sous-écrans (About, Legal, Credits, Contact) ont un fond noir
+    // Les écrans Settings et ses sous-écrans (About, Legal, Credits, Contact, MapStyle) ont un fond noir
     DisposableEffect(currentRoute) {
         val activity = context as? ComponentActivity
         val darkBackgroundRoutes = listOf(
@@ -286,7 +288,8 @@ fun NavBar(modifier: Modifier = Modifier) {
             Destination.ABOUT,
             Destination.LEGAL,
             Destination.CREDITS,
-            Destination.CONTACT
+            Destination.CONTACT,
+            Destination.MAP_STYLE
         )
 
         if (currentRoute in darkBackgroundRoutes) {
@@ -483,6 +486,16 @@ private fun AppNavHost(
             SettingsScreen(
                 onAboutClick = {
                     navController.navigate(Destination.ABOUT)
+                },
+                onMapStyleClick = {
+                    navController.navigate(Destination.MAP_STYLE)
+                }
+            )
+        }
+        composable(Destination.MAP_STYLE) {
+            MapStyleScreen(
+                onBackClick = {
+                    navController.popBackStack()
                 }
             )
         }

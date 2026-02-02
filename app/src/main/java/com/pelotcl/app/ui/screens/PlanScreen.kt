@@ -64,6 +64,7 @@ import com.pelotcl.app.ui.components.MapLibreView
 import com.pelotcl.app.ui.components.StationBottomSheet
 import com.pelotcl.app.ui.components.StationInfo
 import com.pelotcl.app.ui.components.StationSearchResult
+import com.pelotcl.app.data.repository.MapStyleRepository
 import com.pelotcl.app.ui.viewmodel.TransportLinesUiState
 import com.pelotcl.app.ui.viewmodel.TransportStopsUiState
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
@@ -205,6 +206,10 @@ fun PlanScreen(
     var shouldCenterOnUser by remember { mutableStateOf(false) }
     var isCenteredOnUser by remember { mutableStateOf(true) }
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+
+    // Map style from settings
+    val mapStyleRepository = remember { MapStyleRepository(context) }
+    val mapStyleUrl = remember { mapStyleRepository.getSelectedStyle().styleUrl }
 
     // Bottom sheet state for BottomSheetScaffold
     val bottomSheetState = rememberStandardBottomSheetState(
@@ -858,7 +863,7 @@ fun PlanScreen(
                 modifier = Modifier.fillMaxSize(),
                 initialPosition = LatLng(45.75, 4.85),
                 initialZoom = 12.0,
-                styleUrl = "https://tiles.openfreemap.org/styles/positron",
+                styleUrl = mapStyleUrl,
                 onMapReady = { map ->
                     mapInstance = map
                     // Add listener to detect when user moves the map

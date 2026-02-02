@@ -23,6 +23,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.pelotcl.app.data.repository.JourneyResult
+import com.pelotcl.app.data.repository.MapStyleRepository
 import com.pelotcl.app.utils.LineColorHelper
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
@@ -46,11 +47,14 @@ fun JourneyMapView(
     journey: JourneyResult,
     onBack: () -> Unit,
     userLocation: LatLng? = null,
-    bottomPadding: Int = 180,
-    styleUrl: String = "https://tiles.openfreemap.org/styles/positron"
+    bottomPadding: Int = 180
 ) {
     val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    
+    // Get the selected map style from the repository
+    val mapStyleRepository = remember { MapStyleRepository(context) }
+    val styleUrl = remember { mapStyleRepository.getSelectedStyle().styleUrl }
 
     remember {
         MapLibre.getInstance(context)

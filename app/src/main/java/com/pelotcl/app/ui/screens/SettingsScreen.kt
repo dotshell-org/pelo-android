@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,6 +27,7 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun SettingsScreen(
     onAboutClick: () -> Unit,
+    onMapStyleClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -46,6 +49,31 @@ fun SettingsScreen(
                 modifier = Modifier
                     .size(200.dp)
                     .padding(bottom = 48.dp)
+            )
+
+            // Bouton Fond de carte
+            Button(
+                onClick = onMapStyleClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF2C2C2C)
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    text = "Fond de carte",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            }
+            
+            // Espacement entre les boutons
+            Spacer(
+                modifier = Modifier.height(16.dp)
             )
 
             // Bouton À propos
