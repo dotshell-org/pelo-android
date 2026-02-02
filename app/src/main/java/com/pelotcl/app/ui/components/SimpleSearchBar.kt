@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
@@ -22,30 +21,32 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.utils.BusIconHelper
 
@@ -66,6 +67,19 @@ fun SimpleSearchBar(
     var expanded by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
 
+    val density = LocalDensity.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val imeHeight = WindowInsets.ime.getBottom(density)
+    
+    var previousImeHeight by remember { mutableStateOf(0) }
+
+    LaunchedEffect(imeHeight) {
+        if (previousImeHeight > 0 && imeHeight == 0 && query.isEmpty() && expanded) {
+            expanded = false
+        }
+        previousImeHeight = imeHeight
+    }
+
     fun isStrongLine(line: String): Boolean {
         val upperLine = line.uppercase()
         return when {
@@ -79,7 +93,17 @@ fun SimpleSearchBar(
     }
 
     Box(
-        (if (expanded) Modifier.fillMaxSize().background(Color.Black) else modifier)
+        (if (expanded) 
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .clickable { 
+                    if (query.isEmpty()) {
+                        expanded = false
+                        keyboardController?.hide()
+                    }
+                }
+         else modifier)
             .semantics { isTraversalGroup = true }
             .padding(0.dp)
     ) {
@@ -142,6 +166,9 @@ fun SimpleSearchBar(
                 Modifier
                     .padding(top = 12.dp, bottom = 28.dp)
                     .verticalScroll(rememberScrollState())
+                    .clickable {
+
+                    }
             ) {
                 searchResults.forEach { result ->
                     ListItem(
