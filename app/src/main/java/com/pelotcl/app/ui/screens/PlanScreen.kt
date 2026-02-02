@@ -712,7 +712,7 @@ fun PlanScreen(
     }
 
     val peekHeight = when(sheetContentState) {
-        SheetContentState.LINE_DETAILS, SheetContentState.ALL_SCHEDULES -> bottomPadding + 150.dp
+        SheetContentState.LINE_DETAILS, SheetContentState.ALL_SCHEDULES -> bottomPadding + 160.dp
         SheetContentState.STATION -> 0.dp
         else -> 0.dp
     }
@@ -792,6 +792,11 @@ fun PlanScreen(
                                 },
                                 onItineraryClick = { stopName ->
                                     onItineraryClick(stopName)
+                                },
+                                onHeaderClick = {
+                                    scope.launch {
+                                        scaffoldSheetState.bottomSheetState.expand()
+                                    }
                                 }
                             )
                         }
@@ -1029,7 +1034,8 @@ private fun LineDetailsSheetContent(
     onLineClick: (String) -> Unit = {},
     onStopClick: (String) -> Unit = {},
     onShowAllSchedules: (lineName: String, directionName: String, schedules: List<String>) -> Unit,
-    onItineraryClick: (stopName: String) -> Unit = {}
+    onItineraryClick: (stopName: String) -> Unit = {},
+    onHeaderClick: () -> Unit = {}
 ) {
     LineDetailsBottomSheet(
         viewModel = viewModel,
@@ -1042,7 +1048,8 @@ private fun LineDetailsSheetContent(
         onLineClick = onLineClick,
         onStopClick = onStopClick,
         onShowAllSchedules = onShowAllSchedules,
-        onItineraryClick = onItineraryClick
+        onItineraryClick = onItineraryClick,
+        onHeaderClick = onHeaderClick
     )
 }
 

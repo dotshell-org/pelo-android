@@ -144,7 +144,8 @@ fun LineDetailsBottomSheet(
     onLineClick: (String) -> Unit = {},
     onStopClick: (String) -> Unit = {},
     onShowAllSchedules: (lineName: String, directionName: String, schedules: List<String>) -> Unit,
-    onItineraryClick: (stopName: String) -> Unit = {}
+    onItineraryClick: (stopName: String) -> Unit = {},
+    onHeaderClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -250,26 +251,37 @@ fun LineDetailsBottomSheet(
                         Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to station", tint = Gray700)
                     }
                     Spacer(modifier = Modifier.width(8.dp))
-                    val drawableName = BusIconHelper.getDrawableNameForLineName(lineInfo.lineName)
-                    val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
-                    if (resourceId != 0) {
-                        Image(painter = painterResource(id = resourceId), contentDescription = "Line ${lineInfo.lineName}", modifier = Modifier.size(50.dp))
-                    } else {
-                        Box(
-                            modifier = Modifier.size(50.dp).clip(CircleShape).background(getLineColor(lineInfo.lineName)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(text = lineInfo.lineName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                    
+                    // Clickable central part (line icon + station name)
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { onHeaderClick() }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val drawableName = BusIconHelper.getDrawableNameForLineName(lineInfo.lineName)
+                        val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
+                        if (resourceId != 0) {
+                            Image(painter = painterResource(id = resourceId), contentDescription = "Line ${lineInfo.lineName}", modifier = Modifier.size(50.dp))
+                        } else {
+                            Box(
+                                modifier = Modifier.size(50.dp).clip(CircleShape).background(getLineColor(lineInfo.lineName)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(text = lineInfo.lineName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
                         }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = lineInfo.currentStationName,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Black,
+                            modifier = Modifier.weight(1f)
+                        )
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = lineInfo.currentStationName,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black,
-                        modifier = Modifier.weight(1f)
-                    )
+                    
                     // Favorite button
                     if (lineInfo.currentStationName == "") {
                         val favorites by viewModel.favoriteLines.collectAsState()
