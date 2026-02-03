@@ -27,7 +27,8 @@ fun MapLibreView(
     modifier: Modifier = Modifier,
     initialPosition: LatLng = LatLng(45.75, 4.85),
     initialZoom: Double = 10.0,
-    styleUrl: String = "https://tiles.openfreemap.org/styles/positron",
+    // Use local asset for faster startup (eliminates network latency for style loading)
+    styleUrl: String = "asset://positron.json",
     onMapReady: (MapLibreMap) -> Unit = {},
     userLocation: LatLng? = null,
     centerOnUserLocation: Boolean = false

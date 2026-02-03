@@ -36,12 +36,17 @@ object SearchUtils {
      * Optimized to minimize allocations and string operations
      */
     fun fuzzyContains(text: String, query: String): Boolean {
-        if (query.isEmpty()) return true
-        if (text.isEmpty()) return false
-        
-        val normalizedText = normalizeForSearch(text)
-        val normalizedQuery = normalizeForSearch(query)
-        
+        return fuzzyContainsNormalized(normalizeForSearch(text), normalizeForSearch(query))
+    }
+
+    /**
+     * Optimized version that accepts pre-normalized text and query.
+     * Use this when searching through many items with cached normalized names.
+     */
+    fun fuzzyContainsNormalized(normalizedText: String, normalizedQuery: String): Boolean {
+        if (normalizedQuery.isEmpty()) return true
+        if (normalizedText.isEmpty()) return false
+
         // Check if query has multiple words
         val queryWords = normalizedQuery.split(" ").filter { it.isNotEmpty() }
         
@@ -94,12 +99,17 @@ object SearchUtils {
      * Optimized to minimize allocations and string operations
      */
     fun fuzzyStartsWith(text: String, query: String): Boolean {
-        if (query.isEmpty()) return true
-        if (text.isEmpty()) return false
-        
-        val normalizedText = normalizeForSearch(text)
-        val normalizedQuery = normalizeForSearch(query)
-        
+        return fuzzyStartsWithNormalized(normalizeForSearch(text), normalizeForSearch(query))
+    }
+
+    /**
+     * Optimized version that accepts pre-normalized text and query.
+     * Use this when searching through many items with cached normalized names.
+     */
+    fun fuzzyStartsWithNormalized(normalizedText: String, normalizedQuery: String): Boolean {
+        if (normalizedQuery.isEmpty()) return true
+        if (normalizedText.isEmpty()) return false
+
         // Try direct match (most common case)
         if (normalizedText.startsWith(normalizedQuery)) {
             return true

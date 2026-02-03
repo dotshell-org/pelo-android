@@ -51,10 +51,9 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
-import com.google.android.gms.tasks.CancellationTokenSource
 import com.pelotcl.app.ui.components.LinesBottomSheet
 import com.pelotcl.app.ui.components.SimpleSearchBar
 import com.pelotcl.app.ui.components.StationSearchResult
@@ -63,6 +62,7 @@ import com.pelotcl.app.ui.screens.ContactScreen
 import com.pelotcl.app.ui.screens.CreditsScreen
 import com.pelotcl.app.ui.screens.ItineraryScreen
 import com.pelotcl.app.ui.screens.LegalScreen
+import com.pelotcl.app.ui.screens.MapStyleScreen
 import com.pelotcl.app.ui.screens.PlanScreen
 import com.pelotcl.app.ui.screens.SettingsScreen
 import com.pelotcl.app.ui.theme.PeloTheme
@@ -70,11 +70,13 @@ import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.data.api.RetrofitInstance
 import com.pelotcl.app.data.cache.TransportCache
+import com.pelotcl.app.utils.LocationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import org.maplibre.android.MapLibre
 import org.maplibre.android.geometry.LatLng
 
 class MainActivity : ComponentActivity() {
@@ -86,14 +88,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Initialize HTTP cache early for network optimization
-        RetrofitInstance.initialize(applicationContext)
-
-        // Preload disk cache, SQLite, and Raptor in parallel for faster startup
-        // This runs before UI is shown, so data is ready when needed
+        // Preload disk cache and SQLite in parallel BEFORE UI (critical for first render)
+        // Retrofit initialization is deferred to after setContent
         appScope.launch {
             try {
-                // Parallel cache, SQLite, and Raptor warmup
+                // Parallel cache and SQLite warmup - these are needed for initial UI
                 val cacheJob = launch {
                     val cache = TransportCache.getInstance(applicationContext)
                     cache.preloadFromDisk()
@@ -102,16 +101,7 @@ class MainActivity : ComponentActivity() {
                     val schedulesRepo = com.pelotcl.app.data.gtfs.SchedulesRepository(applicationContext)
                     schedulesRepo.warmupDatabase()
                 }
-                // Preload Raptor library in background (deferred slightly to prioritize UI)
-                // Uses singleton pattern - same instance will be used everywhere
-                launch {
-                    delay(300) // Small delay to let UI start rendering
-                    val raptorRepo = com.pelotcl.app.data.repository.RaptorRepository.getInstance(applicationContext)
-                    raptorRepo.initialize()
-                    // Preload journey cache from disk for faster initial queries
-                    raptorRepo.preloadJourneyCache()
-                }
-                // Wait for cache and SQLite (critical for UI), Raptor can complete later
+                // Wait for cache and SQLite (critical for UI)
                 cacheJob.join()
                 sqliteJob.join()
             } catch (e: Exception) {
@@ -128,9 +118,27 @@ class MainActivity : ComponentActivity() {
                 android.graphics.Color.TRANSPARENT
             )
         )
+
         setContent {
             PeloTheme {
                 NavBar(modifier = Modifier.fillMaxSize())
+            }
+        }
+
+        // Deferred initialization - run AFTER setContent to not block first frame
+        // These are not needed for initial UI display
+        appScope.launch {
+            // Initialize HTTP cache for network requests (not needed for cached data display)
+            RetrofitInstance.initialize(applicationContext)
+
+            // Preload Raptor library in background (only needed for itinerary calculations)
+            delay(500) // Let UI stabilize first
+            try {
+                val raptorRepo = com.pelotcl.app.data.repository.RaptorRepository.getInstance(applicationContext)
+                raptorRepo.initialize()
+                raptorRepo.preloadJourneyCache()
+            } catch (e: Exception) {
+                android.util.Log.w("MainActivity", "Raptor preload failed: ${e.message}")
             }
         }
     }
@@ -166,6 +174,7 @@ private enum class Destination(
         const val LEGAL = "legal"
         const val CREDITS = "credits"
         const val CONTACT = "contact"
+        const val MAP_STYLE = "map_style"
     }
 }
 
@@ -179,24 +188,29 @@ fun NavBar(modifier: Modifier = Modifier) {
     var showLinesSheet by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
-    val application = context.applicationContext as android.app.Application
+    val application = remember(context) { context.applicationContext as android.app.Application }
 
-    val viewModel: TransportViewModel = viewModel(
-        factory = object : ViewModelProvider.Factory {
+    // Memoize the factory to avoid recreation on recomposition
+    val viewModelFactory = remember(application) {
+        object : ViewModelProvider.Factory {
             override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
                 @Suppress("UNCHECKED_CAST")
                 return TransportViewModel(application) as T
             }
         }
-    )
+    }
+    val viewModel: TransportViewModel = viewModel(factory = viewModelFactory)
 
     var searchQuery by remember { mutableStateOf("") }
     var stationSearchResults by remember { mutableStateOf<List<StationSearchResult>>(emptyList()) }
     var selectedStationFromSearch by remember { mutableStateOf<StationSearchResult?>(null) }
     
-    // User location for itinerary
+    // User location for itinerary (continuously updated)
     var userLocation by remember { mutableStateOf<LatLng?>(null) }
     
+    // Fused location client for continuous updates
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+
     // Itinerary destination stop
     var itineraryDestinationStop by remember { mutableStateOf<String?>(null) }
 
@@ -205,24 +219,17 @@ fun NavBar(modifier: Modifier = Modifier) {
     ) { permissions ->
         val granted = permissions.entries.any { it.value }
         if (granted) {
-            // Get location when permission granted
-            try {
-                val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
-                fusedLocationClient.getCurrentLocation(
-                    Priority.PRIORITY_HIGH_ACCURACY,
-                    CancellationTokenSource().token
-                ).addOnSuccessListener { location ->
-                    if (location != null) {
-                        userLocation = LatLng(location.latitude, location.longitude)
-                    }
-                }
-            } catch (_: SecurityException) {
-                // Handle exception
+            // Start continuous location updates when permission granted
+            LocationHelper.startLocationUpdates(fusedLocationClient) { location ->
+                userLocation = location
             }
         }
     }
 
     LaunchedEffect(Unit) {
+        // Defer location permission check to not block first frame
+        delay(500)
+
         val hasPermission = ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.ACCESS_FINE_LOCATION
@@ -240,20 +247,17 @@ fun NavBar(modifier: Modifier = Modifier) {
                 )
             )
         } else {
-            // Get location if permission already granted
-            try {
-                val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
-                fusedLocationClient.getCurrentLocation(
-                    Priority.PRIORITY_HIGH_ACCURACY,
-                    CancellationTokenSource().token
-                ).addOnSuccessListener { location ->
-                    if (location != null) {
-                        userLocation = LatLng(location.latitude, location.longitude)
-                    }
-                }
-            } catch (_: SecurityException) {
-                // Handle exception
+            // Start continuous location updates if permission already granted
+            LocationHelper.startLocationUpdates(fusedLocationClient) { location ->
+                userLocation = location
             }
+        }
+    }
+
+    // Stop location updates when composable is disposed
+    DisposableEffect(Unit) {
+        onDispose {
+            LocationHelper.stopLocationUpdates(fusedLocationClient)
         }
     }
 
@@ -271,11 +275,25 @@ fun NavBar(modifier: Modifier = Modifier) {
         }
     }
 
+    // Observer la route courante pour gérer la barre de statut
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+
     // Gérer la barre de statut selon l'écran actif
-    DisposableEffect(selectedDestination) {
+    // Les écrans Settings et ses sous-écrans (About, Legal, Credits, Contact, MapStyle) ont un fond noir
+    DisposableEffect(currentRoute) {
         val activity = context as? ComponentActivity
-        if (selectedDestination == Destination.PARAMETRES.ordinal) {
-            // Barre de statut avec icônes blanches pour fond noir
+        val darkBackgroundRoutes = listOf(
+            Destination.PARAMETRES.route,
+            Destination.ABOUT,
+            Destination.LEGAL,
+            Destination.CREDITS,
+            Destination.CONTACT,
+            Destination.MAP_STYLE
+        )
+
+        if (currentRoute in darkBackgroundRoutes) {
+            // Barre de statut avec icônes blanches pour fond noir (fond transparent)
             activity?.enableEdgeToEdge(
                 statusBarStyle = SystemBarStyle.dark(
                     android.graphics.Color.TRANSPARENT
@@ -285,7 +303,7 @@ fun NavBar(modifier: Modifier = Modifier) {
                 )
             )
         } else {
-            // Barre de statut normale pour les autres écrans
+            // Barre de statut normale pour les autres écrans (fond clair)
             activity?.enableEdgeToEdge(
                 statusBarStyle = SystemBarStyle.light(
                     android.graphics.Color.TRANSPARENT,
@@ -460,13 +478,24 @@ private fun AppNavHost(
                         restoreState = true
                     }
                 },
-                favoriteLines = favoriteLines
+                favoriteLines = favoriteLines,
+                viewModel = viewModel
             )
         }
         composable(Destination.PARAMETRES.route) {
             SettingsScreen(
                 onAboutClick = {
                     navController.navigate(Destination.ABOUT)
+                },
+                onMapStyleClick = {
+                    navController.navigate(Destination.MAP_STYLE)
+                }
+            )
+        }
+        composable(Destination.MAP_STYLE) {
+            MapStyleScreen(
+                onBackClick = {
+                    navController.popBackStack()
                 }
             )
         }

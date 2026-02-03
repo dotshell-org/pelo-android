@@ -9,6 +9,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,6 +23,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.pelotcl.app.data.repository.JourneyResult
+import com.pelotcl.app.data.repository.MapStyleRepository
 import com.pelotcl.app.utils.LineColorHelper
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
@@ -44,10 +46,15 @@ fun JourneyMapView(
     modifier: Modifier = Modifier,
     journey: JourneyResult,
     onBack: () -> Unit,
-    styleUrl: String = "https://tiles.openfreemap.org/styles/positron"
+    userLocation: LatLng? = null,
+    bottomPadding: Int = 180
 ) {
     val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    
+    // Get the selected map style from the repository
+    val mapStyleRepository = remember { MapStyleRepository(context) }
+    val styleUrl = remember { mapStyleRepository.getSelectedStyle().styleUrl }
 
     remember {
         MapLibre.getInstance(context)
@@ -58,11 +65,11 @@ fun JourneyMapView(
             getMapAsync { map ->
                 // Disable map rotation
                 map.uiSettings.isRotateGesturesEnabled = false
-                
+
                 map.setStyle(styleUrl) { style ->
                     // Calculate bounds for the journey
                     val boundsBuilder = LatLngBounds.Builder()
-                    
+
                     // Add all points from all legs to the bounds
                     journey.legs.forEach { leg ->
                         boundsBuilder.include(LatLng(leg.fromLat, leg.fromLon))
@@ -72,12 +79,19 @@ fun JourneyMapView(
                             boundsBuilder.include(LatLng(stop.lat, stop.lon))
                         }
                     }
-                    
+
                     // Fit camera to bounds with padding
+                    // Use asymmetric padding to account for bottom sheet
                     try {
                         val bounds = boundsBuilder.build()
                         map.moveCamera(
-                            CameraUpdateFactory.newLatLngBounds(bounds, 60)
+                            CameraUpdateFactory.newLatLngBounds(
+                                bounds,
+                                60,    // left padding
+                                100,   // top padding
+                                60,    // right padding
+                                bottomPadding  // bottom padding (adjusts for expanded/collapsed state)
+                            )
                         )
                     } catch (e: Exception) {
                         // Fallback to Lyon center if bounds calculation fails
@@ -86,7 +100,7 @@ fun JourneyMapView(
                             .zoom(12.0)
                             .build()
                     }
-                    
+
                     // Draw each leg of the journey
                     journey.legs.forEachIndexed { index, leg ->
                         val lineColor = if (leg.isWalking) {
@@ -96,17 +110,17 @@ fun JourneyMapView(
                             val colorInt = LineColorHelper.getColorForLineString(leg.routeName ?: "")
                             String.format("#%06X", 0xFFFFFF and colorInt)
                         }
-                        
+
                         // Build the coordinates array for this leg
                         // Include: fromStop -> intermediate stops -> toStop
                         val coordinatesArray = JsonArray()
-                        
+
                         // From stop
                         val fromCoord = JsonArray()
                         fromCoord.add(leg.fromLon)
                         fromCoord.add(leg.fromLat)
                         coordinatesArray.add(fromCoord)
-                        
+
                         // Intermediate stops
                         leg.intermediateStops.forEach { stop ->
                             val coord = JsonArray()
@@ -114,13 +128,13 @@ fun JourneyMapView(
                             coord.add(stop.lat)
                             coordinatesArray.add(coord)
                         }
-                        
+
                         // To stop
                         val toCoord = JsonArray()
                         toCoord.add(leg.toLon)
                         toCoord.add(leg.toLat)
                         coordinatesArray.add(toCoord)
-                        
+
                         // Create GeoJSON for this leg's line
                         val lineGeoJson = JsonObject().apply {
                             addProperty("type", "Feature")
@@ -135,14 +149,14 @@ fun JourneyMapView(
                             }
                             add("properties", properties)
                         }
-                        
+
                         // Add source and layer for this leg
                         val sourceId = "journey-leg-$index"
                         val layerId = "journey-leg-layer-$index"
-                        
+
                         val lineSource = GeoJsonSource(sourceId, lineGeoJson.toString())
                         style.addSource(lineSource)
-                        
+
                         val lineLayer = LineLayer(layerId, sourceId).apply {
                             setProperties(
                                 PropertyFactory.lineColor(lineColor),
@@ -158,12 +172,12 @@ fun JourneyMapView(
                             }
                         }
                         style.addLayer(lineLayer)
-                        
+
                         // Add endpoint circles for this leg
                         val endpointsGeoJson = JsonObject().apply {
                             addProperty("type", "FeatureCollection")
                             val features = JsonArray()
-                            
+
                             // Start point
                             val startFeature = JsonObject().apply {
                                 addProperty("type", "Feature")
@@ -177,7 +191,7 @@ fun JourneyMapView(
                                 add("geometry", geometry)
                             }
                             features.add(startFeature)
-                            
+
                             // End point
                             val endFeature = JsonObject().apply {
                                 addProperty("type", "Feature")
@@ -191,16 +205,16 @@ fun JourneyMapView(
                                 add("geometry", geometry)
                             }
                             features.add(endFeature)
-                            
+
                             add("features", features)
                         }
-                        
+
                         val endpointsSourceId = "journey-leg-endpoints-$index"
                         val endpointsLayerId = "journey-leg-endpoints-layer-$index"
-                        
+
                         val endpointsSource = GeoJsonSource(endpointsSourceId, endpointsGeoJson.toString())
                         style.addSource(endpointsSource)
-                        
+
                         val endpointsLayer = CircleLayer(endpointsLayerId, endpointsSourceId).apply {
                             setProperties(
                                 PropertyFactory.circleRadius(if (leg.isWalking) 4f else 6f),
@@ -213,31 +227,31 @@ fun JourneyMapView(
                         }
                         style.addLayer(endpointsLayer)
                     }
-                    
+
                     // Add stop markers (circles at each stop)
                     val stopsGeoJson = JsonObject().apply {
                         addProperty("type", "FeatureCollection")
                         val features = JsonArray()
-                        
+
                         // Collect all unique stops with their names
                         data class StopInfo(val lat: Double, val lon: Double, val name: String, val isMain: Boolean)
                         val stops = mutableListOf<StopInfo>()
-                        
+
                         journey.legs.forEachIndexed { legIndex, leg ->
                             // First stop of journey
                             if (legIndex == 0) {
                                 stops.add(StopInfo(leg.fromLat, leg.fromLon, leg.fromStopName, true))
                             }
-                            
+
                             // Intermediate stops (not main stops, no labels)
                             leg.intermediateStops.forEach { stop ->
                                 stops.add(StopInfo(stop.lat, stop.lon, stop.stopName, false))
                             }
-                            
+
                             // End stop of each leg (always show as main for transfers and final destination)
                             stops.add(StopInfo(leg.toLat, leg.toLon, leg.toStopName, true))
                         }
-                        
+
                         stops.forEach { stopInfo ->
                             val feature = JsonObject().apply {
                                 addProperty("type", "Feature")
@@ -257,14 +271,14 @@ fun JourneyMapView(
                             }
                             features.add(feature)
                         }
-                        
+
                         add("features", features)
                     }
-                    
+
                     // Add stops source and layers
                     val stopsSource = GeoJsonSource("journey-stops", stopsGeoJson.toString())
                     style.addSource(stopsSource)
-                    
+
                     // Intermediate stops layer (smaller circles) - no filter, show all first
                     val intermediateStopsLayer = CircleLayer("journey-intermediate-stops", "journey-stops").apply {
                         setProperties(
@@ -281,7 +295,7 @@ fun JourneyMapView(
                         ))
                     }
                     style.addLayer(intermediateStopsLayer)
-                    
+
                     // Main stops layer (larger circles) - on top
                     val mainStopsLayer = CircleLayer("journey-main-stops", "journey-stops").apply {
                         setProperties(
@@ -298,7 +312,7 @@ fun JourneyMapView(
                         ))
                     }
                     style.addLayer(mainStopsLayer)
-                    
+
                     // Labels for main stops
                     val labelsLayer = SymbolLayer("journey-stop-labels", "journey-stops").apply {
                         setProperties(
@@ -322,10 +336,67 @@ fun JourneyMapView(
                         ))
                     }
                     style.addLayer(labelsLayer)
+
+                    // Add user location blue circle if available
+                    if (userLocation != null) {
+                        val userLocationGeoJson = JsonObject().apply {
+                            addProperty("type", "Feature")
+                            val geometry = JsonObject().apply {
+                                addProperty("type", "Point")
+                                val coordinates = JsonArray()
+                                coordinates.add(userLocation.longitude)
+                                coordinates.add(userLocation.latitude)
+                                add("coordinates", coordinates)
+                            }
+                            add("geometry", geometry)
+                        }
+
+                        val userLocationSource = GeoJsonSource("user-location-source", userLocationGeoJson.toString())
+                        style.addSource(userLocationSource)
+
+                        val userLocationLayer = CircleLayer("user-location-layer", "user-location-source").apply {
+                            setProperties(
+                                PropertyFactory.circleRadius(10f),
+                                PropertyFactory.circleColor("#3B82F6"),
+                                PropertyFactory.circleStrokeWidth(3f),
+                                PropertyFactory.circleStrokeColor("#FFFFFF"),
+                                PropertyFactory.circleOpacity(1.0f),
+                                PropertyFactory.circleStrokeOpacity(1.0f)
+                            )
+                        }
+                        style.addLayer(userLocationLayer)
+                    }
                 }
             }
         }
     }
+
+    // Update user location in real-time when it changes
+    LaunchedEffect(userLocation) {
+        if (userLocation != null) {
+            mapView.getMapAsync { map ->
+                map.getStyle { style ->
+                    // Create updated GeoJSON for user location
+                    val userLocationGeoJson = JsonObject().apply {
+                        addProperty("type", "Feature")
+                        val geometry = JsonObject().apply {
+                            addProperty("type", "Point")
+                            val coordinates = JsonArray()
+                            coordinates.add(userLocation.longitude)
+                            coordinates.add(userLocation.latitude)
+                            add("coordinates", coordinates)
+                        }
+                        add("geometry", geometry)
+                    }
+
+                    // Update existing source if it exists, otherwise it will be created on map load
+                    val existingSource = style.getSource("user-location-source") as? GeoJsonSource
+                    existingSource?.setGeoJson(userLocationGeoJson.toString())
+                }
+            }
+        }
+    }
+
 
     // Manage MapView lifecycle
     DisposableEffect(lifecycleOwner) {
@@ -354,7 +425,7 @@ fun JourneyMapView(
             factory = { mapView },
             modifier = Modifier.matchParentSize()
         )
-        
+
         // Back button
         Box(
             modifier = Modifier

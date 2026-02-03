@@ -10,6 +10,8 @@ import com.pelotcl.app.data.model.TransportLineProperties
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.pelotcl.app.data.model.StopCollection
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 
 /**
@@ -120,6 +122,124 @@ class TransportRepository(context: Context? = null) {
                 Result.failure(e)
             }
         }
+    }
+
+    /**
+     * Data class representing a partial load result
+     */
+    data class LinesLoadProgress(
+        val lines: List<Feature>,
+        val isComplete: Boolean,
+        val source: String // For debugging: "cache_metro_tram", "navigone", "trambus", "rhonexpress"
+    )
+
+    /**
+     * Fetches all transport lines progressively using a Flow.
+     * Emits lines as they become available (cache first, then API data).
+     * This allows the UI to display lines progressively for better UX.
+     */
+    fun getAllLinesFlow(): Flow<LinesLoadProgress> = flow {
+        val loadedCodeTraces = mutableSetOf<String>()
+        val allLoadedFeatures = mutableListOf<Feature>()
+
+        fun addUniqueFeatures(features: List<Feature>): List<Feature> {
+            val newFeatures = features.filter { feature ->
+                val codeTrace = feature.properties.codeTrace
+                if (codeTrace !in loadedCodeTraces) {
+                    loadedCodeTraces.add(codeTrace)
+                    true
+                } else {
+                    false
+                }
+            }
+            allLoadedFeatures.addAll(newFeatures)
+            return allLoadedFeatures.toList()
+        }
+
+        // Step 1: Load metro and tram from cache first (fastest)
+        val cachedMetro = cache?.getMetroLines()
+        val cachedTram = cache?.getTramLines()
+
+        if (cachedMetro != null && cachedTram != null) {
+            val cacheFeatures = addUniqueFeatures(cachedMetro + cachedTram)
+            emit(LinesLoadProgress(cacheFeatures, isComplete = false, source = "cache_metro_tram"))
+        } else {
+            // No cache, load from API
+            try {
+                val metroFuniculaire = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    api.getTransportLines()
+                }
+                cache?.saveMetroLines(metroFuniculaire.features)
+
+                val trams = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    api.getTramLines()
+                }
+                cache?.saveTramLines(trams.features)
+
+                val apiFeatures = addUniqueFeatures(metroFuniculaire.features + trams.features)
+                emit(LinesLoadProgress(apiFeatures, isComplete = false, source = "api_metro_tram"))
+            } catch (e: Exception) {
+                android.util.Log.e("TransportRepository", "Failed to load metro/tram: ${e.message}")
+            }
+        }
+
+        // Step 2: Load Navigone (from cache or API)
+        val cachedNavigone = cache?.getNavigoneLines()
+        val navigoneFeatures = if (cachedNavigone != null) {
+            cachedNavigone
+        } else {
+            try {
+                val navigone = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    api.getNavigoneLines()
+                }
+                cache?.saveNavigoneLines(navigone.features)
+                navigone.features
+            } catch (e: Exception) {
+                android.util.Log.w("TransportRepository", "Failed to load navigone lines: ${e.message}")
+                emptyList()
+            }
+        }
+        if (navigoneFeatures.isNotEmpty()) {
+            val updatedFeatures = addUniqueFeatures(navigoneFeatures)
+            emit(LinesLoadProgress(updatedFeatures, isComplete = false, source = "navigone"))
+        }
+
+        // Step 3: Load Trambus (from cache or API)
+        val cachedTrambus = cache?.getTrambusLines()
+        val trambusFeatures = if (cachedTrambus != null) {
+            cachedTrambus
+        } else {
+            try {
+                val trambus = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    api.getTrambusLines()
+                }
+                cache?.saveTrambusLines(trambus.features)
+                trambus.features
+            } catch (e: Exception) {
+                android.util.Log.w("TransportRepository", "Failed to load trambus lines: ${e.message}")
+                emptyList()
+            }
+        }
+        if (trambusFeatures.isNotEmpty()) {
+            val updatedFeatures = addUniqueFeatures(trambusFeatures)
+            emit(LinesLoadProgress(updatedFeatures, isComplete = false, source = "trambus"))
+        }
+
+        // Step 4: Load Rhônexpress (always from API, small data)
+        try {
+            val rxFeatures = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                fetchRhonexpressFromWfs()
+            }
+            if (rxFeatures.isNotEmpty()) {
+                val updatedFeatures = addUniqueFeatures(rxFeatures)
+                emit(LinesLoadProgress(updatedFeatures, isComplete = false, source = "rhonexpress"))
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("TransportRepository", "Failed to load Rhônexpress: ${e.message}")
+        }
+
+        // Final emission: mark as complete
+        emit(LinesLoadProgress(allLoadedFeatures.toList(), isComplete = true, source = "complete"))
     }
 
     /**
@@ -540,5 +660,63 @@ class TransportRepository(context: Context? = null) {
                 Result.failure(e)
             }
         }
+    }
+
+    /**
+     * Returns cached lines immediately (even if stale/expired).
+     * Use this for instant UI display, then call getAllLines() to refresh.
+     * Returns null if no cache exists at all.
+     */
+    suspend fun getAllLinesStale(): Result<FeatureCollection>? {
+        return withContext(kotlinx.coroutines.Dispatchers.Default) {
+            try {
+                // Try to load stale cache data (even if expired)
+                val cachedMetro = cache?.getMetroLinesStale()
+                val cachedTram = cache?.getTramLinesStale()
+
+                // If no cache at all, return null to indicate fresh load needed
+                if (cachedMetro == null || cachedTram == null) {
+                    return@withContext null
+                }
+
+                val cachedNavigone = cache.getNavigoneLinesStale() ?: emptyList()
+                val cachedTrambus = cache.getTrambusLinesStale() ?: emptyList()
+
+                // Build collection from stale cache
+                val allFeatures = cachedMetro + cachedTram + cachedNavigone + cachedTrambus
+
+                // Group by code_trace and keep only the first of each group
+                val uniqueLines = allFeatures
+                    .groupBy { it.properties.codeTrace }
+                    .map { (_, features) -> features.first() }
+
+                val collection = FeatureCollection(
+                    type = "FeatureCollection",
+                    features = uniqueLines,
+                    totalFeatures = uniqueLines.size,
+                    numberMatched = uniqueLines.size,
+                    numberReturned = uniqueLines.size
+                )
+
+                Result.success(collection)
+            } catch (e: Exception) {
+                android.util.Log.w("TransportRepository", "getAllLinesStale failed: ${e.message}")
+                null
+            }
+        }
+    }
+
+    /**
+     * Check if cache needs refresh (has data but expired).
+     */
+    fun needsCacheRefresh(): Boolean {
+        return cache?.needsRefresh() ?: false
+    }
+
+    /**
+     * Check if any cached data is available.
+     */
+    fun hasAnyCachedData(): Boolean {
+        return cache?.hasAnyCachedData() ?: false
     }
 }

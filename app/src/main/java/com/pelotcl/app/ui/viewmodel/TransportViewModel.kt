@@ -11,19 +11,25 @@ import com.pelotcl.app.data.model.Feature
 import com.pelotcl.app.data.model.StopFeature
 import com.pelotcl.app.data.repository.RaptorRepository
 import com.pelotcl.app.data.repository.TransportRepository
+import com.pelotcl.app.data.repository.TrafficAlertsRepository
 import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.utils.Connection
 import com.pelotcl.app.data.repository.FavoritesRepository
+import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.ConnectionsHelper
 import com.pelotcl.app.utils.HolidayDetector
 import java.time.LocalDate
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.math.pow
 import kotlin.math.sqrt
@@ -33,6 +39,7 @@ import kotlin.math.sqrt
  */
 sealed class TransportLinesUiState {
     data object Loading : TransportLinesUiState()
+    data class PartialSuccess(val lines: List<Feature>, val source: String) : TransportLinesUiState()
     data class Success(val lines: List<Feature>) : TransportLinesUiState()
     data class Error(val message: String) : TransportLinesUiState()
 }
@@ -52,6 +59,7 @@ sealed class TransportStopsUiState {
 class TransportViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = TransportRepository(application.applicationContext)
+    private val trafficAlertsRepository = TrafficAlertsRepository(application.applicationContext)
 
     // Shared RaptorRepository singleton - kept alive during app lifetime
     val raptorRepository = RaptorRepository.getInstance(application.applicationContext)
@@ -84,15 +92,35 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     private val _selectedLineName = MutableStateFlow<String?>(null)
     val selectedLineName: StateFlow<String?> = _selectedLineName.asStateFlow()
 
+    // Traffic alerts state
+    private val _trafficAlerts = MutableStateFlow<Map<String, List<com.pelotcl.app.data.model.TrafficAlert>>>(emptyMap())
+    val trafficAlerts: StateFlow<Map<String, List<com.pelotcl.app.data.model.TrafficAlert>>> = _trafficAlerts.asStateFlow()
+
     // Preloading flags to avoid multiple reloads
     private var isPreloading: Boolean = false
     private var hasPreloaded: Boolean = false
 
+    // Cancellable jobs for line detail operations to prevent accumulation during rapid changes
+    private var headsignJob: Job? = null
+    private var directionsJob: Job? = null
+    private var schedulesJob: Job? = null
+    private var lineLoadJob: Job? = null
+
     init {
         // Start non-blocking preload on creation to have lines, stops, and connection index ready
         preloadAllData()
-        // Load favorites
-        _favoriteLines.value = favoritesRepository.getFavorites().map { it.uppercase() }.toSet()
+
+        // Load favorites asynchronously (SharedPreferences read can be slow on some devices)
+        viewModelScope.launch(Dispatchers.IO) {
+            val favorites = favoritesRepository.getFavorites().map { it.uppercase() }.toSet()
+            _favoriteLines.value = favorites
+        }
+
+        // Defer traffic alerts - not critical for initial display
+        viewModelScope.launch {
+            delay(1000) // Wait for UI to stabilize
+            refreshTrafficAlerts()
+        }
     }
 
     /**
@@ -106,7 +134,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun loadHeadsign(routeName: String) {
-        viewModelScope.launch {
+        // Cancel previous job to prevent accumulation during rapid line changes
+        headsignJob?.cancel()
+        headsignJob = viewModelScope.launch {
             // GTFS uses "NAVI1" for Navigone while the app displays "NAV1"
             val gtfsRouteName = if (routeName.equals("NAV1", ignoreCase = true)) "NAVI1" else routeName
             val headsigns = schedulesRepository.getHeadsigns(gtfsRouteName)
@@ -120,9 +150,13 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      */
     @RequiresApi(Build.VERSION_CODES.O)
     fun computeAvailableDirections(lineName: String, stopName: String) {
-        viewModelScope.launch {
-            // Determine if it is a school holiday
-            val isTodayHoliday = holidayDetector.isSchoolHoliday(LocalDate.now())
+        // Cancel previous job to prevent accumulation during rapid line changes
+        directionsJob?.cancel()
+        directionsJob = viewModelScope.launch {
+            // Check for school holidays and French public holidays separately
+            val today = LocalDate.now()
+            val isSchoolHoliday = holidayDetector.isSchoolHoliday(today)
+            val isPublicHoliday = holidayDetector.isFrenchPublicHoliday(today)
             val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
 
             // Candidate directions list: those exposed by _headsigns otherwise 0 and 1 by default
@@ -131,7 +165,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             val available = mutableListOf<Int>()
             for (dir in candidateDirections) {
                 try {
-                    val schedules = schedulesRepository.getSchedules(gtfsLineName, stopName, dir, isTodayHoliday)
+                    val schedules = schedulesRepository.getSchedules(gtfsLineName, stopName, dir, isSchoolHoliday, isPublicHoliday)
                     if (schedules.isNotEmpty()) {
                         available.add(dir)
                     }
@@ -148,17 +182,21 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      */
     @RequiresApi(Build.VERSION_CODES.O)
     fun loadSchedulesForDirection(lineName: String, stopName: String, directionId: Int) {
-        viewModelScope.launch {
+        // Cancel previous job to prevent accumulation during rapid line changes
+        schedulesJob?.cancel()
+        schedulesJob = viewModelScope.launch {
             _allSchedules.value = emptyList()
             _nextSchedules.value = emptyList()
 
-            // Determine if today is a school holiday
-            val isTodayHoliday = holidayDetector.isSchoolHoliday(LocalDate.now())
+            // Check for school holidays and French public holidays separately
+            val today = LocalDate.now()
+            val isSchoolHoliday = holidayDetector.isSchoolHoliday(today)
+            val isPublicHoliday = holidayDetector.isFrenchPublicHoliday(today)
 
             // The GTFS data uses NAVI1 for the Navigone, but the app displays NAV1
             val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
 
-            val allSchedulesForDay = schedulesRepository.getSchedules(gtfsLineName, stopName, directionId, isTodayHoliday)
+            val allSchedulesForDay = schedulesRepository.getSchedules(gtfsLineName, stopName, directionId, isSchoolHoliday, isPublicHoliday)
             _allSchedules.value = allSchedulesForDay
 
             if (allSchedulesForDay.isEmpty()) {
@@ -193,6 +231,52 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
+     * Cancels all pending line detail operations (headsign, directions, schedules, line load).
+     * Call this when the user rapidly changes between lines/connections to prevent
+     * accumulation of concurrent operations that can cause OutOfMemoryError.
+     */
+    fun cancelPendingLineOperations() {
+        headsignJob?.cancel()
+        directionsJob?.cancel()
+        schedulesJob?.cancel()
+        lineLoadJob?.cancel()
+    }
+
+    /**
+     * Clears all line detail states (headsigns, schedules, directions).
+     * Call this when switching to a new line to ensure fresh state and prevent
+     * stale data from accumulating in memory.
+     */
+    fun clearLineDetailStates() {
+        _headsigns.value = emptyMap()
+        _allSchedules.value = emptyList()
+        _nextSchedules.value = emptyList()
+        _availableDirections.value = emptyList()
+    }
+
+    /**
+     * Combined operation: cancel pending operations and clear states.
+     * Use this when rapidly switching between lines.
+     */
+    fun resetLineDetailState() {
+        cancelPendingLineOperations()
+        clearLineDetailStates()
+    }
+
+    /**
+     * Clears schedule-related states (schedules, directions) but keeps headsigns.
+     * Call this when switching stops on the same line to ensure fresh schedule data
+     * while preserving direction labels.
+     */
+    fun clearScheduleState() {
+        directionsJob?.cancel()
+        schedulesJob?.cancel()
+        _allSchedules.value = emptyList()
+        _nextSchedules.value = emptyList()
+        _availableDirections.value = emptyList()
+    }
+
+    /**
      * Reloads all strong lines (metro/tram/funicular/navigone + RX)
      * and updates UI state. Used as fallback if a strong line is missing.
      */
@@ -214,15 +298,24 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
     // Stops cache to avoid reloading them each time
     private var cachedStops: List<StopFeature>? = null
-    private var stopsLoadingJob: kotlinx.coroutines.Job? = null
+    private var stopsLoadingJob: Job? = null
+
+    // Lines loading job to prevent duplicate concurrent loads
+    private var linesLoadingJob: Job? = null
 
     // Pre-calculated transfers index by stop name
     // Key = normalized stop name, Value = list of transfer lines
     private var connectionsIndex: Map<String, List<Connection>> = emptyMap()
 
+    // Pre-calculated index of stops by line name for O(1) lookups
+    // Key = line name (uppercase), Value = list of StopFeatures serving that line
+    private var stopsByLineIndex: Map<String, List<StopFeature>> = emptyMap()
+    private val stopsByLineIndexMutex = Mutex()
+
     // LruCache for line stops to avoid expensive geometric calculations
     // Key = "lineName|currentStopName", Value = list of LineStopInfo
-    private val lineStopsCache = LruCache<String, List<com.pelotcl.app.data.gtfs.LineStopInfo>>(30)
+    // Reduced from 30 to 15 entries to limit memory usage during rapid navigation
+    private val lineStopsCache = LruCache<String, List<com.pelotcl.app.data.gtfs.LineStopInfo>>(15)
 
     // === OPTIMIZATION: Pre-computed GeoJSON cache for stops ===
     // Cached GeoJSON string for all stops (avoids re-computation on each map display)
@@ -232,9 +325,13 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     // Hash of stops list to detect changes and invalidate cache
     private var cachedStopsHash: Int = 0
 
-    // === OPTIMIZATION: Pre-loaded icon bitmaps cache ===
-    // Cached bitmaps for transport line icons (loaded once, reused)
-    private var cachedIconBitmaps: Map<String, android.graphics.Bitmap>? = null
+    // === OPTIMIZATION: Pre-loaded icon bitmaps cache with memory management ===
+    // LruCache with 10MB max size for bitmap icons, responds to memory pressure
+    private val iconBitmapCache = object : LruCache<String, android.graphics.Bitmap>(10 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: android.graphics.Bitmap): Int {
+            return value.allocationByteCount
+        }
+    }
 
     /**
      * Returns cached stops GeoJSON data if available and valid.
@@ -259,15 +356,40 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
-     * Returns cached icon bitmaps if available.
+     * Returns cached icon bitmaps as a snapshot map.
+     * The underlying cache uses LruCache for automatic memory management.
      */
-    fun getCachedIconBitmaps(): Map<String, android.graphics.Bitmap>? = cachedIconBitmaps
+    fun getCachedIconBitmaps(): Map<String, android.graphics.Bitmap>? {
+        val snapshot = iconBitmapCache.snapshot()
+        return if (snapshot.isEmpty()) null else snapshot
+    }
 
     /**
-     * Caches icon bitmaps for reuse.
+     * Caches icon bitmaps for reuse using memory-aware LruCache.
      */
     fun cacheIconBitmaps(bitmaps: Map<String, android.graphics.Bitmap>) {
-        cachedIconBitmaps = bitmaps
+        bitmaps.forEach { (key, bitmap) ->
+            iconBitmapCache.put(key, bitmap)
+        }
+    }
+
+    /**
+     * Reduces bitmap cache size based on memory pressure level.
+     * Call from Application.onTrimMemory() to respond to system memory pressure.
+     * @param level The trim level from ComponentCallbacks2 (TRIM_MEMORY_*)
+     */
+    fun trimBitmapCache(level: Int) {
+        when {
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> {
+                iconBitmapCache.evictAll()
+            }
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_MODERATE -> {
+                iconBitmapCache.trimToSize(iconBitmapCache.maxSize() / 2)
+            }
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> {
+                iconBitmapCache.trimToSize(iconBitmapCache.maxSize() * 3 / 4)
+            }
+        }
     }
 
     /**
@@ -277,20 +399,23 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     @Suppress("unused") // Public API for cache invalidation when GTFS data is updated
     fun clearAllCaches() {
         lineStopsCache.evictAll()
+        iconBitmapCache.evictAll()
         connectionsIndex = emptyMap()
+        stopsByLineIndex = emptyMap()
         cachedStops = null
         // Clear GeoJSON cache
         cachedStopsGeoJson = null
         cachedRequiredIcons = null
         cachedStopsHash = 0
-        // Clear icon bitmaps cache
-        cachedIconBitmaps = null
+        // Clear BusIconHelper cache
+        BusIconHelper.clearCache()
     }
 
     /**
      * Preloads lines and stops at launch, builds transfers index,
      * and populates StateFlows if possible. Does not block UI.
-     * Uses 2-phase loading strategy:
+     * Uses 3-phase loading strategy for optimal UX:
+     * - Phase 0 (instant): Show stale cache immediately if available
      * - Phase 1 (immediate): Critical UI data (lines, stops, SQLite warmup)
      * - Phase 2 (deferred): Heavy processing (connections index, Raptor preload)
      */
@@ -302,11 +427,24 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             try {
                 val startTime = System.currentTimeMillis()
 
+                // ===== PHASE 0: Show stale cache instantly =====
+                // This allows the UI to display immediately with cached data
+                // while fresh data loads in the background
+                val currentLinesState = _uiState.value
+                if (currentLinesState !is TransportLinesUiState.Success && currentLinesState !is TransportLinesUiState.PartialSuccess) {
+                    val staleResult = repository.getAllLinesStale()
+                    staleResult?.onSuccess { featureCollection ->
+                        if (featureCollection.features.isNotEmpty()) {
+                            _uiState.value = TransportLinesUiState.Success(featureCollection.features)
+                            Log.d("TransportViewModel", "Phase 0: Displayed ${featureCollection.features.size} lines from stale cache in ${System.currentTimeMillis() - startTime}ms")
+                        }
+                    }
+                }
+
                 // ===== PHASE 1: Critical UI data (parallel) =====
                 val linesDeferred = async(Dispatchers.IO) {
-                    if (_uiState.value !is TransportLinesUiState.Success) {
-                        repository.getAllLines()
-                    } else null
+                    // Always try to refresh from network for fresh data
+                    repository.getAllLines()
                 }
 
                 val stopsDeferred = async(Dispatchers.IO) {
@@ -323,13 +461,20 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 // Wait for critical data to complete
                 val (linesResult, stopsResult) = awaitAll(linesDeferred, stopsDeferred)
 
-                // Process lines result
+                // Process lines result - update with fresh data
                 @Suppress("UNCHECKED_CAST")
                 (linesResult as? Result<com.pelotcl.app.data.model.FeatureCollection>)?.let { result ->
                     result.onSuccess { featureCollection ->
+                        // Update with fresh data (may be same as stale cache if not expired)
                         _uiState.value = TransportLinesUiState.Success(featureCollection.features)
+                        Log.d("TransportViewModel", "Phase 1: Refreshed with ${featureCollection.features.size} lines in ${System.currentTimeMillis() - startTime}ms")
                     }.onFailure { e ->
                         Log.w("TransportViewModel", "Preload: failed loading lines: ${e.message}")
+                        // Keep stale cache if refresh failed and we had cached data
+                        val linesAfterFailure = _uiState.value
+                        if (linesAfterFailure !is TransportLinesUiState.Success && linesAfterFailure !is TransportLinesUiState.PartialSuccess) {
+                            _uiState.value = TransportLinesUiState.Error(e.message ?: "Failed to load lines")
+                        }
                     }
                 }
 
@@ -400,6 +545,18 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
+     * Normalizes a line name for alert matching (removes spaces and hyphens)
+     */
+    private fun normalizeLineForAlerts(line: String): String {
+        return line.uppercase()
+            .replace(" ", "")
+            .replace("-", "")
+            .replace("TRAM", "")
+            .replace("METRO", "")
+            .trim()
+    }
+
+    /**
      * Retrieves transfers for a given stop from the pre-calculated index
      * Ultra-fast method (O(1))
      */
@@ -408,7 +565,18 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         val connections = connectionsIndex[normalized] ?: emptyList()
         // Exclude the current line (with normalization to handle NAVI1 vs NAV1)
         val normalizedCurrentLine = normalizeLineName(currentLine)
-        return connections.filter { normalizeLineName(it.lineName) != normalizedCurrentLine }
+        return connections
+            .filter { normalizeLineName(it.lineName) != normalizedCurrentLine }
+            .sortedWith(compareBy<Connection> {
+                when (it.transportType) {
+                    com.pelotcl.app.utils.TransportType.METRO -> 1
+                    com.pelotcl.app.utils.TransportType.TRAM -> 2
+                    com.pelotcl.app.utils.TransportType.FUNICULAR -> 3
+                    com.pelotcl.app.utils.TransportType.NAVIGONE -> 4
+                    com.pelotcl.app.utils.TransportType.BUS -> 5
+                    com.pelotcl.app.utils.TransportType.UNKNOWN -> 6
+                }
+            }.thenBy { it.lineName })
     }
 
     /**
@@ -502,23 +670,95 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
         connectionsIndex = index
+
+        // Also build the stops-by-line index for fast filtering in map operations
+        buildStopsByLineIndex(allStops)
     }
 
     /**
-     * Loads all transport lines
+     * Builds an index mapping line names to their stops for O(1) lookups.
+     * Called after stops are loaded and when connections index is built.
+     */
+    private suspend fun buildStopsByLineIndex(allStops: List<StopFeature>) = withContext(Dispatchers.Default) {
+        val index = mutableMapOf<String, MutableList<StopFeature>>()
+
+        for (stop in allStops) {
+            val lines = BusIconHelper.getAllLinesForStop(stop)
+            for (line in lines) {
+                val key = line.uppercase()
+                index.getOrPut(key) { mutableListOf() }.add(stop)
+            }
+        }
+
+        stopsByLineIndexMutex.withLock {
+            stopsByLineIndex = index
+        }
+    }
+
+    /**
+     * Gets all stops serving a specific line in O(1) time.
+     * Uses pre-computed index for fast access during map filtering.
+     *
+     * @param lineName The line name (case-insensitive)
+     * @return List of StopFeatures serving that line, or empty list if not found
+     */
+    fun getStopsFeaturesForLine(lineName: String): List<StopFeature> {
+        // Handle NAV1/NAVI1 normalization
+        val searchKeys = if (lineName.equals("NAV1", ignoreCase = true)) {
+            listOf("NAV1", "NAVI1")
+        } else {
+            listOf(lineName.uppercase())
+        }
+
+        // Return first match from index
+        for (key in searchKeys) {
+            stopsByLineIndex[key]?.let { return it }
+        }
+        return emptyList()
+    }
+
+    /**
+     * Checks if the stops-by-line index is ready for use.
+     */
+    fun isStopsByLineIndexReady(): Boolean = stopsByLineIndex.isNotEmpty()
+
+    /**
+     * Loads all transport lines progressively with request coalescing.
+     * Emits partial states as lines become available for better UX.
+     * Prevents duplicate concurrent API calls when called multiple times.
      */
     fun loadAllLines() {
-        viewModelScope.launch {
+        // Skip if already loaded successfully or currently loading
+        if (_uiState.value is TransportLinesUiState.Success) return
+        if (linesLoadingJob?.isActive == true) return
+
+        linesLoadingJob = viewModelScope.launch {
             _uiState.value = TransportLinesUiState.Loading
-            repository.getAllLines()
-                .onSuccess { featureCollection ->
-                    _uiState.value = TransportLinesUiState.Success(featureCollection.features)
+
+            try {
+                repository.getAllLinesFlow().collect { progress ->
+                    if (progress.isComplete) {
+                        _uiState.value = TransportLinesUiState.Success(progress.lines)
+                        Log.d("TransportViewModel", "Lines loading complete: ${progress.lines.size} lines")
+                    } else {
+                        _uiState.value = TransportLinesUiState.PartialSuccess(progress.lines, progress.source)
+                        Log.d("TransportViewModel", "Lines partial load (${progress.source}): ${progress.lines.size} lines")
+                    }
                 }
-                .onFailure { exception ->
+            } catch (e: Exception) {
+                Log.e("TransportViewModel", "Error loading lines: ${e.message}")
+                // If we have partial data, keep it and log the error
+                val currentState = _uiState.value
+                if (currentState is TransportLinesUiState.PartialSuccess && currentState.lines.isNotEmpty()) {
+                    // Convert partial to success with what we have
+                    _uiState.value = TransportLinesUiState.Success(currentState.lines)
+                    Log.w("TransportViewModel", "Keeping partial data due to error: ${currentState.lines.size} lines")
+                } else {
                     _uiState.value = TransportLinesUiState.Error(
-                        exception.message ?: "An error occurred"
+                        e.message ?: "An error occurred"
                     )
                 }
+            }
         }
     }
 
@@ -553,17 +793,23 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      * Does not modify state if the line is already present
      */
     fun addLineToLoaded(lineName: String) {
-        viewModelScope.launch {
+        // Cancel previous line load job to prevent accumulation during rapid changes
+        lineLoadJob?.cancel()
+        lineLoadJob = viewModelScope.launch {
             val currentState = _uiState.value
 
-            // Do nothing if not in Success state
-            if (currentState !is TransportLinesUiState.Success) {
-                Log.w("TransportViewModel", "Current state is not Success, cannot add line")
-                return@launch
+            // Get current lines from Success or PartialSuccess state
+            val currentLines = when (currentState) {
+                is TransportLinesUiState.Success -> currentState.lines
+                is TransportLinesUiState.PartialSuccess -> currentState.lines
+                else -> {
+                    Log.w("TransportViewModel", "Current state is not Success/PartialSuccess, cannot add line")
+                    return@launch
+                }
             }
 
             // Check if line is already loaded
-            val isAlreadyLoaded = currentState.lines.any {
+            val isAlreadyLoaded = currentLines.any {
                 lineName.equals(it.properties.ligne, ignoreCase = true)
             }
 
@@ -576,7 +822,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 .onSuccess { feature ->
                     if (feature != null) {
                         // Add the new line to existing lines
-                        val updatedLines = currentState.lines + feature
+                        val updatedLines = currentLines + feature
                         _uiState.value = TransportLinesUiState.Success(updatedLines)
                     } else {
                         Log.w("TransportViewModel", "getLineByName returned null for $lineName")
@@ -595,14 +841,18 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     fun removeLineFromLoaded(lineName: String) {
         val currentState = _uiState.value
 
-        // Do nothing if not in Success state
-        if (currentState !is TransportLinesUiState.Success) {
-            Log.w("TransportViewModel", "Current state is not Success, cannot remove line")
-            return
+        // Get current lines from Success or PartialSuccess state
+        val currentLines = when (currentState) {
+            is TransportLinesUiState.Success -> currentState.lines
+            is TransportLinesUiState.PartialSuccess -> currentState.lines
+            else -> {
+                Log.w("TransportViewModel", "Current state is not Success/PartialSuccess, cannot remove line")
+                return
+            }
         }
 
         // Filter to remove the line
-        val updatedLines = currentState.lines.filter {
+        val updatedLines = currentLines.filter {
             !lineName.equals(it.properties.ligne, ignoreCase = true)
         }
 
@@ -611,17 +861,54 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
     /**
      * Retrieves stops served by a specific line, ordered according to the line's path
-     * Uses LruCache to avoid expensive geometric calculations on repeated calls
+     * Uses GTFS stop_sequences table as primary source for ordering
+     * Falls back to static cache (metros/trams) then geometric ordering
      * @param lineName Line name (ex: "86", "A", "T1")
      * @param currentStopName Current stop name to mark it (optional)
+     * @param directionId Direction ID (0 or 1) for GTFS ordering, defaults to 0
      * @return List of stops with their transfers, ordered according to the line's route
      */
-    fun getStopsForLine(lineName: String, currentStopName: String? = null): List<com.pelotcl.app.data.gtfs.LineStopInfo> {
+    fun getStopsForLine(lineName: String, currentStopName: String? = null, directionId: Int = 0): List<com.pelotcl.app.data.gtfs.LineStopInfo> {
         // Check LruCache first for ultra-fast repeated lookups
-        val cacheKey = "$lineName|${currentStopName ?: ""}"
+        val cacheKey = "$lineName|${currentStopName ?: ""}|$directionId"
         lineStopsCache.get(cacheKey)?.let { return it }
 
-        // First, try to retrieve from static cache (for metros and trams)
+        // GTFS uses "NAVI1" for Navigone while the app displays "NAV1"
+        val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
+
+        // First, try to retrieve from GTFS stop_sequences table (most accurate)
+        val gtfsSequences = schedulesRepository.getStopSequences(gtfsLineName, directionId)
+        if (gtfsSequences.isNotEmpty()) {
+            val allStops = getCachedStopsSync()
+            // Build a map of normalized name -> official stop name and connections
+            val normalizedToStop = allStops.associateBy { normalizeStopName(it.properties.nom) }
+
+            val result = gtfsSequences.mapNotNull { (stationName, sequence) ->
+                // Try to find the matching stop in allStops
+                val normalizedGtfsName = normalizeStopName(stationName)
+                val matchingStop = normalizedToStop[normalizedGtfsName]
+
+                val officialName = matchingStop?.properties?.nom ?: stationName
+                val connections = getConnectionsForStop(officialName, lineName)
+
+                com.pelotcl.app.data.gtfs.LineStopInfo(
+                    stopId = matchingStop?.properties?.id?.toString() ?: "gtfs_${lineName}_${sequence}",
+                    stopName = officialName,
+                    stopSequence = sequence,
+                    isCurrentStop = currentStopName?.let {
+                        normalizeStopName(officialName) == normalizeStopName(it)
+                    } ?: false,
+                    connections = connections.map { it.lineName }
+                )
+            }.distinctBy { normalizeStopName(it.stopName) }
+
+            if (result.isNotEmpty()) {
+                lineStopsCache.put(cacheKey, result)
+                return result
+            }
+        }
+
+        // Second, try to retrieve from static cache (for metros and trams)
         val cachedStops = com.pelotcl.app.data.gtfs.LineStopsCache.getLineStops(lineName, currentStopName)
         if (cachedStops != null) {
             // Align cache labels with official GTFS labels (strict comparison required DB side)
@@ -684,9 +971,15 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
         // Get all line traces to order stops
         val currentState = _uiState.value
-        if (currentState is TransportLinesUiState.Success) {
+        val currentLines = when (currentState) {
+            is TransportLinesUiState.Success -> currentState.lines
+            is TransportLinesUiState.PartialSuccess -> currentState.lines
+            else -> null
+        }
+
+        if (currentLines != null) {
             // Get ALL traces of this line (may have multiple directions)
-            val lineFeatures = currentState.lines.filter {
+            val lineFeatures = currentLines.filter {
                 lineName.equals(it.properties.ligne, ignoreCase = true)
             }
 
@@ -813,6 +1106,11 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     .map { it.properties.ligne.split(':').first().trim() }
                     .distinct()
             }
+            is TransportLinesUiState.PartialSuccess -> {
+                currentState.lines
+                    .map { it.properties.ligne.split(':').first().trim() }
+                    .distinct()
+            }
             else -> emptyList()
         }
 
@@ -846,5 +1144,86 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 },
                 { line -> line }
             ))
+    }
+
+    /**
+     * Traffic Alerts Management
+     */
+
+    /**
+     * Gets traffic status (alert count and last update)
+     */
+    fun getTrafficStatus() = viewModelScope.launch {
+        trafficAlertsRepository.getTrafficStatus()
+    }
+
+    /**
+     * Gets all traffic alerts
+     */
+    fun getAllTrafficAlerts() = viewModelScope.launch {
+        trafficAlertsRepository.getTrafficAlerts()
+    }
+
+    /**
+     * Gets alerts for a specific line (uses cached state first)
+     */
+    fun getAlertsForLine(lineCode: String): List<com.pelotcl.app.data.model.TrafficAlert> {
+        val normalizedLineCode = normalizeLineForAlerts(lineCode)
+        val alerts = _trafficAlerts.value[normalizedLineCode] ?: emptyList()
+        if (alerts.isEmpty() && _trafficAlerts.value.isNotEmpty()) {
+            // Log known keys to help debug mapping
+            Log.d("AlertCheck", "No alerts for $normalizedLineCode. Available keys: ${_trafficAlerts.value.keys.take(5)}...")
+        }
+        return alerts
+    }
+
+    /**
+     * Gets the most severe alert for a specific line (uses cached state first)
+     */
+    fun getMostSevereAlertForLine(lineCode: String): com.pelotcl.app.data.model.TrafficAlert? {
+        val alerts = getAlertsForLine(lineCode)
+        return if (alerts.isEmpty()) {
+            null
+        } else {
+            // Find the alert with the highest severity (lowest severityLevel value)
+            alerts.minByOrNull { it.severityLevel }
+        }
+    }
+
+    /**
+     * Gets the alert severity for a specific line (or null if no alerts)
+     */
+    fun getAlertSeverityForLine(lineCode: String): com.pelotcl.app.data.model.AlertSeverity? {
+        val alert = getMostSevereAlertForLine(lineCode)
+        val severity = alert?.let {
+            com.pelotcl.app.data.model.AlertSeverity.fromSeverityType(it.severityType, it.severityLevel)
+        }
+        Log.d("AlertCheck", "getAlertSeverityForLine($lineCode) -> normalized: ${normalizeLineForAlerts(lineCode)}, hasAlert: ${alert != null}, severity: ${severity?.name}")
+        return severity
+    }
+
+    /**
+     * Refreshes traffic alerts cache and updates state
+     */
+    fun refreshTrafficAlerts() = viewModelScope.launch {
+        try {
+            val result = trafficAlertsRepository.getTrafficAlerts()
+            if (result.isSuccess) {
+                val alerts = result.getOrDefault(emptyList())
+                Log.d("AlertCheck", "Fetched ${alerts.size} alerts from repository")
+                // Group alerts by line code (normalized for robust matching)
+                val alertsByLine = alerts.groupBy { alert: com.pelotcl.app.data.model.TrafficAlert ->
+                    val normalized = normalizeLineForAlerts(alert.lineCode)
+                    Log.d("AlertCheck", "Mapping alert for ${alert.lineCode} to $normalized")
+                    normalized
+                }
+                _trafficAlerts.value = alertsByLine
+                Log.d("AlertCheck", "Updated _trafficAlerts with ${alertsByLine.size} unique normalized lines")
+            } else {
+                Log.e("AlertCheck", "Failed to fetch alerts: ${result.exceptionOrNull()?.message}")
+            }
+        } catch (e: Exception) {
+            Log.e("TransportViewModel", "Error refreshing traffic alerts", e)
+        }
     }
 }

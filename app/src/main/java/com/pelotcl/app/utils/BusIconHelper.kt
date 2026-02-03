@@ -1,15 +1,23 @@
 package com.pelotcl.app.utils
 
+import android.util.LruCache
 import com.pelotcl.app.data.model.StopFeature
 
 /**
  * Utility to determine appropriate icons for bus stops
  */
 object BusIconHelper {
-    
+
+    /**
+     * Cache for parsed desserte strings to avoid repeated parsing.
+     * Key: desserte string, Value: list of normalized line names
+     * Size: 500 entries (sufficient for frequently accessed stops)
+     */
+    private val desserteCache = LruCache<String, List<String>>(500)
+
     /**
      * Extracts the first bus line from a stop and returns the corresponding drawable name
-     * 
+     *
      * @param stopFeature The transport stop
      * @return The drawable name (without the .xml extension) or null if no line found
      */
@@ -19,12 +27,43 @@ object BusIconHelper {
         val firstLine = lines.first()
         return getDrawableNameForLine(firstLine)
     }
-    
+
     /**
-     * Returns all lines serving a stop (line names)
+     * Returns all lines serving a stop (line names).
+     * Results are cached by desserte string to avoid repeated parsing.
      */
     fun getAllLinesForStop(stopFeature: StopFeature): List<String> {
-        return parseDesserte(stopFeature.properties.desserte).map { normalizeLineName(it) }
+        val desserte = stopFeature.properties.desserte
+
+        // Check cache first
+        desserteCache.get(desserte)?.let { return it }
+
+        // Parse and cache
+        val result = parseDesserte(desserte).map { normalizeLineName(it) }
+        desserteCache.put(desserte, result)
+        return result
+    }
+
+    /**
+     * Clears the desserte cache. Call when data source changes or under memory pressure.
+     */
+    fun clearCache() {
+        desserteCache.evictAll()
+    }
+
+    /**
+     * Trims the cache under memory pressure.
+     * @param level The trim memory level from ComponentCallbacks2
+     */
+    fun trimCache(level: Int) {
+        when {
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> {
+                desserteCache.evictAll()
+            }
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_MODERATE -> {
+                desserteCache.trimToSize(desserteCache.maxSize() / 2)
+            }
+        }
     }
     
     /**

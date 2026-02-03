@@ -108,6 +108,9 @@ dependencies {
     // Kotlinx Serialization for fast JSON caching
     implementation(libs.kotlinx.serialization.json)
 
+    // ProfileInstaller for Baseline Profiles (improves cold start by ~15-30%)
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

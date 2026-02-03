@@ -12,11 +12,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Accessible
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Directions
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -137,7 +141,8 @@ fun StationBottomSheet(
     stationInfo: StationInfo?,
     sheetState: SheetState?,
     onDismiss: () -> Unit,
-    onLineClick: (String) -> Unit = {}
+    onLineClick: (String) -> Unit = {},
+    onItineraryClick: () -> Unit = {}
 ) {
     if (stationInfo != null) {
         val content = @Composable {
@@ -161,17 +166,39 @@ fun StationBottomSheet(
                         modifier = Modifier.weight(1f)
                     )
                     
-                    // PMR icon if station is accessible
-                    if (stationInfo.isPmr) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Accessible,
-                            contentDescription = "Station accessible PMR",
-                            tint = Color(0xFF2563EB),
-                            modifier = Modifier.size(24.dp)
-                        )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // PMR icon if station is accessible
+                        if (stationInfo.isPmr) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Accessible,
+                                contentDescription = "Station accessible PMR",
+                                tint = Color(0xFF2563EB),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+
+                        // Itinerary circular button
+                        FilledIconButton(
+                            onClick = onItineraryClick,
+                            modifier = Modifier.size(40.dp),
+                            shape = CircleShape,
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = Color.Black,
+                                contentColor = Color.White
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Directions,
+                                contentDescription = "Itinéraire",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                 }
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 // Scrollable list of lines (sorted)

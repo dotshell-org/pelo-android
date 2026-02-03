@@ -10,6 +10,8 @@ import com.pelotcl.app.data.repository.TransportRepository
 import com.pelotcl.app.utils.SearchUtils
 import java.io.FileOutputStream
 import java.io.IOException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 enum class LineType {
     METRO, FUNICULAR, NAVIGONE, TRAM, BUS, CHRONO
@@ -20,17 +22,28 @@ class SchedulesRepository(context: Context) {
     private val appContext: Context = context.applicationContext
     private val dbHelper = SchedulesDatabaseHelper(appContext)
 
+    // Mutex for thread-safe access to allStopsCache
+    private val allStopsMutex = Mutex()
+    // In-memory cache for all stops (loaded from DB)
+    private var allStopsCache: List<Triple<String, String, Boolean>>? = null
+    // Cache of normalized stop names for fast search (indexed same as allStopsCache)
+    private var normalizedNamesCache: List<String>? = null
+
     companion object {
         // LRU Cache for schedules: key = "lineName|stopName|directionId|isHoliday"
-        // Max 100 entries (typical usage pattern is viewing ~10-20 stops per session)
-        private val schedulesCache = LruCache<String, List<String>>(100)
+        // Reduced from 100 to 50 entries to limit memory during rapid navigation
+        private val schedulesCache = LruCache<String, List<String>>(50)
 
         // LRU Cache for headsigns: key = routeName
-        private val headsignsCache = LruCache<String, Map<Int, String>>(50)
+        // Reduced from 50 to 30 entries
+        private val headsignsCache = LruCache<String, Map<Int, String>>(30)
 
         // LRU Cache for search results: key = normalized query (3+ chars)
-        // Increased size for better search responsiveness
-        private val searchCache = LruCache<String, List<StationSearchResult>>(50)
+        private val searchCache = LruCache<String, List<StationSearchResult>>(30)
+
+        // LRU Cache for stop sequences: key = "routeName|directionId"
+        // Reduced from 100 to 40 entries
+        private val stopSequencesCache = LruCache<String, List<Pair<String, Int>>>(40)
 
         // Track if database has been warmed up
         @Volatile
@@ -44,6 +57,7 @@ class SchedulesRepository(context: Context) {
             schedulesCache.evictAll()
             headsignsCache.evictAll()
             searchCache.evictAll()
+            stopSequencesCache.evictAll()
         }
     }
 
@@ -80,50 +94,28 @@ class SchedulesRepository(context: Context) {
 
         val results = mutableListOf<StationSearchResult>()
         try {
-            val db = dbHelper.readableDatabase
+            // Utiliser la recherche en mémoire pour une gestion fiable des accents
+            // (SQLite LIKE ne gère pas bien les accents sur Android)
+            val allStops = getAllStops()
+            val normalizedNames = normalizedNamesCache ?: return emptyList()
 
-            // Optimisation: utiliser SQL pour pré-filtrer largement
-            // On prend tous les arrêts qui contiennent au moins le premier mot
-            // puis le fuzzy matching en mémoire fait le travail précis (avec accents, tirets, etc.)
-            val words = query.trim().split("\\s+".toRegex()).filter { it.isNotEmpty() }
-            
-            val cursor = if (words.isEmpty()) {
-                db.rawQuery("SELECT nom, desserte, pmr FROM arrets LIMIT 50", null)
-            } else {
-                // Pré-filtre large: juste le premier mot pour réduire la liste
-                // Le fuzzy matching vérifiera tous les mots après
-                db.rawQuery(
-                    "SELECT nom, desserte, pmr FROM arrets WHERE LOWER(nom) LIKE ? LIMIT 500",
-                    arrayOf("%${words[0].lowercase()}%")
-                )
-            }
+            // Filtrer les candidats avec fuzzy matching optimisé (utilise le cache des noms normalisés)
+            val filteredWithIndex = allStops.indices.filter { index ->
+                SearchUtils.fuzzyContainsNormalized(normalizedNames[index], normalizedQuery)
+            }.map { index -> allStops[index] to normalizedNames[index] }
 
-            val candidateStops = mutableListOf<Triple<String, String, Boolean>>()
-            while (cursor.moveToNext()) {
-                val name = cursor.getString(0)
-                val desserteRaw = cursor.getString(1) ?: ""
-                val isPmr = cursor.getInt(2) == 1
-                candidateStops.add(Triple(name, desserteRaw, isPmr))
-            }
-            cursor.close()
-
-            // Filtrer les candidats avec fuzzy matching pour une précision maximale
-            val filteredStops = candidateStops.filter { (name, _, _) ->
-                SearchUtils.fuzzyContains(name, query)
-            }
-
-            // Trier: priorité aux arrêts qui commencent par la query
-            val sorted = filteredStops.sortedWith(
+            // Trier: priorité aux arrêts qui commencent par la query (avec noms pré-normalisés)
+            val sorted = filteredWithIndex.sortedWith(
                 compareBy(
-                    { !SearchUtils.fuzzyStartsWith(it.first, query) },
-                    { it.first }
+                    { !SearchUtils.fuzzyStartsWithNormalized(it.second, normalizedQuery) },
+                    { it.first.first }
                 )
-            ).take(50)
+            ).take(50).map { it.first }
 
             // Convertir en StationSearchResult et fusionner les arrêts du même nom
             val stopsByName = mutableMapOf<String, MutableList<String>>()
             val pmrByName = mutableMapOf<String, Boolean>()
-            
+
             sorted.forEach { (name, desserteRaw, isPmr) ->
                 val lines = if (desserteRaw.isNotBlank()) {
                     // Parse pour enlever les suffixes :A et :R et extraire uniquement les noms de lignes
@@ -136,13 +128,13 @@ class SchedulesRepository(context: Context) {
                 } else {
                     emptyList()
                 }
-                
+
                 // Fusionner les lignes pour le même arrêt
                 stopsByName.getOrPut(name) { mutableListOf() }.addAll(lines)
                 // Un arrêt est PMR s'il l'est dans au moins une de ses entrées
                 pmrByName[name] = pmrByName.getOrDefault(name, false) || isPmr
             }
-            
+
             // Créer les résultats avec lignes fusionnées et dédupliquées
             stopsByName.forEach { (name, lines) ->
                 results.add(StationSearchResult(name, lines.distinct(), pmrByName[name] ?: false))
@@ -154,11 +146,11 @@ class SchedulesRepository(context: Context) {
             return try {
                 val repo = TransportRepository(appContext)
                 val stopsResult = repo.getAllStops()
-                
+
                 // Grouper les arrêts par nom et fusionner leurs lignes
                 val stopsByName = mutableMapOf<String, MutableList<String>>()
                 val pmrByName = mutableMapOf<String, Boolean>()
-                
+
                 stopsResult.getOrNull()?.features
                     ?.asSequence()
                     ?.filter { SearchUtils.fuzzyContains(it.properties.nom, query) }
@@ -172,12 +164,12 @@ class SchedulesRepository(context: Context) {
                             }
                             ?.filter { it.isNotEmpty() }
                             ?: emptyList()
-                        
+
                         val name = stop.properties.nom
                         stopsByName.getOrPut(name) { mutableListOf() }.addAll(lines)
                         pmrByName[name] = pmrByName.getOrDefault(name, false) || stop.properties.pmr
                     }
-                
+
                 // Créer les résultats avec lignes fusionnées
                 stopsByName.map { (name, lines) ->
                     StationSearchResult(name, lines.distinct(), pmrByName[name] ?: false)
@@ -198,6 +190,43 @@ class SchedulesRepository(context: Context) {
         }
 
         return results
+    }
+
+    /**
+     * Helper to load all stops into memory once for efficient filtering.
+     * Thread-safe using Mutex. Also builds the normalized names cache.
+     */
+    private suspend fun getAllStops(): List<Triple<String, String, Boolean>> {
+        allStopsCache?.let { return it }
+
+        return allStopsMutex.withLock {
+            allStopsCache?.let { return it }
+
+            val stops = mutableListOf<Triple<String, String, Boolean>>()
+            val normalizedNames = mutableListOf<String>()
+            try {
+                val db = dbHelper.readableDatabase
+                // Load critical columns for search: name, lines served (desserte), isPMR
+                val cursor = db.rawQuery("SELECT nom, desserte, pmr FROM arrets", null)
+
+                while (cursor.moveToNext()) {
+                    val name = cursor.getString(0)
+                    val desserteRaw = cursor.getString(1) ?: ""
+                    val isPmr = cursor.getInt(2) == 1
+                    stops.add(Triple(name, desserteRaw, isPmr))
+                    normalizedNames.add(SearchUtils.normalizeForSearch(name))
+                }
+                cursor.close()
+            } catch (e: Exception) {
+                Log.e("SchedulesRepository", "Error loading all stops: ${e.message}")
+            }
+
+            // Cache the immutable lists
+            val immutableStops = stops.toList()
+            allStopsCache = immutableStops
+            normalizedNamesCache = normalizedNames.toList()
+            immutableStops
+        }
     }
 
     private fun getLineType(lineName: String): LineType {
@@ -239,9 +268,64 @@ class SchedulesRepository(context: Context) {
         return result
     }
 
-    fun getSchedules(lineName: String, stopName: String, directionId: Int, isHoliday: Boolean): List<String> {
+    /**
+     * Retrieves the canonical stop sequence for a line and direction from GTFS data.
+     * @param routeName The route/line name (e.g., "86", "A", "T1")
+     * @param directionId The direction ID (0 or 1)
+     * @return List of pairs (station_name, stop_sequence) ordered by sequence, or empty if not found
+     */
+    fun getStopSequences(routeName: String, directionId: Int): List<Pair<String, Int>> {
+        val cacheKey = "$routeName|$directionId"
+        stopSequencesCache.get(cacheKey)?.let { return it }
+
+        val result = mutableListOf<Pair<String, Int>>()
+        try {
+            val db = dbHelper.readableDatabase
+            val cursor = db.rawQuery(
+                """
+                SELECT station_name, stop_sequence 
+                FROM stop_sequences 
+                WHERE route_name = ? AND direction_id = ?
+                ORDER BY stop_sequence ASC
+                """.trimIndent(),
+                arrayOf(routeName, directionId.toString())
+            )
+            while (cursor.moveToNext()) {
+                val stationName = cursor.getString(0)
+                val stopSequence = cursor.getInt(1)
+                result.add(Pair(stationName, stopSequence))
+            }
+            cursor.close()
+
+            if (result.isNotEmpty()) {
+                stopSequencesCache.put(cacheKey, result)
+            }
+        } catch (e: Exception) {
+            Log.e("SchedulesRepository", "Error getting stop sequences for $routeName dir $directionId", e)
+        }
+        return result
+    }
+
+    /**
+     * Retrieves all available stop sequences for a line (both directions).
+     * @param routeName The route/line name
+     * @return Map of directionId to list of (station_name, stop_sequence)
+     */
+    fun getAllStopSequences(routeName: String): Map<Int, List<Pair<String, Int>>> {
+        val result = mutableMapOf<Int, List<Pair<String, Int>>>()
+        // Try both directions
+        for (directionId in listOf(0, 1)) {
+            val sequences = getStopSequences(routeName, directionId)
+            if (sequences.isNotEmpty()) {
+                result[directionId] = sequences
+            }
+        }
+        return result
+    }
+
+    fun getSchedules(lineName: String, stopName: String, directionId: Int, isSchoolHoliday: Boolean, isPublicHoliday: Boolean): List<String> {
         // Build cache key
-        val cacheKey = "$lineName|$stopName|$directionId|$isHoliday"
+        val cacheKey = "$lineName|$stopName|$directionId|$isSchoolHoliday|$isPublicHoliday"
         schedulesCache.get(cacheKey)?.let {
             return it
         }
@@ -252,10 +336,11 @@ class SchedulesRepository(context: Context) {
 
             val lineType = getLineType(lineName)
 
-            val effectiveIsHoliday = if (lineType == LineType.METRO || lineType == LineType.FUNICULAR || lineType == LineType.TRAM) {
+            // School holidays only affect bus schedules (AM vs AV)
+            val effectiveIsSchoolHoliday = if (lineType == LineType.METRO || lineType == LineType.FUNICULAR || lineType == LineType.TRAM) {
                 false
             } else {
-                isHoliday
+                isSchoolHoliday
             }
 
             val calendar = java.util.Calendar.getInstance()
@@ -269,8 +354,13 @@ class SchedulesRepository(context: Context) {
                 java.util.Calendar.SATURDAY -> "saturday"
                 else -> "sunday"
             }
-            // Use the actual day of the week for all line types (metro/tram have different weekend schedules)
-            val dayColumn = actualDayColumn
+
+            // CRITICAL: Public holidays always use Sunday schedules, regardless of actual day
+            val dayColumn = if (isPublicHoliday) {
+                "sunday"
+            } else {
+                actualDayColumn
+            }
 
             // Format today's date as YYYYMMDD for GTFS calendar date comparison
             val todayFormatted = String.format(
@@ -281,13 +371,15 @@ class SchedulesRepository(context: Context) {
                 calendar.get(java.util.Calendar.DAY_OF_MONTH)
             )
 
-            val isWeekday = dayColumn in setOf("monday", "tuesday", "wednesday", "thursday", "friday")
+            val isWeekday = actualDayColumn in setOf("monday", "tuesday", "wednesday", "thursday", "friday")
             var appliedAmAvFilter = false
             var serviceIdFilter = ""
 
-            if (lineType != LineType.METRO && lineType != LineType.FUNICULAR && lineType != LineType.NAVIGONE && lineType != LineType.TRAM && isWeekday) {
+            // For bus lines on weekdays: use AM (normal) or AV (school holiday) schedules
+            // Note: This is separate from public holidays which override the dayColumn to Sunday
+            if (lineType != LineType.METRO && lineType != LineType.FUNICULAR && lineType != LineType.NAVIGONE && lineType != LineType.TRAM && isWeekday && !isPublicHoliday) {
                 appliedAmAvFilter = true
-                serviceIdFilter = if (effectiveIsHoliday) {
+                serviceIdFilter = if (effectiveIsSchoolHoliday) {
                     "AND s.service_id LIKE '%AV%'"
                 } else {
                     "AND s.service_id LIKE '%AM%'"

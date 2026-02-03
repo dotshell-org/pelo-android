@@ -1,6 +1,7 @@
 package com.pelotcl.app.ui.components
 
 import android.os.Build
+import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -13,14 +14,29 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PriorityHigh
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import com.pelotcl.app.utils.SearchUtils
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,13 +44,25 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.gestures.FlingBehavior
+import androidx.compose.foundation.gestures.ScrollableDefaults
+import androidx.compose.runtime.Stable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.text.isDigitsOnly
+import com.pelotcl.app.data.model.AlertSeverity
+import com.pelotcl.app.data.model.AlertSeverity as TrafficAlertSeverity
+import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.utils.LineColorHelper
 
 /**
@@ -46,10 +74,94 @@ fun LinesBottomSheet(
     allLines: List<String>,
     onLineClick: (String) -> Unit,
     modifier: Modifier = Modifier,
-    favoriteLines: Set<String> = emptySet()
+    favoriteLines: Set<String> = emptySet(),
+    viewModel: TransportViewModel? = null
 ) {
     val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
+
+    // State pour gérer le scroll
+    val listState = rememberLazyListState()
+
+    // Détecte si on est en bas de la liste
+    val isAtBottom by remember {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
+            val isLastItemVisible = lastVisibleItem?.index == layoutInfo.totalItemsCount - 1
+            val isLastItemFullyVisible = lastVisibleItem?.let {
+                it.offset + it.size <= layoutInfo.viewportEndOffset
+            } ?: false
+            isLastItemVisible && isLastItemFullyVisible
+        }
+    }
+
+    // Détecte si on est en haut de la liste
+    val isAtTop by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+        }
+    }
+
+    // NestedScrollConnection pour arrêter le scroll aux limites
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                // Si on scrolle vers le bas (available.y < 0) et qu'on est déjà en bas, bloquer
+                if (available.y < 0 && isAtBottom) {
+                    return Offset(0f, available.y)
+                }
+                // Si on scrolle vers le haut (available.y > 0) et qu'on est déjà en haut, bloquer
+                if (available.y > 0 && isAtTop) {
+                    return Offset(0f, available.y)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                // Consommer tout le scroll restant si on est aux limites
+                if (isAtBottom && available.y < 0) {
+                    return Offset(0f, available.y)
+                }
+                if (isAtTop && available.y > 0) {
+                    return Offset(0f, available.y)
+                }
+                return Offset.Zero
+            }
+        }
+    }
+
+    // Observe traffic alerts from ViewModel
+    val trafficAlerts by viewModel?.trafficAlerts?.collectAsState() ?: remember { mutableStateOf(emptyMap()) }
+
+    // Compute a map of alerts for all lines to be used by Chips
+    val lineAlerts = remember(trafficAlerts, allLines) {
+        Log.d("AlertCheck", "Recomputing lineAlerts map. trafficAlerts size: ${trafficAlerts.size}, allLines size: ${allLines.size}")
+        if (viewModel != null && allLines.isNotEmpty()) {
+            val alertsMap = mutableMapOf<String, TrafficAlertSeverity>()
+            allLines.forEach { lineName ->
+                // Log each line check to see why it might be missing
+                try {
+                    val severity = viewModel.getAlertSeverityForLine(lineName)
+                    if (severity != null) {
+                        Log.d("AlertCheck", "Line $lineName has alert severity: ${severity.name}")
+                        alertsMap[lineName.uppercase()] = severity
+                    }
+                } catch (e: Exception) {
+                    Log.e("LinesBottomSheet", "Error loading alerts for line $lineName", e)
+                }
+            }
+            Log.d("AlertCheck", "Computed alertsMap size: ${alertsMap.size}")
+            alertsMap
+        } else {
+            Log.d("AlertCheck", "viewModel is null or allLines is empty")
+            emptyMap()
+        }
+    }
 
     // Organize lines by category
     val categorizedLines = remember(allLines, favoriteLines) {
@@ -76,7 +188,7 @@ fun LinesBottomSheet(
             base.toList()
         }
     }
-    
+
     // Filtrer les lignes selon la recherche
     val filteredCategories = remember(categorizedLines, searchQuery) {
         if (searchQuery.isEmpty()) {
@@ -88,7 +200,25 @@ fun LinesBottomSheet(
             }
         }
     }
-    
+
+    // Flatten the structure for LazyColumn items
+    data class CategoryItem(val category: String)
+    data class LineRowItem(val category: String, val rowIndex: Int, val lines: List<String>)
+
+    val flattenedItems = remember(filteredCategories) {
+        buildList {
+            filteredCategories.forEach { (category, lines) ->
+                // Add category header
+                add(CategoryItem(category))
+
+                // Add line rows (chunked by 4)
+                lines.chunked(4).forEachIndexed { rowIndex, rowLines ->
+                    add(LineRowItem(category, rowIndex, rowLines))
+                }
+            }
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -98,55 +228,76 @@ fun LinesBottomSheet(
     ) {
         // List of lines by category
         LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            state = listState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .nestedScroll(nestedScrollConnection),
+            userScrollEnabled = true
         ) {
-            // We lazily compose rows per category to avoid inflating hundreds of chips at once
-            filteredCategories.forEach { (category, lines) ->
-                val chunks = lines.chunked(4)
-
-                // Category header
-                item(key = "header_$" + category) {
-                    Text(
-                        text = category,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp, bottom = 8.dp)
-                    )
+            items(
+                items = flattenedItems,
+                key = { item ->
+                    when (item) {
+                        is CategoryItem -> "header_${item.category}"
+                        is LineRowItem -> "${item.category}_row_${item.rowIndex}"
+                        else -> item.hashCode()
+                    }
+                },
+                contentType = { item ->
+                    when (item) {
+                        is CategoryItem -> "header"
+                        is LineRowItem -> "linerow"
+                        else -> null
+                    }
                 }
-
-                // One lazy item per row
-                items(count = chunks.size, key = { rowIndex -> "${category}_row_$rowIndex" }) { rowIndex ->
-                    val rowLines = chunks[rowIndex]
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        // Up to 4 chips per row
-                        rowLines.forEach { line ->
-                            // Each chip now also accepts an optional favorite status & toggle
-                            LineChip(
-                                lineName = line,
-                                onClick = { onLineClick(line) },
-                                modifier = Modifier.weight(1f)
+            ) { item ->
+                when (item) {
+                    is CategoryItem -> {
+                        // Category header
+                        Column {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = item.category,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp, bottom = 8.dp)
                             )
                         }
-                        // Fill remaining columns for alignment consistency
-                        repeat(4 - rowLines.size) {
-                            Spacer(modifier = Modifier.weight(1f))
+                    }
+                    is LineRowItem -> {
+                        // Row of line chips
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Up to 4 chips per row
+                            item.lines.forEach { line ->
+                                val alertSeverity = lineAlerts[line.uppercase()]
+                                LineChip(
+                                    lineName = line,
+                                    onClick = { onLineClick(line) },
+                                    modifier = Modifier.weight(1f),
+                                    alertSeverity = alertSeverity
+                                )
+                            }
+                            // Fill remaining columns for alignment consistency
+                            repeat(4 - item.lines.size) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
                         }
                     }
                 }
             }
-            
+
             // Message if no results
             if (filteredCategories.isEmpty() && searchQuery.isNotEmpty()) {
-                item {
+                item(key = "no_results") {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -192,12 +343,7 @@ private fun naturalComparatorString(a: String, b: String): Int {
 }
 
 /**
- * Section pour une catégorie de lignes
- */
-// CategorySection removed in favor of a fully lazy layout within LazyColumn to avoid initial lag
-
-/**
- * Chip pour afficher une ligne avec son icône TCL officielle
+ * Chip to show a line with the official TCL icon
  */
 @Suppress("DiscouragedApi") // Dynamic resource loading for transport line icons
 @RequiresApi(Build.VERSION_CODES.O)
@@ -205,10 +351,11 @@ private fun naturalComparatorString(a: String, b: String): Int {
 private fun LineChip(
     lineName: String,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    alertSeverity: TrafficAlertSeverity? = null
 ) {
     val context = LocalContext.current
-    
+
     // Get icon resource ID
     val drawableId = remember(lineName) {
         val resourceName = lineName.lowercase()
@@ -218,52 +365,110 @@ private fun LineChip(
             .replace("-", "")
             .replace(" ", "")
             .let { if (it.first().isDigit()) "_$it" else it } // Prefix _ if starts with digit
-        
+
         context.resources.getIdentifier(resourceName, "drawable", context.packageName)
     }
-    
+
     Box(
         modifier = modifier
-            .height(36.dp) // Reduced from 48dp to 36dp
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
-            .padding(2.dp), // Reduced from 4dp to 2dp
+            .height(48.dp)
+            .padding(4.dp),
         contentAlignment = Alignment.Center
     ) {
-        if (drawableId != 0) {
-            // Use official TCL icon
-            Icon(
-                painter = painterResource(id = drawableId),
-                contentDescription = "Ligne $lineName",
-                modifier = Modifier.fillMaxSize(),
-                tint = Color.Unspecified // Garde les couleurs d'origine du SVG
-            )
-        } else {
-            // Fallback if icon doesn't exist
-            val backgroundColor = Color(LineColorHelper.getColorForLineString(lineName))
-            val textColor = if (lineName.uppercase() == "T3") Color.Black else Color.White
-            
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(backgroundColor)
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = lineName,
-                    color = textColor,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
+        // Content Box with clipping and click
+        Box(
+            modifier = Modifier
+                .size(80.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            if (drawableId != 0) {
+                // Use official TCL icon
+                Icon(
+                    painter = painterResource(id = drawableId),
+                    contentDescription = "Ligne $lineName",
+                    modifier = Modifier.size(80.dp),
+                    tint = Color.Unspecified
                 )
+            } else {
+                // Fallback if icon doesn't exist
+                val backgroundColor = Color(LineColorHelper.getColorForLineString(lineName))
+                val textColor = if (lineName.uppercase() == "T3") Color.Black else Color.White
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(backgroundColor)
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = lineName,
+                        color = textColor,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
             }
+        }
+
+        // Alert badge (bottom-right corner) - Placed outside the clipped box
+        if (alertSeverity != null) {
+            AlertBadge(
+                severity = alertSeverity,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .offset(x = (5).dp, y = (2).dp)
+            )
         }
     }
 }
 
 /**
- * Vérifie si une ligne a une icône SVG disponible
+ * Composable for displaying an alert pastilla (color circle)
+ */
+@Composable
+private fun AlertBadge(
+    severity: TrafficAlertSeverity,
+    modifier: Modifier = Modifier
+) {
+    val badgeColor = Color(severity.color)
+    val badgeSize = 16.dp
+
+    Box(
+        modifier = modifier
+            .size(badgeSize)
+            .clip(CircleShape)
+            .background(badgeColor),
+        contentAlignment = Alignment.Center
+    ) {
+        if (severity == AlertSeverity.INFORMATION || severity == AlertSeverity.OTHER_EFFECT) {
+            // Use a text-based "i" to avoid the double circle from Icons.Default.Info
+            Text(
+                text = "i",
+                color = Color.White,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Serif
+                ),
+                modifier = Modifier.padding(bottom = 1.dp)
+            )
+        } else {
+            // PriorityHigh is a plain "!" without a surrounding circle
+            Icon(
+                imageVector = Icons.Default.PriorityHigh,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(12.dp)
+            )
+        }
+    }
+}
+
+/**
+ * Checks if a line has an available SVG icon
  */
 @Suppress("DiscouragedApi") // Dynamic resource loading for transport line icons
 private fun hasLineIcon(lineName: String, context: android.content.Context): Boolean {
@@ -274,18 +479,18 @@ private fun hasLineIcon(lineName: String, context: android.content.Context): Boo
         .replace("-", "")
         .replace(" ", "")
         .let { if (it.firstOrNull()?.isDigit() == true) "_$it" else it }
-    
+
     val drawableId = context.resources.getIdentifier(resourceName, "drawable", context.packageName)
     return drawableId != 0
 }
 
 /**
- * Organise les lignes par catégorie et filtre celles qui n'ont pas d'icône
+ * Organises lines by category and filters those which haven't icon.
  */
 private fun categorizeLines(lines: List<String>, context: android.content.Context): Map<String, List<String>> {
     // First filter lines that don't have icons
     val linesWithIcon = lines.filter { hasLineIcon(it, context) }
-    
+
     val metros = mutableListOf<String>()
     val trams = mutableListOf<String>()
     val funiculaires = mutableListOf<String>()
@@ -299,7 +504,7 @@ private fun categorizeLines(lines: List<String>, context: android.content.Contex
     val zi = mutableListOf<String>()
     val carsDuRhone = mutableListOf<String>()
     val bus = mutableListOf<String>()
-    
+
     linesWithIcon.forEach { line ->
         val upperLine = line.uppercase()
         when {
@@ -319,7 +524,7 @@ private fun categorizeLines(lines: List<String>, context: android.content.Contex
             else -> bus.add(line)
         }
     }
-    
+
     // Natural sort that correctly handles numbers in strings
     val naturalComparator = Comparator<String> { a, b ->
         val partsA = a.split(Regex("(?<=\\D)(?=\\d)|(?<=\\d)(?=\\D)"))
@@ -350,9 +555,9 @@ private fun categorizeLines(lines: List<String>, context: android.content.Contex
     fun naturalSort(lines: List<String>): List<String> {
         return lines.sortedWith(naturalComparator)
     }
-    
+
     val result = mutableMapOf<String, List<String>>()
-    
+
     if (metros.isNotEmpty()) result["Métro"] = naturalSort(metros)
     if (funiculaires.isNotEmpty()) result["Funiculaire"] = naturalSort(funiculaires)
     if (trams.isNotEmpty()) result["Tramway"] = naturalSort(trams)
@@ -366,6 +571,6 @@ private fun categorizeLines(lines: List<String>, context: android.content.Contex
     if (bus.isNotEmpty()) result["Bus"] = naturalSort(bus)
     if (carsDuRhone.isNotEmpty()) result["Cars du Rhône TCL unifié"] = naturalSort(carsDuRhone)
     if (jd.isNotEmpty()) result["Junior Direct"] = naturalSort(jd)
-    
+
     return result
 }
