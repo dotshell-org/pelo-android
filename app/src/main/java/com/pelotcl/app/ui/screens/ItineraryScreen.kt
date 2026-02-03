@@ -464,6 +464,7 @@ fun ItineraryScreen(
                     JourneyMapView(
                         journey = selectedJourney!!,
                         onBack = { selectedJourney = null },
+                        userLocation = userLocation,
                         bottomPadding = mapBottomPadding,
                         modifier = Modifier.fillMaxSize()
                     )
