@@ -2,6 +2,7 @@ package com.pelotcl.app.ui.screens
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.RectF
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -252,6 +253,15 @@ fun PlanScreen(
                     selectedLine?.currentStationName?.isNotBlank() == true)) {
             scope.launch {
                 scaffoldSheetState.bottomSheetState.expand()
+            }
+        }
+        // Partial expand (show sheet but collapsed) when clicking directly on a line from the map
+        // (coming from null state with no station selected)
+        if (sheetContentState == SheetContentState.LINE_DETAILS &&
+            previousSheetContentState == null &&
+            selectedLine?.currentStationName?.isBlank() == true) {
+            scope.launch {
+                scaffoldSheetState.bottomSheetState.partialExpand()
             }
         }
         previousSheetContentState = sheetContentState
@@ -541,6 +551,36 @@ fun PlanScreen(
                             selectedStation = clickedStationInfo
                             sheetContentState = SheetContentState.STATION
                         }
+                    }
+                }, onLineClick = { lineName ->
+                    scope.launch {
+                        // Cancel pending operations and clear states from previous line to prevent OOM
+                        viewModel.resetLineDetailState()
+
+                        // Close any existing sheet content
+                        if (sheetContentState == SheetContentState.LINE_DETAILS || sheetContentState == SheetContentState.ALL_SCHEDULES) {
+                            selectedLine?.let { lineInfo ->
+                                val currentLineName = lineInfo.lineName
+                                if (!isMetroTramOrFunicular(currentLineName)) {
+                                    viewModel.removeLineFromLoaded(currentLineName)
+                                }
+                            }
+                        }
+
+                        selectedLine = LineInfo(
+                            lineName = lineName,
+                            currentStationName = ""
+                        )
+
+                        if (!isMetroTramOrFunicular(lineName)) {
+                            viewModel.addLineToLoaded(lineName)
+                            if (isTemporaryBus(lineName)) {
+                                temporaryLoadedBusLines = temporaryLoadedBusLines + lineName
+                            }
+                            kotlinx.coroutines.delay(100)
+                        }
+
+                        sheetContentState = SheetContentState.LINE_DETAILS
                     }
                 }, scope = scope, viewModel = viewModel)
             }
@@ -1490,11 +1530,15 @@ private fun addLineToMap(
 
 // deleted
 
+// Holder for the current map click listener to allow removal before adding a new one
+private var currentMapClickListener: MapLibreMap.OnMapClickListener? = null
+
 private suspend fun addStopsToMap(
     map: MapLibreMap,
     stops: List<com.pelotcl.app.data.model.StopFeature>,
     context: android.content.Context,
     onStationClick: (StationInfo) -> Unit = {},
+    onLineClick: (String) -> Unit = {},
     scope: CoroutineScope,
     viewModel: TransportViewModel? = null
 ) {
@@ -1769,8 +1813,11 @@ private suspend fun addStopsToMap(
                     style.addLayerBelow(secondaryLayer, "clusters")
                 }
 
-                // Interaction listener for stops
-                map.addOnMapClickListener { point ->
+                // Remove previous listener before adding a new one to prevent duplicates
+                currentMapClickListener?.let { map.removeOnMapClickListener(it) }
+
+                // Interaction listener for stops and lines
+                val clickListener = MapLibreMap.OnMapClickListener { point ->
                     val screenPoint = map.projection.toScreenLocation(point)
 
                     // Check clusters first
@@ -1778,10 +1825,10 @@ private suspend fun addStopsToMap(
                     if (clusterFeatures.isNotEmpty()) {
                         val cameraUpdate = CameraUpdateFactory.newLatLngZoom(point, map.cameraPosition.zoom + 2)
                         map.animateCamera(cameraUpdate)
-                        return@addOnMapClickListener true
+                        return@OnMapClickListener true
                     }
 
-                    // Check individual stops - query all created layers
+                    // Check individual stops first (higher priority than lines)
                     val interactableLayers = usedSlots.flatMap { idx ->
                         listOf("$priorityLayerPrefix-$idx", "$tramLayerPrefix-$idx", "$secondaryLayerPrefix-$idx")
                     }.toTypedArray()
@@ -1807,7 +1854,45 @@ private suspend fun addStopsToMap(
                                     lignes = lignes
                                 )
                                 onStationClick(stationInfo)
-                                return@addOnMapClickListener true
+                                return@OnMapClickListener true
+                            } catch (_: Exception) {
+                                // Ignore parse errors
+                            }
+                        }
+                    }
+
+                    // Check for line clicks (only if no stop was clicked)
+                    // Use a larger hitbox for easier line selection (30px padding around touch point)
+                    val hitboxPadding = 30f
+                    val lineHitbox = RectF(
+                        screenPoint.x - hitboxPadding,
+                        screenPoint.y - hitboxPadding,
+                        screenPoint.x + hitboxPadding,
+                        screenPoint.y + hitboxPadding
+                    )
+                    
+                    // Query all-lines-layer and individual line layers
+                    // Get all layer IDs that could contain line features
+                    val currentStyle = map.style
+                    val allLineLayerIds = mutableListOf("all-lines-layer")
+                    currentStyle?.layers?.forEach { layer ->
+                        if (layer.id.startsWith("layer-") && !layer.id.startsWith("layer-stops")) {
+                            allLineLayerIds.add(layer.id)
+                        }
+                    }
+                    
+                    val lineFeatures = map.queryRenderedFeatures(lineHitbox, *allLineLayerIds.toTypedArray())
+                    
+                    if (lineFeatures.isNotEmpty()) {
+                        val feature = lineFeatures.first()
+                        val props = feature.properties()
+                        if (props != null) {
+                            try {
+                                val lineName = if (props.has("ligne")) props.get("ligne").asString else ""
+                                if (lineName.isNotEmpty()) {
+                                    onLineClick(lineName)
+                                    return@OnMapClickListener true
+                                }
                             } catch (_: Exception) {
                                 // Ignore parse errors
                             }
@@ -1815,6 +1900,9 @@ private suspend fun addStopsToMap(
                     }
                     false
                 }
+                
+                currentMapClickListener = clickListener
+                map.addOnMapClickListener(clickListener)
             }
         }
     }
