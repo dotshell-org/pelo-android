@@ -37,12 +37,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.BottomSheetScaffold
@@ -78,6 +81,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -106,6 +110,18 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.maplibre.android.geometry.LatLng
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Calendar
+import java.util.Locale
+
+/**
+ * Enum for time selection mode: departure or arrival
+ */
+enum class TimeMode {
+    DEPARTURE,  // Search by departure time (default)
+    ARRIVAL     // Search by arrival time ("I need to be there by...")
+}
 
 /**
  * Represents a selected stop for the itinerary
@@ -205,6 +221,21 @@ fun ItineraryScreen(
     // Track if this is the initial screen opening (to allow fallback only on first load)
     var isInitialLoad by remember { mutableStateOf(true) }
 
+    // Time selection mode: departure (default) or arrival
+    var timeMode by remember { mutableStateOf(TimeMode.DEPARTURE) }
+    
+    // Selected time in seconds from midnight (null = use current time)
+    var selectedTimeSeconds by remember { mutableStateOf<Int?>(null) }
+    
+    // Selected date (null = today)
+    var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
+    
+    // Show time picker dialog
+    var showTimePicker by remember { mutableStateOf(false) }
+    
+    // Show date picker dialog
+    var showDatePicker by remember { mutableStateOf(false) }
+
     // Initialize raptor (only if not already initialized) and resolve arrival stop IDs
     LaunchedEffect(Unit) {
         // Initialize Raptor if not ready
@@ -284,7 +315,8 @@ fun ItineraryScreen(
     }
 
     // Calculate journey when both stops are selected and have IDs resolved
-    LaunchedEffect(departureStop, arrivalStop, isRaptorReady) {
+    // Also recalculate when time mode, selected time, or date changes
+    LaunchedEffect(departureStop, arrivalStop, isRaptorReady, timeMode, selectedTimeSeconds, selectedDate) {
         if (departureStop != null && arrivalStop != null &&
             departureStop!!.stopIds.isNotEmpty() && arrivalStop!!.stopIds.isNotEmpty()) {
             isLoading = true
@@ -294,24 +326,49 @@ fun ItineraryScreen(
 
             scope.launch {
                 try {
-                    // Try with current time first
-                    var results = raptorRepository.getOptimizedPaths(
-                        originStopIds = departureStop!!.stopIds,
-                        destinationStopIds = arrivalStop!!.stopIds
-                    )
+                    var results: List<JourneyResult>
+                    val searchDate = selectedDate ?: LocalDate.now()
+                    
+                    when (timeMode) {
+                        TimeMode.DEPARTURE -> {
+                            // Search by departure time
+                            results = raptorRepository.getOptimizedPaths(
+                                originStopIds = departureStop!!.stopIds,
+                                destinationStopIds = arrivalStop!!.stopIds,
+                                departureTimeSeconds = selectedTimeSeconds,
+                                date = searchDate
+                            )
 
-                    // If no results with current time, try with 9:00 AM as fallback test
-                    if (results.isEmpty()) {
-                        results = raptorRepository.getOptimizedPaths(
-                            originStopIds = departureStop!!.stopIds,
-                            destinationStopIds = arrivalStop!!.stopIds,
-                            departureTimeSeconds = 9 * 3600 // 9:00 AM
-                        )
+                            // If no results with selected/current time, try with 9:00 AM as fallback test
+                            if (results.isEmpty() && selectedTimeSeconds == null) {
+                                results = raptorRepository.getOptimizedPaths(
+                                    originStopIds = departureStop!!.stopIds,
+                                    destinationStopIds = arrivalStop!!.stopIds,
+                                    departureTimeSeconds = 9 * 3600, // 9:00 AM
+                                    date = searchDate
+                                )
+                            }
+                        }
+                        TimeMode.ARRIVAL -> {
+                            // Search by arrival time (arrive by X)
+                            val arrivalTime = selectedTimeSeconds ?: run {
+                                // Default to current time + 1 hour if no time selected
+                                val cal = Calendar.getInstance()
+                                (cal.get(Calendar.HOUR_OF_DAY) + 1) * 3600 + cal.get(Calendar.MINUTE) * 60
+                            }
+                            results = raptorRepository.getOptimizedPathsArriveBy(
+                                originStopIds = departureStop!!.stopIds,
+                                destinationStopIds = arrivalStop!!.stopIds,
+                                arrivalTimeSeconds = arrivalTime,
+                                searchWindowMinutes = 120,
+                                date = searchDate
+                            )
+                        }
                     }
 
                     // If still no results and we have nearby stops for fallback, try them
                     // But only during initial load, not when user makes changes
-                    if (results.isEmpty() && nearbyDepartureStops.isNotEmpty() && !hasManuallySelectedDeparture && isInitialLoad) {
+                    if (results.isEmpty() && nearbyDepartureStops.isNotEmpty() && !hasManuallySelectedDeparture && isInitialLoad && timeMode == TimeMode.DEPARTURE) {
                         // Skip the first stop (already tried) and try the others
                         val fallbackStops = nearbyDepartureStops.drop(1)
 
@@ -324,7 +381,8 @@ fun ItineraryScreen(
                             // Try current time
                             results = raptorRepository.getOptimizedPaths(
                                 originStopIds = fallbackStopIds,
-                                destinationStopIds = arrivalStop!!.stopIds
+                                destinationStopIds = arrivalStop!!.stopIds,
+                                date = searchDate
                             )
 
                             // If no results, try 9:00 AM
@@ -332,7 +390,8 @@ fun ItineraryScreen(
                                 results = raptorRepository.getOptimizedPaths(
                                     originStopIds = fallbackStopIds,
                                     destinationStopIds = arrivalStop!!.stopIds,
-                                    departureTimeSeconds = 9 * 3600
+                                    departureTimeSeconds = 9 * 3600,
+                                    date = searchDate
                                 )
                             }
 
@@ -600,6 +659,29 @@ fun ItineraryScreen(
                             icon = Icons.Default.Search,
                             keyboardController = keyboardController
                         )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Time and date selection row
+                        TimeSelectionRow(
+                            timeMode = timeMode,
+                            selectedTimeSeconds = selectedTimeSeconds,
+                            selectedDate = selectedDate,
+                            onTimeModeChange = { newMode -> 
+                                timeMode = newMode
+                                // When switching to ARRIVAL mode, set a default time if none selected
+                                if (newMode == TimeMode.ARRIVAL && selectedTimeSeconds == null) {
+                                    val cal = Calendar.getInstance()
+                                    selectedTimeSeconds = (cal.get(Calendar.HOUR_OF_DAY) + 1) * 3600 + cal.get(Calendar.MINUTE) * 60
+                                }
+                            },
+                            onTimeClick = { showTimePicker = true },
+                            onDateClick = { showDatePicker = true },
+                            onClearDateTime = { 
+                                selectedTimeSeconds = null
+                                selectedDate = null
+                            }
+                        )
                     }
                 }
 
@@ -731,6 +813,33 @@ fun ItineraryScreen(
                 item(key = "navigation_spacer") {
                     Spacer(modifier = Modifier.height(80.dp))
                 }
+            }
+            
+            // Time picker dialog - must be outside LazyColumn
+            if (showTimePicker) {
+                TimePickerDialog(
+                    initialTimeSeconds = selectedTimeSeconds ?: run {
+                        val cal = Calendar.getInstance()
+                        cal.get(Calendar.HOUR_OF_DAY) * 3600 + cal.get(Calendar.MINUTE) * 60
+                    },
+                    onTimeSelected = { timeSeconds ->
+                        selectedTimeSeconds = timeSeconds
+                        showTimePicker = false
+                    },
+                    onDismiss = { showTimePicker = false }
+                )
+            }
+            
+            // Date picker dialog
+            if (showDatePicker) {
+                DatePickerDialog(
+                    initialDate = selectedDate ?: LocalDate.now(),
+                    onDateSelected = { date ->
+                        selectedDate = date
+                        showDatePicker = false
+                    },
+                    onDismiss = { showDatePicker = false }
+                )
             }
         } // End of else block for selectedJourney == null
     }
@@ -1307,6 +1416,527 @@ private fun JourneyDetailsSheetContent(
             }
             // Bottom spacer to prevent content from being cut off by navigation bar
             Spacer(modifier = Modifier.height(80.dp))
+        }
+    }
+}
+
+/**
+ * Row for selecting departure/arrival time mode and picking a date/time
+ */
+@Composable
+private fun TimeSelectionRow(
+    timeMode: TimeMode,
+    selectedTimeSeconds: Int?,
+    selectedDate: LocalDate?,
+    onTimeModeChange: (TimeMode) -> Unit,
+    onTimeClick: () -> Unit,
+    onDateClick: () -> Unit,
+    onClearDateTime: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                color = Color.White.copy(alpha = 0.1f),
+                shape = RoundedCornerShape(12.dp)
+            )
+            .padding(12.dp)
+    ) {
+        // First row: Mode toggle and clear button
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Mode toggle buttons
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Departure mode button
+                Box(
+                    modifier = Modifier
+                        .background(
+                            color = if (timeMode == TimeMode.DEPARTURE) Color.White.copy(alpha = 0.2f) else Color.Transparent,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        .clickable { onTimeModeChange(TimeMode.DEPARTURE) }
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = "Départ",
+                        color = if (timeMode == TimeMode.DEPARTURE) Color.White else Color.White.copy(alpha = 0.6f),
+                        fontWeight = if (timeMode == TimeMode.DEPARTURE) FontWeight.Bold else FontWeight.Normal,
+                        fontSize = 14.sp
+                    )
+                }
+                
+                Spacer(modifier = Modifier.width(8.dp))
+                
+                // Arrival mode button
+                Box(
+                    modifier = Modifier
+                        .background(
+                            color = if (timeMode == TimeMode.ARRIVAL) Color.White.copy(alpha = 0.2f) else Color.Transparent,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        .clickable { onTimeModeChange(TimeMode.ARRIVAL) }
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = "Arrivée",
+                        color = if (timeMode == TimeMode.ARRIVAL) Color.White else Color.White.copy(alpha = 0.6f),
+                        fontWeight = if (timeMode == TimeMode.ARRIVAL) FontWeight.Bold else FontWeight.Normal,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+            
+            // Clear button (only show if date or time is set)
+            if (selectedTimeSeconds != null || selectedDate != null) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Réinitialiser",
+                    tint = Color.White.copy(alpha = 0.6f),
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clickable { onClearDateTime() }
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        // Second row: Date and time pickers
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Date picker
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .weight(1f)
+                    .background(
+                        color = Color.White.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    .clickable { onDateClick() }
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CalendarToday,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = formatDateDisplay(selectedDate),
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+            
+            // Time picker
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .weight(1f)
+                    .background(
+                        color = Color.White.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    .clickable { onTimeClick() }
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Schedule,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (selectedTimeSeconds != null) {
+                        formatTimeSeconds(selectedTimeSeconds)
+                    } else {
+                        "Maintenant"
+                    },
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Simple time picker dialog using wheel-style pickers
+ * Minutes are rounded to 5-minute intervals
+ */
+@Composable
+private fun TimePickerDialog(
+    initialTimeSeconds: Int,
+    onTimeSelected: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val initialHour = (initialTimeSeconds / 3600) % 24
+    // Round initial minute to nearest 5 minutes
+    val initialMinute = ((initialTimeSeconds % 3600) / 60 / 5) * 5
+    
+    var selectedHour by remember { mutableStateOf(initialHour) }
+    var selectedMinute by remember { mutableStateOf(initialMinute) }
+    
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Time display
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    // Hour picker
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(onClick = { selectedHour = (selectedHour + 1) % 24 }) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowUp,
+                                contentDescription = "Augmenter l'heure",
+                                tint = Color.White
+                            )
+                        }
+                        Text(
+                            text = String.format(java.util.Locale.ROOT, "%02d", selectedHour),
+                            color = Color.White,
+                            fontSize = 48.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        IconButton(onClick = { selectedHour = if (selectedHour == 0) 23 else selectedHour - 1 }) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowDown,
+                                contentDescription = "Diminuer l'heure",
+                                tint = Color.White
+                            )
+                        }
+                    }
+                    
+                    Text(
+                        text = ":",
+                        color = Color.White,
+                        fontSize = 48.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
+                    
+                    // Minute picker
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(onClick = { selectedMinute = (selectedMinute + 5) % 60 }) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowUp,
+                                contentDescription = "Augmenter les minutes",
+                                tint = Color.White
+                            )
+                        }
+                        Text(
+                            text = String.format(java.util.Locale.ROOT, "%02d", selectedMinute),
+                            color = Color.White,
+                            fontSize = 48.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        IconButton(onClick = { selectedMinute = if (selectedMinute < 5) 55 else selectedMinute - 5 }) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowDown,
+                                contentDescription = "Diminuer les minutes",
+                                tint = Color.White
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                // Action buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Text(
+                        text = "Annuler",
+                        color = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier
+                            .clickable { onDismiss() }
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                color = Red500,
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .clickable { 
+                                onTimeSelected(selectedHour * 3600 + selectedMinute * 60) 
+                            }
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = "Confirmer",
+                            color = Color.White
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Format time in seconds to HH:mm string
+ */
+private fun formatTimeSeconds(seconds: Int): String {
+    val hours = (seconds / 3600) % 24
+    val minutes = (seconds % 3600) / 60
+    return String.format(java.util.Locale.ROOT, "%02d:%02d", hours, minutes)
+}
+
+/**
+ * Format date for display
+ * Shows "Aujourd'hui" for today, "Demain" for tomorrow, or the date
+ */
+private fun formatDateDisplay(date: LocalDate?): String {
+    if (date == null) return "Aujourd'hui"
+    
+    val today = LocalDate.now()
+    val tomorrow = today.plusDays(1)
+    
+    return when (date) {
+        today -> "Aujourd'hui"
+        tomorrow -> "Demain"
+        else -> {
+            val formatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.FRENCH)
+            date.format(formatter).replaceFirstChar { it.uppercase() }
+        }
+    }
+}
+
+/**
+ * Date picker dialog for selecting a journey date
+ * Allows selecting dates up to 60 days in the future with month navigation
+ */
+@Composable
+private fun DatePickerDialog(
+    initialDate: LocalDate,
+    onDateSelected: (LocalDate) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedDate by remember { mutableStateOf(initialDate) }
+    val today = LocalDate.now()
+    val maxDate = today.plusDays(60) // Allow up to 60 days in the future
+    
+    // Current displayed month
+    var displayedMonth by remember { 
+        mutableStateOf(initialDate.withDayOfMonth(1)) 
+    }
+    
+    val monthFormatter = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.FRENCH)
+    val dayOfWeekFormatter = DateTimeFormatter.ofPattern("E", Locale.FRENCH)
+    
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Month navigation
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Previous month button
+                    IconButton(
+                        onClick = { 
+                            val prevMonth = displayedMonth.minusMonths(1)
+                            if (!prevMonth.plusMonths(1).isBefore(today.withDayOfMonth(1))) {
+                                displayedMonth = prevMonth
+                            }
+                        },
+                        enabled = !displayedMonth.isBefore(today.withDayOfMonth(1)) && 
+                                  !displayedMonth.isEqual(today.withDayOfMonth(1))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowUp,
+                            contentDescription = "Mois précédent",
+                            tint = if (!displayedMonth.isBefore(today.withDayOfMonth(1)) && 
+                                       !displayedMonth.isEqual(today.withDayOfMonth(1))) 
+                                Color.White else Color.White.copy(alpha = 0.3f),
+                            modifier = Modifier.rotate(-90f)
+                        )
+                    }
+                    
+                    Text(
+                        text = displayedMonth.format(monthFormatter).replaceFirstChar { it.uppercase() },
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    
+                    // Next month button
+                    IconButton(
+                        onClick = { 
+                            val nextMonth = displayedMonth.plusMonths(1)
+                            if (!nextMonth.isAfter(maxDate.withDayOfMonth(1))) {
+                                displayedMonth = nextMonth
+                            }
+                        },
+                        enabled = !displayedMonth.plusMonths(1).isAfter(maxDate.withDayOfMonth(1))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowUp,
+                            contentDescription = "Mois suivant",
+                            tint = if (!displayedMonth.plusMonths(1).isAfter(maxDate.withDayOfMonth(1))) 
+                                Color.White else Color.White.copy(alpha = 0.3f),
+                            modifier = Modifier.rotate(90f)
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // Days of week header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    listOf("L", "M", "M", "J", "V", "S", "D").forEach { day ->
+                        Text(
+                            text = day,
+                            color = Color.White.copy(alpha = 0.6f),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.width(36.dp),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Calendar grid
+                val firstDayOfMonth = displayedMonth
+                val lastDayOfMonth = displayedMonth.plusMonths(1).minusDays(1)
+                // Monday = 1, Sunday = 7, we want Monday as first column (index 0)
+                val firstDayOfWeek = (firstDayOfMonth.dayOfWeek.value - 1) // 0 = Monday
+                val daysInMonth = lastDayOfMonth.dayOfMonth
+                
+                // Generate calendar rows (max 6 weeks)
+                val calendarDays = mutableListOf<LocalDate?>()
+                // Add empty cells for days before the first of month
+                repeat(firstDayOfWeek) { calendarDays.add(null) }
+                // Add all days of the month
+                for (day in 1..daysInMonth) {
+                    calendarDays.add(displayedMonth.withDayOfMonth(day))
+                }
+                // Fill remaining cells to complete the last row
+                while (calendarDays.size % 7 != 0) {
+                    calendarDays.add(null)
+                }
+                
+                calendarDays.chunked(7).forEach { week ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        week.forEach { date ->
+                            if (date != null) {
+                                val isSelected = date == selectedDate
+                                val isToday = date == today
+                                val isSelectable = !date.isBefore(today) && !date.isAfter(maxDate)
+                                
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(
+                                            color = when {
+                                                isSelected -> Red500
+                                                isToday -> Color.White.copy(alpha = 0.15f)
+                                                else -> Color.Transparent
+                                            },
+                                            shape = CircleShape
+                                        )
+                                        .then(
+                                            if (isSelectable) Modifier.clickable { selectedDate = date }
+                                            else Modifier
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = date.dayOfMonth.toString(),
+                                        color = when {
+                                            !isSelectable -> Color.White.copy(alpha = 0.3f)
+                                            isSelected -> Color.White
+                                            else -> Color.White.copy(alpha = 0.9f)
+                                        },
+                                        fontSize = 14.sp,
+                                        fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                }
+                            } else {
+                                // Empty cell
+                                Box(modifier = Modifier.size(36.dp))
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Action buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Text(
+                        text = "Annuler",
+                        color = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier
+                            .clickable { onDismiss() }
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                color = Red500,
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .clickable { onDateSelected(selectedDate) }
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = "Confirmer",
+                            color = Color.White
+                        )
+                    }
+                }
+            }
         }
     }
 }

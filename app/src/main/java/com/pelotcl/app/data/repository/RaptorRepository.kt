@@ -5,13 +5,18 @@ import android.util.Log
 import android.util.LruCache
 import com.pelotcl.app.data.cache.JourneyCache
 import com.pelotcl.app.utils.SearchUtils
+import io.raptor.PeriodData
 import io.raptor.RaptorLibrary
 import io.raptor.model.Stop
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import java.io.BufferedInputStream
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.util.Calendar
 import kotlin.math.pow
 import kotlin.math.sqrt
@@ -20,6 +25,12 @@ import kotlin.math.sqrt
  * Repository to handle raptor-kt route calculations.
  * Uses lazy initialization - Raptor library is only loaded when first needed,
  * not at app startup, to improve initial loading time.
+ *
+ * Supports multiple schedule periods:
+ * - saturday: Saturday schedules
+ * - sunday: Sunday and public holiday schedules
+ * - school_on_weekdays: Weekday schedules during school periods
+ * - school_off_weekdays: Weekday schedules during school holidays
  *
  * Performance optimizations:
  * - Multi-level cache: Memory LRU (30min) -> Disk cache (daily) -> Raptor calculation
@@ -37,6 +48,9 @@ class RaptorRepository private constructor(private val context: Context) {
     private var stopsCache: List<Stop> = emptyList()
     private val mutex = Mutex()
 
+    // School holidays data parsed from assets
+    private var schoolHolidays: List<HolidayPeriod> = emptyList()
+
     // Multi-level disk cache for journey persistence
     private val journeyDiskCache: JourneyCache by lazy { JourneyCache.getInstance(context) }
 
@@ -49,11 +63,18 @@ class RaptorRepository private constructor(private val context: Context) {
     // Performance: Reusable StringBuilder for cache key building (ThreadLocal for thread safety)
     private val cacheKeyBuilder = ThreadLocal.withInitial { StringBuilder(64) }
 
+    // Period IDs matching asset file naming
     companion object {
         private const val TAG = "RaptorRepository"
 
         // Set to false for production builds to reduce log overhead
         private const val DEBUG_LOGGING = false
+
+        // Period constants
+        private const val PERIOD_SATURDAY = "saturday"
+        private const val PERIOD_SUNDAY = "sunday"
+        private const val PERIOD_SCHOOL_ON_WEEKDAYS = "school_on_weekdays"
+        private const val PERIOD_SCHOOL_OFF_WEEKDAYS = "school_off_weekdays"
 
         // LRU Cache for journey results: key = "origin|dest|time"
         // Level 1 cache: 50 entries in memory with 30-minute validity
@@ -108,9 +129,10 @@ class RaptorRepository private constructor(private val context: Context) {
     private var isInitializing = false
 
     /**
-     * Initialize the Raptor library with stops.bin and routes.bin from assets.
+     * Initialize the Raptor library with all period data from assets.
      * This is called lazily on first use, not at startup.
      * Uses buffered I/O and builds performance indexes.
+     * Loads all schedule periods: saturday, sunday, school_on_weekdays, school_off_weekdays
      */
     suspend fun initialize(): Result<Unit> = withContext(Dispatchers.IO) {
         // Fast path: already initialized
@@ -134,22 +156,41 @@ class RaptorRepository private constructor(private val context: Context) {
             try {
                 val startTime = System.currentTimeMillis()
 
-                // Use BufferedInputStream for faster asset loading
-                val stopsInputStream = BufferedInputStream(context.assets.open("stops.bin"), 8192)
-                val routesInputStream = BufferedInputStream(context.assets.open("routes.bin"), 8192)
+                // Load school holidays from assets
+                loadSchoolHolidays()
 
-                raptorLibrary = RaptorLibrary(
-                    stopsInputStream = stopsInputStream,
-                    routesInputStream = routesInputStream
-                )
+                // Load all period data
+                val periods = listOf(
+                    PERIOD_SATURDAY,
+                    PERIOD_SUNDAY,
+                    PERIOD_SCHOOL_ON_WEEKDAYS,
+                    PERIOD_SCHOOL_OFF_WEEKDAYS
+                ).map { periodId ->
+                    PeriodData(
+                        periodId = periodId,
+                        stopsInputStream = BufferedInputStream(
+                            context.assets.open("stops_$periodId.bin"), 8192
+                        ),
+                        routesInputStream = BufferedInputStream(
+                            context.assets.open("routes_$periodId.bin"), 8192
+                        )
+                    )
+                }
+
+                raptorLibrary = RaptorLibrary(periods)
+
+                // Set initial period based on current day
+                updatePeriodForDate(LocalDate.now())
                 
-                // Cache all stops for lookup
+                // Cache all stops for lookup (from current period)
                 stopsCache = raptorLibrary?.searchStopsByName("") ?: emptyList()
 
                 // Build performance indexes
                 buildStopIndexes()
 
                 isInitialized = true
+
+                Log.d(TAG, "Raptor initialized in ${System.currentTimeMillis() - startTime}ms with ${periods.size} periods, current: ${raptorLibrary?.getCurrentPeriod()}")
 
                 Result.success(Unit)
             } catch (e: Exception) {
@@ -160,6 +201,103 @@ class RaptorRepository private constructor(private val context: Context) {
             }
         }
     }
+
+    /**
+     * Load school holidays data from assets/holidays.json
+     */
+    private fun loadSchoolHolidays() {
+        try {
+            val json = context.assets.open("holidays.json").bufferedReader().use { it.readText() }
+            val holidaysData = Json.decodeFromString<HolidaysData>(json)
+            schoolHolidays = holidaysData.holidays.mapNotNull { holiday ->
+                val startDate = try {
+                    LocalDate.parse(holiday.startDateInclusive, DateTimeFormatter.ISO_DATE)
+                } catch (e: Exception) { null }
+                
+                val endDate = try {
+                    holiday.endDateInclusive?.let { LocalDate.parse(it, DateTimeFormatter.ISO_DATE) }
+                } catch (e: Exception) { null }
+                
+                if (startDate != null) {
+                    HolidayPeriod(
+                        name = holiday.name,
+                        startDate = startDate,
+                        endDate = endDate ?: startDate.plusMonths(2) // Summer holidays fallback
+                    )
+                } else null
+            }
+            Log.d(TAG, "Loaded ${schoolHolidays.size} school holiday periods")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load school holidays: ${e.message}", e)
+            schoolHolidays = emptyList()
+        }
+    }
+
+    /**
+     * Determine if a given date falls within school holidays
+     */
+    private fun isSchoolHoliday(date: LocalDate): Boolean {
+        return schoolHolidays.any { period ->
+            !date.isBefore(period.startDate) && !date.isAfter(period.endDate)
+        }
+    }
+
+    /**
+     * Get the appropriate period ID for a given date
+     */
+    private fun getPeriodForDate(date: LocalDate): String {
+        val dayOfWeek = date.dayOfWeek.value // 1 = Monday, 7 = Sunday
+
+        return when (dayOfWeek) {
+            6 -> PERIOD_SATURDAY
+            7 -> PERIOD_SUNDAY
+            else -> {
+                if (isSchoolHoliday(date)) {
+                    PERIOD_SCHOOL_OFF_WEEKDAYS
+                } else {
+                    PERIOD_SCHOOL_ON_WEEKDAYS
+                }
+            }
+        }
+    }
+
+    /**
+     * Update the active period based on the given date.
+     * This should be called when searching for journeys to ensure
+     * the correct schedule is used.
+     */
+    private fun updatePeriodForDate(date: LocalDate) {
+        val targetPeriod = getPeriodForDate(date)
+        val currentPeriod = raptorLibrary?.getCurrentPeriod()
+        
+        if (currentPeriod != targetPeriod) {
+            raptorLibrary?.setPeriod(targetPeriod)
+            Log.d(TAG, "Switched period from $currentPeriod to $targetPeriod for date $date")
+            
+            // Rebuild stop cache and indexes for new period
+            stopsCache = raptorLibrary?.searchStopsByName("") ?: emptyList()
+            buildStopIndexes()
+        }
+    }
+
+    /**
+     * Ensure the correct period is set for the given date before queries.
+     * Called before each route calculation.
+     * @param date The date to use for period selection (default: today)
+     */
+    private fun ensureCorrectPeriod(date: LocalDate = LocalDate.now()) {
+        updatePeriodForDate(date)
+    }
+
+    /**
+     * Get the current active period ID
+     */
+    fun getCurrentPeriod(): String? = raptorLibrary?.getCurrentPeriod()
+
+    /**
+     * Get all available period IDs
+     */
+    fun getAvailablePeriods(): Set<String> = raptorLibrary?.getAvailablePeriods() ?: emptySet()
 
     /**
      * Build HashMap indexes for O(1) stop lookups.
@@ -311,21 +449,24 @@ class RaptorRepository private constructor(private val context: Context) {
      * @param originStopIds List of origin stop IDs (to handle stops with multiple platforms)
      * @param destinationStopIds List of destination stop IDs
      * @param departureTimeSeconds Departure time in seconds from midnight (default: current time)
+     * @param date The date to search for (default: today). Used to select the correct schedule period.
      */
     suspend fun getOptimizedPaths(
         originStopIds: List<Int>,
         destinationStopIds: List<Int>,
-        departureTimeSeconds: Int? = null
+        departureTimeSeconds: Int? = null,
+        date: LocalDate = LocalDate.now()
     ): List<JourneyResult> = withContext(Dispatchers.Default) {
         ensureInitialized()
+        ensureCorrectPeriod(date) // Auto-select period based on selected date
         try {
             val depTime = departureTimeSeconds ?: getCurrentTimeInSeconds()
             
             // Smart time rounding: 15 min in off-peak, 5 min in peak hours
             val roundedDepTime = getRoundedDepartureTime(depTime)
 
-            // Build cache key
-            val cacheKey = buildCacheKey(originStopIds, destinationStopIds, roundedDepTime)
+            // Build cache key (includes date to ensure different periods are cached separately)
+            val cacheKey = buildCacheKey(originStopIds, destinationStopIds, roundedDepTime, date)
 
             // Level 1: Check in-memory LRU cache
             val memoryCached = journeyCache.get(cacheKey)
@@ -452,6 +593,117 @@ class RaptorRepository private constructor(private val context: Context) {
     }
 
     /**
+     * Calculate optimized journeys that arrive by a specific time.
+     * Useful for "I need to be there by X" scenarios.
+     *
+     * @param originStopIds List of origin stop IDs
+     * @param destinationStopIds List of destination stop IDs  
+     * @param arrivalTimeSeconds Desired arrival time in seconds from midnight
+     * @param searchWindowMinutes How far back to search for departures (default: 120 minutes)
+     * @param date The date to search for (default: today). Used to select the correct schedule period.
+     * @return List of JourneyResult sorted by latest departure (arrive as late as possible while still being on time)
+     */
+    suspend fun getOptimizedPathsArriveBy(
+        originStopIds: List<Int>,
+        destinationStopIds: List<Int>,
+        arrivalTimeSeconds: Int,
+        searchWindowMinutes: Int = 120,
+        date: LocalDate = LocalDate.now()
+    ): List<JourneyResult> = withContext(Dispatchers.Default) {
+        ensureInitialized()
+        ensureCorrectPeriod(date)
+        try {
+            if (originStopIds.isEmpty()) {
+                Log.w(TAG, "getOptimizedPathsArriveBy: originStopIds is empty!")
+                return@withContext emptyList()
+            }
+            if (destinationStopIds.isEmpty()) {
+                Log.w(TAG, "getOptimizedPathsArriveBy: destinationStopIds is empty!")
+                return@withContext emptyList()
+            }
+
+            // Use raptor-kt's arrive-by search
+            val journeys = raptorLibrary?.getOptimizedPathsArriveBy(
+                originStopIds = originStopIds,
+                destinationStopIds = destinationStopIds,
+                arrivalTime = arrivalTimeSeconds,
+                searchWindowMinutes = searchWindowMinutes
+            ) ?: emptyList()
+
+            // Map results using the same logic as getOptimizedPaths
+            val results = ArrayList<JourneyResult>(journeys.size)
+
+            for (legs in journeys) {
+                if (legs.isEmpty()) continue
+
+                val journeyLegs = ArrayList<JourneyLeg>(legs.size)
+                var hasInvalidLeg = false
+
+                for (leg in legs) {
+                    val fromStop = stopsByIndex[leg.fromStopIndex]
+                    val toStop = stopsByIndex[leg.toStopIndex]
+
+                    if (fromStop == null || toStop == null) {
+                        if (DEBUG_LOGGING) {
+                            Log.w(TAG, "getOptimizedPathsArriveBy: Stop not found - fromIdx=${leg.fromStopIndex}, toIdx=${leg.toStopIndex}")
+                        }
+                        hasInvalidLeg = true
+                        break
+                    }
+
+                    val intermediateIndices = leg.intermediateStopIndices
+                    val intermediateTimes = leg.intermediateArrivalTimes
+                    val intermediateStops = ArrayList<IntermediateStop>(intermediateIndices.size)
+
+                    for (idx in intermediateIndices.indices) {
+                        val stop = stopsByIndex[intermediateIndices[idx]]
+                        val arrivalTime = if (idx < intermediateTimes.size) intermediateTimes[idx] else null
+                        if (stop != null && arrivalTime != null) {
+                            intermediateStops.add(IntermediateStop(
+                                stopName = stop.name,
+                                arrivalTime = arrivalTime,
+                                lat = stop.lat,
+                                lon = stop.lon
+                            ))
+                        }
+                    }
+                    
+                    journeyLegs.add(JourneyLeg(
+                        fromStopId = fromStop.id.toString(),
+                        fromStopName = fromStop.name,
+                        fromLat = fromStop.lat,
+                        fromLon = fromStop.lon,
+                        toStopId = toStop.id.toString(),
+                        toStopName = toStop.name,
+                        toLat = toStop.lat,
+                        toLon = toStop.lon,
+                        departureTime = leg.departureTime,
+                        arrivalTime = leg.arrivalTime,
+                        routeName = leg.routeName,
+                        routeColor = null,
+                        isWalking = leg.isTransfer,
+                        direction = leg.direction,
+                        intermediateStops = intermediateStops
+                    ))
+                }
+                
+                if (hasInvalidLeg || journeyLegs.isEmpty()) continue
+
+                results.add(JourneyResult(
+                    departureTime = legs.first().departureTime,
+                    arrivalTime = legs.last().arrivalTime,
+                    legs = journeyLegs
+                ))
+            }
+
+            results
+        } catch (e: Exception) {
+            Log.e(TAG, "Error calculating arrive-by paths: ${e.message}", e)
+            emptyList()
+        }
+    }
+
+    /**
      * Smart time rounding for better cache hit rate:
      * - Peak hours (7-9, 17-19): 5 minute intervals (more precision needed)
      * - Off-peak hours: 15 minute intervals (fewer variations, better hits)
@@ -473,8 +725,9 @@ class RaptorRepository private constructor(private val context: Context) {
      * Build a cache key for journey results.
      * Sorts IDs to ensure same key regardless of order.
      * Uses reusable StringBuilder to reduce GC pressure.
+     * Includes date to ensure different dates/periods return different results.
      */
-    private fun buildCacheKey(originIds: List<Int>, destIds: List<Int>, time: Int): String {
+    private fun buildCacheKey(originIds: List<Int>, destIds: List<Int>, time: Int, date: LocalDate): String {
         val sb = cacheKeyBuilder.get()!!
         sb.setLength(0) // Clear without allocation
 
@@ -496,6 +749,8 @@ class RaptorRepository private constructor(private val context: Context) {
 
         sb.append('|')
         sb.append(time)
+        sb.append('|')
+        sb.append(date.toString()) // Include date to differentiate cache by period
 
         return sb.toString()
     }
@@ -616,3 +871,40 @@ data class JourneyLeg(
         return String.format(java.util.Locale.ROOT, "%02d:%02d", hours, minutes)
     }
 }
+
+/**
+ * Data classes for parsing holidays.json
+ */
+@Serializable
+private data class HolidaysData(
+    val school_year: String,
+    val location: HolidayLocation,
+    val holidays: List<HolidayEntry>
+)
+
+@Serializable
+private data class HolidayLocation(
+    val department: String,
+    val academy: String,
+    val zone: String
+)
+
+@Serializable
+private data class HolidayEntry(
+    val name: String,
+    @kotlinx.serialization.SerialName("start_date_inclusive")
+    val startDateInclusive: String,
+    @kotlinx.serialization.SerialName("end_date_inclusive")
+    val endDateInclusive: String?,
+    @kotlinx.serialization.SerialName("school_resumes")
+    val schoolResumes: String
+)
+
+/**
+ * Internal representation of a holiday period
+ */
+private data class HolidayPeriod(
+    val name: String,
+    val startDate: java.time.LocalDate,
+    val endDate: java.time.LocalDate
+)
