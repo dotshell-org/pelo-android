@@ -1731,7 +1731,7 @@ private fun formatDateDisplay(date: LocalDate?): String {
 
 /**
  * Date picker dialog for selecting a journey date
- * Allows selecting dates up to 60 days in the future with month navigation
+ * Allows selecting dates with month navigation
  */
 @Composable
 private fun DatePickerDialog(
@@ -1741,7 +1741,6 @@ private fun DatePickerDialog(
 ) {
     var selectedDate by remember { mutableStateOf(initialDate) }
     val today = LocalDate.now()
-    val maxDate = today.plusDays(60) // Allow up to 60 days in the future
     
     // Current displayed month
     var displayedMonth by remember { 
@@ -1798,20 +1797,11 @@ private fun DatePickerDialog(
                     )
                     
                     // Next month button
-                    IconButton(
-                        onClick = { 
-                            val nextMonth = displayedMonth.plusMonths(1)
-                            if (!nextMonth.isAfter(maxDate.withDayOfMonth(1))) {
-                                displayedMonth = nextMonth
-                            }
-                        },
-                        enabled = !displayedMonth.plusMonths(1).isAfter(maxDate.withDayOfMonth(1))
-                    ) {
+                    IconButton(onClick = { displayedMonth = displayedMonth.plusMonths(1) }) {
                         Icon(
                             imageVector = Icons.Default.KeyboardArrowUp,
                             contentDescription = "Mois suivant",
-                            tint = if (!displayedMonth.plusMonths(1).isAfter(maxDate.withDayOfMonth(1))) 
-                                Color.White else Color.White.copy(alpha = 0.3f),
+                            tint = Color.White,
                             modifier = Modifier.rotate(90f)
                         )
                     }
@@ -1867,7 +1857,7 @@ private fun DatePickerDialog(
                             if (date != null) {
                                 val isSelected = date == selectedDate
                                 val isToday = date == today
-                                val isSelectable = !date.isBefore(today) && !date.isAfter(maxDate)
+                                val isSelectable = !date.isBefore(today)
                                 
                                 Box(
                                     modifier = Modifier
