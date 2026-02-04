@@ -8,10 +8,12 @@ import androidx.annotation.RequiresApi
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.pelotcl.app.data.model.Feature
+import com.pelotcl.app.data.model.SimpleVehiclePosition
 import com.pelotcl.app.data.model.StopFeature
 import com.pelotcl.app.data.repository.RaptorRepository
 import com.pelotcl.app.data.repository.TransportRepository
 import com.pelotcl.app.data.repository.TrafficAlertsRepository
+import com.pelotcl.app.data.repository.VehiclePositionsRepository
 import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.utils.Connection
 import com.pelotcl.app.data.repository.FavoritesRepository
@@ -95,6 +97,14 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     // Traffic alerts state
     private val _trafficAlerts = MutableStateFlow<Map<String, List<com.pelotcl.app.data.model.TrafficAlert>>>(emptyMap())
     val trafficAlerts: StateFlow<Map<String, List<com.pelotcl.app.data.model.TrafficAlert>>> = _trafficAlerts.asStateFlow()
+
+    // Vehicle positions state for live tracking
+    private val vehiclePositionsRepository = VehiclePositionsRepository()
+    private val _vehiclePositions = MutableStateFlow<List<SimpleVehiclePosition>>(emptyList())
+    val vehiclePositions: StateFlow<List<SimpleVehiclePosition>> = _vehiclePositions.asStateFlow()
+    private val _isLiveTrackingEnabled = MutableStateFlow(false)
+    val isLiveTrackingEnabled: StateFlow<Boolean> = _isLiveTrackingEnabled.asStateFlow()
+    private var vehiclePositionsJob: Job? = null
 
     // Preloading flags to avoid multiple reloads
     private var isPreloading: Boolean = false
@@ -274,6 +284,51 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         _allSchedules.value = emptyList()
         _nextSchedules.value = emptyList()
         _availableDirections.value = emptyList()
+    }
+
+    /**
+     * Toggles live vehicle tracking for the given line.
+     * When enabled, fetches vehicle positions every 10 seconds.
+     */
+    fun toggleLiveTracking(lineName: String) {
+        if (_isLiveTrackingEnabled.value) {
+            stopLiveTracking()
+        } else {
+            startLiveTracking(lineName)
+        }
+    }
+
+    /**
+     * Starts live vehicle tracking for the given line.
+     * Fetches vehicle positions immediately and then every 10 seconds.
+     */
+    fun startLiveTracking(lineName: String) {
+        vehiclePositionsJob?.cancel()
+        _isLiveTrackingEnabled.value = true
+        
+        vehiclePositionsJob = viewModelScope.launch {
+            while (_isLiveTrackingEnabled.value) {
+                try {
+                    val result = vehiclePositionsRepository.getVehiclePositionsForLine(lineName)
+                    result.onSuccess { positions ->
+                        _vehiclePositions.value = positions
+                    }
+                } catch (_: Exception) {
+                    // Silently ignore errors - will retry in 10 seconds
+                }
+                delay(10_000) // Refresh every 10 seconds
+            }
+        }
+    }
+
+    /**
+     * Stops live vehicle tracking and clears vehicle positions.
+     */
+    fun stopLiveTracking() {
+        vehiclePositionsJob?.cancel()
+        vehiclePositionsJob = null
+        _isLiveTrackingEnabled.value = false
+        _vehiclePositions.value = emptyList()
     }
 
     /**

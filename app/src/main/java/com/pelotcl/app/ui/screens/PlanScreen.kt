@@ -9,21 +9,33 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.BottomSheetScaffold
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -40,9 +52,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.pelotcl.app.R
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -86,11 +100,13 @@ import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.style.expressions.Expression
+import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonOptions
 import org.maplibre.android.style.sources.GeoJsonSource
+import androidx.compose.ui.text.font.FontWeight
 
 private const val PRIORITY_STOPS_MIN_ZOOM = 12.5f
 private const val TRAM_STOPS_MIN_ZOOM = 14.0f
@@ -183,6 +199,8 @@ fun PlanScreen(
     val uiState by viewModel.uiState.collectAsState()
     val stopsUiState by viewModel.stopsUiState.collectAsState()
     val favoriteLines by viewModel.favoriteLines.collectAsState()
+    val vehiclePositions by viewModel.vehiclePositions.collectAsState()
+    val isLiveTrackingEnabled by viewModel.isLiveTrackingEnabled.collectAsState()
     var mapInstance by remember { mutableStateOf<MapLibreMap?>(null) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -613,6 +631,107 @@ fun PlanScreen(
             }
             temporaryLoadedBusLines = emptySet()
         }
+        // Stop live tracking when leaving line details
+        if (sheetContentState != SheetContentState.LINE_DETAILS && sheetContentState != SheetContentState.ALL_SCHEDULES) {
+            viewModel.stopLiveTracking()
+        }
+    }
+
+    // Track previous line name to detect actual line changes (not initial selection)
+    var previousLineName by remember { mutableStateOf<String?>(null) }
+    
+    // Stop live tracking only when changing from one line to another (not on initial selection)
+    LaunchedEffect(selectedLine?.lineName) {
+        val currentLineName = selectedLine?.lineName
+        if (previousLineName != null && currentLineName != null && previousLineName != currentLineName) {
+            // Actually changing from one line to another - stop tracking
+            viewModel.stopLiveTracking()
+        }
+        previousLineName = currentLineName
+    }
+
+    // Update vehicle markers on the map when vehicle positions change
+    LaunchedEffect(vehiclePositions, mapInstance, selectedLine) {
+        val map = mapInstance ?: return@LaunchedEffect
+        val positions = vehiclePositions
+        val line = selectedLine
+
+        map.getStyle { style ->
+            // Remove existing vehicle layers and sources
+            style.getLayer("vehicle-positions-layer")?.let { style.removeLayer(it) }
+            style.getSource("vehicle-positions-source")?.let { style.removeSource(it) }
+
+            if (positions.isEmpty() || line == null) return@getStyle
+
+            // Create GeoJSON for vehicle positions
+            val vehiclesGeoJson = JsonObject().apply {
+                addProperty("type", "FeatureCollection")
+                val featuresArray = JsonArray()
+                positions.forEach { vehicle ->
+                    val feature = JsonObject().apply {
+                        addProperty("type", "Feature")
+                        val geometry = JsonObject().apply {
+                            addProperty("type", "Point")
+                            val coords = JsonArray()
+                            coords.add(vehicle.longitude)
+                            coords.add(vehicle.latitude)
+                            add("coordinates", coords)
+                        }
+                        add("geometry", geometry)
+                        val props = JsonObject().apply {
+                            addProperty("vehicleId", vehicle.vehicleId)
+                            addProperty("lineName", vehicle.lineName)
+                            addProperty("destination", vehicle.destinationName ?: "")
+                        }
+                        add("properties", props)
+                    }
+                    featuresArray.add(feature)
+                }
+                add("features", featuresArray)
+            }.toString()
+
+            // Add source
+            val source = GeoJsonSource("vehicle-positions-source", vehiclesGeoJson)
+            style.addSource(source)
+
+            // Create bus marker icon: red circle with white bus pictogram
+            val iconName = "vehicle-bus-marker"
+            if (style.getImage(iconName) == null) {
+                val size = 72 // Icon size in pixels (larger for better visibility)
+                val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+                val canvas = android.graphics.Canvas(bitmap)
+                
+                // Draw circle background
+                val circlePaint = android.graphics.Paint().apply {
+                    color = android.graphics.Color.parseColor("#DB1212")
+                    isAntiAlias = true
+                }
+                circlePaint.style = android.graphics.Paint.Style.FILL
+                canvas.drawCircle(size / 2f, size / 2f, size / 2f, circlePaint)
+                
+                // Draw white bus icon from vector drawable
+                val busDrawable = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_bus_vehicle)
+                busDrawable?.let { drawable ->
+                    val iconSize = (size * 0.65f).toInt()
+                    val iconOffset = (size - iconSize) / 2
+                    drawable.setBounds(iconOffset, iconOffset, iconOffset + iconSize, iconOffset + iconSize)
+                    drawable.draw(canvas)
+                }
+                
+                style.addImage(iconName, bitmap)
+            }
+
+            // Add symbol layer with bus marker
+            val symbolLayer = SymbolLayer("vehicle-positions-layer", "vehicle-positions-source").apply {
+                setProperties(
+                    PropertyFactory.iconImage(iconName),
+                    PropertyFactory.iconSize(1.0f),
+                    PropertyFactory.iconAllowOverlap(true),
+                    PropertyFactory.iconIgnorePlacement(true)
+                )
+            }
+            style.addLayer(symbolLayer)
+        }
     }
 
     LaunchedEffect(showLinesSheet, sheetContentState) {
@@ -967,6 +1086,80 @@ fun PlanScreen(
                             color = Color.White,
                             radius = size.minDimension / 2.5f,
                             style = androidx.compose.ui.graphics.drawscope.Stroke(width = 7f)
+                        )
+                    }
+                }
+            }
+
+            // LIVE button - shows when a bus line is selected (not metro/tram/funicular)
+            AnimatedVisibility(
+                visible = sheetContentState == SheetContentState.LINE_DETAILS 
+                    && selectedLine != null 
+                    && !isMetroTramOrFunicular(selectedLine!!.lineName),
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 36.dp, end = 16.dp)
+            ) {
+                // Determine button state: active with vehicles, active without vehicles, or inactive
+                val hasVehicles = isLiveTrackingEnabled && vehiclePositions.isNotEmpty()
+                val isActiveNoVehicles = isLiveTrackingEnabled && vehiclePositions.isEmpty()
+                
+                // Animation for the bouncing dot (goes up and down)
+                val infiniteTransition = rememberInfiniteTransition(label = "live_dot")
+                val dotOffset by infiniteTransition.animateFloat(
+                    initialValue = if (hasVehicles) -2f else 0f,
+                    targetValue = if (hasVehicles) 2f else 0f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(400),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "dot_bounce"
+                )
+                
+                val buttonColor = when {
+                    hasVehicles -> Color(0xFFEF4444) // Red when active with vehicles
+                    isActiveNoVehicles -> Color(0xFF9CA3AF) // Gray when active but no vehicles
+                    else -> Color.Black // Black when inactive
+                }
+                
+                Button(
+                    onClick = {
+                        selectedLine?.let { line ->
+                            viewModel.toggleLiveTracking(line.lineName)
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = buttonColor
+                    ),
+                    shape = RoundedCornerShape(20.dp),
+                    elevation = ButtonDefaults.buttonElevation(
+                        defaultElevation = 4.dp
+                    ),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        start = 15.dp,
+                        end = 16.dp,
+                        top = 8.dp,
+                        bottom = 8.dp
+                    )
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Always show dot, animate when active with vehicles
+                        Canvas(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .graphicsLayer { translationY = dotOffset }
+                        ) {
+                            drawCircle(color = Color.White)
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "LIVE",
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
                         )
                     }
                 }
