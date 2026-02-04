@@ -103,7 +103,7 @@ fun LinesBottomSheet(
         }
     }
 
-    // NestedScrollConnection pour arrêter le scroll aux limites
+    // NestedScrollConnection pour arrêter le scroll vers le bas seulement quand on atteint la fin
     val nestedScrollConnection = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
@@ -111,10 +111,8 @@ fun LinesBottomSheet(
                 if (available.y < 0 && isAtBottom) {
                     return Offset(0f, available.y)
                 }
-                // Si on scrolle vers le haut (available.y > 0) et qu'on est déjà en haut, bloquer
-                if (available.y > 0 && isAtTop) {
-                    return Offset(0f, available.y)
-                }
+                // Ne PAS bloquer le scroll vers le haut quand on est en haut pour permettre 
+                // l'interaction avec la BottomSheet (dismiss par drag)
                 return Offset.Zero
             }
 
@@ -123,13 +121,11 @@ fun LinesBottomSheet(
                 available: Offset,
                 source: NestedScrollSource
             ): Offset {
-                // Consommer tout le scroll restant si on est aux limites
+                // Consommer tout le scroll restant seulement si on scrolle vers le bas en étant en bas
                 if (isAtBottom && available.y < 0) {
                     return Offset(0f, available.y)
                 }
-                if (isAtTop && available.y > 0) {
-                    return Offset(0f, available.y)
-                }
+                // Ne PAS consommer le scroll vers le haut pour permettre le dismiss de la BottomSheet
                 return Offset.Zero
             }
         }
