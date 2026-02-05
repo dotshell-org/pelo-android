@@ -93,6 +93,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pelotcl.app.data.repository.ItineraryPreferencesRepository
 import com.pelotcl.app.data.repository.JourneyLeg
 import com.pelotcl.app.data.repository.JourneyResult
 import com.pelotcl.app.data.repository.RaptorStop
@@ -143,6 +144,8 @@ fun ItineraryScreen(
     val view = LocalView.current
     val scope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
+    val context = LocalContext.current
+    val itineraryPrefsRepo = remember { ItineraryPreferencesRepository(context) }
 
     // Track selected journey for map view
     var selectedJourney by remember { mutableStateOf<JourneyResult?>(null) }
@@ -329,6 +332,9 @@ fun ItineraryScreen(
                     var results: List<JourneyResult>
                     val searchDate = selectedDate ?: LocalDate.now()
                     
+                    // Get current blocked route patterns from preferences
+                    val blockedRouteNames = itineraryPrefsRepo.getBlockedRoutePatterns()
+                    
                     when (timeMode) {
                         TimeMode.DEPARTURE -> {
                             // Search by departure time
@@ -336,7 +342,8 @@ fun ItineraryScreen(
                                 originStopIds = departureStop!!.stopIds,
                                 destinationStopIds = arrivalStop!!.stopIds,
                                 departureTimeSeconds = selectedTimeSeconds,
-                                date = searchDate
+                                date = searchDate,
+                                blockedRouteNames = blockedRouteNames
                             )
 
                             // If no results with selected/current time, try with 9:00 AM as fallback test
@@ -345,7 +352,8 @@ fun ItineraryScreen(
                                     originStopIds = departureStop!!.stopIds,
                                     destinationStopIds = arrivalStop!!.stopIds,
                                     departureTimeSeconds = 9 * 3600, // 9:00 AM
-                                    date = searchDate
+                                    date = searchDate,
+                                    blockedRouteNames = blockedRouteNames
                                 )
                             }
                         }
@@ -361,7 +369,8 @@ fun ItineraryScreen(
                                 destinationStopIds = arrivalStop!!.stopIds,
                                 arrivalTimeSeconds = arrivalTime,
                                 searchWindowMinutes = 120,
-                                date = searchDate
+                                date = searchDate,
+                                blockedRouteNames = blockedRouteNames
                             )
                         }
                     }
@@ -382,7 +391,8 @@ fun ItineraryScreen(
                             results = raptorRepository.getOptimizedPaths(
                                 originStopIds = fallbackStopIds,
                                 destinationStopIds = arrivalStop!!.stopIds,
-                                date = searchDate
+                                date = searchDate,
+                                blockedRouteNames = blockedRouteNames
                             )
 
                             // If no results, try 9:00 AM
@@ -391,7 +401,8 @@ fun ItineraryScreen(
                                     originStopIds = fallbackStopIds,
                                     destinationStopIds = arrivalStop!!.stopIds,
                                     departureTimeSeconds = 9 * 3600,
-                                    date = searchDate
+                                    date = searchDate,
+                                    blockedRouteNames = blockedRouteNames
                                 )
                             }
 

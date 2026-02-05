@@ -450,12 +450,14 @@ class RaptorRepository private constructor(private val context: Context) {
      * @param destinationStopIds List of destination stop IDs
      * @param departureTimeSeconds Departure time in seconds from midnight (default: current time)
      * @param date The date to search for (default: today). Used to select the correct schedule period.
+     * @param blockedRouteNames Set of route name patterns to exclude from routing (e.g., "JD" blocks all JD lines, "RX" blocks RhôneExpress)
      */
     suspend fun getOptimizedPaths(
         originStopIds: List<Int>,
         destinationStopIds: List<Int>,
         departureTimeSeconds: Int? = null,
-        date: LocalDate = LocalDate.now()
+        date: LocalDate = LocalDate.now(),
+        blockedRouteNames: Set<String> = emptySet()
     ): List<JourneyResult> = withContext(Dispatchers.Default) {
         ensureInitialized()
         ensureCorrectPeriod(date) // Auto-select period based on selected date
@@ -466,7 +468,7 @@ class RaptorRepository private constructor(private val context: Context) {
             val roundedDepTime = getRoundedDepartureTime(depTime)
 
             // Build cache key (includes date to ensure different periods are cached separately)
-            val cacheKey = buildCacheKey(originStopIds, destinationStopIds, roundedDepTime, date)
+            val cacheKey = buildCacheKey(originStopIds, destinationStopIds, roundedDepTime, date, blockedRouteNames)
 
             // Level 1: Check in-memory LRU cache
             val memoryCached = journeyCache.get(cacheKey)
@@ -501,7 +503,8 @@ class RaptorRepository private constructor(private val context: Context) {
             val journeys = raptorLibrary?.getOptimizedPaths(
                 originStopIds = originStopIds,
                 destinationStopIds = destinationStopIds,
-                departureTime = depTime
+                departureTime = depTime,
+                blockedRouteNames = blockedRouteNames
             ) ?: emptyList()
 
             // Performance: Pre-allocate results list with estimated capacity
@@ -601,6 +604,7 @@ class RaptorRepository private constructor(private val context: Context) {
      * @param arrivalTimeSeconds Desired arrival time in seconds from midnight
      * @param searchWindowMinutes How far back to search for departures (default: 120 minutes)
      * @param date The date to search for (default: today). Used to select the correct schedule period.
+     * @param blockedRouteNames Set of route name patterns to exclude from routing (e.g., "JD" blocks all JD lines, "RX" blocks RhôneExpress)
      * @return List of JourneyResult sorted by latest departure (arrive as late as possible while still being on time)
      */
     suspend fun getOptimizedPathsArriveBy(
@@ -608,7 +612,8 @@ class RaptorRepository private constructor(private val context: Context) {
         destinationStopIds: List<Int>,
         arrivalTimeSeconds: Int,
         searchWindowMinutes: Int = 120,
-        date: LocalDate = LocalDate.now()
+        date: LocalDate = LocalDate.now(),
+        blockedRouteNames: Set<String> = emptySet()
     ): List<JourneyResult> = withContext(Dispatchers.Default) {
         ensureInitialized()
         ensureCorrectPeriod(date)
@@ -627,7 +632,8 @@ class RaptorRepository private constructor(private val context: Context) {
                 originStopIds = originStopIds,
                 destinationStopIds = destinationStopIds,
                 arrivalTime = arrivalTimeSeconds,
-                searchWindowMinutes = searchWindowMinutes
+                searchWindowMinutes = searchWindowMinutes,
+                blockedRouteNames = blockedRouteNames
             ) ?: emptyList()
 
             // Map results using the same logic as getOptimizedPaths
@@ -725,9 +731,15 @@ class RaptorRepository private constructor(private val context: Context) {
      * Build a cache key for journey results.
      * Sorts IDs to ensure same key regardless of order.
      * Uses reusable StringBuilder to reduce GC pressure.
-     * Includes date to ensure different dates/periods return different results.
+     * Includes date and blocked route names to ensure different filters return different results.
      */
-    private fun buildCacheKey(originIds: List<Int>, destIds: List<Int>, time: Int, date: LocalDate): String {
+    private fun buildCacheKey(
+        originIds: List<Int>,
+        destIds: List<Int>,
+        time: Int,
+        date: LocalDate,
+        blockedRouteNames: Set<String>
+    ): String {
         val sb = cacheKeyBuilder.get()!!
         sb.setLength(0) // Clear without allocation
 
@@ -751,6 +763,13 @@ class RaptorRepository private constructor(private val context: Context) {
         sb.append(time)
         sb.append('|')
         sb.append(date.toString()) // Include date to differentiate cache by period
+        sb.append('|')
+
+        val sortedBlocked = blockedRouteNames.sorted()
+        for (i in sortedBlocked.indices) {
+            if (i > 0) sb.append(',')
+            sb.append(sortedBlocked[i])
+        }
 
         return sb.toString()
     }

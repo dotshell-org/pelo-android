@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,8 +19,10 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -38,6 +41,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -45,6 +49,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun SettingsScreen(
     onBackClick: () -> Unit,
+    onItineraryClick: () -> Unit,
     onAboutClick: () -> Unit,
     onMapStyleClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -68,27 +73,25 @@ fun SettingsScreen(
             isEasterEggActive = false
         }
     }
-
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // Main content - centered vertically
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp),
+                .padding(horizontal = 32.dp)
+                .padding(top = 40.dp, bottom = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Logo Pelo avec animation de rotation continue
             val rotation by animateFloatAsState(
-                targetValue = if (isEasterEggActive) 3600f else 0f, // 10 tours complets
-                animationSpec = tween(10000), // 10 secondes
+                targetValue = if (isEasterEggActive) 3600f else 0f,
+                animationSpec = tween(10000),
                 label = "logo_rotation"
             )
-            
+
             Image(
                 painter = painterResource(id = com.pelotcl.app.R.drawable.ic_launcher_foreground),
                 contentDescription = "Logo Pelo",
@@ -98,62 +101,32 @@ fun SettingsScreen(
                     .rotate(rotation)
                     .clickable {
                         clickCount++
-                        if (clickCount == 3) {
-                            isEasterEggActive = true
+                        if (clickCount >= 3) {
                             clickCount = 0
-                            // Vibration haptic feedback
+                            isEasterEggActive = true
                             hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
                         }
                     }
             )
 
-            // Bouton Fond de carte
-            Button(
-                onClick = onMapStyleClick,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF2C2C2C)
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text(
-                    text = "Fond de carte",
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-            }
-            
-            // Espacement entre les boutons
-            Spacer(
-                modifier = Modifier.height(16.dp)
+            SettingsMenuRow(
+                title = "Itinéraire",
+                onClick = onItineraryClick
+            )
+            HorizontalDivider(color = Color(0xFF3A3A3C))
+            SettingsMenuRow(
+                title = "Fond de carte",
+                onClick = onMapStyleClick
+            )
+            HorizontalDivider(color = Color(0xFF3A3A3C))
+            SettingsMenuRow(
+                title = "À propos",
+                onClick = onAboutClick
             )
 
-            // Bouton À propos
-            Button(
-                onClick = onAboutClick,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF2C2C2C)
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text(
-                    text = "À propos",
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-            }
+            Spacer(modifier = Modifier.height(24.dp))
         }
 
-        // Back button overlaid at top-left, below status bar
         IconButton(
             onClick = onBackClick,
             modifier = Modifier
@@ -164,6 +137,44 @@ fun SettingsScreen(
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "Retour",
+                tint = Color.White
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsMenuRow(
+    title: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.Black
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = title,
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                imageVector = Icons.Filled.ChevronRight,
+                contentDescription = "Next Arrow Icon",
                 tint = Color.White
             )
         }

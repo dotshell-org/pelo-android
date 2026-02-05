@@ -64,6 +64,7 @@ import com.pelotcl.app.ui.screens.ItineraryScreen
 import com.pelotcl.app.ui.screens.LegalScreen
 import com.pelotcl.app.ui.screens.MapStyleScreen
 import com.pelotcl.app.ui.screens.PlanScreen
+import com.pelotcl.app.ui.screens.ItinerarySettingsScreen
 import com.pelotcl.app.ui.screens.SettingsScreen
 import com.pelotcl.app.ui.theme.PeloTheme
 import com.pelotcl.app.ui.theme.Red500
@@ -175,6 +176,7 @@ private enum class Destination(
         const val CREDITS = "credits"
         const val CONTACT = "contact"
         const val MAP_STYLE = "map_style"
+        const val ITINERARY_SETTINGS = "itinerary_settings"
     }
 }
 
@@ -289,7 +291,8 @@ fun NavBar(modifier: Modifier = Modifier) {
             Destination.LEGAL,
             Destination.CREDITS,
             Destination.CONTACT,
-            Destination.MAP_STYLE
+            Destination.MAP_STYLE,
+            Destination.ITINERARY_SETTINGS
         )
 
         if (currentRoute in darkBackgroundRoutes) {
@@ -350,7 +353,8 @@ fun NavBar(modifier: Modifier = Modifier) {
                                         Destination.LEGAL,
                                         Destination.CREDITS,
                                         Destination.CONTACT,
-                                        Destination.MAP_STYLE
+                                        Destination.MAP_STYLE,
+                                        Destination.ITINERARY_SETTINGS
                                     )
                                     if (currentRoute in settingsSubRoutes) {
                                         // Pop back to Settings root
@@ -518,6 +522,9 @@ private fun AppNavHost(
                     }
                     onNavigateToPlan()
                 },
+                onItineraryClick = {
+                    navController.navigate(Destination.ITINERARY_SETTINGS)
+                },
                 onAboutClick = {
                     navController.navigate(Destination.ABOUT)
                 },
@@ -528,6 +535,13 @@ private fun AppNavHost(
         }
         composable(Destination.MAP_STYLE) {
             MapStyleScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        composable(Destination.ITINERARY_SETTINGS) {
+            ItinerarySettingsScreen(
                 onBackClick = {
                     navController.popBackStack()
                 }
