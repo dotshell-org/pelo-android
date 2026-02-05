@@ -343,6 +343,27 @@ fun NavBar(modifier: Modifier = Modifier) {
                                         selectedDestination = Destination.PLAN.ordinal
                                     }
                                     showLinesSheet = true
+                                } else if (destination == Destination.PARAMETRES) {
+                                    // If already on Settings tab, check if we're in a sub-page
+                                    val settingsSubRoutes = listOf(
+                                        Destination.ABOUT,
+                                        Destination.LEGAL,
+                                        Destination.CREDITS,
+                                        Destination.CONTACT,
+                                        Destination.MAP_STYLE
+                                    )
+                                    if (currentRoute in settingsSubRoutes) {
+                                        // Pop back to Settings root
+                                        navController.popBackStack(Destination.PARAMETRES.route, false)
+                                    } else if (selectedDestination != index) {
+                                        navController.navigate(destination.route) {
+                                            launchSingleTop = true
+                                            popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                            restoreState = true
+                                        }
+                                        selectedDestination = index
+                                        showLinesSheet = false
+                                    }
                                 } else if (selectedDestination != index) {
                                     navController.navigate(destination.route) {
                                         launchSingleTop = true
@@ -372,7 +393,8 @@ fun NavBar(modifier: Modifier = Modifier) {
                 }
             }
         ) { contentPadding ->
-            val shouldApplyPadding = selectedDestination != Destination.PLAN.ordinal
+            val shouldApplyPadding = selectedDestination != Destination.PLAN.ordinal &&
+                    selectedDestination != Destination.PARAMETRES.ordinal
             AppNavHost(
                 navController = navController,
                 startDestination = startDestination,
@@ -389,6 +411,9 @@ fun NavBar(modifier: Modifier = Modifier) {
                 userLocation = userLocation,
                 onItineraryClick = { stopName ->
                     itineraryDestinationStop = stopName
+                },
+                onNavigateToPlan = {
+                    selectedDestination = Destination.PLAN.ordinal
                 }
             )
             
@@ -441,7 +466,8 @@ private fun AppNavHost(
     modifier: Modifier = Modifier,
     viewModel: TransportViewModel,
     userLocation: LatLng?,
-    onItineraryClick: (String) -> Unit
+    onItineraryClick: (String) -> Unit,
+    onNavigateToPlan: () -> Unit
 ) {
     NavHost(
         navController = navController,
@@ -484,6 +510,14 @@ private fun AppNavHost(
         }
         composable(Destination.PARAMETRES.route) {
             SettingsScreen(
+                onBackClick = {
+                    navController.navigate(Destination.PLAN.route) {
+                        launchSingleTop = true
+                        popUpTo(navController.graph.startDestinationId) { saveState = true }
+                        restoreState = true
+                    }
+                    onNavigateToPlan()
+                },
                 onAboutClick = {
                     navController.navigate(Destination.ABOUT)
                 },

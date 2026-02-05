@@ -14,9 +14,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -39,6 +44,7 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun SettingsScreen(
+    onBackClick: () -> Unit,
     onAboutClick: () -> Unit,
     onMapStyleClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -68,6 +74,7 @@ fun SettingsScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
+        // Main content - centered vertically
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -144,6 +151,21 @@ fun SettingsScreen(
                     modifier = Modifier.padding(vertical = 8.dp)
                 )
             }
+        }
+
+        // Back button overlaid at top-left, below status bar
+        IconButton(
+            onClick = onBackClick,
+            modifier = Modifier
+                .statusBarsPadding()
+                .padding(start = 4.dp, top = 8.dp)
+                .align(Alignment.TopStart)
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Retour",
+                tint = Color.White
+            )
         }
     }
 }
