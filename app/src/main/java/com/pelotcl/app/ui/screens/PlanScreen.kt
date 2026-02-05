@@ -285,6 +285,17 @@ fun PlanScreen(
         previousSheetContentState = sheetContentState
     }
 
+    // Auto-hide the bottom sheet when content state is null but sheet is still visible
+    // This happens when navigating away (e.g. to Settings) and back: the sheet's visual state
+    // (rememberSaveable) is restored as Expanded/PartiallyExpanded, but content state (remember)
+    // resets to null, leaving an empty expanded sheet.
+    LaunchedEffect(sheetContentState, scaffoldSheetState.bottomSheetState.currentValue) {
+        if (sheetContentState == null &&
+            scaffoldSheetState.bottomSheetState.currentValue != androidx.compose.material3.SheetValue.Hidden) {
+            scaffoldSheetState.bottomSheetState.hide()
+        }
+    }
+
     val latestSheetContentState by rememberUpdatedState(sheetContentState)
     var previousSheetValue by remember { mutableStateOf<androidx.compose.material3.SheetValue?>(null) }
     LaunchedEffect(scaffoldSheetState.bottomSheetState.currentValue) {
