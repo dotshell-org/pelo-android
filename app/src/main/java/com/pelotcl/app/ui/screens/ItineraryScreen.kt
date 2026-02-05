@@ -551,6 +551,9 @@ fun ItineraryScreen(
                             onQueryChange = {
                                 departureQuery = it
                                 isSearchingDeparture = it.isNotEmpty()
+                                if (it.isEmpty()) {
+                                    departureStop = null
+                                }
                             },
                             isSearching = isSearchingDeparture,
                             searchResults = departureSearchResults,
@@ -636,6 +639,9 @@ fun ItineraryScreen(
                             onQueryChange = {
                                 arrivalQuery = it
                                 isSearchingArrival = it.isNotEmpty()
+                                if (it.isEmpty()) {
+                                    arrivalStop = null
+                                }
                             },
                             isSearching = isSearchingArrival,
                             searchResults = arrivalSearchResults,
