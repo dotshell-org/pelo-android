@@ -112,6 +112,7 @@ private const val PRIORITY_STOPS_MIN_ZOOM = 12.5f
 private const val TRAM_STOPS_MIN_ZOOM = 14.0f
 private const val SECONDARY_STOPS_MIN_ZOOM = 17.0f
 private const val SELECTED_STOP_MIN_ZOOM = 9.0f
+private const val LIVE_MODE_ZOOM_LEVEL = 12.0f // Zoom level for live tracking mode (below PRIORITY_STOPS_MIN_ZOOM to hide stop icons)
 
 private fun isMetroTramOrFunicular(lineName: String): Boolean {
     val upperName = lineName.uppercase()
@@ -247,6 +248,9 @@ fun PlanScreen(
     var selectedDirection by remember { mutableStateOf(0) }
 
     var temporaryLoadedBusLines by remember { mutableStateOf<Set<String>>(emptySet()) }
+
+    // Save zoom level before live tracking to restore it when disabled
+    var zoomBeforeLiveTracking by remember { mutableStateOf<Double?>(null) }
 
     var sheetContentState by remember { mutableStateOf<SheetContentState?>(null) }
     val selectedLineNameFromViewModel by viewModel.selectedLineName.collectAsState()
@@ -659,6 +663,32 @@ fun PlanScreen(
             viewModel.stopLiveTracking()
         }
         previousLineName = currentLineName
+    }
+
+    // Auto-zoom out when live tracking is enabled, restore zoom when disabled
+    LaunchedEffect(isLiveTrackingEnabled) {
+        val map = mapInstance ?: return@LaunchedEffect
+        if (isLiveTrackingEnabled) {
+            val currentZoom = map.cameraPosition.zoom
+            // Save current zoom level before zooming out
+            zoomBeforeLiveTracking = currentZoom
+            // Only zoom out if current zoom is higher than LIVE_MODE_ZOOM_LEVEL
+            if (currentZoom > LIVE_MODE_ZOOM_LEVEL) {
+                map.animateCamera(
+                    CameraUpdateFactory.zoomTo(LIVE_MODE_ZOOM_LEVEL.toDouble()),
+                    500 // Animation duration in ms
+                )
+            }
+        } else {
+            // Restore previous zoom level when live tracking is disabled
+            zoomBeforeLiveTracking?.let { savedZoom ->
+                map.animateCamera(
+                    CameraUpdateFactory.zoomTo(savedZoom),
+                    500 // Animation duration in ms
+                )
+                zoomBeforeLiveTracking = null
+            }
+        }
     }
 
     // Update vehicle markers on the map when vehicle positions change
