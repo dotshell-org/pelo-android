@@ -389,7 +389,7 @@ fun LineDetailsBottomSheet(
 }
 
 /**
- * Composable pour afficher les alertes de trafic pour une ligne
+ * Composable to display traffic alerts for a line
  */
 @Composable
 private fun TrafficAlertsSection(
@@ -400,13 +400,29 @@ private fun TrafficAlertsSection(
         return
     }
 
+    // Filter expired alerts
+    val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+    val now = LocalDateTime.now()
+    val validAlerts = alerts.filter { alert ->
+        try {
+            val endDate = LocalDateTime.parse(alert.endDate, dateFormatter)
+            endDate.isAfter(now)
+        } catch (e: Exception) {
+            true // Garder l'alerte si on ne peut pas parser la date
+        }
+    }
+
+    if (validAlerts.isEmpty()) {
+        return
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
             .background(Color(0xFFF5F5F5))
             .padding(horizontal = 24.dp, vertical = 16.dp)
     ) {
-        alerts.forEachIndexed { index, alert ->
+        validAlerts.forEachIndexed { index, alert ->
             var isExpanded by remember { mutableStateOf(false) }
             val severity = com.pelotcl.app.data.model.AlertSeverity.fromSeverityType(alert.severityType, alert.severityLevel)
             val severityColor = Color(severity.color)
@@ -459,7 +475,7 @@ private fun TrafficAlertsSection(
 
                     fun formatDate(input: String): String {
                         val inputFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-                        val outputFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss")
+                        val outputFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
                         val date = LocalDateTime.parse(input, inputFormatter)
                         return date.format(outputFormatter)
                     }
@@ -472,7 +488,7 @@ private fun TrafficAlertsSection(
                 }
             }
 
-            if (index < alerts.size - 1) {
+            if (index < validAlerts.size - 1) {
                 androidx.compose.material3.HorizontalDivider(
                     color = Color.LightGray,
                     thickness = 1.dp,
