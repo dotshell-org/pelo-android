@@ -195,7 +195,8 @@ fun PlanScreen(
     searchSelectedStop: StationSearchResult? = null,
     onSearchSelectionHandled: () -> Unit = {},
     onItineraryClick: (stopName: String) -> Unit = {},
-    initialUserLocation: LatLng? = null
+    initialUserLocation: LatLng? = null,
+    isVisible: Boolean = true
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val stopsUiState by viewModel.stopsUiState.collectAsState()
@@ -227,9 +228,17 @@ fun PlanScreen(
     var isCenteredOnUser by remember { mutableStateOf(true) }
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
-    // Map style from settings
+    // Map style from settings — re-read when returning to the Plan tab
     val mapStyleRepository = remember { MapStyleRepository(context) }
-    val mapStyleUrl = remember { mapStyleRepository.getSelectedStyle().styleUrl }
+    var mapStyleUrl by remember { mutableStateOf(mapStyleRepository.getSelectedStyle().styleUrl) }
+    LaunchedEffect(isVisible) {
+        if (isVisible) {
+            val newStyle = mapStyleRepository.getSelectedStyle().styleUrl
+            if (newStyle != mapStyleUrl) {
+                mapStyleUrl = newStyle
+            }
+        }
+    }
 
     // Bottom sheet state for BottomSheetScaffold
     val bottomSheetState = rememberStandardBottomSheetState(

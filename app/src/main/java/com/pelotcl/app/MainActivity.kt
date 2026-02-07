@@ -437,7 +437,8 @@ fun NavBar(modifier: Modifier = Modifier) {
                     onItineraryClick = { stopName ->
                         itineraryDestinationStop = stopName
                     },
-                    initialUserLocation = userLocation
+                    initialUserLocation = userLocation,
+                    isVisible = selectedDestination == Destination.PLAN.ordinal
                 )
                 
                 // Settings screens - displayed on top when on settings tab

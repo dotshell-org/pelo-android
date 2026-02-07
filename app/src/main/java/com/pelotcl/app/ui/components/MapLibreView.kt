@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -66,6 +67,57 @@ fun MapLibreView(
                         .build()
                     
                     onMapReady(map)
+                }
+            }
+        }
+    }
+
+    // Track the initial style to skip the first LaunchedEffect trigger (already applied in remember block)
+    val initialStyleApplied = remember { mutableStateOf(false) }
+
+    // Re-apply map style when styleUrl changes (e.g. user changed it in settings)
+    LaunchedEffect(styleUrl) {
+        if (!initialStyleApplied.value) {
+            initialStyleApplied.value = true
+            return@LaunchedEffect
+        }
+        mapView.getMapAsync { map ->
+            // Preserve current camera position before style change
+            val currentCamera = map.cameraPosition
+            map.setStyle(styleUrl) { _ ->
+                // Restore camera position after style reload
+                map.cameraPosition = currentCamera
+                // Re-add user location marker if it exists
+                if (userLocation != null) {
+                    map.getStyle { style ->
+                        style.getLayer("user-location-layer")?.let { style.removeLayer(it) }
+                        style.getSource("user-location-source")?.let { style.removeSource(it) }
+
+                        val userLocationGeoJson = JsonObject().apply {
+                            addProperty("type", "Feature")
+                            val geometryObject = JsonObject().apply {
+                                addProperty("type", "Point")
+                                val coordinatesArray = JsonArray()
+                                coordinatesArray.add(userLocation.longitude)
+                                coordinatesArray.add(userLocation.latitude)
+                                add("coordinates", coordinatesArray)
+                            }
+                            add("geometry", geometryObject)
+                        }.toString()
+
+                        style.addSource(GeoJsonSource("user-location-source", userLocationGeoJson))
+                        style.addLayer(
+                            CircleLayer("user-location-layer", "user-location-source").apply {
+                                setProperties(
+                                    PropertyFactory.circleRadius(10f),
+                                    PropertyFactory.circleColor("#3B82F6"),
+                                    PropertyFactory.circleStrokeWidth(3f),
+                                    PropertyFactory.circleStrokeColor("#FFFFFF"),
+                                    PropertyFactory.circleOpacity(1.0f)
+                                )
+                            }
+                        )
+                    }
                 }
             }
         }
