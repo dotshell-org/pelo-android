@@ -596,12 +596,14 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      * Normalizes a line name for alert matching (removes spaces and hyphens)
      */
     private fun normalizeLineForAlerts(line: String): String {
-        return line.uppercase()
+        val cleaned = line.uppercase()
             .replace(" ", "")
             .replace("-", "")
             .replace("TRAM", "")
             .replace("METRO", "")
             .trim()
+        // Apply same normalization as normalizeLineName (e.g. NAVI1 → NAV1)
+        return normalizeLineName(cleaned)
     }
 
     /**
@@ -1170,9 +1172,10 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             }
             .distinct()
 
-        // Combine and deduplicate (case-insensitive) before sorting
+        // Combine and deduplicate using normalized names (e.g. NAVI1 & NAV1 → keep first seen)
+        // Prefer names from Features (GeoJSON) since they're used for API lookups
         return (linesFromFeatures + linesFromStops)
-            .groupBy { it.uppercase() }
+            .groupBy { normalizeLineName(it) }
             .map { (_, variants) -> variants.first() }
             .filter { it.isNotEmpty() && !it.equals("TS", ignoreCase = true) }
             .sortedWith(compareBy(
