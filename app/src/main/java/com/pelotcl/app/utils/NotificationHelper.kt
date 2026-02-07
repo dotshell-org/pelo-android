@@ -50,11 +50,35 @@ class NotificationHelper(private val context: Context) {
             alerts.joinToString(", ") { it.title }
         }
         
+        // Build expanded style with detailed message body
+        val expandedStyle = if (alerts.size == 1) {
+            // Single alert: show full message in expanded view
+            val detail = alerts.first().message.ifBlank { alerts.first().title }
+            NotificationCompat.BigTextStyle()
+                .bigText(detail)
+                .setBigContentTitle(title)
+        } else {
+            // Multiple alerts: show each alert title + message as separate lines
+            NotificationCompat.InboxStyle()
+                .setBigContentTitle(title)
+                .setSummaryText("${alerts.size} alertes")
+                .also { style ->
+                    alerts.forEach { alert ->
+                        val line = if (alert.message.isNotBlank()) {
+                            "• ${alert.title}\n  ${alert.message}"
+                        } else {
+                            "• ${alert.title}"
+                        }
+                        style.addLine(line)
+                    }
+                }
+        }
+        
         val notification = NotificationCompat.Builder(context, PeloApplication.TRAFFIC_ALERTS_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
             .setContentText(content)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(content))
+            .setStyle(expandedStyle)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
