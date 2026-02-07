@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -67,6 +68,27 @@ fun MapLibreView(
                     
                     onMapReady(map)
                 }
+            }
+        }
+    }
+
+    // Track the initial style to skip the first LaunchedEffect trigger (already applied in remember block)
+    val initialStyleApplied = remember { mutableStateOf(false) }
+
+    // Re-apply map style when styleUrl changes (e.g. user changed it in settings)
+    LaunchedEffect(styleUrl) {
+        if (!initialStyleApplied.value) {
+            initialStyleApplied.value = true
+            return@LaunchedEffect
+        }
+        mapView.getMapAsync { map ->
+            // Preserve current camera position before style change
+            val currentCamera = map.cameraPosition
+            map.setStyle(styleUrl) { _ ->
+                // Restore camera position after style reload
+                map.cameraPosition = currentCamera
+                // Re-notify so that PlanScreen re-adds all its layers (lines, stops, etc.)
+                onMapReady(map)
             }
         }
     }

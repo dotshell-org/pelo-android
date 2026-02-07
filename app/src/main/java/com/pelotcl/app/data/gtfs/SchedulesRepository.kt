@@ -30,6 +30,15 @@ class SchedulesRepository(context: Context) {
     private var normalizedNamesCache: List<String>? = null
 
     companion object {
+        @Volatile
+        private var INSTANCE: SchedulesRepository? = null
+
+        fun getInstance(context: Context): SchedulesRepository {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: SchedulesRepository(context.applicationContext).also { INSTANCE = it }
+            }
+        }
+
         // LRU Cache for schedules: key = "lineName|stopName|directionId|isHoliday"
         // Reduced from 100 to 50 entries to limit memory during rapid navigation
         private val schedulesCache = LruCache<String, List<String>>(50)
@@ -58,6 +67,26 @@ class SchedulesRepository(context: Context) {
             headsignsCache.evictAll()
             searchCache.evictAll()
             stopSequencesCache.evictAll()
+        }
+
+        /**
+         * Trim caches under memory pressure.
+         * @param level The trim memory level from ComponentCallbacks2
+         */
+        fun trimCaches(level: Int) {
+            when {
+                level >= android.content.ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> {
+                    clearCaches()
+                    INSTANCE?.allStopsCache = null
+                    INSTANCE?.normalizedNamesCache = null
+                }
+                level >= android.content.ComponentCallbacks2.TRIM_MEMORY_MODERATE -> {
+                    schedulesCache.trimToSize(schedulesCache.maxSize() / 2)
+                    headsignsCache.trimToSize(headsignsCache.maxSize() / 2)
+                    searchCache.trimToSize(searchCache.maxSize() / 2)
+                    stopSequencesCache.trimToSize(stopSequencesCache.maxSize() / 2)
+                }
+            }
         }
     }
 

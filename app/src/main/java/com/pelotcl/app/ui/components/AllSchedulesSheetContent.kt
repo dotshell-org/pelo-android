@@ -78,8 +78,7 @@ fun AllSchedulesSheetContent(
             }
             Spacer(modifier = Modifier.width(8.dp))
 
-            val drawableName = BusIconHelper.getDrawableNameForLineName(allSchedulesInfo.lineName)
-            val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
+            val resourceId = BusIconHelper.getResourceIdForLine(context, allSchedulesInfo.lineName)
             if (resourceId != 0) {
                 Image(painter = painterResource(id = resourceId), contentDescription = "Line ${allSchedulesInfo.lineName}", modifier = Modifier.size(50.dp))
             } else {

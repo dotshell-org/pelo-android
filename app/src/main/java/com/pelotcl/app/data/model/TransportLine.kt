@@ -1,5 +1,6 @@
 package com.pelotcl.app.data.model
 
+import androidx.compose.runtime.Immutable
 import com.google.gson.annotations.SerializedName
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -7,6 +8,7 @@ import kotlinx.serialization.Serializable
 /**
  * Représente une collection GeoJSON de features
  */
+@Immutable
 @Serializable
 data class FeatureCollection(
     val type: String,
@@ -22,6 +24,7 @@ data class FeatureCollection(
 /**
  * Représente une feature GeoJSON avec géométrie et propriétés
  */
+@Immutable
 @Serializable
 data class Feature(
     val type: String,
@@ -37,6 +40,7 @@ data class Feature(
 /**
  * Représente une géométrie de type MultiLineString
  */
+@Immutable
 @Serializable
 data class Geometry(
     val type: String,
@@ -46,6 +50,7 @@ data class Geometry(
 /**
  * Propriétés d'une ligne de transport TCL
  */
+@Immutable
 @Serializable
 data class TransportLineProperties(
     val ligne: String,
@@ -105,12 +110,14 @@ data class TransportLineProperties(
 /**
  * Système de coordonnées
  */
+@Immutable
 @Serializable
 data class CRS(
     val type: String,
     val properties: CRSProperties
 )
 
+@Immutable
 @Serializable
 data class CRSProperties(
     val name: String

@@ -102,6 +102,7 @@ import com.pelotcl.app.ui.theme.Gray200
 import com.pelotcl.app.ui.theme.Gray700
 import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
+import androidx.compose.runtime.Immutable
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LineColorHelper
 import com.pelotcl.app.utils.ListItemRecompositionCounter
@@ -127,6 +128,7 @@ enum class TimeMode {
 /**
  * Represents a selected stop for the itinerary
  */
+@Immutable
 data class SelectedStop(
     val name: String,
     val stopIds: List<Int>
@@ -1002,8 +1004,7 @@ private fun StopSelectionField(
 @Composable
 private fun SmallLineBadge(lineName: String) {
     val context = LocalContext.current
-    val drawableName = BusIconHelper.getDrawableNameForLineName(lineName)
-    val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
+    val resourceId = BusIconHelper.getResourceIdForLine(context, lineName)
 
     if (resourceId != 0) {
         Image(
@@ -1157,8 +1158,7 @@ private fun JourneyLegItem(
                         modifier = Modifier.size(20.dp)
                     )
                 } else {
-                    val drawableName = BusIconHelper.getDrawableNameForLineName(leg.routeName ?: "")
-                    val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
+                    val resourceId = BusIconHelper.getResourceIdForLine(context, leg.routeName ?: "")
 
                     if (resourceId != 0) {
                         Image(
@@ -1369,13 +1369,7 @@ private fun JourneyDetailsSheetContent(
                         )
                     } else {
                         // Transport line icon
-                        val drawableName =
-                            BusIconHelper.getDrawableNameForLineName(leg.routeName ?: "")
-                        val resourceId = context.resources.getIdentifier(
-                            drawableName,
-                            "drawable",
-                            context.packageName
-                        )
+                        val resourceId = BusIconHelper.getResourceIdForLine(context, leg.routeName ?: "")
 
                         if (resourceId != 0) {
                             Image(

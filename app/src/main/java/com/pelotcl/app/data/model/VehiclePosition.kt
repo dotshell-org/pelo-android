@@ -1,5 +1,6 @@
 package com.pelotcl.app.data.model
 
+import androidx.compose.runtime.Immutable
 import com.google.gson.annotations.SerializedName
 
 /**
@@ -92,6 +93,7 @@ data class VehicleLocation(
 /**
  * Simplified vehicle position for UI display
  */
+@Immutable
 data class SimpleVehiclePosition(
     val vehicleId: String,
     val lineName: String,

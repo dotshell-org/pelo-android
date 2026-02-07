@@ -31,7 +31,7 @@ import androidx.compose.runtime.remember
  */
 
 private const val TAG = "RecompositionCounter"
-private const val ENABLED = true // Set to false in production
+private const val ENABLED = false // Set to true for debugging recompositions
 
 /**
  * Recomposition counter for list items.
@@ -43,6 +43,7 @@ private const val ENABLED = true // Set to false in production
  */
 @Composable
 fun ListItemRecompositionCounter(listName: String, itemKey: Any) {
+    if (!ENABLED) return
 
     val counter = remember { ListItemCounterState(listName, itemKey.toString()) }
     SideEffect {

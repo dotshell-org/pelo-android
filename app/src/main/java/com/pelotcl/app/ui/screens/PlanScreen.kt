@@ -195,7 +195,8 @@ fun PlanScreen(
     searchSelectedStop: StationSearchResult? = null,
     onSearchSelectionHandled: () -> Unit = {},
     onItineraryClick: (stopName: String) -> Unit = {},
-    initialUserLocation: LatLng? = null
+    initialUserLocation: LatLng? = null,
+    isVisible: Boolean = true
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val stopsUiState by viewModel.stopsUiState.collectAsState()
@@ -203,6 +204,8 @@ fun PlanScreen(
     val vehiclePositions by viewModel.vehiclePositions.collectAsState()
     val isLiveTrackingEnabled by viewModel.isLiveTrackingEnabled.collectAsState()
     var mapInstance by remember { mutableStateOf<MapLibreMap?>(null) }
+    // Incremented each time the map style is reloaded, to force LaunchedEffects to re-run
+    var mapStyleVersion by remember { mutableStateOf(0) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -227,9 +230,17 @@ fun PlanScreen(
     var isCenteredOnUser by remember { mutableStateOf(true) }
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
-    // Map style from settings
+    // Map style from settings — re-read when returning to the Plan tab
     val mapStyleRepository = remember { MapStyleRepository(context) }
-    val mapStyleUrl = remember { mapStyleRepository.getSelectedStyle().styleUrl }
+    var mapStyleUrl by remember { mutableStateOf(mapStyleRepository.getSelectedStyle().styleUrl) }
+    LaunchedEffect(isVisible) {
+        if (isVisible) {
+            val newStyle = mapStyleRepository.getSelectedStyle().styleUrl
+            if (newStyle != mapStyleUrl) {
+                mapStyleUrl = newStyle
+            }
+        }
+    }
 
     // Bottom sheet state for BottomSheetScaffold
     val bottomSheetState = rememberStandardBottomSheetState(
@@ -376,7 +387,7 @@ fun PlanScreen(
     // Track the number of lines currently displayed to avoid unnecessary map updates
     var lastDisplayedLinesCount by remember { mutableStateOf(0) }
 
-    LaunchedEffect(uiState, mapInstance) {
+    LaunchedEffect(uiState, mapInstance, mapStyleVersion) {
         val map = mapInstance ?: return@LaunchedEffect
 
         // Extract lines from both Success and PartialSuccess states
@@ -540,7 +551,7 @@ fun PlanScreen(
         }
     }
 
-    LaunchedEffect(stopsUiState, mapInstance) {
+    LaunchedEffect(stopsUiState, mapInstance, mapStyleVersion) {
         val map = mapInstance ?: return@LaunchedEffect
 
         when (val state = stopsUiState) {
@@ -692,7 +703,7 @@ fun PlanScreen(
     }
 
     // Update vehicle markers on the map when vehicle positions change
-    LaunchedEffect(vehiclePositions, mapInstance, selectedLine) {
+    LaunchedEffect(vehiclePositions, mapInstance, selectedLine, mapStyleVersion) {
         val map = mapInstance ?: return@LaunchedEffect
         val positions = vehiclePositions
         val line = selectedLine
@@ -787,7 +798,7 @@ fun PlanScreen(
     // Use snapshotFlow with debounce to avoid overwhelming the map when user changes stations rapidly.
     // collectLatest automatically cancels previous collection when new values arrive.
     @OptIn(FlowPreview::class)
-    LaunchedEffect(mapInstance) {
+    LaunchedEffect(mapInstance, mapStyleVersion) {
         val map = mapInstance ?: return@LaunchedEffect
 
         snapshotFlow {
@@ -1065,11 +1076,16 @@ fun PlanScreen(
                 initialZoom = 12.0,
                 styleUrl = mapStyleUrl,
                 onMapReady = { map ->
-                    mapInstance = map
-                    // Add listener to detect when user moves the map
-                    map.addOnCameraMoveStartedListener { reason ->
-                        if (reason == org.maplibre.android.maps.MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
-                            isCenteredOnUser = false
+                    if (mapInstance === map) {
+                        // Same map instance → style was reloaded, bump version to re-trigger LaunchedEffects
+                        mapStyleVersion++
+                    } else {
+                        mapInstance = map
+                        // Add listener to detect when user moves the map
+                        map.addOnCameraMoveStartedListener { reason ->
+                            if (reason == org.maplibre.android.maps.MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
+                                isCenteredOnUser = false
+                            }
                         }
                     }
                 },
@@ -1805,13 +1821,9 @@ private suspend fun addStopsToMap(
             val requiredIcons = mutableSetOf<String>()
             val usedSlots = mutableSetOf<Int>()
 
-            // Cache for resource existence check to avoid repetitive reflection calls
-            val iconAvailabilityCache = mutableMapOf<String, Boolean>()
-            @Suppress("DiscouragedApi") // Dynamic resource loading for transport line icons
+            // Use centralized BusIconHelper cache for resource ID lookups
             fun checkIconAvailable(name: String): Boolean {
-                return iconAvailabilityCache.getOrPut(name) {
-                    context.resources.getIdentifier(name, "drawable", context.packageName) != 0
-                }
+                return BusIconHelper.getResourceIdForDrawableName(context, name) != 0
             }
 
             // Add mode icons to required icons
@@ -1892,10 +1904,9 @@ private suspend fun addStopsToMap(
                 }.toMap()
             } else {
                 // Load bitmaps and cache them
-                @Suppress("DiscouragedApi") // Dynamic resource loading for transport line icons
                 val loadedBitmaps = requiredIcons.mapNotNull { iconName ->
                     try {
-                        val resourceId = context.resources.getIdentifier(iconName, "drawable", context.packageName)
+                        val resourceId = BusIconHelper.getResourceIdForDrawableName(context, iconName)
                         if (resourceId != 0) {
                             val drawable = ContextCompat.getDrawable(context, resourceId)
                             drawable?.let { d ->

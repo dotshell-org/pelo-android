@@ -1,5 +1,6 @@
 package com.pelotcl.app.data.model
 
+import androidx.compose.runtime.Immutable
 import com.google.gson.annotations.SerializedName
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -7,6 +8,7 @@ import kotlinx.serialization.Serializable
 /**
  * Représente une collection GeoJSON d'arrêts de transport
  */
+@Immutable
 @Serializable
 data class StopCollection(
     val type: String,
@@ -22,6 +24,7 @@ data class StopCollection(
 /**
  * Représente un arrêt de transport (Feature GeoJSON)
  */
+@Immutable
 @Serializable
 data class StopFeature(
     val type: String,
@@ -37,6 +40,7 @@ data class StopFeature(
 /**
  * Géométrie d'un arrêt (Point)
  */
+@Immutable
 @Serializable
 data class StopGeometry(
     val type: String, // "Point"
@@ -46,6 +50,7 @@ data class StopGeometry(
 /**
  * Propriétés d'un arrêt TCL
  */
+@Immutable
 @Serializable
 data class StopProperties(
     val id: Int,
