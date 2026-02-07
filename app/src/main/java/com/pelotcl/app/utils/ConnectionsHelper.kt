@@ -1,5 +1,6 @@
 package com.pelotcl.app.utils
 
+import androidx.compose.runtime.Immutable
 import com.pelotcl.app.data.model.StopFeature
 
 enum class TransportType {
@@ -23,6 +24,7 @@ fun getTransportType(lineName: String): TransportType {
     }
 }
 
+@Immutable
 data class Connection(val lineName: String, val transportType: TransportType)
 
 /**

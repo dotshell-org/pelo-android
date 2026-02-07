@@ -330,6 +330,21 @@ class JourneyCache private constructor(context: Context) {
     }
 
     /**
+     * Trim memory cache under memory pressure.
+     * @param level The trim memory level from ComponentCallbacks2
+     */
+    fun trimMemory(level: Int) {
+        when {
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> {
+                memoryCache.evictAll()
+            }
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_MODERATE -> {
+                memoryCache.trimToSize(memoryCache.maxSize() / 2)
+            }
+        }
+    }
+
+    /**
      * Get cache statistics for debugging
      */
     fun getStats(): CacheStats {

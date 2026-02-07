@@ -5,6 +5,7 @@ import android.os.Build
 import android.util.Log
 import android.util.LruCache
 import androidx.annotation.RequiresApi
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.pelotcl.app.data.model.Feature
@@ -39,6 +40,7 @@ import kotlin.math.sqrt
 /**
  * UI state for transport lines
  */
+@Stable
 sealed class TransportLinesUiState {
     data object Loading : TransportLinesUiState()
     data class PartialSuccess(val lines: List<Feature>, val source: String) : TransportLinesUiState()
@@ -49,6 +51,7 @@ sealed class TransportLinesUiState {
 /**
  * UI state for transport stops
  */
+@Stable
 sealed class TransportStopsUiState {
     data object Loading : TransportStopsUiState()
     data class Success(val stops: List<StopFeature>) : TransportStopsUiState()
@@ -72,8 +75,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     private val _stopsUiState = MutableStateFlow<TransportStopsUiState>(TransportStopsUiState.Loading)
     val stopsUiState: StateFlow<TransportStopsUiState> = _stopsUiState.asStateFlow()
 
-    private val schedulesRepository = com.pelotcl.app.data.gtfs.SchedulesRepository(application.applicationContext)
-    private val holidayDetector = HolidayDetector(application.applicationContext)
+    private val schedulesRepository = com.pelotcl.app.data.gtfs.SchedulesRepository.getInstance(application.applicationContext)
+    private val holidayDetector by lazy { HolidayDetector(application.applicationContext) }
     private val favoritesRepository = FavoritesRepository(application.applicationContext)
 
     private val _headsigns = MutableStateFlow<Map<Int, String>>(emptyMap())
@@ -557,19 +560,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     }
                 }
 
-                // Preload Raptor after a short delay to not compete with UI rendering
-                // This lazy-initializes the Raptor library in the background
-                // Reduced from 2000ms to 500ms for faster itinerary availability
+                // Raptor initialization is handled by MainActivity to avoid duplicate init.
+                // Here we only cleanup expired cache entries once Raptor is ready.
                 launch(Dispatchers.IO) {
-                    kotlinx.coroutines.delay(500) // Wait 500ms for initial UI to render
-                    val raptorStart = System.currentTimeMillis()
-                    raptorRepository.initialize()
-
-                    // Preload journey cache from disk (recent itineraries)
-                    raptorRepository.preloadJourneyCache()
-                    val cacheStats = raptorRepository.getCacheStats()
-
-                    // Cleanup expired cache entries (runs in background)
                     raptorRepository.cleanupExpiredCache()
                 }
 

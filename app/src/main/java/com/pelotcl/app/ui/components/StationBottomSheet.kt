@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.pelotcl.app.ui.theme.Gray200
 import com.pelotcl.app.ui.theme.Gray700
+import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.ListItemRecompositionCounter
 
 /**
@@ -259,11 +260,8 @@ private fun LineListItem(
 
     @Suppress("ComposeLocalContext") // Context access needed for dynamic resource loading
     val context = LocalContext.current
-    val resources = context.resources
-    val packageName = context.packageName
     val resourceId = remember(lineName) {
-        val drawableName = getDrawableNameForLine(lineName)
-        resources.getIdentifier(drawableName, "drawable", packageName)
+        BusIconHelper.getResourceIdForLine(context, lineName)
     }
 
     Row(

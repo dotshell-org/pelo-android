@@ -99,7 +99,7 @@ class MainActivity : ComponentActivity() {
                     cache.preloadFromDisk()
                 }
                 val sqliteJob = launch {
-                    val schedulesRepo = com.pelotcl.app.data.gtfs.SchedulesRepository(applicationContext)
+                    val schedulesRepo = com.pelotcl.app.data.gtfs.SchedulesRepository.getInstance(applicationContext)
                     schedulesRepo.warmupDatabase()
                 }
                 // Wait for cache and SQLite (critical for UI)
@@ -133,7 +133,8 @@ class MainActivity : ComponentActivity() {
             RetrofitInstance.initialize(applicationContext)
 
             // Preload Raptor library in background (only needed for itinerary calculations)
-            delay(500) // Let UI stabilize first
+            // yield() gives the UI thread priority without an arbitrary delay
+            kotlinx.coroutines.yield()
             try {
                 val raptorRepo = com.pelotcl.app.data.repository.RaptorRepository.getInstance(applicationContext)
                 raptorRepo.initialize()

@@ -1,8 +1,11 @@
 package com.pelotcl.app.data.gtfs
 
+import androidx.compose.runtime.Immutable
+
 /**
  * Represents a stop on a line with its order and information
  */
+@Immutable
 data class LineStopInfo(
     val stopId: String,
     val stopName: String,

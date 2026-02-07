@@ -90,8 +90,7 @@ private fun DirectionOption(
 ) {
     val context = LocalContext.current
     val lineColor = Color(LineColorHelper.getColorForLineString(direction.lineName))
-    val drawableName = BusIconHelper.getDrawableNameForLineName(direction.lineName)
-    val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
+    val resourceId = BusIconHelper.getResourceIdForLine(context, direction.lineName)
     
     Surface(
         modifier = modifier

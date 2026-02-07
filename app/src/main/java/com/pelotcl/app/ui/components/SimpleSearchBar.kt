@@ -48,9 +48,11 @@ import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.Immutable
 import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.utils.BusIconHelper
 
+@Immutable
 data class StationSearchResult(
     val stopName: String,
     val lines: List<String>,
@@ -255,8 +257,7 @@ fun SimpleSearchBar(
 @Composable
 private fun SearchConnectionBadge(lineName: String) {
     val context = LocalContext.current
-    val drawableName = BusIconHelper.getDrawableNameForLineName(lineName)
-    val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
+    val resourceId = BusIconHelper.getResourceIdForLine(context, lineName)
 
     if (resourceId != 0) {
         Image(

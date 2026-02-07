@@ -24,9 +24,9 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
@@ -72,6 +72,7 @@ import com.pelotcl.app.ui.theme.Orange500
 import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportLinesUiState
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
+import androidx.compose.runtime.Immutable
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.Connection
 import com.pelotcl.app.utils.LineColorHelper
@@ -85,6 +86,7 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
+@Immutable
 data class LineInfo(
     val lineName: String,
     val currentStationName: String,
@@ -260,8 +262,7 @@ fun LineDetailsBottomSheet(
                             .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        val drawableName = BusIconHelper.getDrawableNameForLineName(lineInfo.lineName)
-                        val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
+                        val resourceId = BusIconHelper.getResourceIdForLine(context, lineInfo.lineName)
                         if (resourceId != 0) {
                             Image(painter = painterResource(id = resourceId), contentDescription = "Line ${lineInfo.lineName}", modifier = Modifier.size(50.dp))
                         } else {
@@ -295,83 +296,88 @@ fun LineDetailsBottomSheet(
 
                 Spacer(modifier = Modifier.height(36.dp))
 
-                // Scrollable Content (Schedules + Stops)
-                Column(
+                // Scrollable Content (Schedules + Stops) using LazyColumn for virtualization
+                LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
-                        .verticalScroll(rememberScrollState())
                 ) {
                     if (lineAlerts.isNotEmpty()) {
-                        TrafficAlertsSection(
-                            alerts = lineAlerts,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(modifier = Modifier.height(20.dp))
+                        item(key = "traffic_alerts") {
+                            TrafficAlertsSection(
+                                alerts = lineAlerts,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(20.dp))
+                        }
                     }
 
                     // Part 1: Next Schedules (contains Itinerary button)
                     if (lineInfo.currentStationName.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        NextSchedulesSection(
-                            viewModel = viewModel,
-                            lineInfo = lineInfo,
-                            selectedDirection = selectedDirection,
-                            onDirectionChange = onDirectionChange,
-                            onShowAllSchedules = onShowAllSchedules,
-                            onItineraryClick = { onItineraryClick(lineInfo.currentStationName) }
-                        )
-                        Spacer(modifier = Modifier.height(20.dp))
+                        item(key = "next_schedules") {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            NextSchedulesSection(
+                                viewModel = viewModel,
+                                lineInfo = lineInfo,
+                                selectedDirection = selectedDirection,
+                                onDirectionChange = onDirectionChange,
+                                onShowAllSchedules = onShowAllSchedules,
+                                onItineraryClick = { onItineraryClick(lineInfo.currentStationName) }
+                            )
+                            Spacer(modifier = Modifier.height(20.dp))
+                        }
                     }
 
                     // Part 2: Connections
                     if (connections.isNotEmpty()) {
-                        ConnectionsSection(
-                            connections = connections,
-                            onLineClick = onLineClick
-                        )
+                        item(key = "connections") {
+                            ConnectionsSection(
+                                connections = connections,
+                                onLineClick = onLineClick
+                            )
+                        }
                     }
 
                     // Part 3: Stops or Loader
                     if (isLoading) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(200.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator()
+                        item(key = "loading") {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator()
+                            }
+                        }
+                    } else if (displayedStops.isEmpty()) {
+                        item(key = "empty_loading") {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator()
+                            }
                         }
                     } else {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 24.dp)
-                                .padding(top = 10.dp, bottom = 40.dp)
-                        ) {
-                            if (displayedStops.isEmpty()) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(200.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CircularProgressIndicator()
-                                }
-                            } else {
-                                val lineColor = getLineColor(lineInfo.lineName)
-                                displayedStops.forEachIndexed { index, stop ->
-                                    key(stop.stopId) {
-                                        StopItemWithLine(
-                                            stop = stop,
-                                            lineColor = lineColor,
-                                            isFirst = index == 0,
-                                            isLast = index == displayedStops.size - 1,
-                                            onStopClick = { onStopClick(stop.stopName) }
-                                        )
-                                    }
-                                }
-                            }
+                        val lineColor = getLineColor(lineInfo.lineName)
+                        itemsIndexed(
+                            items = displayedStops,
+                            key = { _, stop -> stop.stopId }
+                        ) { index, stop ->
+                            StopItemWithLine(
+                                stop = stop,
+                                lineColor = lineColor,
+                                isFirst = index == 0,
+                                isLast = index == displayedStops.size - 1,
+                                onStopClick = { onStopClick(stop.stopName) },
+                                modifier = Modifier.padding(horizontal = 24.dp)
+                            )
+                        }
+                        item(key = "bottom_spacer") {
+                            Spacer(modifier = Modifier.height(40.dp))
                         }
                     }
                 }
@@ -774,12 +780,12 @@ private fun ConnectionsSection(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Boolean, isLast: Boolean, onStopClick: () -> Unit = {}) {
+private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Boolean, isLast: Boolean, onStopClick: () -> Unit = {}, modifier: Modifier = Modifier) {
     // Debug: measure the recompositions of this item
     ListItemRecompositionCounter("LineStops", stop.stopId)
 
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).height(IntrinsicSize.Min).clickable { onStopClick() },
+        modifier = modifier.fillMaxWidth().padding(vertical = 4.dp).height(IntrinsicSize.Min).clickable { onStopClick() },
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(modifier = Modifier.width(40.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
@@ -848,9 +854,8 @@ private fun ConnectionBadge(
 ) {
     val context = LocalContext.current
 
-    // Convert line name to drawable name using BusIconHelper for consistency
-    val drawableName = BusIconHelper.getDrawableNameForLineName(lineName)
-    val resourceId = context.resources.getIdentifier(drawableName, "drawable", context.packageName)
+    // Convert line name to drawable resource ID using cached lookup
+    val resourceId = BusIconHelper.getResourceIdForLine(context, lineName)
 
     val modifier = if (onClick != null) {
         Modifier.size(size).clickable { onClick() }

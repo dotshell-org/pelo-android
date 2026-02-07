@@ -1805,13 +1805,9 @@ private suspend fun addStopsToMap(
             val requiredIcons = mutableSetOf<String>()
             val usedSlots = mutableSetOf<Int>()
 
-            // Cache for resource existence check to avoid repetitive reflection calls
-            val iconAvailabilityCache = mutableMapOf<String, Boolean>()
-            @Suppress("DiscouragedApi") // Dynamic resource loading for transport line icons
+            // Use centralized BusIconHelper cache for resource ID lookups
             fun checkIconAvailable(name: String): Boolean {
-                return iconAvailabilityCache.getOrPut(name) {
-                    context.resources.getIdentifier(name, "drawable", context.packageName) != 0
-                }
+                return BusIconHelper.getResourceIdForDrawableName(context, name) != 0
             }
 
             // Add mode icons to required icons
@@ -1892,10 +1888,9 @@ private suspend fun addStopsToMap(
                 }.toMap()
             } else {
                 // Load bitmaps and cache them
-                @Suppress("DiscouragedApi") // Dynamic resource loading for transport line icons
                 val loadedBitmaps = requiredIcons.mapNotNull { iconName ->
                     try {
-                        val resourceId = context.resources.getIdentifier(iconName, "drawable", context.packageName)
+                        val resourceId = BusIconHelper.getResourceIdForDrawableName(context, iconName)
                         if (resourceId != 0) {
                             val drawable = ContextCompat.getDrawable(context, resourceId)
                             drawable?.let { d ->

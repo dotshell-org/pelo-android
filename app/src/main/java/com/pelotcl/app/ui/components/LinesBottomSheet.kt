@@ -352,17 +352,9 @@ private fun LineChip(
 ) {
     val context = LocalContext.current
 
-    // Get icon resource ID
+    // Get icon resource ID (cached via BusIconHelper)
     val drawableId = remember(lineName) {
-        val resourceName = lineName.lowercase()
-            .replace("é", "e")
-            .replace("è", "e")
-            .replace("ê", "e")
-            .replace("-", "")
-            .replace(" ", "")
-            .let { if (it.first().isDigit()) "_$it" else it } // Prefix _ if starts with digit
-
-        context.resources.getIdentifier(resourceName, "drawable", context.packageName)
+        BusIconHelper.getResourceIdForLine(context, lineName)
     }
 
     Box(
@@ -466,18 +458,8 @@ private fun AlertBadge(
 /**
  * Checks if a line has an available SVG icon
  */
-@Suppress("DiscouragedApi") // Dynamic resource loading for transport line icons
 private fun hasLineIcon(lineName: String, context: android.content.Context): Boolean {
-    val resourceName = lineName.lowercase()
-        .replace("é", "e")
-        .replace("è", "e")
-        .replace("ê", "e")
-        .replace("-", "")
-        .replace(" ", "")
-        .let { if (it.firstOrNull()?.isDigit() == true) "_$it" else it }
-
-    val drawableId = context.resources.getIdentifier(resourceName, "drawable", context.packageName)
-    return drawableId != 0
+    return BusIconHelper.getResourceIdForLine(context, lineName) != 0
 }
 
 /**

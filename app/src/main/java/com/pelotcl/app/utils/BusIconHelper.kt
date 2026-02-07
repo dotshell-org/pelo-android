@@ -1,5 +1,6 @@
 package com.pelotcl.app.utils
 
+import android.content.Context
 import android.util.LruCache
 import com.pelotcl.app.data.model.StopFeature
 
@@ -14,6 +15,41 @@ object BusIconHelper {
      * Size: 500 entries (sufficient for frequently accessed stops)
      */
     private val desserteCache = LruCache<String, List<String>>(500)
+
+    /**
+     * Cache for resolved drawable resource IDs to avoid repeated getIdentifier() reflection calls.
+     * Key: drawable name, Value: resource ID (0 if not found)
+     */
+    private val resourceIdCache = HashMap<String, Int>(256)
+
+    /**
+     * Resolves a line name to its drawable resource ID, using a cache to avoid
+     * repeated calls to resources.getIdentifier() (which uses reflection internally).
+     *
+     * @param context Android context for resource resolution
+     * @param lineName The line name (ex: "212", "C17", "A", "NAVI1")
+     * @return The drawable resource ID, or 0 if not found
+     */
+    @Suppress("DiscouragedApi")
+    fun getResourceIdForLine(context: Context, lineName: String): Int {
+        val drawableName = getDrawableNameForLineName(lineName)
+        if (drawableName.isBlank()) return 0
+        return resourceIdCache.getOrPut(drawableName) {
+            context.resources.getIdentifier(drawableName, "drawable", context.packageName)
+        }
+    }
+
+    /**
+     * Resolves a raw drawable name to its resource ID, using a cache.
+     * Use this when you already have the drawable name (e.g., from getIconNameForStop).
+     */
+    @Suppress("DiscouragedApi")
+    fun getResourceIdForDrawableName(context: Context, drawableName: String): Int {
+        if (drawableName.isBlank()) return 0
+        return resourceIdCache.getOrPut(drawableName) {
+            context.resources.getIdentifier(drawableName, "drawable", context.packageName)
+        }
+    }
 
     /**
      * Extracts the first bus line from a stop and returns the corresponding drawable name
@@ -49,6 +85,7 @@ object BusIconHelper {
      */
     fun clearCache() {
         desserteCache.evictAll()
+        resourceIdCache.clear()
     }
 
     /**

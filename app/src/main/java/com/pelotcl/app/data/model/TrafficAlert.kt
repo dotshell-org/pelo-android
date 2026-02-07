@@ -1,10 +1,12 @@
 package com.pelotcl.app.data.model
 
+import androidx.compose.runtime.Immutable
 import com.google.gson.annotations.SerializedName
 
 /**
  * Représente une alerte de trafic pour une ligne de transport
  */
+@Immutable
 data class TrafficAlert(
     @SerializedName("cause")
     val cause: String,
