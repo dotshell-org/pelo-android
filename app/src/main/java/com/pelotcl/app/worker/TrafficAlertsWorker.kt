@@ -30,9 +30,9 @@ class TrafficAlertsWorker(
             // Funicular
             "F1", "F2",
             // Navigone
-            "NAV1", "NAVI1",
+            "NAVI1",
             // Trambus
-            "TB1", "TB2", "TB3"
+            "TB11", "TB12"
         )
     }
     
