@@ -87,38 +87,8 @@ fun MapLibreView(
             map.setStyle(styleUrl) { _ ->
                 // Restore camera position after style reload
                 map.cameraPosition = currentCamera
-                // Re-add user location marker if it exists
-                if (userLocation != null) {
-                    map.getStyle { style ->
-                        style.getLayer("user-location-layer")?.let { style.removeLayer(it) }
-                        style.getSource("user-location-source")?.let { style.removeSource(it) }
-
-                        val userLocationGeoJson = JsonObject().apply {
-                            addProperty("type", "Feature")
-                            val geometryObject = JsonObject().apply {
-                                addProperty("type", "Point")
-                                val coordinatesArray = JsonArray()
-                                coordinatesArray.add(userLocation.longitude)
-                                coordinatesArray.add(userLocation.latitude)
-                                add("coordinates", coordinatesArray)
-                            }
-                            add("geometry", geometryObject)
-                        }.toString()
-
-                        style.addSource(GeoJsonSource("user-location-source", userLocationGeoJson))
-                        style.addLayer(
-                            CircleLayer("user-location-layer", "user-location-source").apply {
-                                setProperties(
-                                    PropertyFactory.circleRadius(10f),
-                                    PropertyFactory.circleColor("#3B82F6"),
-                                    PropertyFactory.circleStrokeWidth(3f),
-                                    PropertyFactory.circleStrokeColor("#FFFFFF"),
-                                    PropertyFactory.circleOpacity(1.0f)
-                                )
-                            }
-                        )
-                    }
-                }
+                // Re-notify so that PlanScreen re-adds all its layers (lines, stops, etc.)
+                onMapReady(map)
             }
         }
     }
