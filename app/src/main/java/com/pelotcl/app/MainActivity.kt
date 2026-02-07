@@ -215,6 +215,10 @@ fun NavBar(modifier: Modifier = Modifier) {
 
     // Itinerary destination stop
     var itineraryDestinationStop by remember { mutableStateOf<String?>(null) }
+    
+    // Track if itinerary map view is open (for navbar back behavior)
+    var isItineraryMapViewOpen by remember { mutableStateOf(false) }
+    var backFromMapTrigger by remember { mutableStateOf(0) }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -332,21 +336,17 @@ fun NavBar(modifier: Modifier = Modifier) {
                         NavigationBarItem(
                             selected = selectedDestination == index,
                             onClick = {
-                                // Close itinerary overlay when navigating
-                                itineraryDestinationStop = null
-                                
                                 if (destination == Destination.LIGNES) {
+                                    // Close itinerary when going to Lines
+                                    itineraryDestinationStop = null
+                                    isItineraryMapViewOpen = false
                                     // Si on n'est pas sur Plan, naviguer vers Plan d'abord
                                     if (selectedDestination != Destination.PLAN.ordinal) {
-                                        navController.navigate(Destination.PLAN.route) {
-                                            launchSingleTop = true
-                                            popUpTo(navController.graph.startDestinationId) { saveState = true }
-                                            restoreState = true
-                                        }
                                         selectedDestination = Destination.PLAN.ordinal
                                     }
                                     showLinesSheet = true
                                 } else if (destination == Destination.PARAMETRES) {
+                                    // Don't close itinerary when going to Settings (preserve state)
                                     // If already on Settings tab, check if we're in a sub-page
                                     val settingsSubRoutes = listOf(
                                         Destination.ABOUT,
@@ -360,22 +360,25 @@ fun NavBar(modifier: Modifier = Modifier) {
                                         // Pop back to Settings root
                                         navController.popBackStack(Destination.PARAMETRES.route, false)
                                     } else if (selectedDestination != index) {
-                                        navController.navigate(destination.route) {
-                                            launchSingleTop = true
-                                            popUpTo(navController.graph.startDestinationId) { saveState = true }
-                                            restoreState = true
-                                        }
                                         selectedDestination = index
                                         showLinesSheet = false
                                     }
                                 } else if (selectedDestination != index) {
-                                    navController.navigate(destination.route) {
-                                        launchSingleTop = true
-                                        popUpTo(navController.graph.startDestinationId) { saveState = true }
-                                        restoreState = true
-                                    }
+                                    // PLAN destination - just go back, don't close itinerary (preserve state)
                                     selectedDestination = index
                                     showLinesSheet = false
+                                } else if (destination == Destination.PLAN) {
+                                    // Already on Plan tab - handle itinerary back navigation
+                                    if (itineraryDestinationStop != null) {
+                                        if (isItineraryMapViewOpen) {
+                                            // Go back from map view to itinerary list
+                                            backFromMapTrigger++
+                                        } else {
+                                            // Close itinerary entirely
+                                            itineraryDestinationStop = null
+                                            isItineraryMapViewOpen = false
+                                        }
+                                    }
                                 }
                             },
                             icon = {
@@ -397,33 +400,56 @@ fun NavBar(modifier: Modifier = Modifier) {
                 }
             }
         ) { contentPadding ->
-            val shouldApplyPadding = selectedDestination != Destination.PLAN.ordinal &&
-                    selectedDestination != Destination.PARAMETRES.ordinal
-            AppNavHost(
-                navController = navController,
-                startDestination = startDestination,
-                contentPadding = contentPadding,
-                showLinesSheet = showLinesSheet,
-                onBottomSheetStateChanged = { isOpen -> isBottomSheetOpen = isOpen },
-                onLinesSheetDismiss = {
-                    showLinesSheet = false
-                },
-                searchSelectedStop = selectedStationFromSearch,
-                onSearchSelectionHandled = { selectedStationFromSearch = null },
-                modifier = if (shouldApplyPadding) Modifier.padding(contentPadding) else Modifier,
-                viewModel = viewModel,
-                userLocation = userLocation,
-                onItineraryClick = { stopName ->
-                    itineraryDestinationStop = stopName
-                },
-                onNavigateToPlan = {
-                    selectedDestination = Destination.PLAN.ordinal
+            // Keep PlanScreen always mounted to preserve map state
+            // Settings and other screens are displayed on top when active
+            Box(modifier = Modifier.fillMaxSize()) {
+                // PlanScreen is ALWAYS mounted (never conditionally removed)
+                // This preserves the map state when navigating to settings and back
+                PlanScreen(
+                    contentPadding = contentPadding,
+                    onSheetStateChanged = { isOpen -> isBottomSheetOpen = isOpen },
+                    showLinesSheet = showLinesSheet,
+                    onLinesSheetDismiss = {
+                        showLinesSheet = false
+                    },
+                    searchSelectedStop = selectedStationFromSearch,
+                    onSearchSelectionHandled = { selectedStationFromSearch = null },
+                    viewModel = viewModel,
+                    onItineraryClick = { stopName ->
+                        itineraryDestinationStop = stopName
+                    },
+                    initialUserLocation = userLocation
+                )
+                
+                // Settings screens - displayed on top when on settings tab
+                if (selectedDestination == Destination.PARAMETRES.ordinal) {
+                    AppNavHost(
+                        navController = navController,
+                        startDestination = Destination.PARAMETRES,
+                        contentPadding = contentPadding,
+                        showLinesSheet = showLinesSheet,
+                        onBottomSheetStateChanged = { isOpen -> isBottomSheetOpen = isOpen },
+                        onLinesSheetDismiss = {
+                            showLinesSheet = false
+                        },
+                        searchSelectedStop = selectedStationFromSearch,
+                        onSearchSelectionHandled = { selectedStationFromSearch = null },
+                        modifier = Modifier,
+                        viewModel = viewModel,
+                        userLocation = userLocation,
+                        onItineraryClick = { stopName ->
+                            itineraryDestinationStop = stopName
+                        },
+                        onNavigateToPlan = {
+                            selectedDestination = Destination.PLAN.ordinal
+                        }
+                    )
                 }
-            )
+            }
             
-            // Itinerary overlay - displayed on top of everything
+            // Itinerary overlay - displayed on top of PlanScreen but hidden when on Settings
             AnimatedVisibility(
-                visible = itineraryDestinationStop != null,
+                visible = itineraryDestinationStop != null && selectedDestination != Destination.PARAMETRES.ordinal,
                 enter = slideInVertically(initialOffsetY = { it }),
                 exit = slideOutVertically(targetOffsetY = { it })
             ) {
@@ -433,7 +459,12 @@ fun NavBar(modifier: Modifier = Modifier) {
                     viewModel = viewModel,
                     onBack = {
                         itineraryDestinationStop = null
-                    }
+                        isItineraryMapViewOpen = false
+                    },
+                    onMapViewChanged = { isMapOpen ->
+                        isItineraryMapViewOpen = isMapOpen
+                    },
+                    backFromMapTrigger = backFromMapTrigger
                 )
             }
         }
@@ -445,7 +476,7 @@ fun NavBar(modifier: Modifier = Modifier) {
                     searchQuery = query
                 },
                 onSearch = { result ->
-                    selectedStationFromSearch = result
+                    itineraryDestinationStop = result.stopName
                     searchQuery = ""
                 },
                 modifier = Modifier
@@ -482,44 +513,11 @@ private fun AppNavHost(
         popEnterTransition = { EnterTransition.None },
         popExitTransition = { ExitTransition.None }
     ) {
-        composable(Destination.PLAN.route) {
-            PlanScreen(
-                contentPadding = contentPadding,
-                onSheetStateChanged = onBottomSheetStateChanged,
-                showLinesSheet = showLinesSheet,
-                onLinesSheetDismiss = onLinesSheetDismiss,
-                searchSelectedStop = searchSelectedStop,
-                onSearchSelectionHandled = onSearchSelectionHandled,
-                viewModel = viewModel,
-                onItineraryClick = onItineraryClick,
-                initialUserLocation = userLocation
-            )
-        }
-        composable(Destination.LIGNES.route) {
-            val favoriteLines by viewModel.favoriteLines.collectAsState()
-            LinesBottomSheet(
-                allLines = viewModel.getAllAvailableLines(),
-                onLineClick = { lineName ->
-                    // Select line and navigate back to Plan screen where it will open the details
-                    viewModel.selectLine(lineName)
-                    navController.navigate(Destination.PLAN.route) {
-                        launchSingleTop = true
-                        popUpTo(navController.graph.startDestinationId) { saveState = true }
-                        restoreState = true
-                    }
-                },
-                favoriteLines = favoriteLines,
-                viewModel = viewModel
-            )
-        }
+        // Settings screens only - PlanScreen is handled outside NavHost
         composable(Destination.PARAMETRES.route) {
             SettingsScreen(
                 onBackClick = {
-                    navController.navigate(Destination.PLAN.route) {
-                        launchSingleTop = true
-                        popUpTo(navController.graph.startDestinationId) { saveState = true }
-                        restoreState = true
-                    }
+                    // Just switch back to Plan tab - no navigation needed since PlanScreen is always mounted
                     onNavigateToPlan()
                 },
                 onItineraryClick = {

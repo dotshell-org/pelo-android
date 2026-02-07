@@ -139,7 +139,9 @@ fun ItineraryScreen(
     destinationStopName: String,
     userLocation: LatLng?,
     viewModel: TransportViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onMapViewChanged: (Boolean) -> Unit = {},
+    backFromMapTrigger: Int = 0
 ) {
     val view = LocalView.current
     val scope = rememberCoroutineScope()
@@ -149,6 +151,18 @@ fun ItineraryScreen(
 
     // Track selected journey for map view
     var selectedJourney by remember { mutableStateOf<JourneyResult?>(null) }
+    
+    // Notify parent when map view state changes
+    LaunchedEffect(selectedJourney) {
+        onMapViewChanged(selectedJourney != null)
+    }
+    
+    // Handle back from map request from parent (e.g., Plan button in navbar)
+    LaunchedEffect(backFromMapTrigger) {
+        if (backFromMapTrigger > 0 && selectedJourney != null) {
+            selectedJourney = null
+        }
+    }
 
     // Bottom sheet state for swipable journey details
     val journeySheetState = rememberStandardBottomSheetState(

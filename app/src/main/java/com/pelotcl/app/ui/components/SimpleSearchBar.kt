@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.traversalIndex
@@ -162,10 +163,22 @@ fun SimpleSearchBar(
                 dividerColor = Color.Transparent
             )
         ) {
+            val scrollState = rememberScrollState()
+            
+            // Hide keyboard when scrolling
+            LaunchedEffect(scrollState) {
+                snapshotFlow { scrollState.isScrollInProgress }
+                    .collect { isScrolling ->
+                        if (isScrolling) {
+                            keyboardController?.hide()
+                        }
+                    }
+            }
+            
             Column(
                 Modifier
                     .padding(top = 12.dp, bottom = 28.dp)
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(scrollState)
                     .clickable {
 
                     }
