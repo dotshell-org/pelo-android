@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import com.pelotcl.app.utils.BusIconHelper
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -353,7 +354,7 @@ private fun LineChip(
     val context = LocalContext.current
 
     // Get icon resource ID (cached via BusIconHelper)
-    val drawableId = remember(lineName) {
+    val drawableId = remember<Int>(lineName) {
         BusIconHelper.getResourceIdForLine(context, lineName)
     }
 
