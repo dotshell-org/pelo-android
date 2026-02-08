@@ -103,7 +103,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.geometry)
 
     // Raptor-KT
-    implementation("eu.dotshell:raptor-kt:1.1.1")
+    implementation("eu.dotshell:raptor-kt:1.2.0")
 
     // Kotlinx Serialization for fast JSON caching
     implementation(libs.kotlinx.serialization.json)
