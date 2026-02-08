@@ -73,6 +73,23 @@ interface GrandLyonApi {
     ): FeatureCollection
 
     /**
+     * Retrieves a single bus line by name from Grand Lyon's WFS API using CQL filter.
+     * Much more efficient than downloading all 10,000 bus features.
+     */
+    @GET("geoserver/sytral/ows")
+    suspend fun getBusLineByName(
+        @Query("SERVICE") service: String = "WFS",
+        @Query("VERSION") version: String = "2.0.0",
+        @Query("request") request: String = "GetFeature",
+        @Query("typename") typename: String = "sytral:tcl_sytral.tcllignebus_2_0_0",
+        @Query("outputFormat") outputFormat: String = "application/json",
+        @Query("SRSNAME") srsName: String = "EPSG:4171",
+        @Query("sortby") sortBy: String = "gid",
+        @Query("count") count: Int = 10,
+        @Query("cql_filter") cqlFilter: String
+    ): FeatureCollection
+
+    /**
      * Retrieves TCL trambus lines from Grand Lyon's WFS API
      */
     @GET("geoserver/sytral/ows")

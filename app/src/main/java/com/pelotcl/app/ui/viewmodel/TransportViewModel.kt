@@ -18,11 +18,15 @@ import com.pelotcl.app.data.repository.VehiclePositionsRepository
 import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.utils.Connection
 import com.pelotcl.app.data.repository.FavoritesRepository
+import com.pelotcl.app.data.cache.SpatialGrid
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.ConnectionsHelper
 import com.pelotcl.app.utils.HolidayDetector
 import java.time.LocalDate
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.Dispatchers
@@ -113,11 +117,12 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     private var isPreloading: Boolean = false
     private var hasPreloaded: Boolean = false
 
-    // Cancellable jobs for line detail operations to prevent accumulation during rapid changes
-    private var headsignJob: Job? = null
-    private var directionsJob: Job? = null
-    private var schedulesJob: Job? = null
-    private var lineLoadJob: Job? = null
+    // === STRUCTURED CONCURRENCY: SupervisorJob for line detail operations ===
+    // All line-detail coroutines (headsigns, directions, schedules, line loading) run under
+    // this scope. Cancelling lineDetailJob cancels ALL children at once, preventing
+    // accumulation during rapid navigation between lines.
+    private var lineDetailJob = SupervisorJob()
+    private var lineDetailScope = CoroutineScope(viewModelScope.coroutineContext + lineDetailJob)
 
     init {
         // Start non-blocking preload on creation to have lines, stops, and connection index ready
@@ -147,9 +152,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun loadHeadsign(routeName: String) {
-        // Cancel previous job to prevent accumulation during rapid line changes
-        headsignJob?.cancel()
-        headsignJob = viewModelScope.launch {
+        lineDetailScope.launch {
             // GTFS uses "NAVI1" for Navigone while the app displays "NAV1"
             val gtfsRouteName = if (routeName.equals("NAV1", ignoreCase = true)) "NAVI1" else routeName
             val headsigns = schedulesRepository.getHeadsigns(gtfsRouteName)
@@ -163,9 +166,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      */
     @RequiresApi(Build.VERSION_CODES.O)
     fun computeAvailableDirections(lineName: String, stopName: String) {
-        // Cancel previous job to prevent accumulation during rapid line changes
-        directionsJob?.cancel()
-        directionsJob = viewModelScope.launch {
+        lineDetailScope.launch {
             // Check for school holidays and French public holidays separately
             val today = LocalDate.now()
             val isSchoolHoliday = holidayDetector.isSchoolHoliday(today)
@@ -195,9 +196,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      */
     @RequiresApi(Build.VERSION_CODES.O)
     fun loadSchedulesForDirection(lineName: String, stopName: String, directionId: Int) {
-        // Cancel previous job to prevent accumulation during rapid line changes
-        schedulesJob?.cancel()
-        schedulesJob = viewModelScope.launch {
+        lineDetailScope.launch {
             _allSchedules.value = emptyList()
             _nextSchedules.value = emptyList()
 
@@ -249,10 +248,11 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      * accumulation of concurrent operations that can cause OutOfMemoryError.
      */
     fun cancelPendingLineOperations() {
-        headsignJob?.cancel()
-        directionsJob?.cancel()
-        schedulesJob?.cancel()
-        lineLoadJob?.cancel()
+        // Cancel the supervisor job — this cancels ALL children at once
+        lineDetailJob.cancel()
+        // Create a fresh supervisor so new operations can be launched
+        lineDetailJob = SupervisorJob()
+        lineDetailScope = CoroutineScope(viewModelScope.coroutineContext + lineDetailJob)
     }
 
     /**
@@ -282,8 +282,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      * while preserving direction labels.
      */
     fun clearScheduleState() {
-        directionsJob?.cancel()
-        schedulesJob?.cancel()
+        // Cancel all line detail operations and recreate the scope
+        // (headsigns will be reloaded when needed)
+        cancelPendingLineOperations()
         _allSchedules.value = emptyList()
         _nextSchedules.value = emptyList()
         _availableDirections.value = emptyList()
@@ -291,7 +292,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
     /**
      * Toggles live vehicle tracking for the given line.
-     * When enabled, fetches vehicle positions every 10 seconds.
      */
     fun toggleLiveTracking(lineName: String) {
         if (_isLiveTrackingEnabled.value) {
@@ -301,25 +301,55 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    companion object {
+        // Adaptive polling intervals
+        private const val VEHICLE_POLL_BASE_MS = 5_000L      // 5s when active & successful
+        private const val VEHICLE_POLL_MAX_BACKOFF_MS = 60_000L // 60s max on consecutive errors
+        private const val VEHICLE_POLL_BACKOFF_FACTOR = 2.0
+    }
+
     /**
-     * Starts live vehicle tracking for the given line.
-     * Fetches vehicle positions immediately and then every 10 seconds.
+     * Starts live vehicle tracking for the given line with adaptive polling.
+     *
+     * Polling strategy:
+     * - Base interval: 5s on success
+     * - On error: exponential backoff (10s, 20s, 40s, 60s cap)
+     * - On consecutive successes: resets to base interval
+     * - Automatically stops when tracking is disabled
      */
     fun startLiveTracking(lineName: String) {
         vehiclePositionsJob?.cancel()
         _isLiveTrackingEnabled.value = true
-        
+
         vehiclePositionsJob = viewModelScope.launch {
+            var currentDelay = VEHICLE_POLL_BASE_MS
+            var consecutiveErrors = 0
+
             while (_isLiveTrackingEnabled.value) {
                 try {
                     val result = vehiclePositionsRepository.getVehiclePositionsForLine(lineName)
                     result.onSuccess { positions ->
                         _vehiclePositions.value = positions
+                        // Success: reset to base interval
+                        consecutiveErrors = 0
+                        currentDelay = VEHICLE_POLL_BASE_MS
+                    }.onFailure {
+                        consecutiveErrors++
+                        currentDelay = (VEHICLE_POLL_BASE_MS * VEHICLE_POLL_BACKOFF_FACTOR.pow(consecutiveErrors.toDouble()))
+                            .toLong()
+                            .coerceAtMost(VEHICLE_POLL_MAX_BACKOFF_MS)
+                        Log.w("TransportViewModel", "Vehicle polling error ($consecutiveErrors): ${it.message}, next in ${currentDelay}ms")
                     }
-                } catch (_: Exception) {
-                    // Silently ignore errors - will retry in 10 seconds
+                } catch (e: CancellationException) {
+                    throw e // Don't swallow cancellation
+                } catch (e: Exception) {
+                    consecutiveErrors++
+                    currentDelay = (VEHICLE_POLL_BASE_MS * VEHICLE_POLL_BACKOFF_FACTOR.pow(consecutiveErrors.toDouble()))
+                        .toLong()
+                        .coerceAtMost(VEHICLE_POLL_MAX_BACKOFF_MS)
+                    Log.w("TransportViewModel", "Vehicle polling exception ($consecutiveErrors): ${e.message}, next in ${currentDelay}ms")
                 }
-                delay(10_000) // Refresh every 10 seconds
+                delay(currentDelay)
             }
         }
     }
@@ -375,11 +405,17 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     // Reduced from 30 to 15 entries to limit memory usage during rapid navigation
     private val lineStopsCache = LruCache<String, List<com.pelotcl.app.data.gtfs.LineStopInfo>>(15)
 
+    // === OPTIMIZATION: Spatial grid index for fast bounding-box queries ===
+    // Partitions stops into geographic cells for O(visible_cells) viewport queries
+    val spatialGrid = SpatialGrid()
+
     // === OPTIMIZATION: Pre-computed GeoJSON cache for stops ===
     // Cached GeoJSON string for all stops (avoids re-computation on each map display)
     private var cachedStopsGeoJson: String? = null
     // Set of required icon names for the cached GeoJSON
     private var cachedRequiredIcons: Set<String>? = null
+    // Cached set of used slot indices for the GeoJSON (avoids recalculation)
+    private var cachedUsedSlots: Set<Int>? = null
     // Hash of stops list to detect changes and invalidate cache
     private var cachedStopsHash: Int = 0
 
@@ -394,23 +430,25 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     /**
      * Returns cached stops GeoJSON data if available and valid.
      * Returns null if cache is invalid or stops have changed.
+     * The Triple contains (geoJson, requiredIcons, usedSlots).
      */
-    fun getCachedStopsGeoJson(currentStops: List<StopFeature>): Pair<String, Set<String>>? {
+    fun getCachedStopsGeoJson(currentStops: List<StopFeature>): Triple<String, Set<String>, Set<Int>>? {
         val currentHash = currentStops.hashCode()
-        return if (cachedStopsGeoJson != null && cachedRequiredIcons != null && currentHash == cachedStopsHash) {
-            Pair(cachedStopsGeoJson!!, cachedRequiredIcons!!)
+        return if (cachedStopsGeoJson != null && cachedRequiredIcons != null && cachedUsedSlots != null && currentHash == cachedStopsHash) {
+            Triple(cachedStopsGeoJson!!, cachedRequiredIcons!!, cachedUsedSlots!!)
         } else {
             null
         }
     }
 
     /**
-     * Caches the GeoJSON data for stops.
+     * Caches the GeoJSON data for stops including used slots.
      */
-    fun cacheStopsGeoJson(stops: List<StopFeature>, geoJson: String, requiredIcons: Set<String>) {
+    fun cacheStopsGeoJson(stops: List<StopFeature>, geoJson: String, requiredIcons: Set<String>, usedSlots: Set<Int>) {
         cachedStopsHash = stops.hashCode()
         cachedStopsGeoJson = geoJson
         cachedRequiredIcons = requiredIcons
+        cachedUsedSlots = usedSlots
     }
 
     /**
@@ -464,7 +502,10 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         // Clear GeoJSON cache
         cachedStopsGeoJson = null
         cachedRequiredIcons = null
+        cachedUsedSlots = null
         cachedStopsHash = 0
+        // Clear spatial grid
+        spatialGrid.build(emptyList())
         // Clear BusIconHelper cache
         BusIconHelper.clearCache()
     }
@@ -543,6 +584,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     result.onSuccess { stopCollection ->
                         cachedStops = stopCollection.features
                         stopsForIndexing = stopCollection.features
+                        // Build spatial grid index for fast viewport queries
+                        spatialGrid.build(stopCollection.features)
+                        Log.d("TransportViewModel", "Spatial grid built with ${spatialGrid.size} stops")
                         // Publish stops state only if not already success
                         if (_stopsUiState.value !is TransportStopsUiState.Success) {
                             _stopsUiState.value = TransportStopsUiState.Success(stopCollection.features)
@@ -652,7 +696,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 .onSuccess { stopCollection ->
                     cachedStops = stopCollection.features
 
-                    // Build transfers index
+                    // Build spatial grid and transfers index
+                    spatialGrid.build(stopCollection.features)
                     buildConnectionsIndex(stopCollection.features)
 
                     _stopsUiState.value = TransportStopsUiState.Success(stopCollection.features)
@@ -673,6 +718,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         repository.getAllStops()
             .onSuccess { stopCollection ->
                 cachedStops = stopCollection.features
+                spatialGrid.build(stopCollection.features)
                 buildConnectionsIndex(stopCollection.features)
             }
             .onFailure { exception ->
@@ -843,9 +889,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      * Does not modify state if the line is already present
      */
     fun addLineToLoaded(lineName: String) {
-        // Cancel previous line load job to prevent accumulation during rapid changes
-        lineLoadJob?.cancel()
-        lineLoadJob = viewModelScope.launch {
+        lineDetailScope.launch {
             val currentState = _uiState.value
 
             // Get current lines from Success or PartialSuccess state

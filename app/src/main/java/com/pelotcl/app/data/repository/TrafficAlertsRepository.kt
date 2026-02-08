@@ -7,6 +7,7 @@ import com.pelotcl.app.data.model.AlertSeverity
 import com.pelotcl.app.data.model.TrafficAlert
 import com.pelotcl.app.data.model.TrafficAlertsResponse
 import com.pelotcl.app.data.model.TrafficStatusResponse
+import com.pelotcl.app.utils.withRetry
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 
@@ -30,12 +31,14 @@ class TrafficAlertsRepository(private val context: Context) {
                     return@withContext Result.success(cachedStatus)
                 }
                 
-                // Fetch from API
-                val response = api.getTrafficStatus()
-                
+                // Fetch from API with retry on transient failures
+                val response = withRetry(maxRetries = 2, initialDelayMs = 500) {
+                    api.getTrafficStatus()
+                }
+
                 // Cache the response
                 cache.saveTrafficStatus(response)
-                
+
                 Result.success(response)
             } catch (e: Exception) {
                 Log.e("TrafficAlertsRepository", "Error fetching traffic status", e)
@@ -56,8 +59,10 @@ class TrafficAlertsRepository(private val context: Context) {
                     return@withContext Result.success(cachedAlerts.first)
                 }
                 
-                // Fetch from API
-                val response = api.getTrafficAlerts()
+                // Fetch from API with retry on transient failures
+                val response = withRetry(maxRetries = 2, initialDelayMs = 500) {
+                    api.getTrafficAlerts()
+                }
                 
                 if (response.success && response.alerts.isNotEmpty()) {
                     // Cache the response

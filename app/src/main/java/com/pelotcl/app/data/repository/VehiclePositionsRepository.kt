@@ -2,6 +2,7 @@ package com.pelotcl.app.data.repository
 
 import com.pelotcl.app.data.api.VehiclePositionsRetrofitInstance
 import com.pelotcl.app.data.model.SimpleVehiclePosition
+import com.pelotcl.app.utils.withRetry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -21,7 +22,9 @@ class VehiclePositionsRepository {
     suspend fun getVehiclePositionsForLine(lineName: String): Result<List<SimpleVehiclePosition>> {
         return withContext(Dispatchers.IO) {
             try {
-                val response = api.getVehiclePositions()
+                val response = withRetry(maxRetries = 2, initialDelayMs = 500) {
+                    api.getVehiclePositions()
+                }
                 
                 if (!response.success) {
                     return@withContext Result.failure(Exception("API returned success=false"))

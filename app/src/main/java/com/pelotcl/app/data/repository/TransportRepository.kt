@@ -10,6 +10,7 @@ import com.pelotcl.app.data.model.TransportLineProperties
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.pelotcl.app.data.model.StopCollection
+import com.pelotcl.app.utils.withRetry
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
@@ -60,19 +61,25 @@ class TransportRepository(context: Context? = null) {
                         numberReturned = cachedTram.size
                     )
                 } else {
-                    // Cache miss: load from API
-                    metroFuniculaire = api.getTransportLines()
-                    trams = api.getTramLines()
+                    // Cache miss: load from API with retry on transient failures
+                    metroFuniculaire = withRetry(maxRetries = 2, initialDelayMs = 1000) {
+                        api.getTransportLines()
+                    }
+                    trams = withRetry(maxRetries = 2, initialDelayMs = 1000) {
+                        api.getTramLines()
+                    }
 
                     // Save to cache
                     cache?.saveMetroLines(metroFuniculaire.features)
                     cache?.saveTramLines(trams.features)
                 }
 
-                // Load Navigone (from cache or API)
+                // Load Navigone (from cache or API with retry)
                 navigoneFeatures = cachedNavigone ?: run {
                     try {
-                        val navigone = api.getNavigoneLines()
+                        val navigone = withRetry(maxRetries = 2, initialDelayMs = 1000) {
+                            api.getNavigoneLines()
+                        }
                         cache?.saveNavigoneLines(navigone.features)
                         navigone.features
                     } catch (e: Exception) {
@@ -81,10 +88,12 @@ class TransportRepository(context: Context? = null) {
                     }
                 }
 
-                // Load Trambus (from cache or API)
+                // Load Trambus (from cache or API with retry)
                 trambusFeatures = cachedTrambus ?: run {
                     try {
-                        val trambus = api.getTrambusLines()
+                        val trambus = withRetry(maxRetries = 2, initialDelayMs = 1000) {
+                            api.getTrambusLines()
+                        }
                         cache?.saveTrambusLines(trambus.features)
                         trambus.features
                     } catch (e: Exception) {
@@ -164,15 +173,15 @@ class TransportRepository(context: Context? = null) {
             val cacheFeatures = addUniqueFeatures(cachedMetro + cachedTram)
             emit(LinesLoadProgress(cacheFeatures, isComplete = false, source = "cache_metro_tram"))
         } else {
-            // No cache, load from API
+            // No cache, load from API with retry on transient failures
             try {
                 val metroFuniculaire = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    api.getTransportLines()
+                    withRetry(maxRetries = 2, initialDelayMs = 1000) { api.getTransportLines() }
                 }
                 cache?.saveMetroLines(metroFuniculaire.features)
 
                 val trams = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    api.getTramLines()
+                    withRetry(maxRetries = 2, initialDelayMs = 1000) { api.getTramLines() }
                 }
                 cache?.saveTramLines(trams.features)
 
@@ -183,14 +192,14 @@ class TransportRepository(context: Context? = null) {
             }
         }
 
-        // Step 2: Load Navigone (from cache or API)
+        // Step 2: Load Navigone (from cache or API with retry)
         val cachedNavigone = cache?.getNavigoneLines()
         val navigoneFeatures = if (cachedNavigone != null) {
             cachedNavigone
         } else {
             try {
                 val navigone = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    api.getNavigoneLines()
+                    withRetry(maxRetries = 2, initialDelayMs = 1000) { api.getNavigoneLines() }
                 }
                 cache?.saveNavigoneLines(navigone.features)
                 navigone.features
@@ -204,14 +213,14 @@ class TransportRepository(context: Context? = null) {
             emit(LinesLoadProgress(updatedFeatures, isComplete = false, source = "navigone"))
         }
 
-        // Step 3: Load Trambus (from cache or API)
+        // Step 3: Load Trambus (from cache or API with retry)
         val cachedTrambus = cache?.getTrambusLines()
         val trambusFeatures = if (cachedTrambus != null) {
             cachedTrambus
         } else {
             try {
                 val trambus = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    api.getTrambusLines()
+                    withRetry(maxRetries = 2, initialDelayMs = 1000) { api.getTrambusLines() }
                 }
                 cache?.saveTrambusLines(trambus.features)
                 trambus.features
@@ -500,33 +509,35 @@ class TransportRepository(context: Context? = null) {
                 return Result.success(line)
             }
             
-            // Otherwise, search in buses (on-demand loading)
+            // Otherwise, search in buses using CQL filter (downloads only the requested line)
             val cachedBus = cache?.getBusLines()
             val busLine = if (cachedBus != null) {
                 // Cache hit for buses
                 cachedBus.firstOrNull { it.properties.ligne.equals(lineName, ignoreCase = true) }
             } else {
-                // Cache miss: load all buses from API
+                // Use CQL filter to fetch only the requested line from the API
+                // This avoids downloading all 10,000 bus features
+                // Retry on transient network failures (up to 2 retries)
                 try {
-                    val bus = api.getBusLines()
-                    // Save to cache (memory only, not on disk)
-                    cache?.saveBusLines(bus.features)
-
-                    bus.features.firstOrNull {
-                        it.properties.ligne.equals(
-                            lineName,
-                            ignoreCase = true
-                        )
+                    val cqlFilter = "ligne='$lineName'"
+                    val bus = withRetry(maxRetries = 2, initialDelayMs = 1000) {
+                        api.getBusLineByName(cqlFilter = cqlFilter)
                     }
-                } catch (e: OutOfMemoryError) {
-                    android.util.Log.e("TransportRepository", "OutOfMemoryError loading bus lines, trying to find line without caching", e)
-                    // In case of OutOfMemoryError, just load the requested line without caching everything
-                    val bus = api.getBusLines()
                     bus.features.firstOrNull {
-                        it.properties.ligne.equals(
-                            lineName,
-                            ignoreCase = true
-                        )
+                        it.properties.ligne.equals(lineName, ignoreCase = true)
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("TransportRepository", "CQL filter search failed for $lineName, falling back to full load: ${e.message}")
+                    // Fallback: load all buses if CQL filter fails
+                    try {
+                        val bus = api.getBusLines()
+                        cache?.saveBusLines(bus.features)
+                        bus.features.firstOrNull {
+                            it.properties.ligne.equals(lineName, ignoreCase = true)
+                        }
+                    } catch (oom: OutOfMemoryError) {
+                        android.util.Log.e("TransportRepository", "OutOfMemoryError loading bus lines", oom)
+                        null
                     }
                 }
             }
@@ -563,8 +574,10 @@ class TransportRepository(context: Context? = null) {
                         numberReturned = cachedStops.size
                     )
                 } else {
-                    // Cache miss: load from API
-                    response = api.getTransportStops()
+                    // Cache miss: load from API with retry on transient failures
+                    response = withRetry(maxRetries = 2, initialDelayMs = 1000) {
+                        api.getTransportStops()
+                    }
                 }
 
                 // No need to load navigone stops separately - they are in the main API with code NAVI1
