@@ -14,9 +14,9 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
+        mavenLocal()
         google()
-        mavenCentral()
-        mavenLocal() // For local raptor-kt development
+        mavenCentral() // For local raptor-kt development
     }
 }
 
