@@ -600,28 +600,12 @@ class SchedulesRepository(context: Context) {
                 cursor.close()
             }
 
-            // Fallback 2: If still no results and AM/AV filter was applied, try without it
+            // Do not fall back by dropping AM/AV filters to avoid mixing vacation/non-vacation schedules.
             if (result.isEmpty() && appliedAmAvFilter) {
-                serviceIdFilter = ""
-                cursor = db.rawQuery(
-                    """
-                    SELECT DISTINCT substr(s.arrival_time, 1, 5) AS arrival_time 
-                    FROM schedules s
-                    JOIN calendar c ON s.service_id = c.service_id
-                    WHERE s.route_name = ? 
-                    AND s.direction_id = ?
-                    AND c.$dayColumn = 1
-                    $serviceIdFilter
-                    $strongLineServiceFilter
-                    AND s.station_name = ? COLLATE NOCASE
-                    ORDER BY s.arrival_time
-                    """,
-                    arrayOf(lineName, directionId.toString(), stopName)
+                Log.w(
+                    "SchedulesDebug",
+                    "No schedules for current school holiday status; skipping AM/AV fallback to avoid mixing."
                 )
-                while (cursor.moveToNext()) {
-                    result.add(cursor.getString(0))
-                }
-                cursor.close()
             }
 
         } catch (e: Exception) {

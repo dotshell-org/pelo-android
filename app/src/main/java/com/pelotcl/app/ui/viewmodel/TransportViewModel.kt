@@ -222,7 +222,13 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             // The GTFS data uses NAVI1 for the Navigone, but the app displays NAV1
             val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
 
-            val allSchedulesForDay = schedulesRepository.getSchedules(gtfsLineName, stopName, directionId, isSchoolHoliday, isPublicHoliday)
+            val allSchedulesForDay = schedulesRepository.getSchedules(
+                gtfsLineName,
+                stopName,
+                directionId,
+                isSchoolHoliday,
+                isPublicHoliday
+            )
             _allSchedules.value = allSchedulesForDay
 
             if (allSchedulesForDay.isEmpty()) {

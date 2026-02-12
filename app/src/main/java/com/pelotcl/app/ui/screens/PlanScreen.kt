@@ -2465,7 +2465,3 @@ private fun stopLocationUpdates(fusedLocationClient: FusedLocationProviderClient
 }
 
 
-
-
-
-
