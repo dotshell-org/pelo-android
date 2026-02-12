@@ -5,6 +5,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.util.Log
 import android.util.LruCache
+import com.pelotcl.app.ui.components.LineSearchResult
 import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.data.repository.TransportRepository
 import com.pelotcl.app.utils.SearchUtils
@@ -110,6 +111,76 @@ class SchedulesRepository(context: Context) {
             isDatabaseWarmedUp = true
         } catch (e: Exception) {
             Log.w("SchedulesRepository", "Database warmup failed: ${e.message}")
+        }
+    }
+
+    /**
+     * Search for lines by name from GTFS database
+     * This includes all lines (bus, chrono, metro, etc.)
+     */
+    fun searchLinesByName(query: String): List<LineSearchResult> {
+        if (query.isBlank()) return emptyList()
+        
+        val normalizedQuery = query.trim().uppercase()
+        val results = mutableListOf<LineSearchResult>()
+        
+        try {
+            val db = dbHelper.readableDatabase
+            // Get distinct route names from directions table (which contains all available routes)
+            val cursor = db.rawQuery(
+                "SELECT DISTINCT route_name FROM directions ORDER BY route_name",
+                null
+            )
+            
+            val allRoutes = mutableListOf<String>()
+            while (cursor.moveToNext()) {
+                allRoutes.add(cursor.getString(0))
+            }
+            cursor.close()
+            
+            // Filter by query
+            val matchingRoutes = allRoutes.filter { routeName ->
+                routeName.uppercase().contains(normalizedQuery) ||
+                normalizedQuery.contains(routeName.uppercase())
+            }.sortedWith(compareBy(
+                { if (it.equals(normalizedQuery, ignoreCase = true)) 0 else if (it.uppercase().startsWith(normalizedQuery)) 1 else 2 },
+                { it }
+            )).take(20)
+            
+            results.addAll(matchingRoutes.map { routeName ->
+                LineSearchResult(
+                    lineName = routeName,
+                    category = getLineCategoryName(routeName)
+                )
+            })
+            
+        } catch (e: Exception) {
+            Log.e("SchedulesRepository", "Error searching lines: ${e.message}")
+        }
+        
+        return results
+    }
+    
+    /**
+     * Get the category name for a line (Metro, Tram, Bus, etc.)
+     */
+    private fun getLineCategoryName(lineName: String): String {
+        val upperLine = lineName.uppercase()
+        return when {
+            upperLine in setOf("A", "B", "C", "D") -> "Métro"
+            upperLine == "F1" || upperLine == "F2" -> "Funiculaire"
+            upperLine.startsWith("T") && upperLine.length == 2 -> "Tramway"
+            upperLine.startsWith("TB") -> "Trambus"
+            upperLine == "RX" || upperLine.contains("RHON") -> "Tramway"
+            upperLine.startsWith("NAV") || upperLine.startsWith("NAVI") -> "Navigône"
+            upperLine.startsWith("C") && upperLine.length >= 2 && !upperLine.all { it.isDigit() } -> "Chrono"
+            upperLine.startsWith("PL") -> "Pleine Lune"
+            upperLine.startsWith("GE") -> "Gare Express"
+            upperLine.startsWith("S") && !upperLine.all { it.isDigit() } -> "Soyeuse"
+            upperLine.startsWith("ZI") -> "Zone Industrielle"
+            upperLine.startsWith("N") && !upperLine.all { it.isDigit() } -> "Navette"
+            upperLine.startsWith("JD") -> "Junior Direct"
+            else -> "Bus"
         }
     }
 

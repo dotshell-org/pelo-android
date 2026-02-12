@@ -75,7 +75,7 @@ object BusIconHelper {
         desserteCache.get(desserte)?.let { return it }
 
         // Parse and cache
-        val result = parseDesserte(desserte).map { normalizeLineName(it) }
+        val result = parseDesserte(desserte)
         desserteCache.put(desserte, result)
         return result
     }
@@ -102,17 +102,6 @@ object BusIconHelper {
             }
         }
     }
-    
-    /**
-     * Normalizes line names to match icon names
-     * NAVI1 -> NAV1
-     */
-    private fun normalizeLineName(lineName: String): String {
-        return when (lineName.uppercase()) {
-            "NAVI1" -> "NAV1"
-            else -> lineName
-        }
-    }
 
     /**
      * Returns the drawable names for all lines at a stop, in order
@@ -129,8 +118,7 @@ object BusIconHelper {
      * @return The corresponding drawable name (ex: "_212", "c17", "a", "nav1")
      */
     fun getDrawableNameForLineName(lineName: String): String {
-        val normalized = normalizeLineName(lineName)
-        return getDrawableNameForLine(normalized)
+        return getDrawableNameForLine(lineName)
     }
     
     /**

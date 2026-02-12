@@ -15,6 +15,7 @@ import com.pelotcl.app.data.repository.RaptorRepository
 import com.pelotcl.app.data.repository.TransportRepository
 import com.pelotcl.app.data.repository.TrafficAlertsRepository
 import com.pelotcl.app.data.repository.VehiclePositionsRepository
+import com.pelotcl.app.ui.components.LineSearchResult
 import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.utils.Connection
 import com.pelotcl.app.data.repository.FavoritesRepository
@@ -149,6 +150,19 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         return withContext(Dispatchers.IO) {
             schedulesRepository.searchStopsByName(query)
         }
+    }
+
+    /**
+     * Search for lines by name
+     * Returns matching line results from the currently loaded lines
+     */
+    /**
+     * Search for lines by name using GTFS database
+     * Returns matching line results from all available lines (including buses)
+     */
+    fun searchLines(query: String): List<LineSearchResult> {
+        if (query.isBlank()) return emptyList()
+        return schedulesRepository.searchLinesByName(query)
     }
 
     fun loadHeadsign(routeName: String) {

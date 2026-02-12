@@ -55,8 +55,12 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.google.android.gms.location.LocationServices
 import com.pelotcl.app.ui.components.LinesBottomSheet
+import com.pelotcl.app.ui.components.LineSearchResult
 import com.pelotcl.app.ui.components.SimpleSearchBar
 import com.pelotcl.app.ui.components.StationSearchResult
+import com.pelotcl.app.data.repository.SearchHistoryRepository
+import com.pelotcl.app.data.repository.SearchHistoryItem
+import com.pelotcl.app.data.repository.SearchType
 import com.pelotcl.app.ui.screens.AboutScreen
 import com.pelotcl.app.ui.screens.ContactScreen
 import com.pelotcl.app.ui.screens.CreditsScreen
@@ -203,10 +207,20 @@ fun NavBar(modifier: Modifier = Modifier) {
         }
     }
     val viewModel: TransportViewModel = viewModel(factory = viewModelFactory)
+    
+    // Search history repository
+    val searchHistoryRepository = remember { SearchHistoryRepository(context) }
 
     var searchQuery by remember { mutableStateOf("") }
     var stationSearchResults by remember { mutableStateOf<List<StationSearchResult>>(emptyList()) }
+    var lineSearchResults by remember { mutableStateOf<List<LineSearchResult>>(emptyList()) }
+    var searchHistory by remember { mutableStateOf<List<SearchHistoryItem>>(emptyList()) }
     var selectedStationFromSearch by remember { mutableStateOf<StationSearchResult?>(null) }
+    
+    // Load search history on startup
+    LaunchedEffect(Unit) {
+        searchHistory = searchHistoryRepository.getSearchHistory()
+    }
     
     // User location for itinerary (continuously updated)
     var userLocation by remember { mutableStateOf<LatLng?>(null) }
@@ -292,11 +306,17 @@ fun NavBar(modifier: Modifier = Modifier) {
             // Debounce to avoid querying on every keystroke
             delay(300)
             if (current == searchQuery.trim()) {
-                val results = viewModel.searchStops(current)
-                stationSearchResults = results
+                // Search for stops
+                val stopResults = viewModel.searchStops(current)
+                stationSearchResults = stopResults
+                
+                // Search for lines
+                val lineResults = viewModel.searchLines(current)
+                lineSearchResults = lineResults
             }
         } else {
             stationSearchResults = emptyList()
+            lineSearchResults = emptyList()
         }
     }
 
@@ -492,12 +512,51 @@ fun NavBar(modifier: Modifier = Modifier) {
         if (selectedDestination == Destination.PLAN.ordinal && !isBottomSheetOpen && !showLinesSheet && itineraryDestinationStop == null) {
             SimpleSearchBar(
                 searchResults = stationSearchResults,
+                lineSearchResults = lineSearchResults,
+                searchHistory = searchHistory,
                 onQueryChange = { query ->
                     searchQuery = query
                 },
                 onSearch = { result ->
+                    // Save to search history
+                    searchHistoryRepository.addToHistory(
+                        SearchHistoryItem(
+                            query = result.stopName,
+                            type = SearchType.STOP,
+                            lines = result.lines
+                        )
+                    )
+                    searchHistory = searchHistoryRepository.getSearchHistory()
+                    
                     itineraryDestinationStop = result.stopName
                     searchQuery = ""
+                },
+                onLineSearch = { lineResult ->
+                    // Save to search history
+                    searchHistoryRepository.addToHistory(
+                        SearchHistoryItem(
+                            query = lineResult.lineName,
+                            type = SearchType.LINE
+                        )
+                    )
+                    searchHistory = searchHistoryRepository.getSearchHistory()
+                    
+                    // Select the line to show its details (via PlanScreen's LaunchedEffect)
+                    viewModel.selectLine(lineResult.lineName)
+                    searchQuery = ""
+                },
+                onHistoryItemClick = { historyItem ->
+                    if (historyItem.type == SearchType.LINE) {
+                        // Open line details (via PlanScreen's LaunchedEffect)
+                        viewModel.selectLine(historyItem.query)
+                    } else {
+                        // Search for the stop
+                        itineraryDestinationStop = historyItem.query
+                    }
+                },
+                onHistoryItemRemove = { historyItem ->
+                    searchHistoryRepository.removeFromHistory(historyItem.query, historyItem.type)
+                    searchHistory = searchHistoryRepository.getSearchHistory()
                 },
                 modifier = Modifier
                     .align(Alignment.TopCenter)
