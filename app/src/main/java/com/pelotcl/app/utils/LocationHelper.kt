@@ -6,7 +6,9 @@ import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.Priority
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.maplibre.android.geometry.LatLng
+import kotlin.coroutines.resume
 import kotlin.math.pow
 import kotlin.math.sqrt
 
@@ -16,6 +18,33 @@ import kotlin.math.sqrt
 object LocationHelper {
 
     private var locationCallback: LocationCallback? = null
+
+    /**
+     * Get the last known location immediately (cached by the system).
+     * This is very fast as it doesn't require a new GPS fix.
+     * @param fusedLocationClient The fused location client to use
+     * @return The last known location, or null if not available
+     */
+    @Suppress("MissingPermission") // Permission should be checked before calling this function
+    suspend fun getLastKnownLocation(fusedLocationClient: FusedLocationProviderClient): LatLng? {
+        return try {
+            suspendCancellableCoroutine { continuation ->
+                fusedLocationClient.lastLocation
+                    .addOnSuccessListener { location ->
+                        if (location != null) {
+                            continuation.resume(LatLng(location.latitude, location.longitude))
+                        } else {
+                            continuation.resume(null)
+                        }
+                    }
+                    .addOnFailureListener {
+                        continuation.resume(null)
+                    }
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
 
     /**
      * Start receiving continuous location updates

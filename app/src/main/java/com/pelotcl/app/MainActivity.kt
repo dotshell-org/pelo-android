@@ -39,6 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -235,11 +236,20 @@ fun NavBar(modifier: Modifier = Modifier) {
     var isItineraryMapViewOpen by remember { mutableStateOf(false) }
     var backFromMapTrigger by remember { mutableStateOf(0) }
 
+    val scope = rememberCoroutineScope()
+    
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val granted = permissions.entries.any { it.value }
         if (granted) {
+            // Get last known location immediately for instant map centering
+            scope.launch {
+                val lastKnown = LocationHelper.getLastKnownLocation(fusedLocationClient)
+                if (lastKnown != null) {
+                    userLocation = lastKnown
+                }
+            }
             // Start continuous location updates when permission granted
             LocationHelper.startLocationUpdates(fusedLocationClient) { location ->
                 userLocation = location
@@ -253,9 +263,6 @@ fun NavBar(modifier: Modifier = Modifier) {
     ) { _ -> }
 
     LaunchedEffect(Unit) {
-        // Defer location permission check to not block first frame
-        delay(500)
-
         val hasPermission = ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.ACCESS_FINE_LOCATION
@@ -273,13 +280,19 @@ fun NavBar(modifier: Modifier = Modifier) {
                 )
             )
         } else {
-            // Start continuous location updates if permission already granted
+            // PRIORITY: Get last known location immediately for instant map centering
+            // This is cached by the system and returns almost instantly
+            val lastKnown = LocationHelper.getLastKnownLocation(fusedLocationClient)
+            if (lastKnown != null) {
+                userLocation = lastKnown
+            }
+            // Then start continuous location updates for real-time tracking
             LocationHelper.startLocationUpdates(fusedLocationClient) { location ->
                 userLocation = location
             }
         }
         
-        // Request notification permission on Android 13+
+        // Request notification permission on Android 13+ (deferred to not overwhelm user)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val hasNotificationPermission = ContextCompat.checkSelfPermission(
                 context,

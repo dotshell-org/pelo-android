@@ -226,9 +226,19 @@ fun PlanScreen(
 
     // Location state
     var userLocation by remember { mutableStateOf(initialUserLocation) }
-    var shouldCenterOnUser by remember { mutableStateOf(false) }
-    var isCenteredOnUser by remember { mutableStateOf(true) }
+    // Center on user immediately if we have initial location, otherwise wait for first location update
+    var shouldCenterOnUser by remember { mutableStateOf(initialUserLocation != null) }
+    var isCenteredOnUser by remember { mutableStateOf(initialUserLocation != null) }
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+
+    // Handle when initial location becomes available from NavBar after first composition
+    LaunchedEffect(initialUserLocation) {
+        if (initialUserLocation != null && userLocation == null) {
+            userLocation = initialUserLocation
+            shouldCenterOnUser = true
+            isCenteredOnUser = true
+        }
+    }
 
     // Map style from settings — re-read when returning to the Plan tab
     val mapStyleRepository = remember { MapStyleRepository(context) }
