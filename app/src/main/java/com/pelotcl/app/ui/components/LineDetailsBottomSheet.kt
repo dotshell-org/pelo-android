@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -35,6 +36,7 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.PriorityHigh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -61,6 +63,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -78,6 +81,7 @@ import com.pelotcl.app.utils.Connection
 import com.pelotcl.app.utils.LineColorHelper
 import com.pelotcl.app.utils.ListItemRecompositionCounter
 import com.pelotcl.app.utils.TransportType
+import com.pelotcl.app.data.model.AlertSeverity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -155,7 +159,8 @@ fun LineDetailsBottomSheet(
     val lineKey = lineInfo?.lineName to lineInfo?.currentStationName
     var lineStops by remember(lineKey) { mutableStateOf<List<LineStopInfo>>(emptyList()) }
     var isLoading by remember(lineKey) { mutableStateOf(true) }
-    var lineAlerts by remember(lineKey) { mutableStateOf<List<com.pelotcl.app.data.model.TrafficAlert>>(emptyList()) }
+    val alertsKey = lineInfo?.lineName
+    var lineAlerts by remember(alertsKey) { mutableStateOf<List<com.pelotcl.app.data.model.TrafficAlert>>(emptyList()) }
 
     // Cleanup when lineInfo changes or component leaves composition
     DisposableEffect(lineKey) {
@@ -240,6 +245,23 @@ fun LineDetailsBottomSheet(
     // Utilise directement lineStops car l'ordre est déjà correct depuis getStopsForLine avec directionId
     val displayedStops = lineStops
 
+    val validLineAlerts = remember(lineAlerts) { filterValidAlerts(lineAlerts) }
+    val alertSeverity = remember(validLineAlerts) {
+        validLineAlerts
+            .minByOrNull { it.severityLevel }
+            ?.let { AlertSeverity.fromSeverityType(it.severityType, it.severityLevel) }
+    }
+    val listState = rememberLazyListState()
+
+    // Scroll to top when switching lines or stops, and when loading completes
+    LaunchedEffect(lineInfo?.lineName, lineInfo?.currentStationName, isLoading) {
+        // Ensure alerts are visible when switching between line and stop details.
+        // Wait for loading to complete before scrolling
+        if (!isLoading) {
+            listState.scrollToItem(0)
+        }
+    }
+
     if (lineInfo != null) {
         val content = @Composable {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -263,14 +285,40 @@ fun LineDetailsBottomSheet(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         val resourceId = BusIconHelper.getResourceIdForLine(context, lineInfo.lineName)
-                        if (resourceId != 0) {
-                            Image(painter = painterResource(id = resourceId), contentDescription = "Line ${lineInfo.lineName}", modifier = Modifier.size(50.dp))
-                        } else {
-                            Box(
-                                modifier = Modifier.size(50.dp).clip(CircleShape).background(getLineColor(lineInfo.lineName)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(text = lineInfo.lineName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                        Box(
+                            modifier = Modifier.size(50.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (resourceId != 0) {
+                                Image(
+                                    painter = painterResource(id = resourceId),
+                                    contentDescription = "Line ${lineInfo.lineName}",
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(CircleShape)
+                                        .background(getLineColor(lineInfo.lineName)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = lineInfo.lineName,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+
+                            if (alertSeverity != null) {
+                                AlertBadge(
+                                    severity = alertSeverity,
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .offset(x = 6.dp, y = (-10).dp)
+                                )
                             }
                         }
                         Spacer(modifier = Modifier.width(12.dp))
@@ -300,12 +348,13 @@ fun LineDetailsBottomSheet(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f)
+                        .weight(1f),
+                    state = listState
                 ) {
-                    if (lineAlerts.isNotEmpty()) {
+                    if (validLineAlerts.isNotEmpty()) {
                         item(key = "traffic_alerts") {
                             TrafficAlertsSection(
-                                alerts = lineAlerts,
+                                alerts = validLineAlerts,
                                 modifier = Modifier.fillMaxWidth()
                             )
                             Spacer(modifier = Modifier.height(20.dp))
@@ -406,31 +455,15 @@ private fun TrafficAlertsSection(
         return
     }
 
-    // Filter expired alerts
-    val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-    val now = LocalDateTime.now()
-    val validAlerts = alerts.filter { alert ->
-        try {
-            val endDate = LocalDateTime.parse(alert.endDate, dateFormatter)
-            endDate.isAfter(now)
-        } catch (e: Exception) {
-            true // Garder l'alerte si on ne peut pas parser la date
-        }
-    }
-
-    if (validAlerts.isEmpty()) {
-        return
-    }
-
     Column(
         modifier = modifier
             .fillMaxWidth()
             .background(Color(0xFFF5F5F5))
             .padding(horizontal = 24.dp, vertical = 16.dp)
     ) {
-        validAlerts.forEachIndexed { index, alert ->
+        alerts.forEachIndexed { index, alert ->
             var isExpanded by remember { mutableStateOf(false) }
-            val severity = com.pelotcl.app.data.model.AlertSeverity.fromSeverityType(alert.severityType, alert.severityLevel)
+            val severity = AlertSeverity.fromSeverityType(alert.severityType, alert.severityLevel)
             val severityColor = Color(severity.color)
 
             Column(
@@ -494,13 +527,71 @@ private fun TrafficAlertsSection(
                 }
             }
 
-            if (index < validAlerts.size - 1) {
+            if (index < alerts.size - 1) {
                 androidx.compose.material3.HorizontalDivider(
                     color = Color.LightGray,
                     thickness = 1.dp,
                     modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp)
                 )
             }
+        }
+    }
+}
+
+private fun filterValidAlerts(
+    alerts: List<com.pelotcl.app.data.model.TrafficAlert>
+): List<com.pelotcl.app.data.model.TrafficAlert> {
+    if (alerts.isEmpty()) {
+        return emptyList()
+    }
+
+    val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+    val now = LocalDateTime.now()
+    return alerts.filter { alert ->
+        try {
+            val endDate = LocalDateTime.parse(alert.endDate, dateFormatter)
+            endDate.isAfter(now)
+        } catch (e: Exception) {
+            true // Garder l'alerte si on ne peut pas parser la date
+        }
+    }
+}
+
+@Composable
+private fun AlertBadge(
+    severity: AlertSeverity,
+    modifier: Modifier = Modifier
+) {
+    val badgeColor = Color(severity.color)
+    val badgeSize = 12.dp
+
+    Box(
+        modifier = modifier
+            .size(badgeSize)
+            .clip(CircleShape)
+            .background(badgeColor),
+        contentAlignment = Alignment.Center
+    ) {
+        if (severity == AlertSeverity.INFORMATION || severity == AlertSeverity.OTHER_EFFECT) {
+            // Use a text-based "i" to avoid the double circle from Icons.Default.Info
+            Text(
+                text = "i",
+                color = Color.White,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 8.sp,
+                    fontFamily = FontFamily.Serif
+                ),
+                modifier = Modifier.padding(bottom = 3.dp)
+            )
+        } else {
+            // PriorityHigh is a plain "!" without a surrounding circle
+            Icon(
+                imageVector = Icons.Filled.PriorityHigh,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(10.dp)
+            )
         }
     }
 }
