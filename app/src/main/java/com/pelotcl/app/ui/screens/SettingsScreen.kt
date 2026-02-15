@@ -52,6 +52,7 @@ fun SettingsScreen(
     onItineraryClick: () -> Unit,
     onAboutClick: () -> Unit,
     onMapStyleClick: () -> Unit,
+    onOfflineClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var clickCount by remember { mutableIntStateOf(0) }
@@ -117,6 +118,11 @@ fun SettingsScreen(
             SettingsMenuRow(
                 title = "Fond de carte",
                 onClick = onMapStyleClick
+            )
+            HorizontalDivider(color = Color(0xFF3A3A3C))
+            SettingsMenuRow(
+                title = "Mode hors ligne",
+                onClick = onOfflineClick
             )
             HorizontalDivider(color = Color(0xFF3A3A3C))
             SettingsMenuRow(

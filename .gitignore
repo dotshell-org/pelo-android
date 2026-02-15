@@ -28,3 +28,7 @@ scripts/.venv
 # Keystore files
 *.jks
 *.keystore
+/app/release/output-metadata.json
+/app/release/Pelofinal.apk
+/app/release/baselineProfiles/0/app-release.dm
+/app/release/baselineProfiles/1/app-release.dm

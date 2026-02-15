@@ -70,6 +70,7 @@ import com.pelotcl.app.ui.screens.LegalScreen
 import com.pelotcl.app.ui.screens.MapStyleScreen
 import com.pelotcl.app.ui.screens.PlanScreen
 import com.pelotcl.app.ui.screens.ItinerarySettingsScreen
+import com.pelotcl.app.ui.screens.OfflineSettingsScreen
 import com.pelotcl.app.ui.screens.SettingsScreen
 import com.pelotcl.app.ui.theme.PeloTheme
 import com.pelotcl.app.ui.theme.Red500
@@ -183,6 +184,7 @@ private enum class Destination(
         const val CONTACT = "contact"
         const val MAP_STYLE = "map_style"
         const val ITINERARY_SETTINGS = "itinerary_settings"
+        const val OFFLINE_SETTINGS = "offline_settings"
     }
 }
 
@@ -348,7 +350,8 @@ fun NavBar(modifier: Modifier = Modifier) {
             Destination.CREDITS,
             Destination.CONTACT,
             Destination.MAP_STYLE,
-            Destination.ITINERARY_SETTINGS
+            Destination.ITINERARY_SETTINGS,
+            Destination.OFFLINE_SETTINGS
         )
 
         if (currentRoute in darkBackgroundRoutes) {
@@ -406,7 +409,8 @@ fun NavBar(modifier: Modifier = Modifier) {
                                         Destination.CREDITS,
                                         Destination.CONTACT,
                                         Destination.MAP_STYLE,
-                                        Destination.ITINERARY_SETTINGS
+                                        Destination.ITINERARY_SETTINGS,
+                                        Destination.OFFLINE_SETTINGS
                                     )
                                     if (currentRoute in settingsSubRoutes) {
                                         // Pop back to Settings root
@@ -620,6 +624,9 @@ private fun AppNavHost(
                 },
                 onMapStyleClick = {
                     navController.navigate(Destination.MAP_STYLE)
+                },
+                onOfflineClick = {
+                    navController.navigate(Destination.OFFLINE_SETTINGS)
                 }
             )
         }
@@ -632,6 +639,14 @@ private fun AppNavHost(
         }
         composable(Destination.ITINERARY_SETTINGS) {
             ItinerarySettingsScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        composable(Destination.OFFLINE_SETTINGS) {
+            OfflineSettingsScreen(
+                viewModel = viewModel,
                 onBackClick = {
                     navController.popBackStack()
                 }

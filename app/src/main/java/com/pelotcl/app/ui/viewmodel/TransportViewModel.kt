@@ -20,6 +20,9 @@ import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.utils.Connection
 import com.pelotcl.app.data.repository.FavoritesRepository
 import com.pelotcl.app.data.cache.SpatialGrid
+import com.pelotcl.app.data.network.ConnectivityObserver
+import com.pelotcl.app.data.offline.OfflineDataInfo
+import com.pelotcl.app.data.offline.OfflineDataManager
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.ConnectionsHelper
 import com.pelotcl.app.utils.HolidayDetector
@@ -106,6 +109,19 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     private val _trafficAlerts = MutableStateFlow<Map<String, List<com.pelotcl.app.data.model.TrafficAlert>>>(emptyMap())
     val trafficAlerts: StateFlow<Map<String, List<com.pelotcl.app.data.model.TrafficAlert>>> = _trafficAlerts.asStateFlow()
 
+    // Connectivity and offline state
+    private val connectivityObserver = ConnectivityObserver.getInstance(application.applicationContext)
+    val offlineDataManager = OfflineDataManager.getInstance(application.applicationContext)
+
+    private val _isOffline = MutableStateFlow(false)
+    val isOffline: StateFlow<Boolean> = _isOffline.asStateFlow()
+
+    val offlineDataInfo: StateFlow<OfflineDataInfo> = offlineDataManager.offlineDataInfo
+
+    // Alerts timestamp for staleness display
+    private val _alertsTimestampMillis = MutableStateFlow<Long?>(null)
+    val alertsTimestampMillis: StateFlow<Long?> = _alertsTimestampMillis.asStateFlow()
+
     // Vehicle positions state for live tracking
     private val vehiclePositionsRepository = VehiclePositionsRepository()
     private val _vehiclePositions = MutableStateFlow<List<SimpleVehiclePosition>>(emptyList())
@@ -126,6 +142,13 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     private var lineDetailScope = CoroutineScope(viewModelScope.coroutineContext + lineDetailJob)
 
     init {
+        // Observe connectivity changes
+        viewModelScope.launch {
+            connectivityObserver.isOnline.collect { online ->
+                _isOffline.value = !online
+            }
+        }
+
         // Start non-blocking preload on creation to have lines, stops, and connection index ready
         preloadAllData()
 
@@ -140,6 +163,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             delay(1000) // Wait for UI to stabilize
             refreshTrafficAlerts()
         }
+
+        // Load offline data info
+        offlineDataManager.refreshInfo()
     }
 
     /**
@@ -338,6 +364,11 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      * - Automatically stops when tracking is disabled
      */
     fun startLiveTracking(lineName: String) {
+        // Don't start live tracking when offline
+        if (_isOffline.value) {
+            Log.w("TransportViewModel", "Cannot start live tracking while offline")
+            return
+        }
         vehiclePositionsJob?.cancel()
         _isLiveTrackingEnabled.value = true
 
@@ -1333,6 +1364,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     normalized
                 }
                 _trafficAlerts.value = alertsByLine
+                _alertsTimestampMillis.value = trafficAlertsRepository.getAlertsTimestampMillis()
                 Log.d("AlertCheck", "Updated _trafficAlerts with ${alertsByLine.size} unique normalized lines")
             } else {
                 Log.e("AlertCheck", "Failed to fetch alerts: ${result.exceptionOrNull()?.message}")

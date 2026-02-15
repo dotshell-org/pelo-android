@@ -10,6 +10,7 @@ import com.pelotcl.app.data.model.TransportLineProperties
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.pelotcl.app.data.model.StopCollection
+import com.pelotcl.app.data.offline.OfflineRepository
 import com.pelotcl.app.utils.withRetry
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -19,9 +20,10 @@ import kotlinx.coroutines.withContext
  * Repository for managing transport line data
  */
 class TransportRepository(context: Context? = null) {
-    
+
     private val api = RetrofitInstance.api
     private val cache = context?.let { TransportCache.getInstance(it) }
+    private val offlineRepo = context?.let { OfflineRepository.getInstance(it) }
     
     /**
      * Fetches all transport lines (metro, funicular, tram, and navigone ONLY)
@@ -128,7 +130,23 @@ class TransportRepository(context: Context? = null) {
 
                 Result.success(filteredCollection)
             } catch (e: Exception) {
-                Result.failure(e)
+                // Fallback to offline repository if available
+                val offlineLines = offlineRepo?.loadAllLines()
+                if (!offlineLines.isNullOrEmpty()) {
+                    val uniqueLines = offlineLines
+                        .groupBy { it.properties.codeTrace }
+                        .map { (_, features) -> features.first() }
+                    android.util.Log.d("TransportRepository", "Using offline data: ${uniqueLines.size} lines")
+                    Result.success(FeatureCollection(
+                        type = "FeatureCollection",
+                        features = uniqueLines,
+                        totalFeatures = uniqueLines.size,
+                        numberMatched = uniqueLines.size,
+                        numberReturned = uniqueLines.size
+                    ))
+                } else {
+                    Result.failure(e)
+                }
             }
         }
     }
@@ -544,7 +562,25 @@ class TransportRepository(context: Context? = null) {
             
             Result.success(busLine)
         } catch (e: Exception) {
-            Result.failure(e)
+            // Fallback to offline repository for bus lines
+            try {
+                val offlineBus = offlineRepo?.loadBusLines()
+                val offlineLine = offlineBus?.firstOrNull {
+                    it.properties.ligne.equals(lineName, ignoreCase = true)
+                }
+                if (offlineLine != null) {
+                    android.util.Log.d("TransportRepository", "Found $lineName in offline bus data")
+                    return Result.success(offlineLine)
+                }
+                // Also try other offline line types
+                val allOffline = offlineRepo?.loadAllLines()
+                val offlineAny = allOffline?.firstOrNull {
+                    it.properties.ligne.equals(lineName, ignoreCase = true)
+                }
+                Result.success(offlineAny)
+            } catch (offlineEx: Exception) {
+                Result.failure(e)
+            }
         }
     }
     
@@ -670,7 +706,20 @@ class TransportRepository(context: Context? = null) {
 
                 Result.success(filteredCollection)
             } catch (e: Exception) {
-                Result.failure(e)
+                // Fallback to offline repository if available
+                val offlineStops = offlineRepo?.loadStops()
+                if (!offlineStops.isNullOrEmpty()) {
+                    android.util.Log.d("TransportRepository", "Using offline stops: ${offlineStops.size}")
+                    Result.success(StopCollection(
+                        type = "FeatureCollection",
+                        features = offlineStops,
+                        totalFeatures = offlineStops.size,
+                        numberMatched = offlineStops.size,
+                        numberReturned = offlineStops.size
+                    ))
+                } else {
+                    Result.failure(e)
+                }
             }
         }
     }
@@ -687,8 +736,21 @@ class TransportRepository(context: Context? = null) {
                 val cachedMetro = cache?.getMetroLinesStale()
                 val cachedTram = cache?.getTramLinesStale()
 
-                // If no cache at all, return null to indicate fresh load needed
+                // If no cache at all, try offline repository
                 if (cachedMetro == null || cachedTram == null) {
+                    val offlineLines = offlineRepo?.loadAllLines()
+                    if (!offlineLines.isNullOrEmpty()) {
+                        val uniqueLines = offlineLines
+                            .groupBy { it.properties.codeTrace }
+                            .map { (_, features) -> features.first() }
+                        return@withContext Result.success(FeatureCollection(
+                            type = "FeatureCollection",
+                            features = uniqueLines,
+                            totalFeatures = uniqueLines.size,
+                            numberMatched = uniqueLines.size,
+                            numberReturned = uniqueLines.size
+                        ))
+                    }
                     return@withContext null
                 }
 
