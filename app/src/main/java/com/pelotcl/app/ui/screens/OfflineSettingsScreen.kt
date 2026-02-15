@@ -259,6 +259,11 @@ private fun OfflineStatusCard(info: OfflineDataInfo, context: android.content.Co
             )
             Spacer(modifier = Modifier.height(8.dp))
             StatusRow(
+                label = "Lignes de bus",
+                value = if (info.busLinesCount > 0) "${info.busLinesCount} lignes" else "Non t\u00e9l\u00e9charg\u00e9es"
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            StatusRow(
                 label = "Tuiles de carte",
                 value = if (info.mapTilesDownloaded) "T\u00e9l\u00e9charg\u00e9es" else "Non t\u00e9l\u00e9charg\u00e9es"
             )

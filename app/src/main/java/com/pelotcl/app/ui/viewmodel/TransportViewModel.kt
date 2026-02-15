@@ -963,9 +963,11 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             }
 
             // Load the line from the API (or offline storage if offline)
+            Log.d("TransportViewModel", "addLineToLoaded: loading $lineName (offline=${_isOffline.value})")
             repository.getLineByName(lineName, isOffline = _isOffline.value)
                 .onSuccess { feature ->
                     if (feature != null) {
+                        Log.d("TransportViewModel", "addLineToLoaded: got $lineName with ${feature.geometry.coordinates.size} segments, ${feature.geometry.coordinates.sumOf { it.size }} points")
                         // Add the new line to existing lines
                         val updatedLines = currentLines + feature
                         _uiState.value = TransportLinesUiState.Success(updatedLines)

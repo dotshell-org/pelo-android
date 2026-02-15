@@ -122,10 +122,14 @@ class OfflineDataManager(private val context: Context) {
                 // Step 3: ALL bus lines (the big one)
                 _downloadState.value = OfflineDownloadState.Downloading(cumulativeProgress, "Toutes les lignes de bus...")
                 try {
+                    // Free memory before the large bus download
+                    System.gc()
                     val bus = withRetry(maxRetries = 2, initialDelayMs = 2000) {
                         api.getBusLines()
                     }
+                    Log.d(TAG, "Downloaded ${bus.features.size} bus features, saving by line...")
                     offlineRepository.saveBusLines(bus.features)
+                    Log.d(TAG, "Bus lines saved to per-line files")
                 } catch (e: OutOfMemoryError) {
                     Log.e(TAG, "OutOfMemoryError downloading bus lines", e)
                     _downloadState.value = OfflineDownloadState.Error("Mémoire insuffisante pour télécharger les lignes de bus")

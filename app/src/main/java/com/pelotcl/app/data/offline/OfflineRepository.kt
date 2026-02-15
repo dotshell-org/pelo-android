@@ -22,7 +22,8 @@ data class OfflineDataInfo(
     val isAvailable: Boolean = false,
     val lastDownloadTimestamp: Long = 0L,
     val totalSizeBytes: Long = 0L,
-    val mapTilesDownloaded: Boolean = false
+    val mapTilesDownloaded: Boolean = false,
+    val busLinesCount: Int = 0
 )
 
 /**
@@ -231,11 +232,14 @@ class OfflineRepository(private val context: Context) {
         val mapTiles = prefs.getBoolean(KEY_MAP_TILES_DOWNLOADED, false)
         val hasData = lastDownload > 0L && offlineDir.listFiles()?.isNotEmpty() == true
 
+        val busCount = busDir.listFiles()?.count { it.name.endsWith(".json.gz") } ?: 0
+
         return OfflineDataInfo(
             isAvailable = hasData,
             lastDownloadTimestamp = lastDownload,
             totalSizeBytes = if (hasData) calculateTotalSize() else 0L,
-            mapTilesDownloaded = mapTiles
+            mapTilesDownloaded = mapTiles,
+            busLinesCount = busCount
         )
     }
 
@@ -267,7 +271,10 @@ class OfflineRepository(private val context: Context) {
     private fun calculateTotalSize(): Long {
         val mainSize = offlineDir.listFiles()?.filter { it.isFile }?.sumOf { it.length() } ?: 0L
         val busSize = busDir.listFiles()?.sumOf { it.length() } ?: 0L
-        return mainSize + busSize
+        // Include MapLibre offline tiles database (stored by MapLibre in filesDir)
+        val mapLibreDb = File(context.filesDir, "mbgl-offline.db")
+        val mapTilesSize = if (mapLibreDb.exists()) mapLibreDb.length() else 0L
+        return mainSize + busSize + mapTilesSize
     }
 
     private suspend inline fun <reified T> writeCompressed(fileName: String, data: T) =

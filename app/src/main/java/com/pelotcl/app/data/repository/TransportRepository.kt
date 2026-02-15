@@ -586,10 +586,12 @@ class TransportRepository(context: Context? = null) {
 
             // Try bus from offline per-line file
             val offlineBus = offlineRepo?.loadBusLineByName(lineName)
+            android.util.Log.d("TransportRepository", "Offline bus for $lineName: ${offlineBus?.size ?: "null"} features")
             val offlineBusLine = offlineBus?.firstOrNull {
                 it.properties.ligne.equals(lineName, ignoreCase = true)
             }
             if (offlineBusLine != null) {
+                android.util.Log.d("TransportRepository", "Offline bus $lineName: geom type=${offlineBusLine.geometry.type}, coords=${offlineBusLine.geometry.coordinates.size} segments")
                 return Result.success(offlineBusLine)
             }
 
@@ -598,6 +600,7 @@ class TransportRepository(context: Context? = null) {
             val offlineAny = allOffline?.firstOrNull {
                 it.properties.ligne.equals(lineName, ignoreCase = true)
             }
+            android.util.Log.d("TransportRepository", "Offline allLines for $lineName: ${if (offlineAny != null) "found" else "NOT found"}")
             Result.success(offlineAny)
         } catch (e: Exception) {
             android.util.Log.e("TransportRepository", "Offline getLineByName failed for $lineName", e)
