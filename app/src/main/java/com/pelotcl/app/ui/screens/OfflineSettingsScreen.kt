@@ -60,7 +60,7 @@ fun OfflineSettingsScreen(
     val downloadState by viewModel.offlineDataManager.downloadState.collectAsState()
     val isOffline by viewModel.isOffline.collectAsState()
     val offlineRepository = remember { OfflineRepository.getInstance(context) }
-    var selectedMapStyles by remember { mutableStateOf(offlineRepository.getSelectedMapStyles()) }
+    var selectedMapStyles by remember { mutableStateOf(offlineRepository.getSelectedMapStyles().ifEmpty { setOf(MapStyle.POSITRON.key) }) }
 
     Box(
         modifier = modifier
@@ -117,9 +117,11 @@ fun OfflineSettingsScreen(
                 isDownloading = downloadState is OfflineDownloadState.Downloading,
                 isEnabled = !isOffline,
                 onStyleToggled = { styleKey, checked ->
-                    val newSet = if (checked) selectedMapStyles + styleKey
+                    var newSet = if (checked) selectedMapStyles + styleKey
                     else if (selectedMapStyles.size > 1) selectedMapStyles - styleKey
                     else selectedMapStyles
+                    // Toujours forcer positron si aucun style n'est sélectionné
+                    if (newSet.isEmpty()) newSet = setOf(MapStyle.POSITRON.key)
                     selectedMapStyles = newSet
                     offlineRepository.setSelectedMapStyles(newSet)
                 }
@@ -141,11 +143,12 @@ fun OfflineSettingsScreen(
                         ),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(Icons.Filled.CloudDownload, null, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Filled.CloudDownload, null, modifier = Modifier.size(20.dp), tint = Color.White)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = if (offlineDataInfo.isAvailable) "Mettre à jour" else "Télécharger les données",
                             fontSize = 16.sp,
+                            color = Color.White,
                             modifier = Modifier.padding(vertical = 4.dp)
                         )
                     }
@@ -268,7 +271,7 @@ private fun MapStyleSelectionCard(
                     Spacer(modifier = Modifier.width(16.dp))
                     Text(style.displayName, color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
 
-                    if (isDownloaded) {
+                    if (isDownloaded && isSelected) {
                         Icon(Icons.Filled.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(18.dp))
                     }
                 }
