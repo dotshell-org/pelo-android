@@ -102,38 +102,53 @@ class OfflineDataManager(private val context: Context) {
                 }
                 cumulativeProgress += WEIGHT_METRO_TRAM
 
-                // Step 2: Navigone + Trambus
+                // Step 2: Navigone + Trambus (downloaded separately so one failure doesn't block the other)
                 _downloadState.value = OfflineDownloadState.Downloading(cumulativeProgress, "Lignes Navigone et Trambus...")
                 try {
                     val navigone = withRetry(maxRetries = 2, initialDelayMs = 1000) {
                         api.getNavigoneLines()
                     }
                     offlineRepository.saveNavigoneLines(navigone.features)
-
+                    Log.d(TAG, "Navigone: saved ${navigone.features.size} features")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to download navigone lines (non-critical)", e)
+                }
+                try {
                     val trambus = withRetry(maxRetries = 2, initialDelayMs = 1000) {
                         api.getTrambusLines()
                     }
-                    offlineRepository.saveTrambusLines(trambus.features)
+                    Log.d(TAG, "Trambus API returned ${trambus.features.size} features: ${trambus.features.map { it.properties.ligne }.distinct()}")
+                    if (trambus.features.isNotEmpty()) {
+                        offlineRepository.saveTrambusLines(trambus.features)
+                        // Verify the file was actually written
+                        val verifyLoad = offlineRepository.loadTrambusLines()
+                        Log.d(TAG, "Trambus: verify after save = ${verifyLoad?.size ?: "NULL (write failed!)"} features")
+                    } else {
+                        Log.w(TAG, "Trambus API returned 0 features — nothing to save")
+                    }
                 } catch (e: Exception) {
-                    Log.w(TAG, "Failed to download navigone/trambus lines (non-critical)", e)
-                    // Non-critical, continue
+                    Log.e(TAG, "Failed to download trambus lines (non-critical)", e)
                 }
                 cumulativeProgress += WEIGHT_NAVIGONE_TRAMBUS
 
                 // Step 3: ALL bus lines — downloaded in pages to avoid OOM
+                // The WFS dataset tcllignebus contains ALL line types (bus, TB, etc.)
+                // We save bus lines to per-line files and also rescue TB/navigone features
+                // in case Step 2 failed to download them separately.
                 _downloadState.value = OfflineDownloadState.Downloading(cumulativeProgress, "Lignes de bus...")
                 try {
                     offlineRepository.clearBusLines()
+                    // GTFS bus-like names for the per-line fallback later
                     val busLikeNames = schedulesRepository.getAllBusLikeRouteNames()
                     val busNameBySafe = busLikeNames.associateBy {
                         it.uppercase().replace(Regex("[^A-Za-z0-9_-]"), "_")
                     }
-                    val busLikeUpperSet = busLikeNames.map { it.uppercase() }.toSet()
-                    Log.d(TAG, "Bus GTFS filter: ${busLikeUpperSet.size} route names")
                     val pageSize = 500
                     var startIndex = 0
                     var totalDownloaded = 0
                     var hasMore = true
+                    // Collect trambus features from the bus dataset as a safety net
+                    val rescuedTrambus = mutableListOf<Feature>()
 
                     Log.d(TAG, "Starting paginated bus download (pageSize=$pageSize)")
 
@@ -144,28 +159,46 @@ class OfflineDataManager(private val context: Context) {
                             api.getBusLines(startIndex = startIndex, count = pageSize)
                         }
                         val features = page.features
-                        val busOnly = if (busLikeUpperSet.isNotEmpty()) {
-                            features.filter { busLikeUpperSet.contains(it.properties.ligne.uppercase()) }
-                        } else {
-                            features
-                        }
                         Log.d(TAG, "Bus page response: ${features.size} features, totalFeatures=${page.totalFeatures}, numberMatched=${page.numberMatched}, numberReturned=${page.numberReturned}")
-                        if (busOnly.isNotEmpty()) {
-                            offlineRepository.saveBusLinesPage(busOnly)
-                            totalDownloaded += busOnly.size
+
+                        if (features.isNotEmpty()) {
+                            // Separate trambus (TB%) from real bus lines
+                            val trambusInPage = features.filter { it.properties.ligne.uppercase().startsWith("TB") }
+                            val busFeatures = features.filter { !it.properties.ligne.uppercase().startsWith("TB") }
+
+                            if (trambusInPage.isNotEmpty()) {
+                                rescuedTrambus.addAll(trambusInPage)
+                                Log.d(TAG, "Rescued ${trambusInPage.size} trambus features from bus page")
+                            }
+
+                            if (busFeatures.isNotEmpty()) {
+                                offlineRepository.saveBusLinesPage(busFeatures)
+                                totalDownloaded += busFeatures.size
+                            }
+
                             startIndex += features.size
-                            Log.d(TAG, "Bus page saved: got ${busOnly.size} features (total: $totalDownloaded)")
+                            Log.d(TAG, "Bus page saved: ${busFeatures.size} bus features (total: $totalDownloaded), trambus rescued: ${rescuedTrambus.size}")
                             _downloadState.value = OfflineDownloadState.Downloading(
                                 cumulativeProgress + WEIGHT_BUS * (totalDownloaded.toFloat() / 10000f).coerceAtMost(0.95f),
                                 "Lignes de bus ($totalDownloaded)..."
                             )
                         } else {
-                            Log.w(TAG, "Bus page returned EMPTY features (after GTFS filter) at startIndex=$startIndex")
-                            startIndex += features.size
+                            startIndex += pageSize
                         }
                         // Stop if we got fewer features than requested (last page)
                         hasMore = features.size >= pageSize
                         Log.d(TAG, "hasMore=$hasMore (features.size=${features.size} >= pageSize=$pageSize)")
+                    }
+
+                    // Save rescued trambus if Step 2 failed to download them
+                    if (rescuedTrambus.isNotEmpty()) {
+                        val existingTrambus = offlineRepository.loadTrambusLines()
+                        if (existingTrambus.isNullOrEmpty()) {
+                            offlineRepository.saveTrambusLines(rescuedTrambus)
+                            Log.d(TAG, "Saved ${rescuedTrambus.size} rescued trambus features (Step 2 had failed)")
+                        } else {
+                            Log.d(TAG, "Trambus already saved from Step 2 (${existingTrambus.size} features), skipping rescued ones")
+                        }
                     }
                     // Log final bus directory state
                     var busFiles = offlineRepository.getAvailableBusLineNames()

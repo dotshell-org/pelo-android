@@ -76,10 +76,10 @@ class OfflineRepository(private val context: Context) {
     // ===== SAVE METHODS =====
 
     suspend fun saveMetroLines(lines: List<Feature>) =
-        writeCompressed(FILE_METRO_LINES, lines)
+        writeCompressed(FILE_METRO_LINES, lines.sanitizeForSerialization())
 
     suspend fun saveTramLines(lines: List<Feature>) =
-        writeCompressed(FILE_TRAM_LINES, lines)
+        writeCompressed(FILE_TRAM_LINES, lines.sanitizeForSerialization())
 
     /**
      * Clears all existing bus line files to prepare for a fresh download.
@@ -98,7 +98,7 @@ class OfflineRepository(private val context: Context) {
      * Call clearBusLines() first, then saveBusLinesPage() for each page.
      */
     suspend fun saveBusLinesPage(lines: List<Feature>) = withContext(Dispatchers.IO) {
-        val safeLines = sanitizeBusFeatures(lines)
+        val safeLines = lines.sanitizeForSerialization()
         Log.d(TAG, "saveBusLinesPage: ${lines.size} features, busDir=${busDir.absolutePath}, exists=${busDir.exists()}")
         val grouped = safeLines.groupBy { it.properties.ligne.uppercase() }
         var savedCount = 0
@@ -136,7 +136,7 @@ class OfflineRepository(private val context: Context) {
      */
     suspend fun saveBusLines(lines: List<Feature>) = withContext(Dispatchers.IO) {
         clearBusLines()
-        val safeLines = sanitizeBusFeatures(lines)
+        val safeLines = lines.sanitizeForSerialization()
         // Group by line name and save each separately
         val grouped = safeLines.groupBy { it.properties.ligne.uppercase() }
         for ((lineName, features) in grouped) {
@@ -147,13 +147,13 @@ class OfflineRepository(private val context: Context) {
     }
 
     suspend fun saveNavigoneLines(lines: List<Feature>) =
-        writeCompressed(FILE_NAVIGONE_LINES, lines)
+        writeCompressed(FILE_NAVIGONE_LINES, lines.sanitizeForSerialization())
 
     suspend fun saveTrambusLines(lines: List<Feature>) =
-        writeCompressed(FILE_TRAMBUS_LINES, lines)
+        writeCompressed(FILE_TRAMBUS_LINES, lines.sanitizeForSerialization())
 
     suspend fun saveRxLines(lines: List<Feature>) =
-        writeCompressed(FILE_RX_LINES, lines)
+        writeCompressed(FILE_RX_LINES, lines.sanitizeForSerialization())
 
     suspend fun saveStops(stops: List<StopFeature>) =
         writeCompressed(FILE_STOPS, stops)
@@ -253,11 +253,19 @@ class OfflineRepository(private val context: Context) {
      * Bus lines are NOT included to avoid OOM — use loadBusLineByName() instead.
      */
     suspend fun loadAllLines(): List<Feature> {
+        // Log which files exist on disk
+        val filesOnDisk = offlineDir.listFiles()?.map { it.name } ?: emptyList()
+        Log.d(TAG, "loadAllLines: files on disk = $filesOnDisk")
+
         val metro = loadMetroLines() ?: emptyList()
         val tram = loadTramLines() ?: emptyList()
         val navigone = loadNavigoneLines() ?: emptyList()
         val trambus = loadTrambusLines() ?: emptyList()
         val rx = loadRxLines() ?: emptyList()
+        Log.d(TAG, "loadAllLines: metro=${metro.size}, tram=${tram.size}, navigone=${navigone.size}, trambus=${trambus.size}, rx=${rx.size}")
+        if (trambus.isEmpty()) {
+            Log.w(TAG, "loadAllLines: trambus_lines.json.gz missing! You need to re-download offline data with the latest version.")
+        }
         return metro + tram + navigone + trambus + rx
     }
 
@@ -335,12 +343,14 @@ class OfflineRepository(private val context: Context) {
     private suspend inline fun <reified T> writeCompressedTo(file: File, data: T) =
         withContext(Dispatchers.IO) {
             try {
+                file.parentFile?.mkdirs()
                 val jsonString = json.encodeToString(data)
                 GZIPOutputStream(FileOutputStream(file).buffered()).use { gzip ->
                     gzip.write(jsonString.toByteArray(Charsets.UTF_8))
                 }
+                Log.d(TAG, "Wrote ${file.name}: ${file.length()} bytes")
             } catch (e: Exception) {
-                Log.e(TAG, "Error writing to ${file.name}", e)
+                Log.e(TAG, "FAILED writing to ${file.name}: ${e.javaClass.simpleName}: ${e.message}", e)
             }
         }
 
@@ -360,31 +370,41 @@ class OfflineRepository(private val context: Context) {
             }
         }
 
-    private fun sanitizeBusFeatures(lines: List<Feature>): List<Feature> {
-        return lines.map { feature ->
-            val props = feature.properties
-            val safeProps = props.copy(
-                codeTrace = props.codeTrace.orEmptySafe(),
-                codeLigne = props.codeLigne.orEmptySafe(),
-                typeTrace = props.typeTrace.orEmptySafe(),
-                nomTrace = props.nomTrace.orEmptySafe(),
-                origine = props.origine.orEmptySafe(),
-                destination = props.destination.orEmptySafe(),
-                nomOrigine = props.nomOrigine.orEmptySafe(),
-                nomDestination = props.nomDestination.orEmptySafe(),
-                familleTransport = props.familleTransport.orEmptySafe(),
-                dateDebut = props.dateDebut.orEmptySafe(),
-                codeTypeLigne = props.codeTypeLigne.orEmptySafe(),
-                nomTypeLigne = props.nomTypeLigne.orEmptySafe(),
-                codeTriLigne = props.codeTriLigne.orEmptySafe(),
-                nomVersion = props.nomVersion.orEmptySafe(),
-                lastUpdate = props.lastUpdate.orEmptySafe(),
-                lastUpdateFme = props.lastUpdateFme.orEmptySafe(),
-                couleur = props.couleur.orEmptySafe()
-            )
-            feature.copy(properties = safeProps)
-        }
-    }
+}
 
-    private fun String?.orEmptySafe(): String = this ?: ""
+/**
+ * Sanitizes Feature list before kotlinx.serialization encoding.
+ * Gson (Retrofit) uses Java reflection to populate Kotlin objects and can inject
+ * null into non-nullable String fields when the JSON field is missing.
+ * This causes NullPointerException in kotlinx.serialization's encodeToString.
+ * Must be called on any List<Feature> that comes from Gson before passing to
+ * kotlinx.serialization's encodeToString.
+ */
+@Suppress("UNCHECKED_CAST")
+fun List<Feature>.sanitizeForSerialization(): List<Feature> {
+    return map { feature ->
+        val props = feature.properties
+        val safeProps = props.copy(
+            ligne = (props.ligne as String?) ?: "",
+            codeTrace = (props.codeTrace as String?) ?: "",
+            codeLigne = (props.codeLigne as String?) ?: "",
+            typeTrace = (props.typeTrace as String?) ?: "",
+            nomTrace = (props.nomTrace as String?) ?: "",
+            origine = (props.origine as String?) ?: "",
+            destination = (props.destination as String?) ?: "",
+            nomOrigine = (props.nomOrigine as String?) ?: "",
+            nomDestination = (props.nomDestination as String?) ?: "",
+            familleTransport = (props.familleTransport as String?) ?: "",
+            dateDebut = (props.dateDebut as String?) ?: "",
+            codeTypeLigne = (props.codeTypeLigne as String?) ?: "",
+            nomTypeLigne = (props.nomTypeLigne as String?) ?: "",
+            codeTriLigne = (props.codeTriLigne as String?) ?: "",
+            nomVersion = (props.nomVersion as String?) ?: "",
+            lastUpdate = (props.lastUpdate as String?) ?: "",
+            lastUpdateFme = (props.lastUpdateFme as String?) ?: ""
+        )
+        val safeId = (feature.id as String?) ?: ""
+        val safeType = (feature.type as String?) ?: "Feature"
+        feature.copy(type = safeType, id = safeId, properties = safeProps)
+    }
 }
