@@ -169,6 +169,29 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
+     * Starts offline data download in viewModelScope so it survives screen navigation.
+     * Using rememberCoroutineScope in the UI would cancel the download if the user leaves the screen.
+     */
+    /**
+     * Starts offline data download in viewModelScope so it survives screen navigation.
+     * Using rememberCoroutineScope in the UI would cancel the download if the user leaves the screen.
+     */
+    fun startOfflineDownload() {
+        viewModelScope.launch {
+            offlineDataManager.downloadAllOfflineData()
+        }
+    }
+
+    /**
+     * Deletes all offline data from viewModelScope.
+     */
+    fun deleteOfflineData() {
+        viewModelScope.launch {
+            offlineDataManager.deleteAllOfflineData()
+        }
+    }
+
+    /**
      * Search for stops by name using SQLite
      * This is the function called by the Search Bar in MainActivity
      */

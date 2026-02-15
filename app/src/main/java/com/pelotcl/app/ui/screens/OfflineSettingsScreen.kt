@@ -41,7 +41,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,7 +53,6 @@ import androidx.compose.ui.unit.sp
 import com.pelotcl.app.data.offline.OfflineDataInfo
 import com.pelotcl.app.data.offline.OfflineDownloadState
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
-import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -66,7 +64,6 @@ fun OfflineSettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val offlineDataInfo by viewModel.offlineDataInfo.collectAsState()
     val downloadState by viewModel.offlineDataManager.downloadState.collectAsState()
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -122,9 +119,7 @@ fun OfflineSettingsScreen(
                 is OfflineDownloadState.Idle, is OfflineDownloadState.Complete, is OfflineDownloadState.Error -> {
                     Button(
                         onClick = {
-                            scope.launch {
-                                viewModel.offlineDataManager.downloadAllOfflineData()
-                            }
+                            viewModel.startOfflineDownload()
                         },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(
@@ -219,9 +214,7 @@ fun OfflineSettingsScreen(
                 TextButton(
                     onClick = {
                         showDeleteDialog = false
-                        scope.launch {
-                            viewModel.offlineDataManager.deleteAllOfflineData()
-                        }
+                        viewModel.deleteOfflineData()
                     }
                 ) {
                     Text("Supprimer", color = Color(0xFFEF4444))
