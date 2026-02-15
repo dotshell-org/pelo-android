@@ -82,14 +82,49 @@ class OfflineRepository(private val context: Context) {
         writeCompressed(FILE_TRAM_LINES, lines)
 
     /**
+     * Clears all existing bus line files to prepare for a fresh download.
+     * Must be called ONCE before starting paginated saveBusLinesPage() calls.
+     */
+    fun clearBusLines() {
+        File(offlineDir, FILE_BUS_LINES).delete()
+        busDir.listFiles()?.forEach { it.delete() }
+    }
+
+    /**
+     * Saves a page of bus lines, grouping by line name into individual files.
+     * Appends to existing files if a line spans multiple pages.
+     * Call clearBusLines() first, then saveBusLinesPage() for each page.
+     */
+    suspend fun saveBusLinesPage(lines: List<Feature>) = withContext(Dispatchers.IO) {
+        val grouped = lines.groupBy { it.properties.ligne.uppercase() }
+        for ((lineName, features) in grouped) {
+            val safeFileName = lineName.replace(Regex("[^A-Za-z0-9_-]"), "_") + ".json.gz"
+            val file = File(busDir, safeFileName)
+            if (file.exists()) {
+                // Append: read existing, merge, rewrite
+                try {
+                    val existingJson = GZIPInputStream(FileInputStream(file).buffered()).use { gzip ->
+                        gzip.bufferedReader(Charsets.UTF_8).readText()
+                    }
+                    val existing = json.decodeFromString<List<Feature>>(existingJson)
+                    writeCompressedTo(file, existing + features)
+                } catch (e: Exception) {
+                    // If read fails, just overwrite
+                    writeCompressedTo(file, features)
+                }
+            } else {
+                writeCompressedTo(file, features)
+            }
+        }
+        Log.d(TAG, "Saved page: ${grouped.size} lines, ${lines.size} features")
+    }
+
+    /**
      * Saves bus lines grouped by line name into individual files (bus/C5.json.gz, bus/44.json.gz, etc.)
      * to avoid loading all 10k features at once (OOM risk).
      */
     suspend fun saveBusLines(lines: List<Feature>) = withContext(Dispatchers.IO) {
-        // Clean old single-file format if it exists
-        File(offlineDir, FILE_BUS_LINES).delete()
-        // Clean old per-line files
-        busDir.listFiles()?.forEach { it.delete() }
+        clearBusLines()
         // Group by line name and save each separately
         val grouped = lines.groupBy { it.properties.ligne.uppercase() }
         for ((lineName, features) in grouped) {

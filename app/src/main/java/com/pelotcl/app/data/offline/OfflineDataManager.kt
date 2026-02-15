@@ -119,17 +119,35 @@ class OfflineDataManager(private val context: Context) {
                 }
                 cumulativeProgress += WEIGHT_NAVIGONE_TRAMBUS
 
-                // Step 3: ALL bus lines (the big one)
-                _downloadState.value = OfflineDownloadState.Downloading(cumulativeProgress, "Toutes les lignes de bus...")
+                // Step 3: ALL bus lines — downloaded in pages to avoid OOM
+                _downloadState.value = OfflineDownloadState.Downloading(cumulativeProgress, "Lignes de bus...")
                 try {
-                    // Free memory before the large bus download
-                    System.gc()
-                    val bus = withRetry(maxRetries = 2, initialDelayMs = 2000) {
-                        api.getBusLines()
+                    offlineRepository.clearBusLines()
+                    val pageSize = 500
+                    var startIndex = 0
+                    var totalDownloaded = 0
+                    var hasMore = true
+
+                    while (hasMore) {
+                        System.gc()
+                        val page = withRetry(maxRetries = 2, initialDelayMs = 1000) {
+                            api.getBusLines(startIndex = startIndex, count = pageSize)
+                        }
+                        val features = page.features
+                        if (features.isNotEmpty()) {
+                            offlineRepository.saveBusLinesPage(features)
+                            totalDownloaded += features.size
+                            startIndex += features.size
+                            Log.d(TAG, "Bus page: got ${features.size} features (total: $totalDownloaded)")
+                            _downloadState.value = OfflineDownloadState.Downloading(
+                                cumulativeProgress + WEIGHT_BUS * (totalDownloaded.toFloat() / 10000f).coerceAtMost(0.95f),
+                                "Lignes de bus ($totalDownloaded)..."
+                            )
+                        }
+                        // Stop if we got fewer features than requested (last page)
+                        hasMore = features.size >= pageSize
                     }
-                    Log.d(TAG, "Downloaded ${bus.features.size} bus features, saving by line...")
-                    offlineRepository.saveBusLines(bus.features)
-                    Log.d(TAG, "Bus lines saved to per-line files")
+                    Log.d(TAG, "Bus download complete: $totalDownloaded features total")
                 } catch (e: OutOfMemoryError) {
                     Log.e(TAG, "OutOfMemoryError downloading bus lines", e)
                     _downloadState.value = OfflineDownloadState.Error("Mémoire insuffisante pour télécharger les lignes de bus")
