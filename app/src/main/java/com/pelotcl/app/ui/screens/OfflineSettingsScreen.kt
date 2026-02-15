@@ -2,6 +2,8 @@ package com.pelotcl.app.ui.screens
 
 import android.text.format.Formatter
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,23 +16,26 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Euro
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -89,6 +94,7 @@ fun OfflineSettingsScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Header
+            Spacer(modifier = Modifier.height(60.dp))
             Icon(
                 imageVector = if (offlineDataInfo.isAvailable) Icons.Filled.CheckCircle else Icons.Filled.CloudOff,
                 contentDescription = null,
@@ -113,14 +119,34 @@ fun OfflineSettingsScreen(
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(50.dp))
 
             // Status card
             if (offlineDataInfo.isAvailable) {
                 OfflineStatusCard(offlineDataInfo, context)
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(30.dp))
             }
 
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp, horizontal = 4.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Map,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Fonds de carte",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
             // Map style selection
             MapStyleSelectionCard(
                 selectedStyles = selectedMapStyles,
@@ -148,22 +174,26 @@ fun OfflineSettingsScreen(
                         },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF3B82F6)
+                            containerColor = Color(0xFFE60000)
                         ),
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Filled.CloudDownload,
                             contentDescription = null,
+                            tint = Color.White,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = if (offlineDataInfo.isAvailable) "Mettre \u00e0 jour" else "T\u00e9l\u00e9charger les donn\u00e9es",
                             fontSize = 16.sp,
+                            color = Color.White,
                             modifier = Modifier.padding(vertical = 4.dp)
                         )
                     }
+
+                    Spacer(modifier = Modifier.height(20.dp))
 
                     if (state is OfflineDownloadState.Error) {
                         Spacer(modifier = Modifier.height(8.dp))
@@ -207,8 +237,30 @@ fun OfflineSettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp, horizontal = 4.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Fonctionnalités hors ligne",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
             // Info card
             OfflineInfoCard()
+
+            Spacer(modifier = Modifier.height(100.dp))
         }
 
         // Back button
@@ -282,11 +334,9 @@ private fun OfflineStatusCard(info: OfflineDataInfo, context: android.content.Co
             )
             Spacer(modifier = Modifier.height(8.dp))
             StatusRow(
-                label = "Tuiles de carte",
+                label = "Fonds de carte",
                 value = if (info.downloadedMapStyles.isNotEmpty()) {
-                    info.downloadedMapStyles.mapNotNull { key ->
-                        MapStyle.entries.find { it.key == key }?.displayName
-                    }.joinToString(", ").ifEmpty { "T\u00e9l\u00e9charg\u00e9es" }
+                    info.downloadedMapStyles.size.toString()
                 } else {
                     "Non t\u00e9l\u00e9charg\u00e9es"
                 }
@@ -324,7 +374,7 @@ private fun DownloadProgressCard(state: OfflineDownloadState.Downloading) {
             ) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(20.dp),
-                    color = Color(0xFF3B82F6),
+                    color = Color(0xFFEF4444),
                     strokeWidth = 2.dp
                 )
                 Spacer(modifier = Modifier.width(12.dp))
@@ -338,7 +388,7 @@ private fun DownloadProgressCard(state: OfflineDownloadState.Downloading) {
             LinearProgressIndicator(
                 progress = { state.progress },
                 modifier = Modifier.fillMaxWidth(),
-                color = Color(0xFF3B82F6),
+                color = Color(0xFFEF4444),
                 trackColor = Color(0xFF3A3A3C),
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -360,99 +410,79 @@ private fun MapStyleSelectionCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1C1C1E)),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF1C1C1E)
+        ),
         shape = RoundedCornerShape(12.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Filled.CloudDownload,
-                    contentDescription = null,
-                    tint = Color(0xFF3B82F6),
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Styles de carte",
-                    color = Color.White,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "S\u00e9lectionnez les styles \u00e0 t\u00e9l\u00e9charger",
-                color = Color.Gray,
-                fontSize = 12.sp
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Standard styles (downloadable)
-            MapStyle.getByCategory(MapStyleCategory.STANDARD).forEach { style ->
+        Column {
+            val styles = MapStyle.getByCategory(MapStyleCategory.STANDARD)
+            styles.forEachIndexed { index, style ->
                 val isSelected = style.key in selectedStyles
                 val isDownloaded = style.key in downloadedStyles
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 2.dp),
+                        .clickable(enabled = !isDownloading) {
+                            onStyleToggled(style.key, !isSelected)
+                        }
+                        .padding(vertical = 16.dp, horizontal = 12.dp)
+                        .alpha(if (isDownloading) 0.5f else 1f),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Checkbox(
-                        checked = isSelected,
-                        onCheckedChange = { checked -> onStyleToggled(style.key, checked) },
-                        enabled = !isDownloading,
-                        colors = CheckboxDefaults.colors(
-                            checkedColor = Color(0xFF3B82F6),
-                            uncheckedColor = Color(0xFF8E8E93),
-                            checkmarkColor = Color.White
-                        )
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(
+                                width = if (isSelected) 0.dp else 2.dp,
+                                color = if (isSelected) Color.Transparent else Color(0xFF8E8E93),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .background(
+                                if (isSelected) Color(0xFFE60000) else Color.Transparent,
+                                shape = RoundedCornerShape(8.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isSelected) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Selectionne",
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
                     Text(
                         text = style.displayName,
                         color = Color.White,
-                        fontSize = 14.sp,
+                        fontSize = 15.sp,
                         modifier = Modifier.weight(1f)
                     )
+
                     if (isDownloaded) {
                         Icon(
                             imageVector = Icons.Filled.CheckCircle,
-                            contentDescription = "T\u00e9l\u00e9charg\u00e9",
+                            contentDescription = null,
                             tint = Color(0xFF4CAF50),
                             modifier = Modifier.size(18.dp)
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
                     }
                 }
-            }
 
-            // Satellite (not downloadable)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Checkbox(
-                    checked = false,
-                    onCheckedChange = null,
-                    enabled = false,
-                    colors = CheckboxDefaults.colors(
-                        disabledUncheckedColor = Color(0xFF5A5A5E)
-                    )
-                )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Vue satellite",
-                        color = Color(0xFF5A5A5E),
-                        fontSize = 14.sp
-                    )
-                    Text(
-                        text = "Non disponible hors ligne",
-                        color = Color(0xFF5A5A5E),
-                        fontSize = 11.sp
+                if (index < styles.size - 1) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 56.dp)
+                            .height(0.5.dp)
+                            .background(Color(0xFF3A3A3C))
                     )
                 }
             }
@@ -472,22 +502,6 @@ private fun OfflineInfoCard() {
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Filled.Info,
-                    contentDescription = null,
-                    tint = Color(0xFF3B82F6),
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Fonctionnalit\u00e9s hors ligne",
-                    color = Color.White,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-            Spacer(modifier = Modifier.height(12.dp))
             FeatureRow("Carte", true)
             FeatureRow("Lignes et arr\u00eats", true)
             FeatureRow("Horaires", true)
