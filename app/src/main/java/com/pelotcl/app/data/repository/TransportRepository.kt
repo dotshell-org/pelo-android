@@ -483,14 +483,19 @@ class TransportRepository(context: Context? = null) {
      * This allows loading bus lines only on demand
      * Uses cache to improve performance
      */
-    suspend fun getLineByName(lineName: String): Result<Feature?> {
+    suspend fun getLineByName(lineName: String, isOffline: Boolean = false): Result<Feature?> {
+        // Fast path: when offline, go directly to caches and offline storage (no network retries)
+        if (isOffline) {
+            return getLineByNameOffline(lineName)
+        }
+
         return try {
             // Try to load from cache
             val cachedMetro = cache?.getMetroLines()
             val cachedTram = cache?.getTramLines()
-            
+
             val priorityFeatures: List<Feature>
-            
+
             if (cachedMetro != null && cachedTram != null) {
                 // Cache hit: use cached data
                 priorityFeatures = cachedMetro + cachedTram
@@ -499,7 +504,7 @@ class TransportRepository(context: Context? = null) {
                 val metroFuniculaire = api.getTransportLines()
                 val trams = api.getTramLines()
                 priorityFeatures = metroFuniculaire.features + trams.features
-                
+
                 // Save to cache
                 cache?.saveMetroLines(metroFuniculaire.features)
                 cache?.saveTramLines(trams.features)
@@ -526,7 +531,7 @@ class TransportRepository(context: Context? = null) {
             if (line != null) {
                 return Result.success(line)
             }
-            
+
             // Otherwise, search in buses using CQL filter (downloads only the requested line)
             val cachedBus = cache?.getBusLines()
             val busLine = if (cachedBus != null) {
@@ -552,29 +557,51 @@ class TransportRepository(context: Context? = null) {
                     }
                 }
             }
-            
+
             Result.success(busLine)
         } catch (e: Exception) {
             // Fallback to offline repository (per-line file for bus, or non-bus lines)
-            try {
-                // Try bus line first (individual small file, no OOM risk)
-                val offlineBus = offlineRepo?.loadBusLineByName(lineName)
-                val offlineLine = offlineBus?.firstOrNull {
-                    it.properties.ligne.equals(lineName, ignoreCase = true)
-                }
-                if (offlineLine != null) {
-                    android.util.Log.d("TransportRepository", "Found $lineName in offline bus data")
-                    return Result.success(offlineLine)
-                }
-                // Try non-bus offline lines (metro/tram/navigone/trambus/rx)
-                val allOffline = offlineRepo?.loadAllLines()
-                val offlineAny = allOffline?.firstOrNull {
-                    it.properties.ligne.equals(lineName, ignoreCase = true)
-                }
-                Result.success(offlineAny)
-            } catch (offlineEx: Exception) {
-                Result.failure(e)
+            getLineByNameOffline(lineName)
+        }
+    }
+
+    /**
+     * Loads a line exclusively from local caches and offline storage (no network calls).
+     * Used when the device is known to be offline to avoid retry delays.
+     */
+    private suspend fun getLineByNameOffline(lineName: String): Result<Feature?> {
+        return try {
+            // Check stale TransportCache first (metro/tram/navigone may still be in memory/disk)
+            val cachedMetro = cache?.getMetroLinesStale()
+            val cachedTram = cache?.getTramLinesStale()
+            val cachedNavigone = cache?.getNavigoneLinesStale()
+            val cachedTrambus = cache?.getTrambusLinesStale()
+
+            val cachedLine = listOfNotNull(cachedMetro, cachedTram, cachedNavigone, cachedTrambus)
+                .flatten()
+                .firstOrNull { it.properties.ligne.equals(lineName, ignoreCase = true) }
+            if (cachedLine != null) {
+                return Result.success(cachedLine)
             }
+
+            // Try bus from offline per-line file
+            val offlineBus = offlineRepo?.loadBusLineByName(lineName)
+            val offlineBusLine = offlineBus?.firstOrNull {
+                it.properties.ligne.equals(lineName, ignoreCase = true)
+            }
+            if (offlineBusLine != null) {
+                return Result.success(offlineBusLine)
+            }
+
+            // Try non-bus offline lines (trambus/rx/etc.)
+            val allOffline = offlineRepo?.loadAllLines()
+            val offlineAny = allOffline?.firstOrNull {
+                it.properties.ligne.equals(lineName, ignoreCase = true)
+            }
+            Result.success(offlineAny)
+        } catch (e: Exception) {
+            android.util.Log.e("TransportRepository", "Offline getLineByName failed for $lineName", e)
+            Result.failure(e)
         }
     }
     

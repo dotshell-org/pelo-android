@@ -962,8 +962,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 return@launch // Line already present, do nothing
             }
 
-            // Load the line from the API
-            repository.getLineByName(lineName)
+            // Load the line from the API (or offline storage if offline)
+            repository.getLineByName(lineName, isOffline = _isOffline.value)
                 .onSuccess { feature ->
                     if (feature != null) {
                         // Add the new line to existing lines
