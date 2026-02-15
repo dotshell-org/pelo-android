@@ -124,16 +124,50 @@ class OfflineRepository(private val context: Context) {
     /**
      * Loads a single bus line by name from offline storage.
      * Only reads one small file instead of all 10k features.
+     * Falls back to legacy single-file format if per-line file not found.
      */
     suspend fun loadBusLineByName(lineName: String): List<Feature>? = withContext(Dispatchers.IO) {
         try {
+            // Try per-line file first (new format)
             val safeFileName = lineName.uppercase().replace(Regex("[^A-Za-z0-9_-]"), "_") + ".json.gz"
             val file = File(busDir, safeFileName)
             if (file.exists()) {
                 val jsonString = GZIPInputStream(FileInputStream(file).buffered()).use { gzip ->
                     gzip.bufferedReader(Charsets.UTF_8).readText()
                 }
-                json.decodeFromString<List<Feature>>(jsonString)
+                return@withContext json.decodeFromString<List<Feature>>(jsonString)
+            }
+
+            // Fallback: migrate legacy single-file format if it exists
+            val legacyFile = File(offlineDir, FILE_BUS_LINES)
+            if (legacyFile.exists()) {
+                Log.d(TAG, "Migrating legacy bus_lines.json.gz to per-line format...")
+                try {
+                    val allBusJson = GZIPInputStream(FileInputStream(legacyFile).buffered()).use { gzip ->
+                        gzip.bufferedReader(Charsets.UTF_8).readText()
+                    }
+                    val allBus = json.decodeFromString<List<Feature>>(allBusJson)
+                    // Save as per-line files
+                    val grouped = allBus.groupBy { it.properties.ligne.uppercase() }
+                    for ((name, features) in grouped) {
+                        val safeName = name.replace(Regex("[^A-Za-z0-9_-]"), "_") + ".json.gz"
+                        val perLineFile = File(busDir, safeName)
+                        val perLineJson = json.encodeToString(features)
+                        GZIPOutputStream(FileOutputStream(perLineFile).buffered()).use { gzip ->
+                            gzip.write(perLineJson.toByteArray(Charsets.UTF_8))
+                        }
+                    }
+                    // Delete legacy file after successful migration
+                    legacyFile.delete()
+                    Log.d(TAG, "Migration complete: ${grouped.size} bus line files created")
+
+                    // Return the requested line
+                    return@withContext grouped[lineName.uppercase()]
+                } catch (oom: OutOfMemoryError) {
+                    Log.e(TAG, "OOM during legacy migration, deleting legacy file", oom)
+                    legacyFile.delete()
+                    null
+                }
             } else null
         } catch (e: Exception) {
             Log.e(TAG, "Error reading bus line $lineName", e)
