@@ -103,6 +103,7 @@ import com.pelotcl.app.ui.theme.Gray700
 import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import androidx.compose.runtime.Immutable
+import com.pelotcl.app.ui.theme.Gray500
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LineColorHelper
 import com.pelotcl.app.utils.ListItemRecompositionCounter
@@ -792,29 +793,29 @@ fun ItineraryScreen(
                             }
                         }
 
-                        // Journey cards with stable keys for efficient recomposition
+                        // Compact journey cards - stacked vertically
                         itemsIndexed(
                             items = journeys,
                             key = { _, journey -> "${journey.departureTime}_${journey.arrivalTime}" },
-                            contentType = { _, _ -> "journey_card" }
+                            contentType = { _, _ -> "compact_journey_card" }
                         ) { index, journey ->
-                            Column(
+                            CompactJourneyCard(
+                                journey = journey,
+                                onClick = {
+                                    selectedJourney = journey
+                                },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 16.dp)
-                            ) {
-                                JourneyCard(
-                                    journey = journey,
-                                    onClick = {
-                                        selectedJourney = journey
-                                    }
+                                    .padding(bottom = if (index < journeys.size - 1) 12.dp else 0.dp)
+                            )
+                            if (index != journeys.size - 1)
+                            {
+                                HorizontalDivider(
+                                    modifier = Modifier
+                                        .padding(horizontal = 16.dp)
+                                        .background(Gray500)
                                 )
-                                if (index < journeys.size - 1) {
-                                    HorizontalDivider(
-                                        color = Color.White.copy(alpha = 0.2f),
-                                        modifier = Modifier.padding(vertical = 32.dp)
-                                    )
-                                }
                             }
                         }
 
@@ -1030,84 +1031,137 @@ private fun SmallLineBadge(lineName: String) {
     }
 }
 
+/**
+ * Compact journey card showing key information in a condensed format
+ * Similar to the bottom sheet header in map view
+ */
 @Composable
-private fun JourneyCard(
+private fun CompactJourneyCard(
     journey: JourneyResult,
-    onClick: () -> Unit = {}
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    // Debug: measure the recompositions of this card
-    ListItemRecompositionCounter("JourneyList", journey.departureTime)
-
-    // Memoize formatted duration to avoid recalculation on recomposition
-    val formattedDuration by remember(journey.durationMinutes) {
-        derivedStateOf {
-            if (journey.durationMinutes < 60) {
-                "${journey.durationMinutes} min"
-            } else {
-                "${journey.durationMinutes / 60}h${(journey.durationMinutes % 60).toString().padStart(2, '0')}min"
-            }
+    val context = LocalContext.current
+    
+    // Memoize formatted duration
+    val formattedDuration = remember(journey.durationMinutes) {
+        if (journey.durationMinutes < 60) {
+            "${journey.durationMinutes} min"
+        } else {
+            "${journey.durationMinutes / 60}h${(journey.durationMinutes % 60).toString().padStart(2, '0')}"
         }
     }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable { onClick() }
-            .padding(vertical = 8.dp)
+    
+    Card(
+        modifier = modifier
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = Color.Transparent
+        )
     ) {
-        // Header with times and duration
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = journey.formatDepartureTime(),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                Text(
-                    text = " → ",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Color.White.copy(alpha = 0.7f)
-                )
-                Text(
-                    text = journey.formatArrivalTime(),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .background(
-                        color = Color.White.copy(alpha = 0.15f),
-                        shape = RoundedCornerShape(8.dp)
-                    )
+            // Header with times and duration
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = formattedDuration,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = journey.formatDepartureTime(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = " → ",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                    Text(
+                        text = journey.formatArrivalTime(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .background(
+                            color = Color.White.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                ) {
+                    Text(
+                        text = formattedDuration,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
+                }
             }
-        }
 
-        Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-        // Journey legs
-        journey.legs.forEachIndexed { index, leg ->
-            key("${leg.fromStopId}_${leg.departureTime}") {
-                JourneyLegItem(
-                    leg = leg,
-                    isFirst = index == 0,
-                    isLast = index == journey.legs.size - 1
-                )
+            // Horizontal journey summary with line icons and chevrons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Start,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                journey.legs.forEachIndexed { index, leg ->
+                    if (leg.isWalking) {
+                        // Walking icon
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.DirectionsWalk,
+                            contentDescription = null,
+                            tint = Gray700,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    } else {
+                        // Transport line icon
+                        val resourceId = BusIconHelper.getResourceIdForLine(context, leg.routeName ?: "")
+
+                        if (resourceId != 0) {
+                            Image(
+                                painter = painterResource(id = resourceId),
+                                contentDescription = null,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(LineColorHelper.getColorForLineString(leg.routeName ?: ""))),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = (leg.routeName ?: "?").take(3),
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+
+                    // Chevron between legs
+                    if (index < journey.legs.size - 1) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.5f),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
             }
         }
     }

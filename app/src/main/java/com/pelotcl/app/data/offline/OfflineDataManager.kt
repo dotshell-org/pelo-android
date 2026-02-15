@@ -58,6 +58,7 @@ class OfflineDataManager(private val context: Context) {
     private val api = RetrofitInstance.api
     private val offlineRepository = OfflineRepository.getInstance(context)
     private val offlineMapManager = OfflineMapManager.getInstance(context)
+    private val schedulesRepository = com.pelotcl.app.data.gtfs.SchedulesRepository.getInstance(context)
 
     private val _downloadState = MutableStateFlow<OfflineDownloadState>(OfflineDownloadState.Idle)
     val downloadState: StateFlow<OfflineDownloadState> = _downloadState.asStateFlow()
@@ -123,6 +124,12 @@ class OfflineDataManager(private val context: Context) {
                 _downloadState.value = OfflineDownloadState.Downloading(cumulativeProgress, "Lignes de bus...")
                 try {
                     offlineRepository.clearBusLines()
+                    val busLikeNames = schedulesRepository.getAllBusLikeRouteNames()
+                    val busNameBySafe = busLikeNames.associateBy {
+                        it.uppercase().replace(Regex("[^A-Za-z0-9_-]"), "_")
+                    }
+                    val busLikeUpperSet = busLikeNames.map { it.uppercase() }.toSet()
+                    Log.d(TAG, "Bus GTFS filter: ${busLikeUpperSet.size} route names")
                     val pageSize = 500
                     var startIndex = 0
                     var totalDownloaded = 0
@@ -137,26 +144,66 @@ class OfflineDataManager(private val context: Context) {
                             api.getBusLines(startIndex = startIndex, count = pageSize)
                         }
                         val features = page.features
+                        val busOnly = if (busLikeUpperSet.isNotEmpty()) {
+                            features.filter { busLikeUpperSet.contains(it.properties.ligne.uppercase()) }
+                        } else {
+                            features
+                        }
                         Log.d(TAG, "Bus page response: ${features.size} features, totalFeatures=${page.totalFeatures}, numberMatched=${page.numberMatched}, numberReturned=${page.numberReturned}")
-                        if (features.isNotEmpty()) {
-                            offlineRepository.saveBusLinesPage(features)
-                            totalDownloaded += features.size
+                        if (busOnly.isNotEmpty()) {
+                            offlineRepository.saveBusLinesPage(busOnly)
+                            totalDownloaded += busOnly.size
                             startIndex += features.size
-                            Log.d(TAG, "Bus page saved: got ${features.size} features (total: $totalDownloaded)")
+                            Log.d(TAG, "Bus page saved: got ${busOnly.size} features (total: $totalDownloaded)")
                             _downloadState.value = OfflineDownloadState.Downloading(
                                 cumulativeProgress + WEIGHT_BUS * (totalDownloaded.toFloat() / 10000f).coerceAtMost(0.95f),
                                 "Lignes de bus ($totalDownloaded)..."
                             )
                         } else {
-                            Log.w(TAG, "Bus page returned EMPTY features at startIndex=$startIndex")
+                            Log.w(TAG, "Bus page returned EMPTY features (after GTFS filter) at startIndex=$startIndex")
+                            startIndex += features.size
                         }
                         // Stop if we got fewer features than requested (last page)
                         hasMore = features.size >= pageSize
                         Log.d(TAG, "hasMore=$hasMore (features.size=${features.size} >= pageSize=$pageSize)")
                     }
                     // Log final bus directory state
-                    val busFiles = offlineRepository.getAvailableBusLineNames()
+                    var busFiles = offlineRepository.getAvailableBusLineNames()
                     Log.d(TAG, "Bus download complete: $totalDownloaded features total, ${busFiles.size} line files on disk: ${busFiles.take(10)}")
+
+                    // Fallback: if bulk download missed lines, fetch missing lines individually by name
+                    if (busNameBySafe.isNotEmpty()) {
+                        val busFilesSafe = busFiles.map { it.uppercase() }.toSet()
+                        val missingSafe = busNameBySafe.keys - busFilesSafe
+                        if (missingSafe.isNotEmpty()) {
+                            Log.w(TAG, "Bulk bus download missing ${missingSafe.size} lines, starting per-line fallback")
+                            var done = 0
+                            val total = missingSafe.size
+                            for (safeName in missingSafe) {
+                                val lineName = busNameBySafe[safeName] ?: continue
+                                try {
+                                    val cqlFilter = "ligne='${lineName.replace("'", "''")}'"
+                                    val page = withRetry(maxRetries = 2, initialDelayMs = 1000) {
+                                        api.getBusLineByName(cqlFilter = cqlFilter, count = 200)
+                                    }
+                                    if (page.features.isNotEmpty()) {
+                                        offlineRepository.saveBusLinesPage(page.features)
+                                    }
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "Fallback bus fetch failed for $lineName: ${e.message}")
+                                }
+                                done++
+                                if (done % 5 == 0 || done == total) {
+                                    _downloadState.value = OfflineDownloadState.Downloading(
+                                        cumulativeProgress + WEIGHT_BUS * (done.toFloat() / total).coerceAtMost(0.95f),
+                                        "Lignes de bus (${done}/${total})..."
+                                    )
+                                }
+                            }
+                            busFiles = offlineRepository.getAvailableBusLineNames()
+                            Log.d(TAG, "Bus fallback complete: ${busFiles.size} line files on disk")
+                        }
+                    }
                 } catch (e: OutOfMemoryError) {
                     Log.e(TAG, "OutOfMemoryError downloading bus lines", e)
                     _downloadState.value = OfflineDownloadState.Error("Mémoire insuffisante pour télécharger les lignes de bus")

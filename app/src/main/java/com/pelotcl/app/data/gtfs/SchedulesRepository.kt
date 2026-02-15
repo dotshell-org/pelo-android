@@ -160,7 +160,38 @@ class SchedulesRepository(context: Context) {
         
         return results
     }
-    
+
+    /**
+     * Returns all distinct route names from the GTFS directions table.
+     */
+    fun getAllRouteNames(): List<String> {
+        val results = mutableListOf<String>()
+        try {
+            val db = dbHelper.readableDatabase
+            val cursor = db.rawQuery(
+                "SELECT DISTINCT route_name FROM directions ORDER BY route_name",
+                null
+            )
+            while (cursor.moveToNext()) {
+                val name = cursor.getString(0)
+                if (!name.isNullOrBlank()) {
+                    results.add(name)
+                }
+            }
+            cursor.close()
+        } catch (e: Exception) {
+            Log.e("SchedulesRepository", "Error loading route names: ${e.message}")
+        }
+        return results
+    }
+
+    /**
+     * Returns only bus-like route names (bus/chrono/PL/etc.).
+     */
+    fun getAllBusLikeRouteNames(): List<String> {
+        return getAllRouteNames().filter { isBusLikeLine(it) }
+    }
+
     /**
      * Get the category name for a line (Metro, Tram, Bus, etc.)
      */
@@ -181,6 +212,19 @@ class SchedulesRepository(context: Context) {
             upperLine.startsWith("N") && !upperLine.all { it.isDigit() } -> "Navette"
             upperLine.startsWith("JD") -> "Junior Direct"
             else -> "Bus"
+        }
+    }
+
+    private fun isBusLikeLine(lineName: String): Boolean {
+        val upperLine = lineName.uppercase()
+        return when {
+            upperLine in setOf("A", "B", "C", "D") -> false
+            upperLine == "F1" || upperLine == "F2" -> false
+            upperLine.startsWith("T") && upperLine.length == 2 -> false
+            upperLine.startsWith("TB") -> false
+            upperLine == "RX" || upperLine.contains("RHON") -> false
+            upperLine.startsWith("NAV") || upperLine.startsWith("NAVI") -> false
+            else -> true
         }
     }
 
