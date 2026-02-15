@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,7 +60,13 @@ fun MapStyleScreen(
 ) {
     val context = LocalContext.current
     val mapStyleRepository = remember { MapStyleRepository(context) }
-    var selectedStyle by remember { mutableStateOf(mapStyleRepository.getSelectedStyle()) }
+    var selectedStyle by remember {
+        mutableStateOf(mapStyleRepository.getEffectiveStyle(isOffline, downloadedMapStyles))
+    }
+
+    LaunchedEffect(isOffline, downloadedMapStyles) {
+        selectedStyle = mapStyleRepository.getEffectiveStyle(isOffline, downloadedMapStyles)
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),

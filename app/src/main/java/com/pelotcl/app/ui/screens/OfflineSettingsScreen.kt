@@ -1,57 +1,39 @@
 package com.pelotcl.app.ui.screens
 
+import android.content.Context
 import android.text.format.Formatter
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Euro
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Map
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.lerp
+import kotlin.math.PI
+import kotlin.math.sin
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -76,7 +58,7 @@ fun OfflineSettingsScreen(
     val context = LocalContext.current
     val offlineDataInfo by viewModel.offlineDataInfo.collectAsState()
     val downloadState by viewModel.offlineDataManager.downloadState.collectAsState()
-    var showDeleteDialog by remember { mutableStateOf(false) }
+    val isOffline by viewModel.isOffline.collectAsState()
     val offlineRepository = remember { OfflineRepository.getInstance(context) }
     var selectedMapStyles by remember { mutableStateOf(offlineRepository.getSelectedMapStyles()) }
 
@@ -111,9 +93,9 @@ fun OfflineSettingsScreen(
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = if (offlineDataInfo.isAvailable)
-                    "Les donn\u00e9es hors ligne sont disponibles"
+                    "Les données hors ligne sont disponibles"
                 else
-                    "T\u00e9l\u00e9chargez les donn\u00e9es pour utiliser l'appli sans connexion",
+                    "Téléchargez les données pour utiliser l'appli sans connexion",
                 color = Color.Gray,
                 fontSize = 14.sp,
                 textAlign = TextAlign.Center
@@ -127,37 +109,17 @@ fun OfflineSettingsScreen(
                 Spacer(modifier = Modifier.height(30.dp))
             }
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp, horizontal = 4.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Map,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Fonds de carte",
-                    color = Color.White,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-            // Map style selection
+            CategoryHeader(Icons.Default.Map, "Fonds de carte")
+
             MapStyleSelectionCard(
                 selectedStyles = selectedMapStyles,
                 downloadedStyles = offlineDataInfo.downloadedMapStyles,
                 isDownloading = downloadState is OfflineDownloadState.Downloading,
+                isEnabled = !isOffline,
                 onStyleToggled = { styleKey, checked ->
-                    val newSet = if (checked) {
-                        selectedMapStyles + styleKey
-                    } else {
-                        if (selectedMapStyles.size > 1) selectedMapStyles - styleKey else selectedMapStyles
-                    }
+                    val newSet = if (checked) selectedMapStyles + styleKey
+                    else if (selectedMapStyles.size > 1) selectedMapStyles - styleKey
+                    else selectedMapStyles
                     selectedMapStyles = newSet
                     offlineRepository.setSelectedMapStyles(newSet)
                 }
@@ -165,238 +127,100 @@ fun OfflineSettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Download / Update button
+            // Download Section
             when (val state = downloadState) {
-                is OfflineDownloadState.Idle, is OfflineDownloadState.Complete, is OfflineDownloadState.Error -> {
+                is OfflineDownloadState.Downloading -> DownloadProgressCard(state)
+                else -> {
                     Button(
-                        onClick = {
-                            viewModel.startOfflineDownload()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isOffline,
+                        onClick = { viewModel.startOfflineDownload() },
+                        modifier = Modifier.fillMaxWidth().alpha(if (isOffline) 0.5f else 1f),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFE60000)
+                            containerColor = Color(0xFFE60000),
+                            disabledContainerColor = Color(0xFF3A3A3C)
                         ),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.CloudDownload,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
+                        Icon(Icons.Filled.CloudDownload, null, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (offlineDataInfo.isAvailable) "Mettre \u00e0 jour" else "T\u00e9l\u00e9charger les donn\u00e9es",
+                            text = if (offlineDataInfo.isAvailable) "Mettre à jour" else "Télécharger les données",
                             fontSize = 16.sp,
-                            color = Color.White,
                             modifier = Modifier.padding(vertical = 4.dp)
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(20.dp))
-
                     if (state is OfflineDownloadState.Error) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = state.message,
-                            color = Color(0xFFEF4444),
-                            fontSize = 13.sp,
-                            textAlign = TextAlign.Center
-                        )
+                        Text(state.message, color = Color(0xFFEF4444), fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp))
                     }
-                }
-                is OfflineDownloadState.Downloading -> {
-                    DownloadProgressCard(state)
-                }
-            }
-
-            // Delete button
-            if (offlineDataInfo.isAvailable && downloadState !is OfflineDownloadState.Downloading) {
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedButton(
-                    onClick = { showDeleteDialog = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = Color(0xFFEF4444)
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Delete,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Supprimer les donn\u00e9es hors ligne",
-                        fontSize = 16.sp,
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    )
                 }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp, horizontal = 4.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Info,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Fonctionnalités hors ligne",
-                    color = Color.White,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-            // Info card
+            CategoryHeader(Icons.Default.Info, "Fonctionnalités hors ligne")
             OfflineInfoCard()
 
             Spacer(modifier = Modifier.height(100.dp))
         }
 
-        // Back button
         IconButton(
             onClick = onBackClick,
-            modifier = Modifier
-                .statusBarsPadding()
-                .padding(start = 4.dp, top = 8.dp)
-                .align(Alignment.TopStart)
+            modifier = Modifier.statusBarsPadding().padding(start = 4.dp, top = 8.dp).align(Alignment.TopStart)
         ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Retour",
-                tint = Color.White
-            )
-        }
-    }
-
-    // Delete confirmation dialog
-    if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Supprimer les donn\u00e9es hors ligne ?") },
-            text = {
-                Text("Les donn\u00e9es t\u00e9l\u00e9charg\u00e9es seront supprim\u00e9es. Vous devrez les t\u00e9l\u00e9charger \u00e0 nouveau pour utiliser le mode hors ligne.")
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDeleteDialog = false
-                        viewModel.deleteOfflineData()
-                    }
-                ) {
-                    Text("Supprimer", color = Color(0xFFEF4444))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Annuler")
-                }
-            }
-        )
-    }
-}
-
-@Composable
-private fun OfflineStatusCard(info: OfflineDataInfo, context: android.content.Context) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1C1C1E)),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            StatusRow(
-                label = "Derni\u00e8re mise \u00e0 jour",
-                value = formatTimestamp(info.lastDownloadTimestamp)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            StatusRow(
-                label = "Espace utilis\u00e9",
-                value = Formatter.formatFileSize(context, info.totalSizeBytes)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            StatusRow(
-                label = "Lignes de bus",
-                value = if (info.busLinesCount > 0) "${info.busLinesCount} lignes" else "Non t\u00e9l\u00e9charg\u00e9es"
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            StatusRow(
-                label = "Fonds de carte",
-                value = if (info.downloadedMapStyles.isNotEmpty()) {
-                    info.downloadedMapStyles.size.toString()
-                } else {
-                    "Non t\u00e9l\u00e9charg\u00e9es"
-                }
-            )
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour", tint = Color.White)
         }
     }
 }
 
 @Composable
-private fun StatusRow(label: String, value: String) {
+private fun CategoryHeader(icon: ImageVector, title: String) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp, horizontal = 4.dp)
     ) {
-        Text(text = label, color = Color.Gray, fontSize = 14.sp)
-        Text(text = value, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Icon(icon, null, tint = Color.White, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DownloadProgressCard(state: OfflineDownloadState.Downloading) {
+    val animatedProgress by animateFloatAsState(
+        targetValue = state.progress.coerceIn(0f, 1f),
+        animationSpec = tween(durationMillis = 600),
+        label = "progress"
+    )
+
+    val progressColor = lerp(Color(0xFFEF4444), Color(0xFF4CAF50), animatedProgress)
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF1C1C1E)),
         shape = RoundedCornerShape(12.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    color = Color(0xFFEF4444),
-                    strokeWidth = 2.dp
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = state.stepDescription,
-                    color = Color.White,
-                    fontSize = 14.sp
-                )
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            LinearProgressIndicator(
-                progress = { state.progress },
+        Column(modifier = Modifier.padding(16.dp)) {
+            Spacer(modifier = Modifier.height(7.dp))
+
+            Text(state.stepDescription,
+                color = Color.White,
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            WavyLinearProgressIndicator(
+                progress = animatedProgress,
                 modifier = Modifier.fillMaxWidth(),
-                color = Color(0xFFEF4444),
-                trackColor = Color(0xFF3A3A3C),
+                indicatorColor = progressColor,
+                trackColor = Color(0xFF3A3A3C)
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "${(state.progress * 100).toInt()}%",
-                color = Color.Gray,
-                fontSize = 13.sp
-            )
+
+            Spacer(modifier = Modifier.height(10.dp))
         }
     }
 }
@@ -406,13 +230,12 @@ private fun MapStyleSelectionCard(
     selectedStyles: Set<String>,
     downloadedStyles: Set<String>,
     isDownloading: Boolean,
+    isEnabled: Boolean,
     onStyleToggled: (String, Boolean) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1C1C1E)
-        ),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1C1C1E)),
         shape = RoundedCornerShape(12.dp)
     ) {
         Column {
@@ -420,73 +243,65 @@ private fun MapStyleSelectionCard(
             styles.forEachIndexed { index, style ->
                 val isSelected = style.key in selectedStyles
                 val isDownloaded = style.key in downloadedStyles
+                val isInteractive = isEnabled && !isDownloading
 
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(enabled = !isDownloading) {
-                            onStyleToggled(style.key, !isSelected)
-                        }
+                        .clickable(enabled = isInteractive) { onStyleToggled(style.key, !isSelected) }
                         .padding(vertical = 16.dp, horizontal = 12.dp)
-                        .alpha(if (isDownloading) 0.5f else 1f),
+                        .alpha(if (isInteractive) 1f else 0.5f),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Case carrée custom
                     Box(
                         modifier = Modifier
                             .size(24.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .border(
-                                width = if (isSelected) 0.dp else 2.dp,
-                                color = if (isSelected) Color.Transparent else Color(0xFF8E8E93),
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                            .background(
-                                if (isSelected) Color(0xFFE60000) else Color.Transparent,
-                                shape = RoundedCornerShape(8.dp)
-                            ),
+                            .clip(RoundedCornerShape(6.dp))
+                            .border(2.dp, if (isSelected) Color.Transparent else Color(0xFF8E8E93), RoundedCornerShape(6.dp))
+                            .background(if (isSelected) Color(0xFFE60000) else Color.Transparent),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (isSelected) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = "Selectionne",
-                                tint = Color.White,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
+                        if (isSelected) Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(16.dp))
                     }
 
                     Spacer(modifier = Modifier.width(16.dp))
-
-                    Text(
-                        text = style.displayName,
-                        color = Color.White,
-                        fontSize = 15.sp,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Text(style.displayName, color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
 
                     if (isDownloaded) {
-                        Icon(
-                            imageVector = Icons.Filled.CheckCircle,
-                            contentDescription = null,
-                            tint = Color(0xFF4CAF50),
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(Icons.Filled.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(18.dp))
                     }
                 }
-
                 if (index < styles.size - 1) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 56.dp)
-                            .height(0.5.dp)
-                            .background(Color(0xFF3A3A3C))
-                    )
+                    Box(modifier = Modifier.fillMaxWidth().padding(start = 56.dp).height(0.5.dp).background(Color(0xFF3A3A3C)))
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun OfflineStatusCard(info: OfflineDataInfo, context: Context) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1C1C1E)),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            StatusRow("Dernière mise à jour", formatTimestamp(info.lastDownloadTimestamp))
+            Spacer(modifier = Modifier.height(8.dp))
+            StatusRow("Espace utilisé", Formatter.formatFileSize(context, info.totalSizeBytes))
+            Spacer(modifier = Modifier.height(8.dp))
+            StatusRow("Lignes de bus", if (info.busLinesCount > 0) "${info.busLinesCount} lignes" else "Aucune")
+        }
+    }
+}
+
+@Composable
+private fun StatusRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = Color.Gray, fontSize = 14.sp)
+        Text(value, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -497,47 +312,103 @@ private fun OfflineInfoCard() {
         colors = CardDefaults.cardColors(containerColor = Color(0xFF1C1C1E)),
         shape = RoundedCornerShape(12.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            FeatureRow("Carte", true)
-            FeatureRow("Lignes et arr\u00eats", true)
-            FeatureRow("Horaires", true)
-            FeatureRow("Recherche", true)
-            FeatureRow("Calcul d'itin\u00e9raire", true)
-            FeatureRow("Alertes trafic (derni\u00e8res connues)", true)
-            FeatureRow("Suivi v\u00e9hicules en temps r\u00e9el", false)
+        Column(modifier = Modifier.padding(16.dp)) {
+            listOf("Carte", "Lignes et arrêts", "Horaires", "Recherche", "Calcul d'itinéraire").forEach {
+                FeatureRow(it, true)
+            }
+            FeatureRow("Suivi temps réel", false)
         }
     }
 }
 
 @Composable
 private fun FeatureRow(feature: String, available: Boolean) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 3.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
-            text = if (available) "\u2713" else "\u2717",
+            text = if (available) "✓" else "✕",
             color = if (available) Color(0xFF4CAF50) else Color(0xFFEF4444),
-            fontSize = 14.sp,
             fontWeight = FontWeight.Bold
         )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = feature,
-            color = if (available) Color.White else Color.Gray,
-            fontSize = 14.sp
-        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(feature, color = if (available) Color.White else Color.Gray, fontSize = 14.sp)
     }
 }
 
 private fun formatTimestamp(timestamp: Long): String {
     if (timestamp == 0L) return "Jamais"
-    val sdf = SimpleDateFormat("d MMM yyyy '\u00e0' HH:mm", Locale.FRANCE)
-    return sdf.format(Date(timestamp))
+    return SimpleDateFormat("d MMM yyyy 'à' HH:mm", Locale.FRANCE).format(Date(timestamp))
+}
+
+@Composable
+private fun WavyLinearProgressIndicator(
+    progress: Float,
+    modifier: Modifier = Modifier,
+    indicatorColor: Color,
+    trackColor: Color,
+    barHeight: androidx.compose.ui.unit.Dp = 7.dp,
+    waveAmplitude: androidx.compose.ui.unit.Dp = 3.dp,
+    wavelength: androidx.compose.ui.unit.Dp = 40.dp,
+    waveSpeedMillis: Int = 1000,
+    gapWidth: androidx.compose.ui.unit.Dp = 5.dp
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "wave")
+    val phase by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = waveSpeedMillis, easing = LinearEasing)
+        ),
+        label = "wavePhase"
+    )
+
+    Canvas(modifier = modifier.height(barHeight + waveAmplitude * 2)) {
+        val width = size.width
+        val height = size.height
+        val centerY = height / 2f
+        val halfHeight = barHeight.toPx() / 2f
+
+        val progressWidth = (width * progress.coerceIn(0f, 1f))
+        val gapPx = gapWidth.toPx()
+
+        val rigidStart = progressWidth + gapPx
+
+        if (rigidStart < width) {
+            drawRoundRect(
+                color = trackColor,
+                topLeft = Offset(rigidStart, centerY - halfHeight),
+                size = Size(width - rigidStart, barHeight.toPx()),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(halfHeight, halfHeight)
+            )
+        }
+
+        if (progressWidth > 0f) {
+            val ampPx = waveAmplitude.toPx()
+            val lenPx = wavelength.toPx()
+            val phasePx = phase * lenPx
+
+            val path = Path()
+
+            var x = 0f
+            path.moveTo(0f, centerY - halfHeight + sin((phasePx) / lenPx * 2 * PI).toFloat() * ampPx)
+
+            val step = 5f
+            while (x <= progressWidth) {
+                val y = centerY - halfHeight + sin((x + phasePx) / lenPx * 2 * PI).toFloat() * ampPx
+                path.lineTo(x, y)
+                x += step
+            }
+
+            path.lineTo(progressWidth, centerY + halfHeight + sin((progressWidth + phasePx) / lenPx * 2 * PI).toFloat() * ampPx)
+
+            x = progressWidth
+            while (x >= 0f) {
+                val y = centerY + halfHeight + sin((x + phasePx) / lenPx * 2 * PI).toFloat() * ampPx
+                path.lineTo(x, y)
+                x -= step
+            }
+
+            path.close()
+            drawPath(path, indicatorColor)
+        }
+    }
 }

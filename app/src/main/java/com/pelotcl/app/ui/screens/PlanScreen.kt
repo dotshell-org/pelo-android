@@ -1165,33 +1165,6 @@ fun PlanScreen(
                 }
             }
 
-            // Offline banner - positioned below the search bar area
-            AnimatedVisibility(
-                visible = isOffline,
-                enter = fadeIn(),
-                exit = fadeOut(),
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 100.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .background(
-                            color = Color(0xFF374151),
-                            shape = RoundedCornerShape(20.dp)
-                        )
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Hors ligne",
-                        color = Color.White,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-
             // LIVE button - shows when a bus line is selected (not metro/tram/funicular)
             AnimatedVisibility(
                 visible = sheetContentState == SheetContentState.LINE_DETAILS
