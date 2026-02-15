@@ -86,8 +86,10 @@ class OfflineRepository(private val context: Context) {
      * Must be called ONCE before starting paginated saveBusLinesPage() calls.
      */
     fun clearBusLines() {
-        File(offlineDir, FILE_BUS_LINES).delete()
+        val legacyDeleted = File(offlineDir, FILE_BUS_LINES).delete()
+        val busFilesCount = busDir.listFiles()?.size ?: 0
         busDir.listFiles()?.forEach { it.delete() }
+        Log.d(TAG, "clearBusLines: legacyDeleted=$legacyDeleted, clearedFiles=$busFilesCount")
     }
 
     /**
@@ -96,27 +98,35 @@ class OfflineRepository(private val context: Context) {
      * Call clearBusLines() first, then saveBusLinesPage() for each page.
      */
     suspend fun saveBusLinesPage(lines: List<Feature>) = withContext(Dispatchers.IO) {
+        Log.d(TAG, "saveBusLinesPage: ${lines.size} features, busDir=${busDir.absolutePath}, exists=${busDir.exists()}")
         val grouped = lines.groupBy { it.properties.ligne.uppercase() }
+        var savedCount = 0
         for ((lineName, features) in grouped) {
             val safeFileName = lineName.replace(Regex("[^A-Za-z0-9_-]"), "_") + ".json.gz"
             val file = File(busDir, safeFileName)
-            if (file.exists()) {
-                // Append: read existing, merge, rewrite
-                try {
-                    val existingJson = GZIPInputStream(FileInputStream(file).buffered()).use { gzip ->
-                        gzip.bufferedReader(Charsets.UTF_8).readText()
+            try {
+                if (file.exists()) {
+                    // Append: read existing, merge, rewrite
+                    try {
+                        val existingJson = GZIPInputStream(FileInputStream(file).buffered()).use { gzip ->
+                            gzip.bufferedReader(Charsets.UTF_8).readText()
+                        }
+                        val existing = json.decodeFromString<List<Feature>>(existingJson)
+                        writeCompressedTo(file, existing + features)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to read existing $safeFileName, overwriting: ${e.message}")
+                        writeCompressedTo(file, features)
                     }
-                    val existing = json.decodeFromString<List<Feature>>(existingJson)
-                    writeCompressedTo(file, existing + features)
-                } catch (e: Exception) {
-                    // If read fails, just overwrite
+                } else {
                     writeCompressedTo(file, features)
                 }
-            } else {
-                writeCompressedTo(file, features)
+                savedCount++
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to save bus line file $safeFileName: ${e.message}", e)
             }
         }
-        Log.d(TAG, "Saved page: ${grouped.size} lines, ${lines.size} features")
+        val filesOnDisk = busDir.listFiles()?.size ?: 0
+        Log.d(TAG, "Saved page: ${grouped.size} lines, ${lines.size} features, saved=$savedCount, filesOnDisk=$filesOnDisk")
     }
 
     /**
@@ -267,7 +277,12 @@ class OfflineRepository(private val context: Context) {
         val mapTiles = prefs.getBoolean(KEY_MAP_TILES_DOWNLOADED, false)
         val hasData = lastDownload > 0L && offlineDir.listFiles()?.isNotEmpty() == true
 
-        val busCount = busDir.listFiles()?.count { it.name.endsWith(".json.gz") } ?: 0
+        val busFiles = busDir.listFiles()
+        val busCount = busFiles?.count { it.name.endsWith(".json.gz") } ?: 0
+        Log.d(TAG, "getOfflineDataInfo: busDir=${busDir.absolutePath}, exists=${busDir.exists()}, busFiles=${busFiles?.size ?: "null"}, busCount=$busCount, lastDownload=$lastDownload")
+        if (busCount > 0) {
+            Log.d(TAG, "Bus files sample: ${busFiles?.take(5)?.map { "${it.name} (${it.length()} bytes)" }}")
+        }
 
         return OfflineDataInfo(
             isAvailable = hasData,

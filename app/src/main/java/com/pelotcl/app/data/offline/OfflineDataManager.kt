@@ -128,26 +128,35 @@ class OfflineDataManager(private val context: Context) {
                     var totalDownloaded = 0
                     var hasMore = true
 
+                    Log.d(TAG, "Starting paginated bus download (pageSize=$pageSize)")
+
                     while (hasMore) {
                         System.gc()
+                        Log.d(TAG, "Fetching bus page: startIndex=$startIndex, count=$pageSize")
                         val page = withRetry(maxRetries = 2, initialDelayMs = 1000) {
                             api.getBusLines(startIndex = startIndex, count = pageSize)
                         }
                         val features = page.features
+                        Log.d(TAG, "Bus page response: ${features.size} features, totalFeatures=${page.totalFeatures}, numberMatched=${page.numberMatched}, numberReturned=${page.numberReturned}")
                         if (features.isNotEmpty()) {
                             offlineRepository.saveBusLinesPage(features)
                             totalDownloaded += features.size
                             startIndex += features.size
-                            Log.d(TAG, "Bus page: got ${features.size} features (total: $totalDownloaded)")
+                            Log.d(TAG, "Bus page saved: got ${features.size} features (total: $totalDownloaded)")
                             _downloadState.value = OfflineDownloadState.Downloading(
                                 cumulativeProgress + WEIGHT_BUS * (totalDownloaded.toFloat() / 10000f).coerceAtMost(0.95f),
                                 "Lignes de bus ($totalDownloaded)..."
                             )
+                        } else {
+                            Log.w(TAG, "Bus page returned EMPTY features at startIndex=$startIndex")
                         }
                         // Stop if we got fewer features than requested (last page)
                         hasMore = features.size >= pageSize
+                        Log.d(TAG, "hasMore=$hasMore (features.size=${features.size} >= pageSize=$pageSize)")
                     }
-                    Log.d(TAG, "Bus download complete: $totalDownloaded features total")
+                    // Log final bus directory state
+                    val busFiles = offlineRepository.getAvailableBusLineNames()
+                    Log.d(TAG, "Bus download complete: $totalDownloaded features total, ${busFiles.size} line files on disk: ${busFiles.take(10)}")
                 } catch (e: OutOfMemoryError) {
                     Log.e(TAG, "OutOfMemoryError downloading bus lines", e)
                     _downloadState.value = OfflineDownloadState.Error("Mémoire insuffisante pour télécharger les lignes de bus")
@@ -201,6 +210,10 @@ class OfflineDataManager(private val context: Context) {
 
                 // Mark data download as complete
                 offlineRepository.markDownloadComplete()
+                // Log offline info right after marking complete (before map tiles)
+                val infoAfterData = offlineRepository.getOfflineDataInfo()
+                Log.d(TAG, "After data download: busLinesCount=${infoAfterData.busLinesCount}, totalSize=${infoAfterData.totalSizeBytes}, isAvailable=${infoAfterData.isAvailable}")
+                _offlineDataInfo.value = infoAfterData
 
                 // Step 7: Map tiles (the longest step)
                 _downloadState.value = OfflineDownloadState.Downloading(cumulativeProgress, "Tuiles de carte (peut prendre plusieurs minutes)...")
