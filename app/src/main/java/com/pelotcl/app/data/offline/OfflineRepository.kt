@@ -98,8 +98,9 @@ class OfflineRepository(private val context: Context) {
      * Call clearBusLines() first, then saveBusLinesPage() for each page.
      */
     suspend fun saveBusLinesPage(lines: List<Feature>) = withContext(Dispatchers.IO) {
+        val safeLines = sanitizeBusFeatures(lines)
         Log.d(TAG, "saveBusLinesPage: ${lines.size} features, busDir=${busDir.absolutePath}, exists=${busDir.exists()}")
-        val grouped = lines.groupBy { it.properties.ligne.uppercase() }
+        val grouped = safeLines.groupBy { it.properties.ligne.uppercase() }
         var savedCount = 0
         for ((lineName, features) in grouped) {
             val safeFileName = lineName.replace(Regex("[^A-Za-z0-9_-]"), "_") + ".json.gz"
@@ -135,8 +136,9 @@ class OfflineRepository(private val context: Context) {
      */
     suspend fun saveBusLines(lines: List<Feature>) = withContext(Dispatchers.IO) {
         clearBusLines()
+        val safeLines = sanitizeBusFeatures(lines)
         // Group by line name and save each separately
-        val grouped = lines.groupBy { it.properties.ligne.uppercase() }
+        val grouped = safeLines.groupBy { it.properties.ligne.uppercase() }
         for ((lineName, features) in grouped) {
             val safeFileName = lineName.replace(Regex("[^A-Za-z0-9_-]"), "_") + ".json.gz"
             writeCompressedTo(File(busDir, safeFileName), features)
@@ -357,4 +359,32 @@ class OfflineRepository(private val context: Context) {
                 null
             }
         }
+
+    private fun sanitizeBusFeatures(lines: List<Feature>): List<Feature> {
+        return lines.map { feature ->
+            val props = feature.properties
+            val safeProps = props.copy(
+                codeTrace = props.codeTrace.orEmptySafe(),
+                codeLigne = props.codeLigne.orEmptySafe(),
+                typeTrace = props.typeTrace.orEmptySafe(),
+                nomTrace = props.nomTrace.orEmptySafe(),
+                origine = props.origine.orEmptySafe(),
+                destination = props.destination.orEmptySafe(),
+                nomOrigine = props.nomOrigine.orEmptySafe(),
+                nomDestination = props.nomDestination.orEmptySafe(),
+                familleTransport = props.familleTransport.orEmptySafe(),
+                dateDebut = props.dateDebut.orEmptySafe(),
+                codeTypeLigne = props.codeTypeLigne.orEmptySafe(),
+                nomTypeLigne = props.nomTypeLigne.orEmptySafe(),
+                codeTriLigne = props.codeTriLigne.orEmptySafe(),
+                nomVersion = props.nomVersion.orEmptySafe(),
+                lastUpdate = props.lastUpdate.orEmptySafe(),
+                lastUpdateFme = props.lastUpdateFme.orEmptySafe(),
+                couleur = props.couleur.orEmptySafe()
+            )
+            feature.copy(properties = safeProps)
+        }
+    }
+
+    private fun String?.orEmptySafe(): String = this ?: ""
 }
