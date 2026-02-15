@@ -29,6 +29,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -52,6 +54,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pelotcl.app.data.offline.OfflineDataInfo
 import com.pelotcl.app.data.offline.OfflineDownloadState
+import com.pelotcl.app.data.offline.OfflineRepository
+import com.pelotcl.app.data.repository.MapStyle
+import com.pelotcl.app.data.repository.MapStyleCategory
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -67,6 +72,8 @@ fun OfflineSettingsScreen(
     val offlineDataInfo by viewModel.offlineDataInfo.collectAsState()
     val downloadState by viewModel.offlineDataManager.downloadState.collectAsState()
     var showDeleteDialog by remember { mutableStateOf(false) }
+    val offlineRepository = remember { OfflineRepository.getInstance(context) }
+    var selectedMapStyles by remember { mutableStateOf(offlineRepository.getSelectedMapStyles()) }
 
     Box(
         modifier = modifier
@@ -113,6 +120,24 @@ fun OfflineSettingsScreen(
                 OfflineStatusCard(offlineDataInfo, context)
                 Spacer(modifier = Modifier.height(16.dp))
             }
+
+            // Map style selection
+            MapStyleSelectionCard(
+                selectedStyles = selectedMapStyles,
+                downloadedStyles = offlineDataInfo.downloadedMapStyles,
+                isDownloading = downloadState is OfflineDownloadState.Downloading,
+                onStyleToggled = { styleKey, checked ->
+                    val newSet = if (checked) {
+                        selectedMapStyles + styleKey
+                    } else {
+                        if (selectedMapStyles.size > 1) selectedMapStyles - styleKey else selectedMapStyles
+                    }
+                    selectedMapStyles = newSet
+                    offlineRepository.setSelectedMapStyles(newSet)
+                }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Download / Update button
             when (val state = downloadState) {
@@ -258,7 +283,13 @@ private fun OfflineStatusCard(info: OfflineDataInfo, context: android.content.Co
             Spacer(modifier = Modifier.height(8.dp))
             StatusRow(
                 label = "Tuiles de carte",
-                value = if (info.mapTilesDownloaded) "T\u00e9l\u00e9charg\u00e9es" else "Non t\u00e9l\u00e9charg\u00e9es"
+                value = if (info.downloadedMapStyles.isNotEmpty()) {
+                    info.downloadedMapStyles.mapNotNull { key ->
+                        MapStyle.entries.find { it.key == key }?.displayName
+                    }.joinToString(", ").ifEmpty { "T\u00e9l\u00e9charg\u00e9es" }
+                } else {
+                    "Non t\u00e9l\u00e9charg\u00e9es"
+                }
             )
         }
     }
@@ -316,6 +347,115 @@ private fun DownloadProgressCard(state: OfflineDownloadState.Downloading) {
                 color = Color.Gray,
                 fontSize = 13.sp
             )
+        }
+    }
+}
+
+@Composable
+private fun MapStyleSelectionCard(
+    selectedStyles: Set<String>,
+    downloadedStyles: Set<String>,
+    isDownloading: Boolean,
+    onStyleToggled: (String, Boolean) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1C1C1E)),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.CloudDownload,
+                    contentDescription = null,
+                    tint = Color(0xFF3B82F6),
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Styles de carte",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "S\u00e9lectionnez les styles \u00e0 t\u00e9l\u00e9charger",
+                color = Color.Gray,
+                fontSize = 12.sp
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Standard styles (downloadable)
+            MapStyle.getByCategory(MapStyleCategory.STANDARD).forEach { style ->
+                val isSelected = style.key in selectedStyles
+                val isDownloaded = style.key in downloadedStyles
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = isSelected,
+                        onCheckedChange = { checked -> onStyleToggled(style.key, checked) },
+                        enabled = !isDownloading,
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = Color(0xFF3B82F6),
+                            uncheckedColor = Color(0xFF8E8E93),
+                            checkmarkColor = Color.White
+                        )
+                    )
+                    Text(
+                        text = style.displayName,
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (isDownloaded) {
+                        Icon(
+                            imageVector = Icons.Filled.CheckCircle,
+                            contentDescription = "T\u00e9l\u00e9charg\u00e9",
+                            tint = Color(0xFF4CAF50),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+
+            // Satellite (not downloadable)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = false,
+                    onCheckedChange = null,
+                    enabled = false,
+                    colors = CheckboxDefaults.colors(
+                        disabledUncheckedColor = Color(0xFF5A5A5E)
+                    )
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Vue satellite",
+                        color = Color(0xFF5A5A5E),
+                        fontSize = 14.sp
+                    )
+                    Text(
+                        text = "Non disponible hors ligne",
+                        color = Color(0xFF5A5A5E),
+                        fontSize = 11.sp
+                    )
+                }
+            }
         }
     }
 }

@@ -23,6 +23,7 @@ data class OfflineDataInfo(
     val lastDownloadTimestamp: Long = 0L,
     val totalSizeBytes: Long = 0L,
     val mapTilesDownloaded: Boolean = false,
+    val downloadedMapStyles: Set<String> = emptySet(),
     val busLinesCount: Int = 0
 )
 
@@ -58,6 +59,8 @@ class OfflineRepository(private val context: Context) {
         // Prefs keys
         private const val KEY_LAST_DOWNLOAD = "last_download_timestamp"
         private const val KEY_MAP_TILES_DOWNLOADED = "map_tiles_downloaded"
+        private const val KEY_DOWNLOADED_MAP_STYLES = "downloaded_map_styles"
+        private const val KEY_SELECTED_MAP_STYLES = "selected_map_styles"
         private const val KEY_DATA_VERSION = "offline_data_version"
         private const val DATA_VERSION = 1
 
@@ -282,9 +285,36 @@ class OfflineRepository(private val context: Context) {
         prefs.edit().putBoolean(KEY_MAP_TILES_DOWNLOADED, downloaded).apply()
     }
 
+    fun getDownloadedMapStyles(): Set<String> {
+        val styles = prefs.getStringSet(KEY_DOWNLOADED_MAP_STYLES, null)
+        if (styles != null) return styles
+        // Migration: if old boolean was true, assume positron was downloaded
+        if (prefs.getBoolean(KEY_MAP_TILES_DOWNLOADED, false)) {
+            val migrated = setOf("positron")
+            prefs.edit().putStringSet(KEY_DOWNLOADED_MAP_STYLES, migrated).apply()
+            return migrated
+        }
+        return emptySet()
+    }
+
+    fun setDownloadedMapStyles(styles: Set<String>) {
+        prefs.edit()
+            .putStringSet(KEY_DOWNLOADED_MAP_STYLES, styles)
+            .putBoolean(KEY_MAP_TILES_DOWNLOADED, styles.isNotEmpty())
+            .apply()
+    }
+
+    fun getSelectedMapStyles(): Set<String> {
+        return prefs.getStringSet(KEY_SELECTED_MAP_STYLES, null) ?: setOf("positron")
+    }
+
+    fun setSelectedMapStyles(styles: Set<String>) {
+        prefs.edit().putStringSet(KEY_SELECTED_MAP_STYLES, styles).apply()
+    }
+
     fun getOfflineDataInfo(): OfflineDataInfo {
         val lastDownload = prefs.getLong(KEY_LAST_DOWNLOAD, 0L)
-        val mapTiles = prefs.getBoolean(KEY_MAP_TILES_DOWNLOADED, false)
+        val downloadedStyles = getDownloadedMapStyles()
         val hasData = lastDownload > 0L && offlineDir.listFiles()?.isNotEmpty() == true
 
         val busFiles = busDir.listFiles()
@@ -298,7 +328,8 @@ class OfflineRepository(private val context: Context) {
             isAvailable = hasData,
             lastDownloadTimestamp = lastDownload,
             totalSizeBytes = if (hasData) calculateTotalSize() else 0L,
-            mapTilesDownloaded = mapTiles,
+            mapTilesDownloaded = downloadedStyles.isNotEmpty(),
+            downloadedMapStyles = downloadedStyles,
             busLinesCount = busCount
         )
     }
@@ -323,6 +354,8 @@ class OfflineRepository(private val context: Context) {
         prefs.edit()
             .remove(KEY_LAST_DOWNLOAD)
             .remove(KEY_DATA_VERSION)
+            .remove(KEY_MAP_TILES_DOWNLOADED)
+            .remove(KEY_DOWNLOADED_MAP_STYLES)
             .apply()
     }
 

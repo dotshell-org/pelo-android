@@ -244,13 +244,17 @@ fun PlanScreen(
     }
 
     // Map style from settings — re-read when returning to the Plan tab
+    // When offline, use the effective style (fallback to a downloaded style if needed)
     val mapStyleRepository = remember { MapStyleRepository(context) }
+    val offlineDataInfo by viewModel.offlineDataInfo.collectAsState()
     var mapStyleUrl by remember { mutableStateOf(mapStyleRepository.getSelectedStyle().styleUrl) }
-    LaunchedEffect(isVisible) {
+    LaunchedEffect(isVisible, isOffline, offlineDataInfo.downloadedMapStyles) {
         if (isVisible) {
-            val newStyle = mapStyleRepository.getSelectedStyle().styleUrl
-            if (newStyle != mapStyleUrl) {
-                mapStyleUrl = newStyle
+            val effectiveStyle = mapStyleRepository.getEffectiveStyle(
+                isOffline, offlineDataInfo.downloadedMapStyles
+            )
+            if (effectiveStyle.styleUrl != mapStyleUrl) {
+                mapStyleUrl = effectiveStyle.styleUrl
             }
         }
     }

@@ -631,10 +631,14 @@ private fun AppNavHost(
             )
         }
         composable(Destination.MAP_STYLE) {
+            val isOffline by viewModel.isOffline.collectAsState()
+            val offlineInfo by viewModel.offlineDataInfo.collectAsState()
             MapStyleScreen(
                 onBackClick = {
                     navController.popBackStack()
-                }
+                },
+                isOffline = isOffline,
+                downloadedMapStyles = offlineInfo.downloadedMapStyles
             )
         }
         composable(Destination.ITINERARY_SETTINGS) {

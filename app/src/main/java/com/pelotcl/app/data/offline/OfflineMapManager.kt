@@ -30,7 +30,9 @@ class OfflineMapManager(private val context: Context) {
 
     companion object {
         private const val TAG = "OfflineMapManager"
-        private const val REGION_NAME = "pelo_lyon_tcl"
+        private const val REGION_NAME_PREFIX = "pelo_lyon_tcl_"
+        // Legacy region name for migration
+        private const val LEGACY_REGION_NAME = "pelo_lyon_tcl"
 
         // Lyon metropolitan area bounding box (covers the full TCL network)
         private val LYON_BOUNDS = LatLngBounds.Builder()
@@ -42,11 +44,10 @@ class OfflineMapManager(private val context: Context) {
         private const val MIN_ZOOM = 8.0
         private const val MAX_ZOOM = 16.0
 
-        // Positron style URL used for offline tiles
-        private const val STYLE_URL = "https://tiles.openfreemap.org/styles/positron"
-
         // Pixel ratio
         private const val PIXEL_RATIO = 1.0f
+
+        fun regionNameForStyle(styleKey: String): String = "$REGION_NAME_PREFIX$styleKey"
 
         @Volatile
         private var INSTANCE: OfflineMapManager? = null
@@ -66,21 +67,21 @@ class OfflineMapManager(private val context: Context) {
     private var currentRegion: OfflineRegion? = null
 
     /**
-     * Starts downloading map tiles for the Lyon region.
-     * The style URL must be a remote URL (not asset://), so we use the Positron remote URL.
+     * Starts downloading map tiles for the Lyon region with a given style.
+     * The style URL must be a remote URL (not asset://).
      */
-    fun startDownload() {
+    fun startDownload(styleUrl: String, regionName: String) {
         _downloadState.value = MapTilesDownloadState.Downloading(0f)
 
         val definition = OfflineTilePyramidRegionDefinition(
-            STYLE_URL,
+            styleUrl,
             LYON_BOUNDS,
             MIN_ZOOM,
             MAX_ZOOM,
             PIXEL_RATIO
         )
 
-        val metadata = REGION_NAME.toByteArray(Charsets.UTF_8)
+        val metadata = regionName.toByteArray(Charsets.UTF_8)
 
         OfflineManager.getInstance(context).createOfflineRegion(
             definition,
@@ -133,6 +134,14 @@ class OfflineMapManager(private val context: Context) {
     }
 
     /**
+     * Resets the download state to Idle.
+     * Must be called before starting a new download to avoid stale terminal states.
+     */
+    fun resetState() {
+        _downloadState.value = MapTilesDownloadState.Idle
+    }
+
+    /**
      * Cancels the current download.
      */
     fun cancelDownload() {
@@ -141,7 +150,7 @@ class OfflineMapManager(private val context: Context) {
     }
 
     /**
-     * Deletes all offline map regions for Pelo.
+     * Deletes all offline map regions for Pelo (both legacy and per-style).
      */
     fun deleteOfflineRegions(onComplete: () -> Unit = {}) {
         OfflineManager.getInstance(context).listOfflineRegions(
@@ -152,30 +161,31 @@ class OfflineMapManager(private val context: Context) {
                         return
                     }
 
-                    var remaining = offlineRegions.size
-                    for (region in offlineRegions) {
-                        val regionName = try {
-                            region.metadata.toString(Charsets.UTF_8)
-                        } catch (e: Exception) { null }
+                    val peloRegions = offlineRegions.filter { region ->
+                        val name = try { region.metadata.toString(Charsets.UTF_8) } catch (e: Exception) { null }
+                        name != null && (name.startsWith(REGION_NAME_PREFIX) || name == LEGACY_REGION_NAME)
+                    }
 
-                        if (regionName == REGION_NAME) {
-                            region.delete(object : OfflineRegion.OfflineRegionDeleteCallback {
-                                override fun onDelete() {
-                                    Log.d(TAG, "Offline region deleted")
-                                    remaining--
-                                    if (remaining <= 0) onComplete()
-                                }
+                    if (peloRegions.isEmpty()) {
+                        onComplete()
+                        return
+                    }
 
-                                override fun onError(error: String) {
-                                    Log.e(TAG, "Error deleting offline region: $error")
-                                    remaining--
-                                    if (remaining <= 0) onComplete()
-                                }
-                            })
-                        } else {
-                            remaining--
-                            if (remaining <= 0) onComplete()
-                        }
+                    var remaining = peloRegions.size
+                    for (region in peloRegions) {
+                        region.delete(object : OfflineRegion.OfflineRegionDeleteCallback {
+                            override fun onDelete() {
+                                Log.d(TAG, "Offline region deleted")
+                                remaining--
+                                if (remaining <= 0) onComplete()
+                            }
+
+                            override fun onError(error: String) {
+                                Log.e(TAG, "Error deleting offline region: $error")
+                                remaining--
+                                if (remaining <= 0) onComplete()
+                            }
+                        })
                     }
                 }
 
@@ -188,15 +198,15 @@ class OfflineMapManager(private val context: Context) {
     }
 
     /**
-     * Checks if an offline region already exists.
+     * Checks if an offline region exists for a specific style.
      */
-    fun checkExistingRegion(callback: (Boolean) -> Unit) {
+    fun checkExistingRegion(regionName: String, callback: (Boolean) -> Unit) {
         OfflineManager.getInstance(context).listOfflineRegions(
             object : OfflineManager.ListOfflineRegionsCallback {
                 override fun onList(offlineRegions: Array<OfflineRegion>?) {
                     val exists = offlineRegions?.any { region ->
                         try {
-                            region.metadata.toString(Charsets.UTF_8) == REGION_NAME
+                            region.metadata.toString(Charsets.UTF_8) == regionName
                         } catch (e: Exception) { false }
                     } ?: false
                     callback(exists)

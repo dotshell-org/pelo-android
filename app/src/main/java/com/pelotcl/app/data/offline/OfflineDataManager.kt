@@ -6,13 +6,17 @@ import com.pelotcl.app.data.api.RetrofitInstance
 import com.pelotcl.app.data.model.Feature
 import com.pelotcl.app.data.model.Geometry
 import com.pelotcl.app.data.model.TransportLineProperties
+import com.pelotcl.app.data.repository.MapStyle
 import com.pelotcl.app.utils.withRetry
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -295,38 +299,66 @@ class OfflineDataManager(private val context: Context) {
                 Log.d(TAG, "After data download: busLinesCount=${infoAfterData.busLinesCount}, totalSize=${infoAfterData.totalSizeBytes}, isAvailable=${infoAfterData.isAvailable}")
                 _offlineDataInfo.value = infoAfterData
 
-                // Step 7: Map tiles (the longest step)
-                _downloadState.value = OfflineDownloadState.Downloading(cumulativeProgress, "Tuiles de carte (peut prendre plusieurs minutes)...")
+                // Step 7: Map tiles for each selected style
+                val selectedStyleKeys = offlineRepository.getSelectedMapStyles()
+                val stylesToDownload = selectedStyleKeys.mapNotNull { key ->
+                    MapStyle.entries.find { it.key == key }
+                }.filter { it.styleUrl.startsWith("http") } // Exclude asset:// styles (e.g. Satellite)
 
-                // Start map tile download and monitor progress
-                offlineMapManager.startDownload()
+                val completedStyles = mutableSetOf<String>()
+                val weightPerStyle = if (stylesToDownload.isNotEmpty()) WEIGHT_MAP_TILES / stylesToDownload.size else WEIGHT_MAP_TILES
 
-                // Monitor map tile download progress
-                offlineMapManager.downloadState.collect { mapState ->
-                    when (mapState) {
-                        is MapTilesDownloadState.Downloading -> {
-                            val totalProgress = cumulativeProgress + (mapState.progress * WEIGHT_MAP_TILES)
-                            _downloadState.value = OfflineDownloadState.Downloading(
-                                totalProgress.coerceIn(0f, 1f),
-                                "Tuiles de carte (${(mapState.progress * 100).toInt()}%)..."
-                            )
+                for ((styleIndex, style) in stylesToDownload.withIndex()) {
+                    val regionName = OfflineMapManager.regionNameForStyle(style.key)
+                    val styleBaseProgress = cumulativeProgress + (styleIndex * weightPerStyle)
+                    _downloadState.value = OfflineDownloadState.Downloading(
+                        styleBaseProgress,
+                        "Tuiles ${style.displayName} (${styleIndex + 1}/${stylesToDownload.size})..."
+                    )
+
+                    // Reset to Idle before starting so first{} doesn't see stale Complete
+                    offlineMapManager.resetState()
+                    offlineMapManager.startDownload(style.styleUrl, regionName)
+
+                    // Monitor progress in a child coroutine, wait for terminal state
+                    coroutineScope {
+                        val progressJob = launch {
+                            offlineMapManager.downloadState.collect { mapState ->
+                                if (mapState is MapTilesDownloadState.Downloading) {
+                                    val totalProgress = styleBaseProgress + (mapState.progress * weightPerStyle)
+                                    _downloadState.value = OfflineDownloadState.Downloading(
+                                        totalProgress.coerceIn(0f, 1f),
+                                        "Tuiles ${style.displayName} (${(mapState.progress * 100).toInt()}%)..."
+                                    )
+                                }
+                            }
                         }
-                        is MapTilesDownloadState.Complete -> {
-                            offlineRepository.setMapTilesDownloaded(true)
-                            _downloadState.value = OfflineDownloadState.Complete
-                            _offlineDataInfo.value = offlineRepository.getOfflineDataInfo()
-                            return@collect
+
+                        // Wait for terminal state (Complete or Error)
+                        val terminalState = offlineMapManager.downloadState.first { state ->
+                            state is MapTilesDownloadState.Complete || state is MapTilesDownloadState.Error
                         }
-                        is MapTilesDownloadState.Error -> {
-                            // Map tiles failed but data is still downloaded
-                            Log.e(TAG, "Map tiles download failed: ${mapState.message}")
-                            _downloadState.value = OfflineDownloadState.Complete
-                            _offlineDataInfo.value = offlineRepository.getOfflineDataInfo()
-                            return@collect
+                        progressJob.cancel()
+
+                        when (terminalState) {
+                            is MapTilesDownloadState.Complete -> {
+                                completedStyles.add(style.key)
+                                Log.d(TAG, "Map tiles for ${style.key} complete")
+                            }
+                            is MapTilesDownloadState.Error -> {
+                                Log.e(TAG, "Map tiles for ${style.key} failed: ${terminalState.message}")
+                            }
+                            else -> {}
                         }
-                        is MapTilesDownloadState.Idle -> { /* wait */ }
                     }
                 }
+
+                // Also keep any previously downloaded styles that are still selected
+                val previouslyDownloaded = offlineRepository.getDownloadedMapStyles()
+                val allDownloaded = completedStyles + previouslyDownloaded.filter { it in selectedStyleKeys }
+                offlineRepository.setDownloadedMapStyles(allDownloaded)
+                _downloadState.value = OfflineDownloadState.Complete
+                _offlineDataInfo.value = offlineRepository.getOfflineDataInfo()
 
             } catch (e: Exception) {
                 Log.e(TAG, "Unexpected error during offline download", e)
@@ -342,7 +374,7 @@ class OfflineDataManager(private val context: Context) {
         withContext(Dispatchers.IO) {
             offlineRepository.deleteOfflineData()
             offlineMapManager.deleteOfflineRegions {
-                offlineRepository.setMapTilesDownloaded(false)
+                offlineRepository.setDownloadedMapStyles(emptySet())
             }
             _downloadState.value = OfflineDownloadState.Idle
             _offlineDataInfo.value = offlineRepository.getOfflineDataInfo()
