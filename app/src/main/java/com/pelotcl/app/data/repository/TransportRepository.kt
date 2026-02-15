@@ -545,26 +545,20 @@ class TransportRepository(context: Context? = null) {
                         it.properties.ligne.equals(lineName, ignoreCase = true)
                     }
                 } catch (e: Exception) {
-                    android.util.Log.w("TransportRepository", "CQL filter search failed for $lineName, falling back to full load: ${e.message}")
-                    // Fallback: load all buses if CQL filter fails
-                    try {
-                        val bus = api.getBusLines()
-                        cache?.saveBusLines(bus.features)
-                        bus.features.firstOrNull {
-                            it.properties.ligne.equals(lineName, ignoreCase = true)
-                        }
-                    } catch (oom: OutOfMemoryError) {
-                        android.util.Log.e("TransportRepository", "OutOfMemoryError loading bus lines", oom)
-                        null
+                    android.util.Log.w("TransportRepository", "CQL filter search failed for $lineName: ${e.message}")
+                    // Fallback to offline per-line file (avoids OOM from loading all 10k bus features)
+                    offlineRepo?.loadBusLineByName(lineName)?.firstOrNull {
+                        it.properties.ligne.equals(lineName, ignoreCase = true)
                     }
                 }
             }
             
             Result.success(busLine)
         } catch (e: Exception) {
-            // Fallback to offline repository for bus lines
+            // Fallback to offline repository (per-line file for bus, or non-bus lines)
             try {
-                val offlineBus = offlineRepo?.loadBusLines()
+                // Try bus line first (individual small file, no OOM risk)
+                val offlineBus = offlineRepo?.loadBusLineByName(lineName)
                 val offlineLine = offlineBus?.firstOrNull {
                     it.properties.ligne.equals(lineName, ignoreCase = true)
                 }
@@ -572,7 +566,7 @@ class TransportRepository(context: Context? = null) {
                     android.util.Log.d("TransportRepository", "Found $lineName in offline bus data")
                     return Result.success(offlineLine)
                 }
-                // Also try other offline line types
+                // Try non-bus offline lines (metro/tram/navigone/trambus/rx)
                 val allOffline = offlineRepo?.loadAllLines()
                 val offlineAny = allOffline?.firstOrNull {
                     it.properties.ligne.equals(lineName, ignoreCase = true)

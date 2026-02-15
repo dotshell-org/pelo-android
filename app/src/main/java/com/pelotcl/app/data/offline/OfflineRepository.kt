@@ -38,6 +38,7 @@ class OfflineRepository(private val context: Context) {
     }
 
     private val offlineDir = File(context.filesDir, "offline_data").also { it.mkdirs() }
+    private val busDir = File(offlineDir, "bus").also { it.mkdirs() }
     private val prefs = context.getSharedPreferences("offline_data_meta", Context.MODE_PRIVATE)
 
     companion object {
@@ -79,8 +80,23 @@ class OfflineRepository(private val context: Context) {
     suspend fun saveTramLines(lines: List<Feature>) =
         writeCompressed(FILE_TRAM_LINES, lines)
 
-    suspend fun saveBusLines(lines: List<Feature>) =
-        writeCompressed(FILE_BUS_LINES, lines)
+    /**
+     * Saves bus lines grouped by line name into individual files (bus/C5.json.gz, bus/44.json.gz, etc.)
+     * to avoid loading all 10k features at once (OOM risk).
+     */
+    suspend fun saveBusLines(lines: List<Feature>) = withContext(Dispatchers.IO) {
+        // Clean old single-file format if it exists
+        File(offlineDir, FILE_BUS_LINES).delete()
+        // Clean old per-line files
+        busDir.listFiles()?.forEach { it.delete() }
+        // Group by line name and save each separately
+        val grouped = lines.groupBy { it.properties.ligne.uppercase() }
+        for ((lineName, features) in grouped) {
+            val safeFileName = lineName.replace(Regex("[^A-Za-z0-9_-]"), "_") + ".json.gz"
+            writeCompressedTo(File(busDir, safeFileName), features)
+        }
+        Log.d(TAG, "Saved ${grouped.size} bus line files (${lines.size} total features)")
+    }
 
     suspend fun saveNavigoneLines(lines: List<Feature>) =
         writeCompressed(FILE_NAVIGONE_LINES, lines)
@@ -105,8 +121,35 @@ class OfflineRepository(private val context: Context) {
     suspend fun loadTramLines(): List<Feature>? =
         readCompressed(FILE_TRAM_LINES)
 
-    suspend fun loadBusLines(): List<Feature>? =
-        readCompressed(FILE_BUS_LINES)
+    /**
+     * Loads a single bus line by name from offline storage.
+     * Only reads one small file instead of all 10k features.
+     */
+    suspend fun loadBusLineByName(lineName: String): List<Feature>? = withContext(Dispatchers.IO) {
+        try {
+            val safeFileName = lineName.uppercase().replace(Regex("[^A-Za-z0-9_-]"), "_") + ".json.gz"
+            val file = File(busDir, safeFileName)
+            if (file.exists()) {
+                val jsonString = GZIPInputStream(FileInputStream(file).buffered()).use { gzip ->
+                    gzip.bufferedReader(Charsets.UTF_8).readText()
+                }
+                json.decodeFromString<List<Feature>>(jsonString)
+            } else null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error reading bus line $lineName", e)
+            null
+        }
+    }
+
+    /**
+     * Returns list of all available offline bus line names (without loading the actual data).
+     */
+    fun getAvailableBusLineNames(): List<String> {
+        return busDir.listFiles()
+            ?.filter { it.name.endsWith(".json.gz") }
+            ?.map { it.name.removeSuffix(".json.gz") }
+            ?: emptyList()
+    }
 
     suspend fun loadNavigoneLines(): List<Feature>? =
         readCompressed(FILE_NAVIGONE_LINES)
@@ -124,16 +167,16 @@ class OfflineRepository(private val context: Context) {
         readCompressed(FILE_TRAFFIC_ALERTS)
 
     /**
-     * Loads ALL offline lines (metro + tram + bus + navigone + trambus + rx) merged.
+     * Loads non-bus offline lines (metro + tram + navigone + trambus + rx).
+     * Bus lines are NOT included to avoid OOM — use loadBusLineByName() instead.
      */
     suspend fun loadAllLines(): List<Feature> {
         val metro = loadMetroLines() ?: emptyList()
         val tram = loadTramLines() ?: emptyList()
-        val bus = loadBusLines() ?: emptyList()
         val navigone = loadNavigoneLines() ?: emptyList()
         val trambus = loadTrambusLines() ?: emptyList()
         val rx = loadRxLines() ?: emptyList()
-        return metro + tram + bus + navigone + trambus + rx
+        return metro + tram + navigone + trambus + rx
     }
 
     // ===== METADATA =====
@@ -175,7 +218,10 @@ class OfflineRepository(private val context: Context) {
      * Deletes all offline data files (not map tiles, which are managed by MapLibre).
      */
     suspend fun deleteOfflineData() = withContext(Dispatchers.IO) {
-        offlineDir.listFiles()?.forEach { it.delete() }
+        busDir.listFiles()?.forEach { it.delete() }
+        offlineDir.listFiles()?.forEach {
+            if (it.isDirectory) it.deleteRecursively() else it.delete()
+        }
         prefs.edit()
             .remove(KEY_LAST_DOWNLOAD)
             .remove(KEY_DATA_VERSION)
@@ -185,19 +231,23 @@ class OfflineRepository(private val context: Context) {
     // ===== INTERNAL =====
 
     private fun calculateTotalSize(): Long {
-        return offlineDir.listFiles()?.sumOf { it.length() } ?: 0L
+        val mainSize = offlineDir.listFiles()?.filter { it.isFile }?.sumOf { it.length() } ?: 0L
+        val busSize = busDir.listFiles()?.sumOf { it.length() } ?: 0L
+        return mainSize + busSize
     }
 
     private suspend inline fun <reified T> writeCompressed(fileName: String, data: T) =
+        writeCompressedTo(File(offlineDir, fileName), data)
+
+    private suspend inline fun <reified T> writeCompressedTo(file: File, data: T) =
         withContext(Dispatchers.IO) {
             try {
-                val file = File(offlineDir, fileName)
                 val jsonString = json.encodeToString(data)
                 GZIPOutputStream(FileOutputStream(file).buffered()).use { gzip ->
                     gzip.write(jsonString.toByteArray(Charsets.UTF_8))
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error writing to $fileName", e)
+                Log.e(TAG, "Error writing to ${file.name}", e)
             }
         }
 
