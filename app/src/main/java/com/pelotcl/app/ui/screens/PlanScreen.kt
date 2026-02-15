@@ -1161,14 +1161,14 @@ fun PlanScreen(
                 }
             }
 
-            // Offline banner
+            // Offline banner - positioned below the search bar area
             AnimatedVisibility(
                 visible = isOffline,
                 enter = fadeIn(),
                 exit = fadeOut(),
                 modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 16.dp, top = 36.dp)
+                    .align(Alignment.TopCenter)
+                    .padding(top = 100.dp)
             ) {
                 Row(
                     modifier = Modifier
