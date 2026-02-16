@@ -490,8 +490,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     private var cachedRequiredIcons: Set<String>? = null
     // Cached set of used slot indices for the GeoJSON (avoids recalculation)
     private var cachedUsedSlots: Set<Int>? = null
-    // Hash of stops list to detect changes and invalidate cache
-    private var cachedStopsHash: Int = 0
+    // Cheap hash of stops list to detect changes and invalidate cache (O(1) instead of O(n))
+    private var cachedStopsHash: Long = 0L
 
     // === OPTIMIZATION: Pre-loaded icon bitmaps cache with memory management ===
     // LruCache with 10MB max size for bitmap icons, responds to memory pressure
@@ -502,12 +502,24 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
+     * Cheap O(1) hash for stop list identity check.
+     * Uses size + first/last element hash instead of iterating all elements.
+     * The list only changes via full replacement, never element-level mutation.
+     */
+    private fun cheapListHash(stops: List<StopFeature>): Long {
+        if (stops.isEmpty()) return 0L
+        return stops.size.toLong() * 31 +
+               stops.first().hashCode().toLong() * 17 +
+               stops.last().hashCode().toLong()
+    }
+
+    /**
      * Returns cached stops GeoJSON data if available and valid.
      * Returns null if cache is invalid or stops have changed.
      * The Triple contains (geoJson, requiredIcons, usedSlots).
      */
     fun getCachedStopsGeoJson(currentStops: List<StopFeature>): Triple<String, Set<String>, Set<Int>>? {
-        val currentHash = currentStops.hashCode()
+        val currentHash = cheapListHash(currentStops)
         return if (cachedStopsGeoJson != null && cachedRequiredIcons != null && cachedUsedSlots != null && currentHash == cachedStopsHash) {
             Triple(cachedStopsGeoJson!!, cachedRequiredIcons!!, cachedUsedSlots!!)
         } else {
@@ -519,28 +531,28 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      * Caches the GeoJSON data for stops including used slots.
      */
     fun cacheStopsGeoJson(stops: List<StopFeature>, geoJson: String, requiredIcons: Set<String>, usedSlots: Set<Int>) {
-        cachedStopsHash = stops.hashCode()
+        cachedStopsHash = cheapListHash(stops)
         cachedStopsGeoJson = geoJson
         cachedRequiredIcons = requiredIcons
         cachedUsedSlots = usedSlots
     }
 
     /**
-     * Returns cached icon bitmaps as a snapshot map.
-     * The underlying cache uses LruCache for automatic memory management.
+     * Returns a cached icon bitmap by name, or null if not cached.
+     * Direct LruCache access without creating a full snapshot copy.
      */
-    fun getCachedIconBitmaps(): Map<String, android.graphics.Bitmap>? {
-        val snapshot = iconBitmapCache.snapshot()
-        return if (snapshot.isEmpty()) null else snapshot
-    }
+    fun getIconBitmap(name: String): android.graphics.Bitmap? = iconBitmapCache.get(name)
 
     /**
-     * Caches icon bitmaps for reuse using memory-aware LruCache.
+     * Checks if all the given icon names are present in the bitmap cache.
      */
-    fun cacheIconBitmaps(bitmaps: Map<String, android.graphics.Bitmap>) {
-        bitmaps.forEach { (key, bitmap) ->
-            iconBitmapCache.put(key, bitmap)
-        }
+    fun hasAllIcons(names: Set<String>): Boolean = names.all { iconBitmapCache.get(it) != null }
+
+    /**
+     * Caches a single icon bitmap for reuse using memory-aware LruCache.
+     */
+    fun cacheIconBitmap(name: String, bitmap: android.graphics.Bitmap) {
+        iconBitmapCache.put(name, bitmap)
     }
 
     /**
@@ -803,26 +815,35 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     /**
      * Builds a transfers index for each stop
      * Allows O(1) access instead of scanning all stops each time
+     * Uses prefix-based indexing for O(n * avg_bucket_size) instead of O(n * total_groups)
      */
     private suspend fun buildConnectionsIndex(allStops: List<StopFeature>) = withContext(Dispatchers.Default) {
         // Step 1: Group stops by approximate name to find a "canonical" name
+        // Uses a prefix index (first 4 chars) to avoid scanning all groups for each stop
         val stopGroups = mutableMapOf<String, MutableList<StopFeature>>()
-        val canonicalNames = mutableMapOf<String, String>()
+        val prefixIndex = mutableMapOf<String, MutableList<String>>()
 
         for (stop in allStops) {
             val normalizedName = normalizeStopName(stop.properties.nom)
-            var foundGroup = false
-            for (key in stopGroups.keys) {
-                if (key.startsWith(normalizedName) || normalizedName.startsWith(key)) {
-                    stopGroups[key]?.add(stop)
-                    canonicalNames[normalizedName] = key
-                    foundGroup = true
-                    break
+            val prefix = if (normalizedName.length >= 4) normalizedName.substring(0, 4) else normalizedName
+
+            // Only search candidates sharing the same prefix
+            var foundGroup: String? = null
+            val candidates = prefixIndex[prefix]
+            if (candidates != null) {
+                for (candidate in candidates) {
+                    if (candidate.startsWith(normalizedName) || normalizedName.startsWith(candidate)) {
+                        foundGroup = candidate
+                        break
+                    }
                 }
             }
-            if (!foundGroup) {
+
+            if (foundGroup != null) {
+                stopGroups[foundGroup]?.add(stop)
+            } else {
                 stopGroups[normalizedName] = mutableListOf(stop)
-                canonicalNames[normalizedName] = normalizedName
+                prefixIndex.getOrPut(prefix) { mutableListOf() }.add(normalizedName)
             }
         }
 

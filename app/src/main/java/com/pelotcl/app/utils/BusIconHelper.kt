@@ -81,6 +81,23 @@ object BusIconHelper {
     }
 
     /**
+     * Pre-populates the resourceIdCache with ALL drawable resource IDs in a single reflection pass.
+     * This replaces ~960 individual getIdentifier() calls (each using reflection) with one bulk scan
+     * of R.drawable fields. Call once at startup on a background thread.
+     */
+    fun preloadResourceIds(context: Context) {
+        if (resourceIdCache.isNotEmpty()) return
+        try {
+            val drawableClass = Class.forName("${context.packageName}.R\$drawable")
+            for (field in drawableClass.fields) {
+                resourceIdCache[field.name] = field.getInt(null)
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("BusIconHelper", "Failed to preload resource IDs: ${e.message}")
+        }
+    }
+
+    /**
      * Clears the desserte cache. Call when data source changes or under memory pressure.
      */
     fun clearCache() {

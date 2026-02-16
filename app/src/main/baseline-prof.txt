@@ -28,8 +28,33 @@ HSPLcom/pelotcl/app/data/gtfs/SchedulesRepository;->warmupDatabase()V
 # Retrofit/API
 HSPLcom/pelotcl/app/data/api/RetrofitInstance;->initialize(Landroid/content/Context;)V
 
-# MapLibre
+# MapLibre (app wrapper + native library)
 Lcom/pelotcl/app/ui/components/MapLibreViewKt;
+Lorg/maplibre/android/**;
+
+# Map rendering & stop display (hot paths during map interaction)
+HSPLcom/pelotcl/app/ui/screens/PlanScreenKt;->PlanScreen(Landroidx/compose/ui/Modifier;Lcom/pelotcl/app/ui/viewmodel/TransportViewModel;Landroidx/compose/runtime/Composer;II)V
+Lcom/pelotcl/app/ui/screens/PlanScreenKt;
+HSPLcom/pelotcl/app/utils/BusIconHelper;->getResourceIdForLine(Landroid/content/Context;Ljava/lang/String;)I
+HSPLcom/pelotcl/app/utils/BusIconHelper;->getAllLinesForStop(Lcom/pelotcl/app/data/model/StopFeature;)Ljava/util/List;
+
+# Spatial grid for viewport queries
+Lcom/pelotcl/app/data/cache/SpatialGrid;
+
+# Bottom sheet components
+Lcom/pelotcl/app/ui/components/LinesBottomSheetKt;
+Lcom/pelotcl/app/ui/components/LineDetailsBottomSheetKt;
+Lcom/pelotcl/app/ui/components/StationBottomSheetKt;
+Lcom/pelotcl/app/ui/components/SimpleSearchBarKt;
+Lcom/pelotcl/app/ui/components/AllSchedulesSheetContentKt;
+Lcom/pelotcl/app/ui/components/DirectionSelectorSheetKt;
+
+# Connections helper
+Lcom/pelotcl/app/utils/ConnectionsHelper;
+
+# Itinerary & journey map
+Lcom/pelotcl/app/ui/screens/ItineraryScreenKt;
+Lcom/pelotcl/app/ui/components/JourneyMapViewKt;
 
 # Compose runtime (critical)
 Landroidx/compose/runtime/**;
