@@ -1895,17 +1895,21 @@ private suspend fun addStopsToMap(
         style.getSource(sourceId)?.let { style.removeSource(it) }
 
         // OPTIMIZATION: Use cached bitmaps if available, otherwise load and cache
+        // Uses direct LruCache accessors to avoid snapshot() full-copy allocation
         scope.launch(Dispatchers.IO) {
-            val cachedBitmaps = viewModel?.getCachedIconBitmaps()
+            val allCached = viewModel?.hasAllIcons(requiredIcons) == true
 
-            val bitmaps: Map<String, android.graphics.Bitmap> = if (cachedBitmaps != null && requiredIcons.all { cachedBitmaps.containsKey(it) }) {
-                // Use cached bitmaps - filter to only required icons
+            val bitmaps: Map<String, android.graphics.Bitmap> = if (allCached) {
+                // All icons are cached - retrieve them directly without snapshot copy
                 requiredIcons.mapNotNull { iconName ->
-                    cachedBitmaps[iconName]?.let { iconName to it }
+                    viewModel?.getIconBitmap(iconName)?.let { iconName to it }
                 }.toMap()
             } else {
-                // Load bitmaps and cache them
-                val loadedBitmaps = requiredIcons.mapNotNull { iconName ->
+                // Load missing bitmaps and cache them individually
+                requiredIcons.mapNotNull { iconName ->
+                    // Check cache first for this specific icon
+                    viewModel?.getIconBitmap(iconName)?.let { return@mapNotNull iconName to it }
+
                     try {
                         val resourceId = BusIconHelper.getResourceIdForDrawableName(context, iconName)
                         if (resourceId != 0) {
@@ -1924,6 +1928,8 @@ private suspend fun addStopsToMap(
                                     d.draw(canvas)
                                     bitmap
                                 }
+                                // Cache individually as loaded
+                                viewModel?.cacheIconBitmap(iconName, bitmap)
                                 iconName to bitmap
                             }
                         } else null
@@ -1931,12 +1937,6 @@ private suspend fun addStopsToMap(
                         null
                     }
                 }.toMap()
-
-                // Merge with existing cache and save
-                val mergedBitmaps = (cachedBitmaps ?: emptyMap()) + loadedBitmaps
-                viewModel?.cacheIconBitmaps(mergedBitmaps)
-
-                loadedBitmaps
             }
 
             withContext(Dispatchers.Main) {

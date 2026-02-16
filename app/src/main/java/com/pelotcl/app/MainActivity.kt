@@ -77,6 +77,7 @@ import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.data.api.RetrofitInstance
 import com.pelotcl.app.data.cache.TransportCache
+import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LocationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -135,6 +136,10 @@ class MainActivity : ComponentActivity() {
         // Deferred initialization - run AFTER setContent to not block first frame
         // These are not needed for initial UI display
         appScope.launch {
+            // Pre-populate all drawable resource IDs in one reflection pass
+            // Avoids ~960 individual getIdentifier() calls during first map render
+            BusIconHelper.preloadResourceIds(applicationContext)
+
             // Initialize HTTP cache for network requests (not needed for cached data display)
             RetrofitInstance.initialize(applicationContext)
 
