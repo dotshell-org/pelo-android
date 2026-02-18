@@ -15,6 +15,9 @@ import java.io.FileOutputStream
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 
+/** Data older than 7 days is considered stale and a refresh is recommended. */
+const val STALE_THRESHOLD_MS = 7L * 24 * 60 * 60 * 1000
+
 /**
  * Metadata about the offline data download.
  */
@@ -25,7 +28,11 @@ data class OfflineDataInfo(
     val mapTilesDownloaded: Boolean = false,
     val downloadedMapStyles: Set<String> = emptySet(),
     val busLinesCount: Int = 0
-)
+) {
+    val isStale: Boolean
+        get() = isAvailable && lastDownloadTimestamp > 0L &&
+                (System.currentTimeMillis() - lastDownloadTimestamp) > STALE_THRESHOLD_MS
+}
 
 /**
  * Dedicated persistent storage for offline data.

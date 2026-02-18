@@ -10,6 +10,7 @@ import com.pelotcl.app.data.repository.MapStyle
 import com.pelotcl.app.utils.withRetry
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -77,6 +78,17 @@ class OfflineDataManager(private val context: Context) {
     }
 
     fun isOfflineDataAvailable(): Boolean = offlineRepository.isOfflineDataAvailable()
+
+    /**
+     * Cancels an ongoing download.
+     * Already-saved data is preserved (partial data is still useful offline).
+     * The coroutine Job must also be cancelled externally by TransportViewModel.
+     */
+    fun cancelDownload() {
+        offlineMapManager.cancelDownload()
+        _downloadState.value = OfflineDownloadState.Idle
+        _offlineDataInfo.value = offlineRepository.getOfflineDataInfo()
+    }
 
     /**
      * Downloads all offline data sequentially.
@@ -383,6 +395,12 @@ class OfflineDataManager(private val context: Context) {
                 _downloadState.value = OfflineDownloadState.Complete
                 _offlineDataInfo.value = offlineRepository.getOfflineDataInfo()
 
+            } catch (e: CancellationException) {
+                Log.d(TAG, "Download cancelled by user")
+                offlineMapManager.cancelDownload()
+                _downloadState.value = OfflineDownloadState.Idle
+                _offlineDataInfo.value = offlineRepository.getOfflineDataInfo()
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Unexpected error during offline download", e)
                 _downloadState.value = OfflineDownloadState.Error("Erreur inattendue: ${e.message}")

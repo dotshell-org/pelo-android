@@ -131,7 +131,23 @@ fun OfflineSettingsScreen(
 
             // Download Section
             when (val state = downloadState) {
-                is OfflineDownloadState.Downloading -> DownloadProgressCard(state)
+                is OfflineDownloadState.Downloading -> {
+                    DownloadProgressCard(state)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    TextButton(
+                        onClick = { viewModel.cancelOfflineDownload() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            Icons.Filled.Close,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = Color.Gray
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Annuler", color = Color.Gray, fontSize = 14.sp)
+                    }
+                }
                 else -> {
                     Button(
                         enabled = !isOffline,
@@ -296,6 +312,27 @@ private fun OfflineStatusCard(info: OfflineDataInfo, context: Context) {
             StatusRow("Espace utilisé", Formatter.formatFileSize(context, info.totalSizeBytes))
             Spacer(modifier = Modifier.height(8.dp))
             StatusRow("Lignes de bus", if (info.busLinesCount > 0) "${info.busLinesCount} lignes" else "Aucune")
+
+            if (info.isStale) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Warning,
+                        contentDescription = null,
+                        tint = Color(0xFFFF9800),
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Données anciennes \u2014 mise à jour recommandée",
+                        color = Color(0xFFFF9800),
+                        fontSize = 13.sp
+                    )
+                }
+            }
         }
     }
 }

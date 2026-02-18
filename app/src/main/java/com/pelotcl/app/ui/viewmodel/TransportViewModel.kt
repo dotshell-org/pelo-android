@@ -130,6 +130,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     val isLiveTrackingEnabled: StateFlow<Boolean> = _isLiveTrackingEnabled.asStateFlow()
     private var vehiclePositionsJob: Job? = null
 
+    // Offline download job reference for cancellation support
+    private var offlineDownloadJob: Job? = null
+
     // Preloading flags to avoid multiple reloads
     private var isPreloading: Boolean = false
     private var hasPreloaded: Boolean = false
@@ -172,14 +175,20 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      * Starts offline data download in viewModelScope so it survives screen navigation.
      * Using rememberCoroutineScope in the UI would cancel the download if the user leaves the screen.
      */
-    /**
-     * Starts offline data download in viewModelScope so it survives screen navigation.
-     * Using rememberCoroutineScope in the UI would cancel the download if the user leaves the screen.
-     */
     fun startOfflineDownload() {
-        viewModelScope.launch {
+        offlineDownloadJob = viewModelScope.launch {
             offlineDataManager.downloadAllOfflineData()
         }
+    }
+
+    /**
+     * Cancels the ongoing offline data download.
+     * Already-saved partial data is preserved.
+     */
+    fun cancelOfflineDownload() {
+        offlineDataManager.cancelDownload()
+        offlineDownloadJob?.cancel()
+        offlineDownloadJob = null
     }
 
     /**
