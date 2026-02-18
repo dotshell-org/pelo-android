@@ -69,7 +69,15 @@ class TrafficAlertsRepository(private val context: Context) {
                 if (response.success && response.alerts.isNotEmpty()) {
                     // Cache the response
                     cache.saveTrafficAlerts(response.alerts, response.timestamp)
-                    
+
+                    // Also persist to offline storage so alerts stay fresh even without
+                    // a manual offline data download
+                    try {
+                        offlineRepo.saveTrafficAlerts(response.alerts)
+                    } catch (e: Exception) {
+                        Log.w("TrafficAlertsRepository", "Failed to persist alerts to offline storage", e)
+                    }
+
                     Result.success(response.alerts)
                 } else {
                     Result.success(emptyList())
