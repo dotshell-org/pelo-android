@@ -20,6 +20,9 @@ import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.utils.Connection
 import com.pelotcl.app.data.repository.FavoritesRepository
 import com.pelotcl.app.data.cache.SpatialGrid
+import com.pelotcl.app.data.network.ConnectivityObserver
+import com.pelotcl.app.data.offline.OfflineDataInfo
+import com.pelotcl.app.data.offline.OfflineDataManager
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.ConnectionsHelper
 import com.pelotcl.app.utils.HolidayDetector
@@ -106,6 +109,19 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     private val _trafficAlerts = MutableStateFlow<Map<String, List<com.pelotcl.app.data.model.TrafficAlert>>>(emptyMap())
     val trafficAlerts: StateFlow<Map<String, List<com.pelotcl.app.data.model.TrafficAlert>>> = _trafficAlerts.asStateFlow()
 
+    // Connectivity and offline state
+    private val connectivityObserver = ConnectivityObserver.getInstance(application.applicationContext)
+    val offlineDataManager = OfflineDataManager.getInstance(application.applicationContext)
+
+    private val _isOffline = MutableStateFlow(false)
+    val isOffline: StateFlow<Boolean> = _isOffline.asStateFlow()
+
+    val offlineDataInfo: StateFlow<OfflineDataInfo> = offlineDataManager.offlineDataInfo
+
+    // Alerts timestamp for staleness display
+    private val _alertsTimestampMillis = MutableStateFlow<Long?>(null)
+    val alertsTimestampMillis: StateFlow<Long?> = _alertsTimestampMillis.asStateFlow()
+
     // Vehicle positions state for live tracking
     private val vehiclePositionsRepository = VehiclePositionsRepository()
     private val _vehiclePositions = MutableStateFlow<List<SimpleVehiclePosition>>(emptyList())
@@ -113,6 +129,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     private val _isLiveTrackingEnabled = MutableStateFlow(false)
     val isLiveTrackingEnabled: StateFlow<Boolean> = _isLiveTrackingEnabled.asStateFlow()
     private var vehiclePositionsJob: Job? = null
+
+    // Offline download job reference for cancellation support
+    private var offlineDownloadJob: Job? = null
 
     // Preloading flags to avoid multiple reloads
     private var isPreloading: Boolean = false
@@ -126,6 +145,13 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     private var lineDetailScope = CoroutineScope(viewModelScope.coroutineContext + lineDetailJob)
 
     init {
+        // Observe connectivity changes
+        viewModelScope.launch {
+            connectivityObserver.isOnline.collect { online ->
+                _isOffline.value = !online
+            }
+        }
+
         // Start non-blocking preload on creation to have lines, stops, and connection index ready
         preloadAllData()
 
@@ -139,6 +165,38 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             delay(1000) // Wait for UI to stabilize
             refreshTrafficAlerts()
+        }
+
+        // Load offline data info
+        offlineDataManager.refreshInfo()
+    }
+
+    /**
+     * Starts offline data download in viewModelScope so it survives screen navigation.
+     * Using rememberCoroutineScope in the UI would cancel the download if the user leaves the screen.
+     */
+    fun startOfflineDownload() {
+        offlineDownloadJob = viewModelScope.launch {
+            offlineDataManager.downloadAllOfflineData()
+        }
+    }
+
+    /**
+     * Cancels the ongoing offline data download.
+     * Already-saved partial data is preserved.
+     */
+    fun cancelOfflineDownload() {
+        offlineDataManager.cancelDownload()
+        offlineDownloadJob?.cancel()
+        offlineDownloadJob = null
+    }
+
+    /**
+     * Deletes all offline data from viewModelScope.
+     */
+    fun deleteOfflineData() {
+        viewModelScope.launch {
+            offlineDataManager.deleteAllOfflineData()
         }
     }
 
@@ -338,6 +396,11 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      * - Automatically stops when tracking is disabled
      */
     fun startLiveTracking(lineName: String) {
+        // Don't start live tracking when offline
+        if (_isOffline.value) {
+            Log.w("TransportViewModel", "Cannot start live tracking while offline")
+            return
+        }
         vehiclePositionsJob?.cancel()
         _isLiveTrackingEnabled.value = true
 
@@ -436,8 +499,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     private var cachedRequiredIcons: Set<String>? = null
     // Cached set of used slot indices for the GeoJSON (avoids recalculation)
     private var cachedUsedSlots: Set<Int>? = null
-    // Hash of stops list to detect changes and invalidate cache
-    private var cachedStopsHash: Int = 0
+    // Cheap hash of stops list to detect changes and invalidate cache (O(1) instead of O(n))
+    private var cachedStopsHash: Long = 0L
 
     // === OPTIMIZATION: Pre-loaded icon bitmaps cache with memory management ===
     // LruCache with 10MB max size for bitmap icons, responds to memory pressure
@@ -448,12 +511,24 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
+     * Cheap O(1) hash for stop list identity check.
+     * Uses size + first/last element hash instead of iterating all elements.
+     * The list only changes via full replacement, never element-level mutation.
+     */
+    private fun cheapListHash(stops: List<StopFeature>): Long {
+        if (stops.isEmpty()) return 0L
+        return stops.size.toLong() * 31 +
+               stops.first().hashCode().toLong() * 17 +
+               stops.last().hashCode().toLong()
+    }
+
+    /**
      * Returns cached stops GeoJSON data if available and valid.
      * Returns null if cache is invalid or stops have changed.
      * The Triple contains (geoJson, requiredIcons, usedSlots).
      */
     fun getCachedStopsGeoJson(currentStops: List<StopFeature>): Triple<String, Set<String>, Set<Int>>? {
-        val currentHash = currentStops.hashCode()
+        val currentHash = cheapListHash(currentStops)
         return if (cachedStopsGeoJson != null && cachedRequiredIcons != null && cachedUsedSlots != null && currentHash == cachedStopsHash) {
             Triple(cachedStopsGeoJson!!, cachedRequiredIcons!!, cachedUsedSlots!!)
         } else {
@@ -465,28 +540,28 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      * Caches the GeoJSON data for stops including used slots.
      */
     fun cacheStopsGeoJson(stops: List<StopFeature>, geoJson: String, requiredIcons: Set<String>, usedSlots: Set<Int>) {
-        cachedStopsHash = stops.hashCode()
+        cachedStopsHash = cheapListHash(stops)
         cachedStopsGeoJson = geoJson
         cachedRequiredIcons = requiredIcons
         cachedUsedSlots = usedSlots
     }
 
     /**
-     * Returns cached icon bitmaps as a snapshot map.
-     * The underlying cache uses LruCache for automatic memory management.
+     * Returns a cached icon bitmap by name, or null if not cached.
+     * Direct LruCache access without creating a full snapshot copy.
      */
-    fun getCachedIconBitmaps(): Map<String, android.graphics.Bitmap>? {
-        val snapshot = iconBitmapCache.snapshot()
-        return if (snapshot.isEmpty()) null else snapshot
-    }
+    fun getIconBitmap(name: String): android.graphics.Bitmap? = iconBitmapCache.get(name)
 
     /**
-     * Caches icon bitmaps for reuse using memory-aware LruCache.
+     * Checks if all the given icon names are present in the bitmap cache.
      */
-    fun cacheIconBitmaps(bitmaps: Map<String, android.graphics.Bitmap>) {
-        bitmaps.forEach { (key, bitmap) ->
-            iconBitmapCache.put(key, bitmap)
-        }
+    fun hasAllIcons(names: Set<String>): Boolean = names.all { iconBitmapCache.get(it) != null }
+
+    /**
+     * Caches a single icon bitmap for reuse using memory-aware LruCache.
+     */
+    fun cacheIconBitmap(name: String, bitmap: android.graphics.Bitmap) {
+        iconBitmapCache.put(name, bitmap)
     }
 
     /**
@@ -749,26 +824,35 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     /**
      * Builds a transfers index for each stop
      * Allows O(1) access instead of scanning all stops each time
+     * Uses prefix-based indexing for O(n * avg_bucket_size) instead of O(n * total_groups)
      */
     private suspend fun buildConnectionsIndex(allStops: List<StopFeature>) = withContext(Dispatchers.Default) {
         // Step 1: Group stops by approximate name to find a "canonical" name
+        // Uses a prefix index (first 4 chars) to avoid scanning all groups for each stop
         val stopGroups = mutableMapOf<String, MutableList<StopFeature>>()
-        val canonicalNames = mutableMapOf<String, String>()
+        val prefixIndex = mutableMapOf<String, MutableList<String>>()
 
         for (stop in allStops) {
             val normalizedName = normalizeStopName(stop.properties.nom)
-            var foundGroup = false
-            for (key in stopGroups.keys) {
-                if (key.startsWith(normalizedName) || normalizedName.startsWith(key)) {
-                    stopGroups[key]?.add(stop)
-                    canonicalNames[normalizedName] = key
-                    foundGroup = true
-                    break
+            val prefix = if (normalizedName.length >= 4) normalizedName.substring(0, 4) else normalizedName
+
+            // Only search candidates sharing the same prefix
+            var foundGroup: String? = null
+            val candidates = prefixIndex[prefix]
+            if (candidates != null) {
+                for (candidate in candidates) {
+                    if (candidate.startsWith(normalizedName) || normalizedName.startsWith(candidate)) {
+                        foundGroup = candidate
+                        break
+                    }
                 }
             }
-            if (!foundGroup) {
+
+            if (foundGroup != null) {
+                stopGroups[foundGroup]?.add(stop)
+            } else {
                 stopGroups[normalizedName] = mutableListOf(stop)
-                canonicalNames[normalizedName] = normalizedName
+                prefixIndex.getOrPut(prefix) { mutableListOf() }.add(normalizedName)
             }
         }
 
@@ -931,10 +1015,12 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 return@launch // Line already present, do nothing
             }
 
-            // Load the line from the API
-            repository.getLineByName(lineName)
+            // Load the line from the API (or offline storage if offline)
+            Log.d("TransportViewModel", "addLineToLoaded: loading $lineName (offline=${_isOffline.value})")
+            repository.getLineByName(lineName, isOffline = _isOffline.value)
                 .onSuccess { feature ->
                     if (feature != null) {
+                        Log.d("TransportViewModel", "addLineToLoaded: got $lineName with ${feature.geometry.coordinates.size} segments, ${feature.geometry.coordinates.sumOf { it.size }} points")
                         // Add the new line to existing lines
                         val updatedLines = currentLines + feature
                         _uiState.value = TransportLinesUiState.Success(updatedLines)
@@ -1333,6 +1419,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     normalized
                 }
                 _trafficAlerts.value = alertsByLine
+                _alertsTimestampMillis.value = trafficAlertsRepository.getAlertsTimestampMillis()
                 Log.d("AlertCheck", "Updated _trafficAlerts with ${alertsByLine.size} unique normalized lines")
             } else {
                 Log.e("AlertCheck", "Failed to fetch alerts: ${result.exceptionOrNull()?.message}")

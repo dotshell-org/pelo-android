@@ -70,12 +70,14 @@ import com.pelotcl.app.ui.screens.LegalScreen
 import com.pelotcl.app.ui.screens.MapStyleScreen
 import com.pelotcl.app.ui.screens.PlanScreen
 import com.pelotcl.app.ui.screens.ItinerarySettingsScreen
+import com.pelotcl.app.ui.screens.OfflineSettingsScreen
 import com.pelotcl.app.ui.screens.SettingsScreen
 import com.pelotcl.app.ui.theme.PeloTheme
 import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.data.api.RetrofitInstance
 import com.pelotcl.app.data.cache.TransportCache
+import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LocationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -134,6 +136,10 @@ class MainActivity : ComponentActivity() {
         // Deferred initialization - run AFTER setContent to not block first frame
         // These are not needed for initial UI display
         appScope.launch {
+            // Pre-populate all drawable resource IDs in one reflection pass
+            // Avoids ~960 individual getIdentifier() calls during first map render
+            BusIconHelper.preloadResourceIds(applicationContext)
+
             // Initialize HTTP cache for network requests (not needed for cached data display)
             RetrofitInstance.initialize(applicationContext)
 
@@ -183,6 +189,7 @@ private enum class Destination(
         const val CONTACT = "contact"
         const val MAP_STYLE = "map_style"
         const val ITINERARY_SETTINGS = "itinerary_settings"
+        const val OFFLINE_SETTINGS = "offline_settings"
     }
 }
 
@@ -348,7 +355,8 @@ fun NavBar(modifier: Modifier = Modifier) {
             Destination.CREDITS,
             Destination.CONTACT,
             Destination.MAP_STYLE,
-            Destination.ITINERARY_SETTINGS
+            Destination.ITINERARY_SETTINGS,
+            Destination.OFFLINE_SETTINGS
         )
 
         if (currentRoute in darkBackgroundRoutes) {
@@ -406,7 +414,8 @@ fun NavBar(modifier: Modifier = Modifier) {
                                         Destination.CREDITS,
                                         Destination.CONTACT,
                                         Destination.MAP_STYLE,
-                                        Destination.ITINERARY_SETTINGS
+                                        Destination.ITINERARY_SETTINGS,
+                                        Destination.OFFLINE_SETTINGS
                                     )
                                     if (currentRoute in settingsSubRoutes) {
                                         // Pop back to Settings root
@@ -620,18 +629,33 @@ private fun AppNavHost(
                 },
                 onMapStyleClick = {
                     navController.navigate(Destination.MAP_STYLE)
+                },
+                onOfflineClick = {
+                    navController.navigate(Destination.OFFLINE_SETTINGS)
                 }
             )
         }
         composable(Destination.MAP_STYLE) {
+            val isOffline by viewModel.isOffline.collectAsState()
+            val offlineInfo by viewModel.offlineDataInfo.collectAsState()
             MapStyleScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                isOffline = isOffline,
+                downloadedMapStyles = offlineInfo.downloadedMapStyles
+            )
+        }
+        composable(Destination.ITINERARY_SETTINGS) {
+            ItinerarySettingsScreen(
                 onBackClick = {
                     navController.popBackStack()
                 }
             )
         }
-        composable(Destination.ITINERARY_SETTINGS) {
-            ItinerarySettingsScreen(
+        composable(Destination.OFFLINE_SETTINGS) {
+            OfflineSettingsScreen(
+                viewModel = viewModel,
                 onBackClick = {
                     navController.popBackStack()
                 }

@@ -3,6 +3,7 @@ package com.pelotcl.app.data.cache
 import android.content.Context
 import com.pelotcl.app.data.model.Feature
 import com.pelotcl.app.data.model.StopFeature
+import com.pelotcl.app.data.offline.sanitizeForSerialization
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -170,10 +171,10 @@ class TransportCache(private val context: Context) {
     suspend fun saveMetroLines(lines: List<Feature>) = mutex.withLock {
         metroLinesCache = lines
         metroLinesTimestamp = System.currentTimeMillis()
-        
+
         // Save timestamp to prefs and data to file asynchronously
         prefs.edit().putLong(KEY_METRO_LINES_TIMESTAMP, metroLinesTimestamp).apply()
-        writeToCompressedFile(FILE_METRO_LINES, lines)
+        writeToCompressedFile(FILE_METRO_LINES, lines.sanitizeForSerialization())
     }
     
     /**
@@ -205,10 +206,10 @@ class TransportCache(private val context: Context) {
     suspend fun saveTramLines(lines: List<Feature>) = mutex.withLock {
         tramLinesCache = lines
         tramLinesTimestamp = System.currentTimeMillis()
-        
+
         // Save timestamp to prefs and data to file asynchronously
         prefs.edit().putLong(KEY_TRAM_LINES_TIMESTAMP, tramLinesTimestamp).apply()
-        writeToCompressedFile(FILE_TRAM_LINES, lines)
+        writeToCompressedFile(FILE_TRAM_LINES, lines.sanitizeForSerialization())
     }
     
     /**
@@ -242,7 +243,7 @@ class TransportCache(private val context: Context) {
         navigoneLinesTimestamp = System.currentTimeMillis()
 
         prefs.edit().putLong(KEY_NAVIGONE_LINES_TIMESTAMP, navigoneLinesTimestamp).apply()
-        writeToCompressedFile(FILE_NAVIGONE_LINES, lines)
+        writeToCompressedFile(FILE_NAVIGONE_LINES, lines.sanitizeForSerialization())
     }
 
     /**
@@ -276,7 +277,7 @@ class TransportCache(private val context: Context) {
         trambusLinesTimestamp = System.currentTimeMillis()
 
         prefs.edit().putLong(KEY_TRAMBUS_LINES_TIMESTAMP, trambusLinesTimestamp).apply()
-        writeToCompressedFile(FILE_TRAMBUS_LINES, lines)
+        writeToCompressedFile(FILE_TRAMBUS_LINES, lines.sanitizeForSerialization())
     }
 
     /**

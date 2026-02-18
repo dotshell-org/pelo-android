@@ -10,6 +10,7 @@ import com.pelotcl.app.data.model.TransportLineProperties
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.pelotcl.app.data.model.StopCollection
+import com.pelotcl.app.data.offline.OfflineRepository
 import com.pelotcl.app.utils.withRetry
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -19,9 +20,10 @@ import kotlinx.coroutines.withContext
  * Repository for managing transport line data
  */
 class TransportRepository(context: Context? = null) {
-    
+
     private val api = RetrofitInstance.api
     private val cache = context?.let { TransportCache.getInstance(it) }
+    private val offlineRepo = context?.let { OfflineRepository.getInstance(it) }
     
     /**
      * Fetches all transport lines (metro, funicular, tram, and navigone ONLY)
@@ -128,7 +130,23 @@ class TransportRepository(context: Context? = null) {
 
                 Result.success(filteredCollection)
             } catch (e: Exception) {
-                Result.failure(e)
+                // Fallback to offline repository if available
+                val offlineLines = offlineRepo?.loadAllLines()
+                if (!offlineLines.isNullOrEmpty()) {
+                    val uniqueLines = offlineLines
+                        .groupBy { it.properties.codeTrace }
+                        .map { (_, features) -> features.first() }
+                    android.util.Log.d("TransportRepository", "Using offline data: ${uniqueLines.size} lines")
+                    Result.success(FeatureCollection(
+                        type = "FeatureCollection",
+                        features = uniqueLines,
+                        totalFeatures = uniqueLines.size,
+                        numberMatched = uniqueLines.size,
+                        numberReturned = uniqueLines.size
+                    ))
+                } else {
+                    Result.failure(e)
+                }
             }
         }
     }
@@ -465,14 +483,19 @@ class TransportRepository(context: Context? = null) {
      * This allows loading bus lines only on demand
      * Uses cache to improve performance
      */
-    suspend fun getLineByName(lineName: String): Result<Feature?> {
+    suspend fun getLineByName(lineName: String, isOffline: Boolean = false): Result<Feature?> {
+        // Fast path: when offline, go directly to caches and offline storage (no network retries)
+        if (isOffline) {
+            return getLineByNameOffline(lineName)
+        }
+
         return try {
             // Try to load from cache
             val cachedMetro = cache?.getMetroLines()
             val cachedTram = cache?.getTramLines()
-            
+
             val priorityFeatures: List<Feature>
-            
+
             if (cachedMetro != null && cachedTram != null) {
                 // Cache hit: use cached data
                 priorityFeatures = cachedMetro + cachedTram
@@ -481,7 +504,7 @@ class TransportRepository(context: Context? = null) {
                 val metroFuniculaire = api.getTransportLines()
                 val trams = api.getTramLines()
                 priorityFeatures = metroFuniculaire.features + trams.features
-                
+
                 // Save to cache
                 cache?.saveMetroLines(metroFuniculaire.features)
                 cache?.saveTramLines(trams.features)
@@ -508,7 +531,7 @@ class TransportRepository(context: Context? = null) {
             if (line != null) {
                 return Result.success(line)
             }
-            
+
             // Otherwise, search in buses using CQL filter (downloads only the requested line)
             val cachedBus = cache?.getBusLines()
             val busLine = if (cachedBus != null) {
@@ -527,23 +550,60 @@ class TransportRepository(context: Context? = null) {
                         it.properties.ligne.equals(lineName, ignoreCase = true)
                     }
                 } catch (e: Exception) {
-                    android.util.Log.w("TransportRepository", "CQL filter search failed for $lineName, falling back to full load: ${e.message}")
-                    // Fallback: load all buses if CQL filter fails
-                    try {
-                        val bus = api.getBusLines()
-                        cache?.saveBusLines(bus.features)
-                        bus.features.firstOrNull {
-                            it.properties.ligne.equals(lineName, ignoreCase = true)
-                        }
-                    } catch (oom: OutOfMemoryError) {
-                        android.util.Log.e("TransportRepository", "OutOfMemoryError loading bus lines", oom)
-                        null
+                    android.util.Log.w("TransportRepository", "CQL filter search failed for $lineName: ${e.message}")
+                    // Fallback to offline per-line file (avoids OOM from loading all 10k bus features)
+                    offlineRepo?.loadBusLineByName(lineName)?.firstOrNull {
+                        it.properties.ligne.equals(lineName, ignoreCase = true)
                     }
                 }
             }
-            
+
             Result.success(busLine)
         } catch (e: Exception) {
+            // Fallback to offline repository (per-line file for bus, or non-bus lines)
+            getLineByNameOffline(lineName)
+        }
+    }
+
+    /**
+     * Loads a line exclusively from local caches and offline storage (no network calls).
+     * Used when the device is known to be offline to avoid retry delays.
+     */
+    private suspend fun getLineByNameOffline(lineName: String): Result<Feature?> {
+        return try {
+            // Check stale TransportCache first (metro/tram/navigone may still be in memory/disk)
+            val cachedMetro = cache?.getMetroLinesStale()
+            val cachedTram = cache?.getTramLinesStale()
+            val cachedNavigone = cache?.getNavigoneLinesStale()
+            val cachedTrambus = cache?.getTrambusLinesStale()
+
+            val cachedLine = listOfNotNull(cachedMetro, cachedTram, cachedNavigone, cachedTrambus)
+                .flatten()
+                .firstOrNull { it.properties.ligne.equals(lineName, ignoreCase = true) }
+            if (cachedLine != null) {
+                return Result.success(cachedLine)
+            }
+
+            // Try bus from offline per-line file
+            val offlineBus = offlineRepo?.loadBusLineByName(lineName)
+            android.util.Log.d("TransportRepository", "Offline bus for $lineName: ${offlineBus?.size ?: "null"} features")
+            val offlineBusLine = offlineBus?.firstOrNull {
+                it.properties.ligne.equals(lineName, ignoreCase = true)
+            }
+            if (offlineBusLine != null) {
+                android.util.Log.d("TransportRepository", "Offline bus $lineName: geom type=${offlineBusLine.geometry.type}, coords=${offlineBusLine.geometry.coordinates.size} segments")
+                return Result.success(offlineBusLine)
+            }
+
+            // Try non-bus offline lines (trambus/rx/etc.)
+            val allOffline = offlineRepo?.loadAllLines()
+            val offlineAny = allOffline?.firstOrNull {
+                it.properties.ligne.equals(lineName, ignoreCase = true)
+            }
+            android.util.Log.d("TransportRepository", "Offline allLines for $lineName: ${if (offlineAny != null) "found" else "NOT found"}")
+            Result.success(offlineAny)
+        } catch (e: Exception) {
+            android.util.Log.e("TransportRepository", "Offline getLineByName failed for $lineName", e)
             Result.failure(e)
         }
     }
@@ -670,7 +730,20 @@ class TransportRepository(context: Context? = null) {
 
                 Result.success(filteredCollection)
             } catch (e: Exception) {
-                Result.failure(e)
+                // Fallback to offline repository if available
+                val offlineStops = offlineRepo?.loadStops()
+                if (!offlineStops.isNullOrEmpty()) {
+                    android.util.Log.d("TransportRepository", "Using offline stops: ${offlineStops.size}")
+                    Result.success(StopCollection(
+                        type = "FeatureCollection",
+                        features = offlineStops,
+                        totalFeatures = offlineStops.size,
+                        numberMatched = offlineStops.size,
+                        numberReturned = offlineStops.size
+                    ))
+                } else {
+                    Result.failure(e)
+                }
             }
         }
     }
@@ -687,8 +760,21 @@ class TransportRepository(context: Context? = null) {
                 val cachedMetro = cache?.getMetroLinesStale()
                 val cachedTram = cache?.getTramLinesStale()
 
-                // If no cache at all, return null to indicate fresh load needed
+                // If no cache at all, try offline repository
                 if (cachedMetro == null || cachedTram == null) {
+                    val offlineLines = offlineRepo?.loadAllLines()
+                    if (!offlineLines.isNullOrEmpty()) {
+                        val uniqueLines = offlineLines
+                            .groupBy { it.properties.codeTrace }
+                            .map { (_, features) -> features.first() }
+                        return@withContext Result.success(FeatureCollection(
+                            type = "FeatureCollection",
+                            features = uniqueLines,
+                            totalFeatures = uniqueLines.size,
+                            numberMatched = uniqueLines.size,
+                            numberReturned = uniqueLines.size
+                        ))
+                    }
                     return@withContext null
                 }
 

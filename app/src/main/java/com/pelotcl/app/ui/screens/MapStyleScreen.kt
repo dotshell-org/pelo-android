@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,11 +54,19 @@ import com.pelotcl.app.data.repository.MapStyleRepository
 @Composable
 fun MapStyleScreen(
     onBackClick: () -> Unit,
+    isOffline: Boolean = false,
+    downloadedMapStyles: Set<String> = emptySet(),
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val mapStyleRepository = remember { MapStyleRepository(context) }
-    var selectedStyle by remember { mutableStateOf(mapStyleRepository.getSelectedStyle()) }
+    var selectedStyle by remember {
+        mutableStateOf(mapStyleRepository.getEffectiveStyle(isOffline, downloadedMapStyles))
+    }
+
+    LaunchedEffect(isOffline, downloadedMapStyles) {
+        selectedStyle = mapStyleRepository.getEffectiveStyle(isOffline, downloadedMapStyles)
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -101,20 +110,24 @@ fun MapStyleScreen(
                 icon = Icons.Default.Map,
                 styles = MapStyle.getByCategory(MapStyleCategory.STANDARD),
                 selectedStyle = selectedStyle,
+                isOffline = isOffline,
+                downloadedMapStyles = downloadedMapStyles,
                 onStyleSelected = { style ->
                     selectedStyle = style
                     mapStyleRepository.saveSelectedStyle(style)
                 }
             )
-            
+
             Spacer(modifier = Modifier.height(24.dp))
-            
+
             // Satellite category
             MapStyleCategorySection(
                 category = MapStyleCategory.SATELLITE,
                 icon = Icons.Default.Satellite,
                 styles = MapStyle.getByCategory(MapStyleCategory.SATELLITE),
                 selectedStyle = selectedStyle,
+                isOffline = isOffline,
+                downloadedMapStyles = downloadedMapStyles,
                 onStyleSelected = { style ->
                     selectedStyle = style
                     mapStyleRepository.saveSelectedStyle(style)
@@ -144,6 +157,8 @@ private fun MapStyleCategorySection(
     icon: ImageVector,
     styles: List<MapStyle>,
     selectedStyle: MapStyle,
+    isOffline: Boolean,
+    downloadedMapStyles: Set<String>,
     onStyleSelected: (MapStyle) -> Unit
 ) {
     Column {
@@ -166,7 +181,7 @@ private fun MapStyleCategorySection(
                 fontWeight = FontWeight.SemiBold
             )
         }
-        
+
         // Style options card
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -177,12 +192,14 @@ private fun MapStyleCategorySection(
         ) {
             Column {
                 styles.forEachIndexed { index, style ->
+                    val isAvailableOffline = !isOffline || style.key in downloadedMapStyles
                     MapStyleItem(
                         style = style,
                         isSelected = style == selectedStyle,
-                        onClick = { onStyleSelected(style) }
+                        isEnabled = isAvailableOffline,
+                        onClick = { if (isAvailableOffline) onStyleSelected(style) }
                     )
-                    
+
                     // Add divider between items (but not after the last one)
                     if (index < styles.size - 1) {
                         Box(
@@ -203,12 +220,13 @@ private fun MapStyleCategorySection(
 private fun MapStyleItem(
     style: MapStyle,
     isSelected: Boolean,
+    isEnabled: Boolean = true,
     onClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .then(if (isEnabled) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -218,34 +236,45 @@ private fun MapStyleItem(
                 .size(24.dp)
                 .clip(CircleShape)
                 .border(
-                    width = if (isSelected) 0.dp else 2.dp,
-                    color = if (isSelected) Color.Transparent else Color(0xFF8E8E93),
+                    width = if (isSelected && isEnabled) 0.dp else 2.dp,
+                    color = if (isSelected && isEnabled) Color.Transparent
+                            else if (!isEnabled) Color(0xFF3A3A3C)
+                            else Color(0xFF8E8E93),
                     shape = CircleShape
                 )
                 .background(
-                    if (isSelected) Color(0xFFE60000) else Color.Transparent,
+                    if (isSelected && isEnabled) Color(0xFFE60000) else Color.Transparent,
                     shape = CircleShape
                 ),
             contentAlignment = Alignment.Center
         ) {
-            if (isSelected) {
+            if (isSelected && isEnabled) {
                 Icon(
                     imageVector = Icons.Default.Check,
-                    contentDescription = "Sélectionné",
+                    contentDescription = "S\u00e9lectionn\u00e9",
                     tint = Color.White,
                     modifier = Modifier.size(16.dp)
                 )
             }
         }
-        
+
         Spacer(modifier = Modifier.width(16.dp))
-        
-        // Style name
-        Text(
-            text = style.displayName,
-            color = Color.White,
-            fontSize = 16.sp,
-            fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal
-        )
+
+        // Style name + unavailable hint
+        Column {
+            Text(
+                text = style.displayName,
+                color = if (isEnabled) Color.White else Color(0xFF5A5A5E),
+                fontSize = 16.sp,
+                fontWeight = if (isSelected && isEnabled) FontWeight.Medium else FontWeight.Normal
+            )
+            if (!isEnabled) {
+                Text(
+                    text = "Non disponible hors ligne",
+                    color = Color(0xFF5A5A5E),
+                    fontSize = 11.sp
+                )
+            }
+        }
     }
 }

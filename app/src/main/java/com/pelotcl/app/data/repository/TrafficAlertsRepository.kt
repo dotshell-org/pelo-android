@@ -7,6 +7,7 @@ import com.pelotcl.app.data.model.AlertSeverity
 import com.pelotcl.app.data.model.TrafficAlert
 import com.pelotcl.app.data.model.TrafficAlertsResponse
 import com.pelotcl.app.data.model.TrafficStatusResponse
+import com.pelotcl.app.data.offline.OfflineRepository
 import com.pelotcl.app.utils.withRetry
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
@@ -15,9 +16,10 @@ import java.util.concurrent.TimeUnit
  * Repository for managing traffic alerts data
  */
 class TrafficAlertsRepository(private val context: Context) {
-    
+
     private val api = RetrofitInstance.api
     private val cache = TrafficAlertsCache(context)
+    private val offlineRepo = OfflineRepository.getInstance(context)
     
     /**
      * Fetches traffic status (alert count and last update)
@@ -73,12 +75,33 @@ class TrafficAlertsRepository(private val context: Context) {
                     Result.success(emptyList())
                 }
             } catch (e: Exception) {
-                Log.e("TrafficAlertsRepository", "Error fetching traffic alerts", e)
+                Log.e("TrafficAlertsRepository", "Error fetching traffic alerts, trying fallbacks", e)
+                // Fallback 1: stale cache (any age)
+                val staleAlerts = cache.getTrafficAlertsStale()
+                if (!staleAlerts.isNullOrEmpty()) {
+                    Log.d("TrafficAlertsRepository", "Using stale cached alerts: ${staleAlerts.size}")
+                    return@withContext Result.success(staleAlerts)
+                }
+                // Fallback 2: offline repository
+                try {
+                    val offlineAlerts = offlineRepo.loadTrafficAlerts()
+                    if (!offlineAlerts.isNullOrEmpty()) {
+                        Log.d("TrafficAlertsRepository", "Using offline alerts: ${offlineAlerts.size}")
+                        return@withContext Result.success(offlineAlerts)
+                    }
+                } catch (offlineEx: Exception) {
+                    Log.w("TrafficAlertsRepository", "Offline alerts fallback failed", offlineEx)
+                }
                 Result.failure(e)
             }
         }
     }
-    
+
+    /**
+     * Returns the timestamp (millis) of the last cached alerts update, or null.
+     */
+    fun getAlertsTimestampMillis(): Long? = cache.getTimestampMillis()
+
     /**
      * Gets alerts for a specific line
      */

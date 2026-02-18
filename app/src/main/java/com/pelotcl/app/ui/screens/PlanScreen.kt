@@ -16,6 +16,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -55,6 +56,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.pelotcl.app.R
 import androidx.lifecycle.Lifecycle
@@ -203,6 +205,7 @@ fun PlanScreen(
     val favoriteLines by viewModel.favoriteLines.collectAsState()
     val vehiclePositions by viewModel.vehiclePositions.collectAsState()
     val isLiveTrackingEnabled by viewModel.isLiveTrackingEnabled.collectAsState()
+    val isOffline by viewModel.isOffline.collectAsState()
     var mapInstance by remember { mutableStateOf<MapLibreMap?>(null) }
     // Incremented each time the map style is reloaded, to force LaunchedEffects to re-run
     var mapStyleVersion by remember { mutableStateOf(0) }
@@ -241,13 +244,17 @@ fun PlanScreen(
     }
 
     // Map style from settings — re-read when returning to the Plan tab
+    // When offline, use the effective style (fallback to a downloaded style if needed)
     val mapStyleRepository = remember { MapStyleRepository(context) }
+    val offlineDataInfo by viewModel.offlineDataInfo.collectAsState()
     var mapStyleUrl by remember { mutableStateOf(mapStyleRepository.getSelectedStyle().styleUrl) }
-    LaunchedEffect(isVisible) {
+    LaunchedEffect(isVisible, isOffline, offlineDataInfo.downloadedMapStyles) {
         if (isVisible) {
-            val newStyle = mapStyleRepository.getSelectedStyle().styleUrl
-            if (newStyle != mapStyleUrl) {
-                mapStyleUrl = newStyle
+            val effectiveStyle = mapStyleRepository.getEffectiveStyle(
+                isOffline, offlineDataInfo.downloadedMapStyles
+            )
+            if (effectiveStyle.styleUrl != mapStyleUrl) {
+                mapStyleUrl = effectiveStyle.styleUrl
             }
         }
     }
@@ -1160,9 +1167,10 @@ fun PlanScreen(
 
             // LIVE button - shows when a bus line is selected (not metro/tram/funicular)
             AnimatedVisibility(
-                visible = sheetContentState == SheetContentState.LINE_DETAILS 
-                    && selectedLine != null 
-                    && !isMetroTramOrFunicular(selectedLine!!.lineName),
+                visible = sheetContentState == SheetContentState.LINE_DETAILS
+                    && selectedLine != null
+                    && !isMetroTramOrFunicular(selectedLine!!.lineName)
+                    && !isOffline,
                 enter = fadeIn(),
                 exit = fadeOut(),
                 modifier = Modifier
@@ -1887,17 +1895,21 @@ private suspend fun addStopsToMap(
         style.getSource(sourceId)?.let { style.removeSource(it) }
 
         // OPTIMIZATION: Use cached bitmaps if available, otherwise load and cache
+        // Uses direct LruCache accessors to avoid snapshot() full-copy allocation
         scope.launch(Dispatchers.IO) {
-            val cachedBitmaps = viewModel?.getCachedIconBitmaps()
+            val allCached = viewModel?.hasAllIcons(requiredIcons) == true
 
-            val bitmaps: Map<String, android.graphics.Bitmap> = if (cachedBitmaps != null && requiredIcons.all { cachedBitmaps.containsKey(it) }) {
-                // Use cached bitmaps - filter to only required icons
+            val bitmaps: Map<String, android.graphics.Bitmap> = if (allCached) {
+                // All icons are cached - retrieve them directly without snapshot copy
                 requiredIcons.mapNotNull { iconName ->
-                    cachedBitmaps[iconName]?.let { iconName to it }
+                    viewModel?.getIconBitmap(iconName)?.let { iconName to it }
                 }.toMap()
             } else {
-                // Load bitmaps and cache them
-                val loadedBitmaps = requiredIcons.mapNotNull { iconName ->
+                // Load missing bitmaps and cache them individually
+                requiredIcons.mapNotNull { iconName ->
+                    // Check cache first for this specific icon
+                    viewModel?.getIconBitmap(iconName)?.let { return@mapNotNull iconName to it }
+
                     try {
                         val resourceId = BusIconHelper.getResourceIdForDrawableName(context, iconName)
                         if (resourceId != 0) {
@@ -1916,6 +1928,8 @@ private suspend fun addStopsToMap(
                                     d.draw(canvas)
                                     bitmap
                                 }
+                                // Cache individually as loaded
+                                viewModel?.cacheIconBitmap(iconName, bitmap)
                                 iconName to bitmap
                             }
                         } else null
@@ -1923,12 +1937,6 @@ private suspend fun addStopsToMap(
                         null
                     }
                 }.toMap()
-
-                // Merge with existing cache and save
-                val mergedBitmaps = (cachedBitmaps ?: emptyMap()) + loadedBitmaps
-                viewModel?.cacheIconBitmaps(mergedBitmaps)
-
-                loadedBitmaps
             }
 
             withContext(Dispatchers.Main) {

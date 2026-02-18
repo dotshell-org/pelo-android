@@ -245,6 +245,9 @@ fun LineDetailsBottomSheet(
     // Utilise directement lineStops car l'ordre est déjà correct depuis getStopsForLine avec directionId
     val displayedStops = lineStops
 
+    val isOffline by viewModel.isOffline.collectAsState()
+    val alertsTimestampMillis by viewModel.alertsTimestampMillis.collectAsState()
+
     val validLineAlerts = remember(lineAlerts) { filterValidAlerts(lineAlerts) }
     val alertSeverity = remember(validLineAlerts) {
         validLineAlerts
@@ -355,6 +358,7 @@ fun LineDetailsBottomSheet(
                         item(key = "traffic_alerts") {
                             TrafficAlertsSection(
                                 alerts = validLineAlerts,
+                                alertsTimestampMillis = if (isOffline) alertsTimestampMillis else null,
                                 modifier = Modifier.fillMaxWidth()
                             )
                             Spacer(modifier = Modifier.height(20.dp))
@@ -449,6 +453,7 @@ fun LineDetailsBottomSheet(
 @Composable
 private fun TrafficAlertsSection(
     alerts: List<com.pelotcl.app.data.model.TrafficAlert>,
+    alertsTimestampMillis: Long? = null,
     modifier: Modifier = Modifier
 ) {
     if (alerts.isEmpty()) {
@@ -461,6 +466,20 @@ private fun TrafficAlertsSection(
             .background(Color(0xFFF5F5F5))
             .padding(horizontal = 24.dp, vertical = 16.dp)
     ) {
+        // Show staleness indicator when offline
+        if (alertsTimestampMillis != null) {
+            val agoText = remember(alertsTimestampMillis) {
+                formatTimeAgo(alertsTimestampMillis)
+            }
+            Text(
+                text = "Dernière mise à jour $agoText",
+                color = Color.Gray,
+                fontSize = 12.sp,
+                fontStyle = FontStyle.Italic,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        }
+
         alerts.forEachIndexed { index, alert ->
             var isExpanded by remember { mutableStateOf(false) }
             val severity = AlertSeverity.fromSeverityType(alert.severityType, alert.severityLevel)
@@ -554,6 +573,19 @@ private fun filterValidAlerts(
         } catch (e: Exception) {
             true // Garder l'alerte si on ne peut pas parser la date
         }
+    }
+}
+
+private fun formatTimeAgo(timestampMillis: Long): String {
+    val diffMs = System.currentTimeMillis() - timestampMillis
+    val diffMinutes = diffMs / 60_000
+    val diffHours = diffMinutes / 60
+    val diffDays = diffHours / 24
+    return when {
+        diffMinutes < 1 -> "à l'instant"
+        diffMinutes < 60 -> "il y a ${diffMinutes}min"
+        diffHours < 24 -> "il y a ${diffHours}h"
+        else -> "il y a ${diffDays}j"
     }
 }
 

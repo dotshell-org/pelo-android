@@ -111,4 +111,15 @@ class MapStyleRepository(private val context: Context) {
     fun getStylesByCategory(category: MapStyleCategory): List<MapStyle> {
         return MapStyle.getByCategory(category)
     }
+
+    /**
+     * Get the effective style considering offline state.
+     * If offline and the selected style is not downloaded, falls back to a downloaded style.
+     */
+    fun getEffectiveStyle(isOffline: Boolean, downloadedStyles: Set<String>): MapStyle {
+        val selected = getSelectedStyle()
+        if (!isOffline) return selected
+        if (selected.key in downloadedStyles) return selected
+        return downloadedStyles.firstOrNull()?.let { MapStyle.fromKey(it) } ?: MapStyle.POSITRON
+    }
 }
