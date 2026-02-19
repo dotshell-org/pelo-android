@@ -621,14 +621,23 @@ private fun AppNavHost(
                     // Just switch back to Plan tab - no navigation needed since PlanScreen is always mounted
                     onNavigateToPlan()
                 },
+                onSystemBack = {
+                    onNavigateToPlan()
+                },
                 onItineraryClick = {
                     navController.navigate(Destination.ITINERARY_SETTINGS)
                 },
-                onAboutClick = {
-                    navController.navigate(Destination.ABOUT)
-                },
                 onMapStyleClick = {
                     navController.navigate(Destination.MAP_STYLE)
+                },
+                onLegalClick = {
+                    navController.navigate(Destination.LEGAL)
+                },
+                onCreditsClick = {
+                    navController.navigate(Destination.CREDITS)
+                },
+                onContactClick = {
+                    navController.navigate(Destination.CONTACT)
                 },
                 onOfflineClick = {
                     navController.navigate(Destination.OFFLINE_SETTINGS)
@@ -636,14 +645,10 @@ private fun AppNavHost(
             )
         }
         composable(Destination.MAP_STYLE) {
-            val isOffline by viewModel.isOffline.collectAsState()
-            val offlineInfo by viewModel.offlineDataInfo.collectAsState()
             MapStyleScreen(
                 onBackClick = {
                     navController.popBackStack()
-                },
-                isOffline = isOffline,
-                downloadedMapStyles = offlineInfo.downloadedMapStyles
+                }
             )
         }
         composable(Destination.ITINERARY_SETTINGS) {
