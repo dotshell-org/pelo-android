@@ -79,28 +79,53 @@ fun CreditsScreen(
             )
 
             Text(
-                text = "Les données de transport utilisées dans l'application proviennent " +
-                        "exclusivement du site de la métropole de Lyon [data.grandlyon.com]. Les " +
-                        "tracés géographiques des lignes de bus (incluant Chrono, Pleine Lune, " +
-                        "Bus relais, Gare Express, Navette, Soyeuse, Zone industrielle et Junior " +
-                        "Direct), tramway, Rhône Express, trambus, métropolitain, funiculaire et" +
-                        "Navigone sont téléchargés en direct depuis l'API publique de la " +
-                        "métropole de Lyon. Il en va de même pour les positions géographiques des " +
-                        "arrêts du réseau qui sont téléchargées en direct depuis l'API. Quant " +
-                        "aux noms des arrêts et des lignes, ainsi qu'aux horaires, l'application " +
-                        "utilise comme source le fichier GTFS fourni par la métropole de Lyon sur" +
-                        "son site. Les icônes des lignes proviennent également de ce même site.",
+                text = "Les données de transport utilisées dans l’application proviennent " +
+                        "exclusivement du site data.grandlyon.com et sont soumises à la Licence " +
+                        "Mobilités.\n\n" +
+                        "Les tracés géographiques des lignes de bus (incluant Chrono, Pleine " +
+                        "Lune, Bus relais, Gare Express, Navette, Soyeuse, Zone Industrielle et " +
+                        "Junior Direct), tramway, Rhônexpress, Trambus, métro, funiculaire et " +
+                        "Navigone sont téléchargés directement depuis l’API publique délivrée " +
+                        "par le SYTRAL sur le site data.grandlyon.com.\n\n" +
+                        "Les positions géographiques ainsi que les noms des arrêts, les contenus " +
+                        "des lignes et les horaires proviennent tous du fichier GTFS (General " +
+                        "Transit Feed Specification) distribué par le SYTRAL sur le site " +
+                        "data.grandlyon.com. Ces données sont manuellement mises à jour par les " +
+                        "développeurs et subissent un prétraitement avant d’être utilisées. " +
+                        "Aucune donnée n’est modifiée, uniquement leur organisation est " +
+                        "transformée afin d’être traitée plus rapidement par l’application.\n\n" +
+                        "Les pictogrammes des lignes proviennent également du site " +
+                        "data.grandlyon.com et sont fournies par le SYTRAL au format SVG.\n\n" +
+                        "Les alertes trafic et les positions de véhicules en temps réel sont " +
+                        "fournies par le SYTRAL sur le site data.grandlyon.com via une API " +
+                        "fermée requérant une authentification. En vertu de la Licence Mobilités, " +
+                        "Dotshell met à disposition du public un miroir de ces données à " +
+                        "l’adresse api.dotshell.eu/pelo/v1/. Le miroir fait des requêtes " +
+                        "périodiquement à l’API du SYTRAL, enregistre en mémoire le résultat et " +
+                        "redistribue au client une copie, accompagnée du timestamp de la dernière " +
+                        "mise à jour. Les données sont purement copiées et redistribuées à " +
+                        "l’exception des alertes trafic pour lesquelles les bus scolaires Junior " +
+                        "Direct ont été fusionnés aux lignes classiques et les doublons ont été " +
+                        "supprimés.",
                 color = Color.White,
                 fontSize = 14.sp,
                 lineHeight = 20.sp,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
             
-            ClickableLink(
-                label = "data.grandlyon.com",
-                url = "https://data.grandlyon.com",
-                uriHandler = uriHandler
-            )
+            Column(modifier = Modifier.padding(bottom = 16.dp)) {
+                ClickableLink(
+                    label = "data.grandlyon.com",
+                    url = "https://data.grandlyon.com",
+                    uriHandler = uriHandler
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                ClickableLink(
+                    label = "api.dotshell.eu/pelo/v1/",
+                    url = "https://api.dotshell.eu/pelo/v1/",
+                    uriHandler = uriHandler
+                )
+            }
             
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -113,10 +138,12 @@ fun CreditsScreen(
             )
 
             Text(
-                text = "Les données de cartographie sont fournies par MapLibre [maplibre.org] et " +
-                        "OpenStreetMaps [openstreetmap.org]. Le fond de carte est fourni par " +
-                        "OpenMapTiles [openmaptiles.org]. L'application utilise le thème \"Light\" " +
-                        "de Map Tiler [maptiler.com].",
+                text = "Les données de cartographie sont fournies par MapLibre et " +
+                        "OpenStreetMaps.\n\n" +
+                        "Les fonds de carte (dénommés Positron, Dark Matter, OSM Bright et " +
+                        "Liberty) sont fournis par OpenMapTiles. L’application utilise par " +
+                        "défaut le thème Positron (Light) de Map Tiler.\n\n" +
+                        "Les tuiles de la vue satellite proviennent de la ESRI World Imagery.",
                 color = Color.White,
                 fontSize = 14.sp,
                 lineHeight = 20.sp,
@@ -147,6 +174,12 @@ fun CreditsScreen(
                     url = "https://www.maptiler.com",
                     uriHandler = uriHandler
                 )
+                Spacer(modifier = Modifier.height(4.dp))
+                ClickableLink(
+                    label = "esri.com",
+                    url = "https://www.esri.com",
+                    uriHandler = uriHandler
+                )
             }
 
             Text(
@@ -158,29 +191,36 @@ fun CreditsScreen(
             )
 
             Text(
-                text = "L'application est développée de manière indépendante par Dotshell [dotshell.eu] " +
-                        "sous license GPL-3.0. Pelo n'est pas affilié aux TCL ou à la SYTRAL. Les " +
-                        "données utilisées sont totalement publiques et accessibles à tous. Il est " +
-                        "possible à n'importe qui d'aider au développement de l'application sur " +
-                        "GitHub [github.com/dotshell-org/pelo-android].",
+                text = "L’application est développée de manière indépendante par Dotshell sous " +
+                        "licence GPL-3.0. Pelo n’est pas affilié aux TCL ou au SYTRAL.\n\n" +
+                        "Le code source est disponible sur la page GitHub de Dotshell aux dépôts " +
+                        "suivants : pelo-android pour le code source de l’application Android, " +
+                        "pelo-ios pour celui de l’application iOS/iPadOS, raptor-gtfs-pipeline, " +
+                        "raptor-kt et raptor-sw pour le système d’itinéraire RAPTOR et enfin " +
+                        "TCL-API-mirror pour le miroir des données en temps réel.\n\n" +
+                        "Toute contribution est ouverte à la communauté.\n\n" +
+                        "Pour plus d’information, rendez-vous sur dotshell.eu.",
                 color = Color.White,
                 fontSize = 14.sp,
                 lineHeight = 20.sp,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
 
-            ClickableLink(
-                label = "dotshell.eu",
-                url = "https://www.dotshell.eu",
-                uriHandler = uriHandler
-            )
-            ClickableLink(
-                label = "github.com/dotshell-org/pelo-android",
-                url = "https://github.com/dotshell-org/pelo-android",
-                uriHandler = uriHandler
-            )
+            Column(modifier = Modifier.padding(bottom = 16.dp)) {
+                ClickableLink(
+                    label = "github.com/dotshell-org",
+                    url = "https://github.com/dotshell-org",
+                    uriHandler = uriHandler
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                ClickableLink(
+                    label = "dotshell.eu",
+                    url = "https://www.dotshell.eu",
+                    uriHandler = uriHandler
+                )
+            }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(80.dp))
         }
     }
 }

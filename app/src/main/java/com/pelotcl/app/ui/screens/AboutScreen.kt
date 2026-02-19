@@ -75,6 +75,7 @@ fun AboutScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(16.dp)
+                .padding(horizontal = 32.dp)
                 .verticalScroll(rememberScrollState())
         ) {
             // App version
@@ -84,7 +85,7 @@ fun AboutScreen(
                 onClick = {}
             )
 
-            HorizontalDivider()
+            HorizontalDivider(color = Color(0xFF3A3A3C))
 
             // Legal mentions / Terms of use
             AboutMenuItem(
@@ -92,7 +93,7 @@ fun AboutScreen(
                 onClick = onLegalClick
             )
 
-            HorizontalDivider()
+            HorizontalDivider(color = Color(0xFF3A3A3C))
 
             // Credits
             AboutMenuItem(
@@ -100,11 +101,11 @@ fun AboutScreen(
                 onClick = onCreditsClick
             )
 
-            HorizontalDivider()
+            HorizontalDivider(color = Color(0xFF3A3A3C))
 
             // Contact / Signal a bug
             AboutMenuItem(
-                title = "Nous contacter / Signaler un bug",
+                title = "Nous contacter",
                 onClick = onContactClick
             )
         }

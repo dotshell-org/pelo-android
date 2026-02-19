@@ -42,7 +42,7 @@ fun ContactScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Nous contacter / Signaler un bug",
+                        text = "Nous contacter",
                         color = Color.White,
                         fontWeight = FontWeight.Bold
                     )

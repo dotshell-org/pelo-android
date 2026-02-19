@@ -31,6 +31,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -38,26 +39,51 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.BackHandler
+import android.os.Build
 import kotlinx.coroutines.delay
 
 @Composable
 fun SettingsScreen(
     onBackClick: () -> Unit,
+    onSystemBack: () -> Unit,
     onItineraryClick: () -> Unit,
-    onAboutClick: () -> Unit,
     onMapStyleClick: () -> Unit,
+    onLegalClick: () -> Unit,
+    onCreditsClick: () -> Unit,
+    onContactClick: () -> Unit,
     onOfflineClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var clickCount by remember { mutableIntStateOf(0) }
     var isEasterEggActive by remember { mutableStateOf(false) }
+    var isAboutMenu by rememberSaveable { mutableStateOf(false) }
     val hapticFeedback = LocalHapticFeedback.current
+    val context = LocalContext.current
+    val versionName = remember {
+        try {
+            val packageManager = context.packageManager
+            val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.getPackageInfo(
+                    context.packageName,
+                    android.content.pm.PackageManager.PackageInfoFlags.of(0)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getPackageInfo(context.packageName, 0)
+            }
+            packageInfo.versionName ?: "0.0.0"
+        } catch (_: Exception) {
+            "0.0.0"
+        }
+    }
     
     // Reset click count after 2 seconds
     LaunchedEffect(clickCount) {
@@ -74,6 +100,15 @@ fun SettingsScreen(
             isEasterEggActive = false
         }
     }
+
+    BackHandler(enabled = isAboutMenu) {
+        isAboutMenu = false
+    }
+
+    BackHandler(enabled = !isAboutMenu) {
+        onSystemBack()
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -85,8 +120,9 @@ fun SettingsScreen(
                 .padding(horizontal = 32.dp)
                 .padding(top = 40.dp, bottom = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.Top
         ) {
+            Spacer(modifier = Modifier.height(80.dp))
             val rotation by animateFloatAsState(
                 targetValue = if (isEasterEggActive) 3600f else 0f,
                 animationSpec = tween(10000),
@@ -110,31 +146,61 @@ fun SettingsScreen(
                     }
             )
 
-            SettingsMenuRow(
-                title = "Itinéraire",
-                onClick = onItineraryClick
-            )
-            HorizontalDivider(color = Color(0xFF3A3A3C))
-            SettingsMenuRow(
-                title = "Fond de carte",
-                onClick = onMapStyleClick
-            )
-            HorizontalDivider(color = Color(0xFF3A3A3C))
-            SettingsMenuRow(
-                title = "Mode hors ligne",
-                onClick = onOfflineClick
-            )
-            HorizontalDivider(color = Color(0xFF3A3A3C))
-            SettingsMenuRow(
-                title = "À propos",
-                onClick = onAboutClick
-            )
+            if (isAboutMenu) {
+                SettingsMenuRow(
+                    title = "Version de l'application",
+                    subtitle = versionName,
+                    onClick = null,
+                    showChevron = false
+                )
+                HorizontalDivider(color = Color(0xFF3A3A3C))
+                SettingsMenuRow(
+                    title = "Mentions légales / CGU",
+                    onClick = onLegalClick
+                )
+                HorizontalDivider(color = Color(0xFF3A3A3C))
+                SettingsMenuRow(
+                    title = "Crédits",
+                    onClick = onCreditsClick
+                )
+                HorizontalDivider(color = Color(0xFF3A3A3C))
+                SettingsMenuRow(
+                    title = "Nous contacter",
+                    onClick = onContactClick
+                )
+            } else {
+                SettingsMenuRow(
+                    title = "Itinéraire",
+                    onClick = onItineraryClick
+                )
+                HorizontalDivider(color = Color(0xFF3A3A3C))
+                SettingsMenuRow(
+                    title = "Fond de carte",
+                    onClick = onMapStyleClick
+                )
+                HorizontalDivider(color = Color(0xFF3A3A3C))
+                SettingsMenuRow(
+                    title = "Mode hors ligne",
+                    onClick = onOfflineClick
+                )
+                HorizontalDivider(color = Color(0xFF3A3A3C))
+                SettingsMenuRow(
+                    title = "À propos",
+                    onClick = { isAboutMenu = true }
+                )
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
         }
 
         IconButton(
-            onClick = onBackClick,
+            onClick = {
+                if (isAboutMenu) {
+                    isAboutMenu = false
+                } else {
+                    onBackClick()
+                }
+            },
             modifier = Modifier
                 .statusBarsPadding()
                 .padding(start = 4.dp, top = 8.dp)
@@ -152,14 +218,23 @@ fun SettingsScreen(
 @Composable
 private fun SettingsMenuRow(
     title: String,
-    onClick: () -> Unit,
+    subtitle: String? = null,
+    onClick: (() -> Unit)?,
+    showChevron: Boolean = true,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier
+    val cardModifier = if (onClick != null) {
+        modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+    } else {
+        modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+    }
+    Card(
+        modifier = cardModifier,
         colors = CardDefaults.cardColors(
             containerColor = Color.Black
         ),
@@ -171,18 +246,31 @@ private fun SettingsMenuRow(
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = title,
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium,
+            Column(
                 modifier = Modifier.weight(1f)
-            )
-            Icon(
-                imageVector = Icons.Filled.ChevronRight,
-                contentDescription = "Next Arrow Icon",
-                tint = Color.White
-            )
+            ) {
+                Text(
+                    text = title,
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                if (!subtitle.isNullOrBlank()) {
+                    Text(
+                        text = subtitle,
+                        color = Color.Gray,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            }
+            if (showChevron && onClick != null) {
+                Icon(
+                    imageVector = Icons.Filled.ChevronRight,
+                    contentDescription = "Next Arrow Icon",
+                    tint = Color.White
+                )
+            }
         }
     }
 }
