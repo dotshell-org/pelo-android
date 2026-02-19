@@ -8,13 +8,17 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.RequiresApi
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,6 +31,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
@@ -38,6 +43,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.Info
@@ -81,6 +87,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -809,14 +816,6 @@ fun ItineraryScreen(
                                     .padding(horizontal = 16.dp)
                                     .padding(bottom = if (index < journeys.size - 1) 12.dp else 0.dp)
                             )
-                            if (index != journeys.size - 1)
-                            {
-                                HorizontalDivider(
-                                    modifier = Modifier
-                                        .padding(horizontal = 16.dp)
-                                        .background(Gray500)
-                                )
-                            }
                         }
 
                         item(key = "spacer_bottom") {
@@ -1042,6 +1041,13 @@ private fun CompactJourneyCard(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val baseBackgroundColor = Color.White.copy(alpha = 0.1f)
+    val backgroundColor by animateColorAsState(
+        targetValue = if (isPressed) Color.White.copy(alpha = 0.16f) else baseBackgroundColor,
+        label = "compact_journey_press"
+    )
     
     // Memoize formatted duration
     val formattedDuration = remember(journey.durationMinutes) {
@@ -1054,10 +1060,15 @@ private fun CompactJourneyCard(
     
     Card(
         modifier = modifier
-            .clickable { onClick() },
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
         colors = CardDefaults.cardColors(
-            containerColor = Color.Transparent
-        )
+            containerColor = backgroundColor
+        ),
+        shape = RoundedCornerShape(12.dp)
     ) {
         Column(
             modifier = Modifier
@@ -1090,70 +1101,64 @@ private fun CompactJourneyCard(
                     )
                 }
 
-                Box(
-                    modifier = Modifier
-                        .background(
-                            color = Color.White.copy(alpha = 0.15f),
-                            shape = RoundedCornerShape(8.dp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                color = Color.White.copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                    ) {
+                        Text(
+                            text = formattedDuration,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
                         )
-                ) {
-                    Text(
-                        text = formattedDuration,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp
-                    )
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
             // Horizontal journey summary with line icons and chevrons
-            Row(
+            FlowRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Start,
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                journey.legs.forEachIndexed { index, leg ->
-                    if (leg.isWalking) {
-                        // Walking icon
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.DirectionsWalk,
+                val nonWalkingLegs = journey.legs.filterNot { it.isWalking }
+
+                nonWalkingLegs.forEachIndexed { index, leg ->
+                    // Transport line icon
+                    val resourceId = BusIconHelper.getResourceIdForLine(context, leg.routeName ?: "")
+
+                    if (resourceId != 0) {
+                        Image(
+                            painter = painterResource(id = resourceId),
                             contentDescription = null,
-                            tint = Gray700,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(28.dp)
                         )
                     } else {
-                        // Transport line icon
-                        val resourceId = BusIconHelper.getResourceIdForLine(context, leg.routeName ?: "")
-
-                        if (resourceId != 0) {
-                            Image(
-                                painter = painterResource(id = resourceId),
-                                contentDescription = null,
-                                modifier = Modifier.size(28.dp)
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(Color(LineColorHelper.getColorForLineString(leg.routeName ?: ""))),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = (leg.routeName ?: "?").take(3),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
                             )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(LineColorHelper.getColorForLineString(leg.routeName ?: ""))),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = (leg.routeName ?: "?").take(3),
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                            }
                         }
                     }
 
                     // Chevron between legs
-                    if (index < journey.legs.size - 1) {
+                    if (index < nonWalkingLegs.size - 1) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                             contentDescription = null,
@@ -1407,21 +1412,19 @@ private fun JourneyDetailsSheetContent(
             Spacer(modifier = Modifier.height(12.dp))
 
             // Horizontal journey summary with line icons
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Start,
-                verticalAlignment = Alignment.CenterVertically
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clipToBounds()
             ) {
-                journey.legs.forEachIndexed { index, leg ->
-                    if (leg.isWalking) {
-                        // Walking icon
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.DirectionsWalk,
-                            contentDescription = null,
-                            tint = Gray700,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    } else {
+                Row(
+                    modifier = Modifier.wrapContentWidth(),
+                    horizontalArrangement = Arrangement.Start,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val nonWalkingLegs = journey.legs.filterNot { it.isWalking }
+
+                    nonWalkingLegs.forEachIndexed { index, leg ->
                         // Transport line icon
                         val resourceId = BusIconHelper.getResourceIdForLine(context, leg.routeName ?: "")
 
@@ -1447,16 +1450,16 @@ private fun JourneyDetailsSheetContent(
                                 )
                             }
                         }
-                    }
 
-                    // Arrow between legs
-                    if (index < journey.legs.size - 1) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.5f),
-                            modifier = Modifier.size(20.dp)
-                        )
+                        // Arrow between legs
+                        if (index < nonWalkingLegs.size - 1) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = Color.White.copy(alpha = 0.5f),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                 }
             }

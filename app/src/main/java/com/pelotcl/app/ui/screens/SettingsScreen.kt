@@ -1,10 +1,13 @@
 package com.pelotcl.app.ui.screens
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -223,11 +226,23 @@ private fun SettingsMenuRow(
     showChevron: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val pressedBackgroundColor by animateColorAsState(
+        targetValue = if (onClick != null && isPressed) Color(0xFF1C1C1E) else Color.Black,
+        animationSpec = tween(durationMillis = 120),
+        label = "settings_menu_press"
+    )
+
     val cardModifier = if (onClick != null) {
         modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
-            .clickable(onClick = onClick)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
     } else {
         modifier
             .fillMaxWidth()
@@ -236,7 +251,7 @@ private fun SettingsMenuRow(
     Card(
         modifier = cardModifier,
         colors = CardDefaults.cardColors(
-            containerColor = Color.Black
+            containerColor = pressedBackgroundColor
         ),
         shape = RoundedCornerShape(12.dp)
     ) {
