@@ -206,6 +206,8 @@ fun PlanScreen(
     val vehiclePositions by viewModel.vehiclePositions.collectAsState()
     val isLiveTrackingEnabled by viewModel.isLiveTrackingEnabled.collectAsState()
     val isOffline by viewModel.isOffline.collectAsState()
+    val isGlobalLiveEnabled by viewModel.isGlobalLiveEnabled.collectAsState()
+    val globalVehiclePositions by viewModel.globalVehiclePositions.collectAsState()
     var mapInstance by remember { mutableStateOf<MapLibreMap?>(null) }
     // Incremented each time the map style is reloaded, to force LaunchedEffects to re-run
     var mapStyleVersion by remember { mutableStateOf(0) }
@@ -803,6 +805,107 @@ fun PlanScreen(
         }
     }
 
+    // Global live map: render ALL vehicles with per-line colored markers
+    LaunchedEffect(globalVehiclePositions, mapInstance, mapStyleVersion) {
+        val map = mapInstance ?: return@LaunchedEffect
+        val positions = globalVehiclePositions
+
+        map.getStyle { style ->
+            // Clean up existing global layers/sources
+            style.getLayer("global-vehicle-positions-layer")?.let { style.removeLayer(it) }
+            style.getSource("global-vehicle-positions-source")?.let { style.removeSource(it) }
+
+            if (positions.isEmpty()) return@getStyle
+
+            // Generate colored marker icons per unique line color
+            val colorIconCache = mutableMapOf<Int, String>()
+            val busDrawable = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_bus_vehicle)
+
+            // Build GeoJSON with per-vehicle icon property
+            val vehiclesGeoJson = JsonObject().apply {
+                addProperty("type", "FeatureCollection")
+                val featuresArray = JsonArray()
+                positions.forEach { vehicle ->
+                    val lineColor = LineColorHelper.getColorForLineString(vehicle.lineName)
+                    val iconName = colorIconCache.getOrPut(lineColor) {
+                        val name = "global-vehicle-marker-${Integer.toHexString(lineColor)}"
+                        if (style.getImage(name) == null) {
+                            val size = 56
+                            val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+                            val canvas = android.graphics.Canvas(bitmap)
+                            val circlePaint = android.graphics.Paint().apply {
+                                color = lineColor
+                                isAntiAlias = true
+                                this.style = android.graphics.Paint.Style.FILL
+                            }
+                            canvas.drawCircle(size / 2f, size / 2f, size / 2f, circlePaint)
+                            busDrawable?.let { drawable ->
+                                val iconSize = (size * 0.65f).toInt()
+                                val iconOffset = (size - iconSize) / 2
+                                drawable.setBounds(iconOffset, iconOffset, iconOffset + iconSize, iconOffset + iconSize)
+                                drawable.draw(canvas)
+                            }
+                            style.addImage(name, bitmap)
+                        }
+                        name
+                    }
+
+                    val feature = JsonObject().apply {
+                        addProperty("type", "Feature")
+                        val geometry = JsonObject().apply {
+                            addProperty("type", "Point")
+                            val coords = JsonArray()
+                            coords.add(vehicle.longitude)
+                            coords.add(vehicle.latitude)
+                            add("coordinates", coords)
+                        }
+                        add("geometry", geometry)
+                        val props = JsonObject().apply {
+                            addProperty("vehicleId", vehicle.vehicleId)
+                            addProperty("lineName", vehicle.lineName)
+                            addProperty("destination", vehicle.destinationName ?: "")
+                            addProperty("icon", iconName)
+                        }
+                        add("properties", props)
+                    }
+                    featuresArray.add(feature)
+                }
+                add("features", featuresArray)
+            }.toString()
+
+            val source = GeoJsonSource("global-vehicle-positions-source", vehiclesGeoJson)
+            style.addSource(source)
+
+            val symbolLayer = SymbolLayer("global-vehicle-positions-layer", "global-vehicle-positions-source").apply {
+                setProperties(
+                    PropertyFactory.iconImage(Expression.get("icon")),
+                    PropertyFactory.iconSize(0.85f),
+                    PropertyFactory.iconAllowOverlap(true),
+                    PropertyFactory.iconIgnorePlacement(true)
+                )
+            }
+            style.addLayer(symbolLayer)
+        }
+    }
+
+    // Auto-zoom when global live is toggled
+    var zoomBeforeGlobalLive by remember { mutableStateOf<Double?>(null) }
+    LaunchedEffect(isGlobalLiveEnabled) {
+        val map = mapInstance ?: return@LaunchedEffect
+        if (isGlobalLiveEnabled) {
+            val currentZoom = map.cameraPosition.zoom
+            zoomBeforeGlobalLive = currentZoom
+            if (currentZoom > 11.0) {
+                map.animateCamera(CameraUpdateFactory.zoomTo(11.0), 500)
+            }
+        } else {
+            zoomBeforeGlobalLive?.let { savedZoom ->
+                map.animateCamera(CameraUpdateFactory.zoomTo(savedZoom), 500)
+                zoomBeforeGlobalLive = null
+            }
+        }
+    }
+
     LaunchedEffect(showLinesSheet, sheetContentState) {
         if (!showLinesSheet && sheetContentState != SheetContentState.LINE_DETAILS && sheetContentState != SheetContentState.ALL_SCHEDULES && temporaryLoadedBusLines.isNotEmpty()) {
             temporaryLoadedBusLines.forEach { busLine ->
@@ -1160,6 +1263,72 @@ fun PlanScreen(
                             color = Color.White,
                             radius = size.minDimension / 2.5f,
                             style = androidx.compose.ui.graphics.drawscope.Stroke(width = 7f)
+                        )
+                    }
+                }
+            }
+
+            // Global LIVE button - shows all vehicles across the network
+            AnimatedVisibility(
+                visible = !isOffline
+                    && sheetContentState != SheetContentState.LINE_DETAILS,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 36.dp, end = 16.dp)
+            ) {
+                val hasGlobalVehicles = isGlobalLiveEnabled && globalVehiclePositions.isNotEmpty()
+                val isGlobalActiveNoVehicles = isGlobalLiveEnabled && globalVehiclePositions.isEmpty()
+
+                val globalInfiniteTransition = rememberInfiniteTransition(label = "global_live_dot")
+                val globalDotOffset by globalInfiniteTransition.animateFloat(
+                    initialValue = if (hasGlobalVehicles) -2f else 0f,
+                    targetValue = if (hasGlobalVehicles) 2f else 0f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(400),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "global_dot_bounce"
+                )
+
+                val globalButtonColor = when {
+                    hasGlobalVehicles -> Color(0xFFEF4444)
+                    isGlobalActiveNoVehicles -> Color(0xFF9CA3AF)
+                    else -> Color.Black
+                }
+
+                Button(
+                    onClick = { viewModel.toggleGlobalLive() },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = globalButtonColor
+                    ),
+                    shape = RoundedCornerShape(20.dp),
+                    elevation = ButtonDefaults.buttonElevation(
+                        defaultElevation = 4.dp
+                    ),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        start = 15.dp,
+                        end = 16.dp,
+                        top = 8.dp,
+                        bottom = 8.dp
+                    )
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Canvas(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .graphicsLayer { translationY = globalDotOffset }
+                        ) {
+                            drawCircle(color = Color.White)
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "LIVE",
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
                         )
                     }
                 }

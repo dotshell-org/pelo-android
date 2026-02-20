@@ -130,6 +130,13 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     val isLiveTrackingEnabled: StateFlow<Boolean> = _isLiveTrackingEnabled.asStateFlow()
     private var vehiclePositionsJob: Job? = null
 
+    // Global live map state (all vehicles across the network)
+    private val _isGlobalLiveEnabled = MutableStateFlow(false)
+    val isGlobalLiveEnabled: StateFlow<Boolean> = _isGlobalLiveEnabled.asStateFlow()
+    private val _globalVehiclePositions = MutableStateFlow<List<SimpleVehiclePosition>>(emptyList())
+    val globalVehiclePositions: StateFlow<List<SimpleVehiclePosition>> = _globalVehiclePositions.asStateFlow()
+    private var globalLiveJob: Job? = null
+
     // Offline download job reference for cancellation support
     private var offlineDownloadJob: Job? = null
 
@@ -384,6 +391,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         private const val VEHICLE_POLL_BASE_MS = 5_000L      // 5s when active & successful
         private const val VEHICLE_POLL_MAX_BACKOFF_MS = 60_000L // 60s max on consecutive errors
         private const val VEHICLE_POLL_BACKOFF_FACTOR = 2.0
+        private const val GLOBAL_LIVE_POLL_BASE_MS = 10_000L   // 10s for global live (all vehicles)
     }
 
     /**
@@ -400,6 +408,10 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         if (_isOffline.value) {
             Log.w("TransportViewModel", "Cannot start live tracking while offline")
             return
+        }
+        // Mutually exclusive with global live
+        if (_isGlobalLiveEnabled.value) {
+            stopGlobalLive()
         }
         vehiclePositionsJob?.cancel()
         _isLiveTrackingEnabled.value = true
@@ -445,6 +457,70 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         vehiclePositionsJob = null
         _isLiveTrackingEnabled.value = false
         _vehiclePositions.value = emptyList()
+    }
+
+    /**
+     * Toggles the global live map showing all vehicles across the network.
+     * Mutually exclusive with per-line live tracking.
+     */
+    fun toggleGlobalLive() {
+        if (_isGlobalLiveEnabled.value) {
+            stopGlobalLive()
+        } else {
+            startGlobalLive()
+        }
+    }
+
+    private fun startGlobalLive() {
+        if (_isOffline.value) {
+            Log.w("TransportViewModel", "Cannot start global live while offline")
+            return
+        }
+        // Mutually exclusive with per-line tracking
+        if (_isLiveTrackingEnabled.value) {
+            stopLiveTracking()
+        }
+
+        globalLiveJob?.cancel()
+        _isGlobalLiveEnabled.value = true
+
+        globalLiveJob = viewModelScope.launch {
+            var currentDelay = GLOBAL_LIVE_POLL_BASE_MS
+            var consecutiveErrors = 0
+
+            while (_isGlobalLiveEnabled.value) {
+                try {
+                    val result = vehiclePositionsRepository.getAllVehiclePositions()
+                    result.onSuccess { positions ->
+                        _globalVehiclePositions.value = positions
+                        consecutiveErrors = 0
+                        currentDelay = GLOBAL_LIVE_POLL_BASE_MS
+                    }.onFailure {
+                        consecutiveErrors++
+                        currentDelay = (GLOBAL_LIVE_POLL_BASE_MS * VEHICLE_POLL_BACKOFF_FACTOR.pow(consecutiveErrors.toDouble()))
+                            .toLong()
+                            .coerceAtMost(VEHICLE_POLL_MAX_BACKOFF_MS)
+                        Log.w("TransportViewModel", "Global live polling error ($consecutiveErrors): ${it.message}")
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    consecutiveErrors++
+                    currentDelay = (GLOBAL_LIVE_POLL_BASE_MS * VEHICLE_POLL_BACKOFF_FACTOR.pow(consecutiveErrors.toDouble()))
+                        .toLong()
+                        .coerceAtMost(VEHICLE_POLL_MAX_BACKOFF_MS)
+                    Log.w("TransportViewModel", "Global live polling exception ($consecutiveErrors): ${e.message}")
+                }
+                delay(currentDelay)
+            }
+        }
+    }
+
+    fun stopGlobalLive() {
+        globalLiveJob?.cancel()
+        globalLiveJob = null
+        _isGlobalLiveEnabled.value = false
+        _globalVehiclePositions.value = emptyList()
     }
 
     /**
