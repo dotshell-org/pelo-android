@@ -137,6 +137,27 @@ private fun getScheduleColorBasedOnTime(scheduleTime: String): Color {
 }
 
 @RequiresApi(Build.VERSION_CODES.O)
+private fun getMinutesUntil(scheduleTime: String): Long? {
+    try {
+        val now = LocalTime.now()
+        val cleanTime = if (scheduleTime.count { it == ':' } == 2) {
+            scheduleTime.substringBeforeLast(":")
+        } else {
+            scheduleTime
+        }
+        val parts = cleanTime.split(":")
+        if (parts.size < 2) return null
+        val hour = parts[0].toInt()
+        val minute = parts[1].toInt()
+        val schedule = LocalTime.of(hour, minute)
+        val diff = ChronoUnit.MINUTES.between(now, schedule)
+        return if (diff < 0) null else diff
+    } catch (_: Exception) {
+        return null
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LineDetailsBottomSheet(
@@ -814,11 +835,20 @@ private fun NextSchedulesSection(
                     if (index > 0) {
                         Spacer(modifier = Modifier.width(16.dp))
                     }
-                    Text(
-                        text = schedule,
-                        style = timeStyle,
-                        color = getScheduleColorBasedOnTime(schedule)
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = schedule,
+                            style = timeStyle,
+                            color = getScheduleColorBasedOnTime(schedule)
+                        )
+                        getMinutesUntil(schedule)?.let { minutes ->
+                            Text(
+                                text = if (minutes == 0L) "< 1 min" else "dans ${minutes} min",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = getScheduleColorBasedOnTime(schedule)
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.weight(1f))
