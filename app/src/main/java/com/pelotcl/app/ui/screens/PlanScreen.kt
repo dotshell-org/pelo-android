@@ -33,6 +33,8 @@ import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
@@ -680,6 +682,10 @@ fun PlanScreen(
         if (sheetContentState != SheetContentState.LINE_DETAILS && sheetContentState != SheetContentState.ALL_SCHEDULES) {
             viewModel.stopLiveTracking()
         }
+        // Stop global live when any sheet is opened (user interacted with the map)
+        if (sheetContentState != null) {
+            viewModel.stopGlobalLive()
+        }
     }
 
     // Track previous line name to detect actual line changes (not initial selection)
@@ -1275,8 +1281,8 @@ fun PlanScreen(
                 enter = fadeIn(),
                 exit = fadeOut(),
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 36.dp, end = 16.dp)
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 184.dp, end = 16.dp)
             ) {
                 val hasGlobalVehicles = isGlobalLiveEnabled && globalVehiclePositions.isNotEmpty()
                 val isGlobalActiveNoVehicles = isGlobalLiveEnabled && globalVehiclePositions.isEmpty()
@@ -1298,38 +1304,83 @@ fun PlanScreen(
                     else -> Color.Black
                 }
 
-                Button(
-                    onClick = { viewModel.toggleGlobalLive() },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = globalButtonColor
-                    ),
-                    shape = RoundedCornerShape(20.dp),
-                    elevation = ButtonDefaults.buttonElevation(
-                        defaultElevation = 4.dp
-                    ),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                        start = 15.dp,
-                        end = 16.dp,
-                        top = 8.dp,
-                        bottom = 8.dp
-                    )
+                Column(
+                    horizontalAlignment = Alignment.End
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Canvas(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .graphicsLayer { translationY = globalDotOffset }
-                        ) {
-                            drawCircle(color = Color.White)
-                        }
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "LIVE",
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
+                    Button(
+                        onClick = { viewModel.toggleGlobalLive() },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = globalButtonColor
+                        ),
+                        shape = RoundedCornerShape(20.dp),
+                        elevation = ButtonDefaults.buttonElevation(
+                            defaultElevation = 4.dp
+                        ),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                            start = 15.dp,
+                            end = 16.dp,
+                            top = 8.dp,
+                            bottom = 8.dp
                         )
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Canvas(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .graphicsLayer { translationY = globalDotOffset }
+                            ) {
+                                drawCircle(color = Color.White)
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "LIVE",
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+
+                    // Color legend when global live is active
+                    AnimatedVisibility(
+                        visible = hasGlobalVehicles,
+                        enter = fadeIn(),
+                        exit = fadeOut()
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color.Black.copy(alpha = 0.85f),
+                            modifier = Modifier.padding(top = 8.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                @Composable
+                                fun LegendItem(color: Color, label: String) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(vertical = 2.dp)
+                                    ) {
+                                        Canvas(modifier = Modifier.size(10.dp)) {
+                                            drawCircle(color = color)
+                                        }
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = label,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.White
+                                        )
+                                    }
+                                }
+                                LegendItem(Color(0xFFEC4899), "Métro A")
+                                LegendItem(Color(0xFF3B82F6), "Métro B")
+                                LegendItem(Color(0xFFF59E0B), "Métro C")
+                                LegendItem(Color(0xFF22C55E), "Métro D")
+                                LegendItem(Color(0xFFA855F7), "Tram")
+                                LegendItem(Color(0xFFEF4444), "Bus")
+                            }
+                        }
                     }
                 }
             }
@@ -1419,6 +1470,11 @@ fun PlanScreen(
 
     if (showLinesSheet) {
         val modalBottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+        // Stop global live when lines sheet is opened
+        LaunchedEffect(Unit) {
+            viewModel.stopGlobalLive()
+        }
 
         LaunchedEffect(showLinesSheet) {
             if (!showLinesSheet) {
