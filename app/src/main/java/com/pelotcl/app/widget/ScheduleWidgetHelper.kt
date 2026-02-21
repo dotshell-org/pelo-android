@@ -18,6 +18,9 @@ data class UpcomingDeparture(
 
 object ScheduleWidgetHelper {
 
+    // directionId = -1 means both directions
+    private const val DIRECTION_BOTH = -1
+
     @RequiresApi(Build.VERSION_CODES.O)
     fun getUpcomingDepartures(
         context: Context,
@@ -32,19 +35,32 @@ object ScheduleWidgetHelper {
         val today = LocalDate.now()
         val isSchoolHoliday = holidayDetector.isSchoolHoliday(today)
         val isPublicHoliday = holidayDetector.isFrenchPublicHoliday(today)
+        val now = LocalTime.now()
 
         val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
-
         val headsigns = repo.getHeadsigns(gtfsLineName)
-        val directionName = headsigns[directionId] ?: ""
 
-        val allSchedules = repo.getSchedules(
-            gtfsLineName, stopName, directionId, isSchoolHoliday, isPublicHoliday
-        )
+        val directionsToQuery = if (directionId == DIRECTION_BOTH) {
+            headsigns.keys.toList().ifEmpty { listOf(0, 1) }
+        } else {
+            listOf(directionId)
+        }
 
-        val now = LocalTime.now()
-        return allSchedules
-            .mapNotNull { time -> minutesUntil(time, now)?.let { UpcomingDeparture(lineName, directionName, time, it) } }
+        val allDepartures = mutableListOf<UpcomingDeparture>()
+        for (dir in directionsToQuery) {
+            val directionName = headsigns[dir] ?: ""
+            val schedules = repo.getSchedules(
+                gtfsLineName, stopName, dir, isSchoolHoliday, isPublicHoliday
+            )
+            schedules.mapNotNull { time ->
+                minutesUntil(time, now)?.let {
+                    UpcomingDeparture(lineName, directionName, time, it)
+                }
+            }.let { allDepartures.addAll(it) }
+        }
+
+        return allDepartures
+            .sortedBy { it.minutesUntil }
             .take(count)
     }
 

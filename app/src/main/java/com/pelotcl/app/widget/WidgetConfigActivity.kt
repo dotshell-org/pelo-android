@@ -127,6 +127,15 @@ private data class LineDirection(
     val headsign: String
 )
 
+/** Unique lines grouped with their available directions */
+private data class LineWithDirections(
+    val lineName: String,
+    val directions: List<LineDirection>
+)
+
+// directionId = -1 means "both directions"
+private const val DIRECTION_BOTH = -1
+
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -138,22 +147,24 @@ private fun WidgetConfigScreen(
     onCancel: () -> Unit
 ) {
     var selectedStop by remember { mutableStateOf<String?>(null) }
+    var selectedLine by remember { mutableStateOf<LineWithDirections?>(null) }
+
+    val title = when {
+        selectedLine != null -> "Choisir la direction"
+        selectedStop != null -> "Choisir le mode"
+        else -> "Choisir un arrêt"
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text(
-                        text = if (selectedStop == null) "Choisir un arrêt" else "Choisir le mode",
-                        fontWeight = FontWeight.Bold
-                    )
-                },
+                title = { Text(text = title, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = {
-                        if (selectedStop != null) {
-                            selectedStop = null
-                        } else {
-                            onCancel()
+                        when {
+                            selectedLine != null -> selectedLine = null
+                            selectedStop != null -> selectedStop = null
+                            else -> onCancel()
                         }
                     }) {
                         Icon(
@@ -178,21 +189,31 @@ private fun WidgetConfigScreen(
                     onStopSelected = { selectedStop = it }
                 )
             } else {
-                // Step 2: Choose mode (all lines or specific line+direction)
-                // Get desserte from favorites (stored from WFS data) with GTFS fallback
                 val desserte = remember(selectedStop) {
                     favoritesRepository.getDesserteForStop(selectedStop!!)
                         ?: schedulesRepository.getDesserteForStop(selectedStop!!)
                         ?: ""
                 }
-                ModeSelectionStep(
-                    stopName = selectedStop!!,
-                    desserte = desserte,
-                    schedulesRepository = schedulesRepository,
-                    onModeSelected = { lineName, directionId ->
-                        onConfigComplete(selectedStop!!, lineName, directionId, desserte)
-                    }
-                )
+
+                if (selectedLine == null) {
+                    // Step 2: Choose all lines or a specific line
+                    LineSelectionStep(
+                        desserte = desserte,
+                        schedulesRepository = schedulesRepository,
+                        onAllLinesSelected = {
+                            onConfigComplete(selectedStop!!, null, 0, desserte)
+                        },
+                        onLineSelected = { line -> selectedLine = line }
+                    )
+                } else {
+                    // Step 3: Choose direction for the selected line
+                    DirectionSelectionStep(
+                        line = selectedLine!!,
+                        onDirectionSelected = { directionId ->
+                            onConfigComplete(selectedStop!!, selectedLine!!.lineName, directionId, desserte)
+                        }
+                    )
+                }
             }
         }
     }
@@ -259,15 +280,15 @@ private fun StopSelectionStep(
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-private fun ModeSelectionStep(
-    stopName: String,
+private fun LineSelectionStep(
     desserte: String,
     schedulesRepository: SchedulesRepository,
-    onModeSelected: (lineName: String?, directionId: Int) -> Unit
+    onAllLinesSelected: () -> Unit,
+    onLineSelected: (LineWithDirections) -> Unit
 ) {
-    // Parse available lines and directions from desserte
-    val lineDirections = remember(desserte) {
-        desserte.split(",")
+    // Parse desserte and group by line
+    val linesWithDirections = remember(desserte) {
+        val lineDirections = desserte.split(",")
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .mapNotNull { entry ->
@@ -287,6 +308,11 @@ private fun ModeSelectionStep(
                     LineDirection(displayLine, dirId, headsign)
                 } else null
             }
+
+        // Group by line name
+        lineDirections.groupBy { it.lineName }.map { (lineName, dirs) ->
+            LineWithDirections(lineName, dirs.sortedBy { it.directionId })
+        }
     }
 
     LazyColumn {
@@ -295,7 +321,7 @@ private fun ModeSelectionStep(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onModeSelected(null, 0) },
+                    .clickable { onAllLinesSelected() },
                 shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
@@ -331,29 +357,102 @@ private fun ModeSelectionStep(
             )
         }
 
-        // Options: Specific line + direction
-        items(lineDirections) { ld ->
+        // Options: Unique lines
+        items(linesWithDirections) { line ->
+            val subtitle = line.directions.joinToString(" · ") { it.headsign }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onModeSelected(ld.lineName, ld.directionId) }
+                    .clickable { onLineSelected(line) }
                     .padding(vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = line.lineName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.width(48.dp)
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            HorizontalDivider()
+        }
+    }
+}
+
+@Composable
+private fun DirectionSelectionStep(
+    line: LineWithDirections,
+    onDirectionSelected: (Int) -> Unit
+) {
+    Column {
+        Text(
+            text = "Ligne ${line.lineName}",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
+        // Option: Both directions (only if there are 2 directions)
+        if (line.directions.size > 1) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onDirectionSelected(DIRECTION_BOTH) },
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
                     Text(
-                        text = ld.lineName,
+                        text = "Les deux directions",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.width(48.dp)
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = ld.headsign,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = line.directions.joinToString(" et ") { it.headsign },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                        maxLines = 2
                     )
                 }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "Ou une seule direction :",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        }
+
+        // Individual directions
+        line.directions.forEach { dir ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onDirectionSelected(dir.directionId) }
+                    .padding(vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = dir.headsign,
+                    style = MaterialTheme.typography.bodyLarge
+                )
             }
             HorizontalDivider()
         }
