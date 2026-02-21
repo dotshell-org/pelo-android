@@ -2264,6 +2264,24 @@ private suspend fun addStopsToMap(
                         return@OnMapClickListener true
                     }
 
+                    // In global LIVE mode, clicking a vehicle opens its line details.
+                    val globalVehicleFeatures = map.queryRenderedFeatures(screenPoint, "global-vehicle-positions-layer")
+                    if (globalVehicleFeatures.isNotEmpty()) {
+                        val feature = globalVehicleFeatures.first()
+                        val props = feature.properties()
+                        if (props != null) {
+                            try {
+                                val lineName = if (props.has("lineName")) props.get("lineName").asString else ""
+                                if (lineName.isNotEmpty()) {
+                                    onLineClick(lineName)
+                                    return@OnMapClickListener true
+                                }
+                            } catch (_: Exception) {
+                                // Ignore parse errors
+                            }
+                        }
+                    }
+
                     // Check individual stops first (higher priority than lines)
                     val interactableLayers = usedSlots.flatMap { idx ->
                         listOf("$priorityLayerPrefix-$idx", "$tramLayerPrefix-$idx", "$secondaryLayerPrefix-$idx")
