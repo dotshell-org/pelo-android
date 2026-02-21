@@ -33,8 +33,6 @@ import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
@@ -132,6 +130,82 @@ private fun isMetroTramOrFunicular(lineName: String): Boolean {
 
 private fun isTemporaryBus(lineName: String): Boolean {
     return !isMetroTramOrFunicular(lineName)
+}
+
+private fun isLiveTrackableLine(lineName: String): Boolean {
+    val upperName = lineName.uppercase()
+    return when {
+        upperName in setOf("A", "B", "C", "D") -> false // metro
+        upperName in setOf("F1", "F2") -> false // funicular
+        upperName.startsWith("NAV") -> false // Navigone
+        upperName == "RX" -> false
+        else -> true // bus + tram + trambus
+    }
+}
+
+private enum class VehicleMarkerType {
+    BUS,
+    TRAM
+}
+
+private fun getVehicleMarkerType(lineName: String): VehicleMarkerType {
+    val upperName = lineName.uppercase()
+    return when {
+        upperName.startsWith("TB") -> VehicleMarkerType.BUS
+        upperName.startsWith("T") -> VehicleMarkerType.TRAM
+        else -> VehicleMarkerType.BUS
+    }
+}
+
+private fun ensureVehicleMarkerImage(
+    mapStyle: org.maplibre.android.maps.Style,
+    context: android.content.Context,
+    iconName: String,
+    color: Int,
+    markerType: VehicleMarkerType,
+    size: Int
+) {
+    if (mapStyle.getImage(iconName) != null) return
+
+    val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(bitmap)
+
+    val circlePaint = android.graphics.Paint().apply {
+        this.color = color
+        isAntiAlias = true
+        style = android.graphics.Paint.Style.FILL
+    }
+    canvas.drawCircle(size / 2f, size / 2f, size / 2f, circlePaint)
+
+    fun drawCenteredDrawable(drawable: android.graphics.drawable.Drawable, maxSize: Int) {
+        val intrinsicWidth = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else maxSize
+        val intrinsicHeight = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else maxSize
+        val scale = minOf(maxSize.toFloat() / intrinsicWidth, maxSize.toFloat() / intrinsicHeight)
+        val drawWidth = (intrinsicWidth * scale).toInt()
+        val drawHeight = (intrinsicHeight * scale).toInt()
+        val left = (size - drawWidth) / 2
+        val top = (size - drawHeight) / 2
+        drawable.setBounds(left, top, left + drawWidth, top + drawHeight)
+        drawable.draw(canvas)
+    }
+
+    when (markerType) {
+        VehicleMarkerType.BUS -> {
+            val busDrawable = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_bus_vehicle)
+            busDrawable?.let { drawable ->
+                drawCenteredDrawable(drawable, (size * 0.65f).toInt())
+            }
+        }
+
+        VehicleMarkerType.TRAM -> {
+            val tramDrawable = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_tramway_vehicle)
+            tramDrawable?.let { drawable ->
+                drawCenteredDrawable(drawable, (size * 0.65f).toInt())
+            }
+        }
+    }
+
+    mapStyle.addImage(iconName, bitmap)
 }
 
 /**
@@ -678,27 +752,38 @@ fun PlanScreen(
             }
             temporaryLoadedBusLines = emptySet()
         }
-        // Stop live tracking when leaving line details
-        if (sheetContentState != SheetContentState.LINE_DETAILS && sheetContentState != SheetContentState.ALL_SCHEDULES) {
-            viewModel.stopLiveTracking()
-        }
-        // Stop global live when any sheet is opened (user interacted with the map)
-        if (sheetContentState != null) {
-            viewModel.stopGlobalLive()
-        }
     }
 
-    // Track previous line name to detect actual line changes (not initial selection)
-    var previousLineName by remember { mutableStateOf<String?>(null) }
-    
-    // Stop live tracking only when changing from one line to another (not on initial selection)
-    LaunchedEffect(selectedLine?.lineName) {
-        val currentLineName = selectedLine?.lineName
-        if (previousLineName != null && currentLineName != null && previousLineName != currentLineName) {
-            // Actually changing from one line to another - stop tracking
-            viewModel.stopLiveTracking()
+    // Keep LIVE mode active while switching between global and per-line context.
+    LaunchedEffect(selectedLine?.lineName, sheetContentState, isLiveTrackingEnabled, isGlobalLiveEnabled, isOffline) {
+        if (isOffline) return@LaunchedEffect
+
+        val isLiveModeEnabled = isLiveTrackingEnabled || isGlobalLiveEnabled
+        if (!isLiveModeEnabled) return@LaunchedEffect
+
+        val isLineContext = sheetContentState == SheetContentState.LINE_DETAILS || sheetContentState == SheetContentState.ALL_SCHEDULES
+        val selectedTrackableLine = selectedLine?.lineName?.takeIf { isLineContext && isLiveTrackableLine(it) }
+        val selectedNotTrackableLine = selectedLine?.lineName?.takeIf { isLineContext && !isLiveTrackableLine(it) }
+
+        if (selectedTrackableLine != null) {
+            if (isGlobalLiveEnabled || !isLiveTrackingEnabled) {
+                viewModel.startLiveTracking(selectedTrackableLine)
+            }
+        } else if (selectedNotTrackableLine != null) {
+            if (isLiveTrackingEnabled) {
+                viewModel.stopLiveTracking()
+            }
+            if (isGlobalLiveEnabled) {
+                viewModel.stopGlobalLive()
+            }
+        } else {
+            if (isLiveTrackingEnabled) {
+                viewModel.stopLiveTracking()
+            }
+            if (!isGlobalLiveEnabled) {
+                viewModel.toggleGlobalLive()
+            }
         }
-        previousLineName = currentLineName
     }
 
     // Auto-zoom out when live tracking is enabled, restore zoom when disabled
@@ -771,32 +856,17 @@ fun PlanScreen(
             val source = GeoJsonSource("vehicle-positions-source", vehiclesGeoJson)
             style.addSource(source)
 
-            // Create bus marker icon: red circle with white bus pictogram
-            val iconName = "vehicle-bus-marker"
-            if (style.getImage(iconName) == null) {
-                val size = 72 // Icon size in pixels (larger for better visibility)
-                val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
-                val canvas = android.graphics.Canvas(bitmap)
-                
-                // Draw circle background
-                val circlePaint = android.graphics.Paint().apply {
-                    color = android.graphics.Color.parseColor("#DB1212")
-                    isAntiAlias = true
-                }
-                circlePaint.style = android.graphics.Paint.Style.FILL
-                canvas.drawCircle(size / 2f, size / 2f, size / 2f, circlePaint)
-                
-                // Draw white bus icon from vector drawable
-                val busDrawable = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_bus_vehicle)
-                busDrawable?.let { drawable ->
-                    val iconSize = (size * 0.65f).toInt()
-                    val iconOffset = (size - iconSize) / 2
-                    drawable.setBounds(iconOffset, iconOffset, iconOffset + iconSize, iconOffset + iconSize)
-                    drawable.draw(canvas)
-                }
-                
-                style.addImage(iconName, bitmap)
-            }
+            val markerColor = LineColorHelper.getColorForLineString(line.lineName)
+            val markerType = getVehicleMarkerType(line.lineName)
+            val iconName = "vehicle-marker-line-${markerType.name.lowercase()}-${Integer.toHexString(markerColor)}"
+            ensureVehicleMarkerImage(
+                mapStyle = style,
+                context = context,
+                iconName = iconName,
+                color = markerColor,
+                markerType = markerType,
+                size = 72
+            )
 
             // Add symbol layer with bus marker
             val symbolLayer = SymbolLayer("vehicle-positions-layer", "vehicle-positions-source").apply {
@@ -823,9 +893,8 @@ fun PlanScreen(
 
             if (positions.isEmpty()) return@getStyle
 
-            // Generate colored marker icons per unique line color
-            val colorIconCache = mutableMapOf<Int, String>()
-            val busDrawable = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_bus_vehicle)
+            // Generate colored/type-specific marker icons per unique (type,color)
+            val iconCache = mutableMapOf<String, String>()
 
             // Build GeoJSON with per-vehicle icon property
             val vehiclesGeoJson = JsonObject().apply {
@@ -833,26 +902,18 @@ fun PlanScreen(
                 val featuresArray = JsonArray()
                 positions.forEach { vehicle ->
                     val lineColor = LineColorHelper.getColorForLineString(vehicle.lineName)
-                    val iconName = colorIconCache.getOrPut(lineColor) {
-                        val name = "global-vehicle-marker-${Integer.toHexString(lineColor)}"
-                        if (style.getImage(name) == null) {
-                            val size = 56
-                            val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
-                            val canvas = android.graphics.Canvas(bitmap)
-                            val circlePaint = android.graphics.Paint().apply {
-                                color = lineColor
-                                isAntiAlias = true
-                                this.style = android.graphics.Paint.Style.FILL
-                            }
-                            canvas.drawCircle(size / 2f, size / 2f, size / 2f, circlePaint)
-                            busDrawable?.let { drawable ->
-                                val iconSize = (size * 0.65f).toInt()
-                                val iconOffset = (size - iconSize) / 2
-                                drawable.setBounds(iconOffset, iconOffset, iconOffset + iconSize, iconOffset + iconSize)
-                                drawable.draw(canvas)
-                            }
-                            style.addImage(name, bitmap)
-                        }
+                    val markerType = getVehicleMarkerType(vehicle.lineName)
+                    val cacheKey = "${markerType.name}-${lineColor}"
+                    val iconName = iconCache.getOrPut(cacheKey) {
+                        val name = "global-vehicle-marker-${markerType.name.lowercase()}-${Integer.toHexString(lineColor)}"
+                        ensureVehicleMarkerImage(
+                            mapStyle = style,
+                            context = context,
+                            iconName = name,
+                            color = lineColor,
+                            markerType = markerType,
+                            size = 56
+                        )
                         name
                     }
 
@@ -1274,132 +1335,32 @@ fun PlanScreen(
                 }
             }
 
-            // Global LIVE button - shows all vehicles across the network
+            // Unified LIVE button (global when no selected bus line, line-specific otherwise)
+            val isLineContext = sheetContentState == SheetContentState.LINE_DETAILS || sheetContentState == SheetContentState.ALL_SCHEDULES
+            val selectedTrackableLineName = selectedLine?.lineName?.takeIf { isLineContext && isLiveTrackableLine(it) }
+            val hasSelectedNotTrackableLine = selectedLine?.lineName?.let { isLineContext && !isLiveTrackableLine(it) } == true
             AnimatedVisibility(
-                visible = !isOffline
-                    && sheetContentState != SheetContentState.LINE_DETAILS,
-                enter = fadeIn(),
-                exit = fadeOut(),
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(bottom = 184.dp, end = 16.dp)
-            ) {
-                val hasGlobalVehicles = isGlobalLiveEnabled && globalVehiclePositions.isNotEmpty()
-                val isGlobalActiveNoVehicles = isGlobalLiveEnabled && globalVehiclePositions.isEmpty()
-
-                val globalInfiniteTransition = rememberInfiniteTransition(label = "global_live_dot")
-                val globalDotOffset by globalInfiniteTransition.animateFloat(
-                    initialValue = if (hasGlobalVehicles) -2f else 0f,
-                    targetValue = if (hasGlobalVehicles) 2f else 0f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(400),
-                        repeatMode = RepeatMode.Reverse
-                    ),
-                    label = "global_dot_bounce"
-                )
-
-                val globalButtonColor = when {
-                    hasGlobalVehicles -> Color(0xFFEF4444)
-                    isGlobalActiveNoVehicles -> Color(0xFF9CA3AF)
-                    else -> Color.Black
-                }
-
-                Column(
-                    horizontalAlignment = Alignment.End
-                ) {
-                    Button(
-                        onClick = { viewModel.toggleGlobalLive() },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = globalButtonColor
-                        ),
-                        shape = RoundedCornerShape(20.dp),
-                        elevation = ButtonDefaults.buttonElevation(
-                            defaultElevation = 4.dp
-                        ),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                            start = 15.dp,
-                            end = 16.dp,
-                            top = 8.dp,
-                            bottom = 8.dp
-                        )
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Canvas(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .graphicsLayer { translationY = globalDotOffset }
-                            ) {
-                                drawCircle(color = Color.White)
-                            }
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "LIVE",
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                        }
-                    }
-
-                    // Color legend when global live is active
-                    AnimatedVisibility(
-                        visible = hasGlobalVehicles,
-                        enter = fadeIn(),
-                        exit = fadeOut()
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = Color.Black.copy(alpha = 0.85f),
-                            modifier = Modifier.padding(top = 8.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                            ) {
-                                @Composable
-                                fun LegendItem(color: Color, label: String) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(vertical = 2.dp)
-                                    ) {
-                                        Canvas(modifier = Modifier.size(10.dp)) {
-                                            drawCircle(color = color)
-                                        }
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = label,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = Color.White
-                                        )
-                                    }
-                                }
-                                LegendItem(Color(0xFFEC4899), "Métro A")
-                                LegendItem(Color(0xFF3B82F6), "Métro B")
-                                LegendItem(Color(0xFFF59E0B), "Métro C")
-                                LegendItem(Color(0xFF22C55E), "Métro D")
-                                LegendItem(Color(0xFFA855F7), "Tram")
-                                LegendItem(Color(0xFFEF4444), "Bus")
-                            }
-                        }
-                    }
-                }
-            }
-
-            // LIVE button - shows when a bus line is selected (not metro/tram/funicular)
-            AnimatedVisibility(
-                visible = sheetContentState == SheetContentState.LINE_DETAILS
-                    && selectedLine != null
-                    && !isMetroTramOrFunicular(selectedLine!!.lineName)
-                    && !isOffline,
+                visible = !isOffline && !hasSelectedNotTrackableLine,
                 enter = fadeIn(),
                 exit = fadeOut(),
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(top = 36.dp, end = 16.dp)
+                    .padding(
+                        top = if (sheetContentState == SheetContentState.LINE_DETAILS || sheetContentState == SheetContentState.ALL_SCHEDULES) {
+                            36.dp
+                        } else {
+                            100.dp
+                        },
+                        end = 12.dp
+                    )
             ) {
-                // Determine button state: active with vehicles, active without vehicles, or inactive
-                val hasVehicles = isLiveTrackingEnabled && vehiclePositions.isNotEmpty()
-                val isActiveNoVehicles = isLiveTrackingEnabled && vehiclePositions.isEmpty()
+                val isLiveModeEnabled = isLiveTrackingEnabled || isGlobalLiveEnabled
+                val hasVehicles = when {
+                    isLiveTrackingEnabled -> vehiclePositions.isNotEmpty()
+                    isGlobalLiveEnabled -> globalVehiclePositions.isNotEmpty()
+                    else -> false
+                }
+                val isActiveNoVehicles = isLiveModeEnabled && !hasVehicles
                 
                 // Animation for the bouncing dot (goes up and down)
                 val infiniteTransition = rememberInfiniteTransition(label = "live_dot")
@@ -1421,8 +1382,17 @@ fun PlanScreen(
                 
                 Button(
                     onClick = {
-                        selectedLine?.let { line ->
-                            viewModel.toggleLiveTracking(line.lineName)
+                        if (isLiveModeEnabled) {
+                            if (isLiveTrackingEnabled) {
+                                viewModel.stopLiveTracking()
+                            }
+                            if (isGlobalLiveEnabled) {
+                                viewModel.stopGlobalLive()
+                            }
+                        } else {
+                            selectedTrackableLineName?.let { lineName ->
+                                viewModel.startLiveTracking(lineName)
+                            } ?: viewModel.toggleGlobalLive()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(
@@ -1470,11 +1440,6 @@ fun PlanScreen(
 
     if (showLinesSheet) {
         val modalBottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-        // Stop global live when lines sheet is opened
-        LaunchedEffect(Unit) {
-            viewModel.stopGlobalLive()
-        }
 
         LaunchedEffect(showLinesSheet) {
             if (!showLinesSheet) {
@@ -2706,5 +2671,3 @@ private fun stopLocationUpdates(fusedLocationClient: FusedLocationProviderClient
         locationCallback = null
     }
 }
-
-
