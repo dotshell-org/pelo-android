@@ -63,13 +63,50 @@
         <!-- Widget receiver -->
         <receiver
             android:name=".widget.PeloWidgetReceiver"
+            android:label="@string/widget_label_all_lines_minutes"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/pelo_widget_info" />
+                android:resource="@xml/pelo_widget_all_lines_minutes_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.PeloWidgetClockAllLinesReceiver"
+            android:label="@string/widget_label_all_lines_clock"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/pelo_widget_all_lines_clock_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.PeloWidgetLineMinutesReceiver"
+            android:label="@string/widget_label_line_minutes"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/pelo_widget_line_minutes_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.PeloWidgetLineClockReceiver"
+            android:label="@string/widget_label_line_clock"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/pelo_widget_line_clock_info" />
         </receiver>
     </application>
 

@@ -8,6 +8,8 @@ import android.content.Intent
 import android.os.Build
 import android.os.SystemClock
 import androidx.glance.appwidget.GlanceAppWidgetManager
+import androidx.glance.appwidget.state.getAppWidgetState
+import androidx.glance.state.PreferencesGlanceStateDefinition
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 
@@ -22,12 +24,16 @@ class WidgetAlarmReceiver : BroadcastReceiver() {
                 val manager = GlanceAppWidgetManager(context)
                 val glanceId = manager.getGlanceIdBy(appWidgetId)
                 PeloWidget().update(context, glanceId)
+                val prefs = getAppWidgetState(
+                    context,
+                    PreferencesGlanceStateDefinition,
+                    glanceId
+                )
+                val intervalMinutes = getRefreshIntervalMinutes(prefs)
+                WidgetRefreshScheduler.scheduleNext(context, appWidgetId, intervalMinutes)
             } catch (_: Exception) {
                 // Widget may have been removed
             } finally {
-                // Reschedule the next alarm
-                val intervalMinutes = intent.getIntExtra("intervalMinutes", 15)
-                WidgetRefreshScheduler.scheduleNext(context, appWidgetId, intervalMinutes)
                 pendingResult.finish()
             }
         }
@@ -36,11 +42,10 @@ class WidgetAlarmReceiver : BroadcastReceiver() {
 
 object WidgetRefreshScheduler {
 
-    private fun getPendingIntent(context: Context, appWidgetId: Int, intervalMinutes: Int): PendingIntent {
+    private fun getPendingIntent(context: Context, appWidgetId: Int): PendingIntent {
         val intent = Intent(context, WidgetAlarmReceiver::class.java).apply {
             action = "com.pelotcl.app.WIDGET_REFRESH_$appWidgetId"
             putExtra("appWidgetId", appWidgetId)
-            putExtra("intervalMinutes", intervalMinutes)
         }
         return PendingIntent.getBroadcast(
             context,
@@ -56,7 +61,7 @@ object WidgetRefreshScheduler {
 
     fun scheduleNext(context: Context, appWidgetId: Int, intervalMinutes: Int) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val pendingIntent = getPendingIntent(context, appWidgetId, intervalMinutes)
+        val pendingIntent = getPendingIntent(context, appWidgetId)
         val triggerAt = SystemClock.elapsedRealtime() + intervalMinutes * 60_000L
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -76,7 +81,7 @@ object WidgetRefreshScheduler {
 
     fun cancel(context: Context, appWidgetId: Int) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val pendingIntent = getPendingIntent(context, appWidgetId, 0)
+        val pendingIntent = getPendingIntent(context, appWidgetId)
         alarmManager.cancel(pendingIntent)
     }
 
@@ -87,16 +92,24 @@ object WidgetRefreshScheduler {
         glanceIds.forEach { glanceId ->
             try {
                 val appWidgetId = manager.getAppWidgetId(glanceId)
-                val prefs = androidx.glance.appwidget.state.getAppWidgetState(
+                val prefs = getAppWidgetState(
                     context,
-                    androidx.glance.state.PreferencesGlanceStateDefinition,
+                    PreferencesGlanceStateDefinition,
                     glanceId
                 )
-                val interval = prefs[PeloWidget.PREF_REFRESH_INTERVAL] ?: 15
+                val interval = getRefreshIntervalMinutes(prefs)
                 schedule(context, appWidgetId, interval)
             } catch (_: Exception) {
                 // Skip if widget state can't be read
             }
         }
     }
+}
+
+private fun getRefreshIntervalMinutes(prefs: androidx.datastore.preferences.core.Preferences): Int {
+    val widgetStyle = WidgetStyle.fromId(prefs[PeloWidget.PREF_WIDGET_STYLE])
+    if (widgetStyle != null) {
+        return widgetStyle.refreshIntervalMinutes
+    }
+    return prefs[PeloWidget.PREF_REFRESH_INTERVAL] ?: 5
 }

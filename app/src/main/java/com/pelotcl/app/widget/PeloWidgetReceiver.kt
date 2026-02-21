@@ -1,12 +1,11 @@
 package com.pelotcl.app.widget
 
-import android.appwidget.AppWidgetManager
 import android.content.Context
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 
-class PeloWidgetReceiver : GlanceAppWidgetReceiver() {
+abstract class BasePeloWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget = PeloWidget()
 
     override fun onEnabled(context: Context) {
@@ -25,3 +24,11 @@ class PeloWidgetReceiver : GlanceAppWidgetReceiver() {
         }
     }
 }
+
+class PeloWidgetReceiver : BasePeloWidgetReceiver()
+
+class PeloWidgetClockAllLinesReceiver : BasePeloWidgetReceiver()
+
+class PeloWidgetLineMinutesReceiver : BasePeloWidgetReceiver()
+
+class PeloWidgetLineClockReceiver : BasePeloWidgetReceiver()

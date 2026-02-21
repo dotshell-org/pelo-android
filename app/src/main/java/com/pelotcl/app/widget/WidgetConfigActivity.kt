@@ -25,8 +25,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -35,11 +33,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -76,6 +74,7 @@ private val AccentYellow = Color(0xFFFFC107)
 class WidgetConfigActivity : ComponentActivity() {
 
     private var appWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
+    private var widgetStyle = WidgetStyle.ALL_LINES_MINUTES
 
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -96,6 +95,7 @@ class WidgetConfigActivity : ComponentActivity() {
             finish()
             return
         }
+        widgetStyle = resolveWidgetStyle(applicationContext, appWidgetId)
 
         val favoritesRepository = FavoritesRepository(applicationContext)
         val schedulesRepository = SchedulesRepository.getInstance(applicationContext)
@@ -103,18 +103,24 @@ class WidgetConfigActivity : ComponentActivity() {
 
         setContent {
             WidgetConfigScreen(
+                widgetStyle = widgetStyle,
                 favoriteStops = favoriteStops,
                 favoritesRepository = favoritesRepository,
                 schedulesRepository = schedulesRepository,
-                onConfigComplete = { stopName, lineName, directionId, desserte, refreshInterval ->
-                    saveWidgetConfig(stopName, lineName, directionId, desserte, refreshInterval)
+                onConfigComplete = { stopName, lineName, directionId, desserte ->
+                    saveWidgetConfig(stopName, lineName, directionId, desserte)
                 },
                 onCancel = { finish() }
             )
         }
     }
 
-    private fun saveWidgetConfig(stopName: String, lineName: String?, directionId: Int, desserte: String, refreshIntervalMinutes: Int) {
+    private fun saveWidgetConfig(
+        stopName: String,
+        lineName: String?,
+        directionId: Int,
+        desserte: String
+    ) {
         val context = applicationContext
         MainScope().launch {
             val glanceId = GlanceAppWidgetManager(context)
@@ -129,11 +135,12 @@ class WidgetConfigActivity : ComponentActivity() {
                 }
                 prefs[PeloWidget.PREF_DIRECTION_ID] = directionId
                 prefs[PeloWidget.PREF_DESSERTE] = desserte
-                prefs[PeloWidget.PREF_REFRESH_INTERVAL] = refreshIntervalMinutes
+                prefs[PeloWidget.PREF_WIDGET_STYLE] = widgetStyle.id
+                prefs[PeloWidget.PREF_REFRESH_INTERVAL] = widgetStyle.refreshIntervalMinutes
             }
 
             PeloWidget().update(context, glanceId)
-            WidgetRefreshScheduler.schedule(context, appWidgetId, refreshIntervalMinutes)
+            WidgetRefreshScheduler.schedule(context, appWidgetId, widgetStyle.refreshIntervalMinutes)
 
             val resultValue = Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
             setResult(RESULT_OK, resultValue)
@@ -162,12 +169,6 @@ private data class PendingConfig(
     val lineName: String?,
     val directionId: Int,
     val desserte: String
-)
-
-private data class RefreshOption(
-    val label: String,
-    val minutes: Int,
-    val subtitle: String? = null
 )
 
 // -- Reusable dark-themed row with press animation --
@@ -260,10 +261,11 @@ private fun DarkTopBar(
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 private fun WidgetConfigScreen(
+    widgetStyle: WidgetStyle,
     favoriteStops: List<String>,
     favoritesRepository: FavoritesRepository,
     schedulesRepository: SchedulesRepository,
-    onConfigComplete: (stopName: String, lineName: String?, directionId: Int, desserte: String, refreshIntervalMinutes: Int) -> Unit,
+    onConfigComplete: (stopName: String, lineName: String?, directionId: Int, desserte: String) -> Unit,
     onCancel: () -> Unit
 ) {
     var selectedStop by remember { mutableStateOf<String?>(null) }
@@ -272,6 +274,7 @@ private fun WidgetConfigScreen(
 
     val title = when {
         pendingConfig != null -> "Mise à jour"
+        selectedStop != null && !widgetStyle.requiresSpecificLine -> "Arrêt"
         selectedLine != null -> "Direction"
         selectedStop != null -> "Lignes"
         else -> "Widget"
@@ -306,19 +309,31 @@ private fun WidgetConfigScreen(
             }
 
             if (pendingConfig != null) {
-                RefreshIntervalStep(
-                    onIntervalSelected = { intervalMinutes ->
-                        val cfg = pendingConfig!!
-                        onConfigComplete(cfg.stopName, cfg.lineName, cfg.directionId, cfg.desserte, intervalMinutes)
+                LaunchedEffect(pendingConfig) {
+                    pendingConfig?.let { cfg ->
+                        onConfigComplete(cfg.stopName, cfg.lineName, cfg.directionId, cfg.desserte)
                     }
-                )
+                }
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Configuration du widget...",
+                        color = TextSecondary,
+                        fontSize = 14.sp
+                    )
+                }
+            } else if (!widgetStyle.requiresSpecificLine) {
+                LaunchedEffect(selectedStop) {
+                    pendingConfig = PendingConfig(selectedStop!!, null, 0, desserte)
+                }
             } else if (selectedLine == null) {
                 LineSelectionStep(
                     desserte = desserte,
                     schedulesRepository = schedulesRepository,
-                    onAllLinesSelected = {
-                        pendingConfig = PendingConfig(selectedStop!!, null, 0, desserte)
-                    },
+                    allowAllLinesOption = false,
+                    onAllLinesSelected = {},
                     onLineSelected = { line -> selectedLine = line }
                 )
             } else {
@@ -423,6 +438,7 @@ private fun StopSelectionStep(
 private fun LineSelectionStep(
     desserte: String,
     schedulesRepository: SchedulesRepository,
+    allowAllLinesOption: Boolean,
     onAllLinesSelected: () -> Unit,
     onLineSelected: (LineWithDirections) -> Unit
 ) {
@@ -457,42 +473,43 @@ private fun LineSelectionStep(
             .verticalScroll(rememberScrollState())
             .padding(top = 8.dp)
     ) {
-        // "All lines" highlight card
-        Text(
-            text = "Mode d'affichage",
-            color = TextSecondary,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-        )
+        if (allowAllLinesOption) {
+            Text(
+                text = "Mode d'affichage",
+                color = TextSecondary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+            )
 
-        Column(
-            modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .clip(RoundedCornerShape(12.dp))
-        ) {
-            DarkMenuRow(onClick = onAllLinesSelected) {
-                Column {
-                    Text(
-                        text = "Toutes les lignes",
-                        color = TextPrimary,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = "Prochains départs de toutes les lignes",
-                        color = TextSecondary,
-                        fontSize = 13.sp
-                    )
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .clip(RoundedCornerShape(12.dp))
+            ) {
+                DarkMenuRow(onClick = onAllLinesSelected) {
+                    Column {
+                        Text(
+                            text = "Toutes les lignes",
+                            color = TextPrimary,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = "Prochains départs de toutes les lignes",
+                            color = TextSecondary,
+                            fontSize = 13.sp
+                        )
+                    }
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+        }
 
         // Specific lines
         Text(
-            text = "Ou une ligne spécifique",
+            text = if (allowAllLinesOption) "Ou une ligne spécifique" else "Choisir une ligne",
             color = TextSecondary,
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
@@ -660,81 +677,6 @@ private fun DirectionSelectionStep(
                     HorizontalDivider(
                         color = DarkDivider,
                         modifier = Modifier.padding(start = 16.dp)
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-    }
-}
-
-// -- Step 4: Refresh interval --
-
-@Composable
-private fun RefreshIntervalStep(
-    onIntervalSelected: (Int) -> Unit
-) {
-    val options = listOf(
-        RefreshOption("1 minute", 1, "Consomme plus de batterie"),
-        RefreshOption("5 minutes", 5, "Peut consommer plus de batterie"),
-        RefreshOption("15 minutes", 15),
-        RefreshOption("30 minutes", 30)
-    )
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(top = 8.dp)
-    ) {
-        Text(
-            text = "Fréquence de mise à jour",
-            color = TextSecondary,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-        )
-
-        Column(
-            modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .clip(RoundedCornerShape(12.dp))
-        ) {
-            options.forEachIndexed { index, option ->
-                DarkMenuRow(
-                    onClick = { onIntervalSelected(option.minutes) },
-                    showChevron = false
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Filled.Timer,
-                            contentDescription = null,
-                            tint = AccentRed,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = "Toutes les ${option.label}",
-                                color = TextPrimary,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                            if (option.subtitle != null) {
-                                Text(
-                                    text = option.subtitle,
-                                    color = TextSecondary,
-                                    fontSize = 13.sp
-                                )
-                            }
-                        }
-                    }
-                }
-                if (index < options.lastIndex) {
-                    HorizontalDivider(
-                        color = DarkDivider,
-                        modifier = Modifier.padding(start = 48.dp)
                     )
                 }
             }

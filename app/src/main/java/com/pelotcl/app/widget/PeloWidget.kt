@@ -63,6 +63,7 @@ class PeloWidget : GlanceAppWidget() {
         val PREF_LINE_NAME = stringPreferencesKey("widget_line_name")
         val PREF_DIRECTION_ID = intPreferencesKey("widget_direction_id")
         val PREF_DESSERTE = stringPreferencesKey("widget_desserte")
+        val PREF_WIDGET_STYLE = intPreferencesKey("widget_style")
         val PREF_REFRESH_INTERVAL = intPreferencesKey("widget_refresh_interval")
     }
 }
@@ -74,6 +75,7 @@ private fun WidgetContent(context: Context) {
     val lineName = prefs[PeloWidget.PREF_LINE_NAME]
     val directionId = prefs[PeloWidget.PREF_DIRECTION_ID] ?: 0
     val desserte = prefs[PeloWidget.PREF_DESSERTE] ?: ""
+    val widgetStyle = WidgetStyle.fromId(prefs[PeloWidget.PREF_WIDGET_STYLE]) ?: WidgetStyle.ALL_LINES_MINUTES
 
     if (stopName == null) {
         // Not configured
@@ -175,7 +177,11 @@ private fun WidgetContent(context: Context) {
             }
         } else {
             departures.forEach { departure ->
-                DepartureRow(departure, showLineBadge = lineName == null)
+                DepartureRow(
+                    departure = departure,
+                    showLineBadge = lineName == null,
+                    timeDisplayMode = widgetStyle.timeDisplayMode
+                )
                 Spacer(modifier = GlanceModifier.height(4.dp))
             }
         }
@@ -183,7 +189,11 @@ private fun WidgetContent(context: Context) {
 }
 
 @Composable
-private fun DepartureRow(departure: UpcomingDeparture, showLineBadge: Boolean) {
+private fun DepartureRow(
+    departure: UpcomingDeparture,
+    showLineBadge: Boolean,
+    timeDisplayMode: TimeDisplayMode
+) {
     val countdownColor = when {
         departure.minutesUntil <= 2 -> ColorProvider(
             androidx.compose.ui.graphics.Color(0xFFEF4444)
@@ -235,8 +245,8 @@ private fun DepartureRow(departure: UpcomingDeparture, showLineBadge: Boolean) {
 
         Text(
             text = when {
+                timeDisplayMode == TimeDisplayMode.CLOCK -> formatDepartureTime(departure.time)
                 departure.minutesUntil == 0L -> "< 1 min"
-                departure.minutesUntil >= 60 -> "${departure.minutesUntil / 60}h${(departure.minutesUntil % 60).toString().padStart(2, '0')}min"
                 else -> "${departure.minutesUntil} min"
             },
             style = TextStyle(
@@ -246,4 +256,18 @@ private fun DepartureRow(departure: UpcomingDeparture, showLineBadge: Boolean) {
             )
         )
     }
+}
+
+private fun formatDepartureTime(rawTime: String): String {
+    val cleanTime = if (rawTime.count { it == ':' } == 2) {
+        rawTime.substringBeforeLast(":")
+    } else {
+        rawTime
+    }
+    val parts = cleanTime.split(":")
+    if (parts.size < 2) return rawTime
+    val hour = parts[0].toIntOrNull() ?: return rawTime
+    val minute = parts[1].toIntOrNull() ?: return rawTime
+    if (hour !in 0..23 || minute !in 0..59) return rawTime
+    return "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
 }
