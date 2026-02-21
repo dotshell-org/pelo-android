@@ -233,7 +233,11 @@ private fun DepartureRow(departure: UpcomingDeparture, showLineBadge: Boolean) {
         )
 
         Text(
-            text = if (departure.minutesUntil == 0L) "< 1 min" else "${departure.minutesUntil} min",
+            text = when {
+                departure.minutesUntil == 0L -> "< 1 min"
+                departure.minutesUntil >= 60 -> "${departure.minutesUntil / 60}h${(departure.minutesUntil % 60).toString().padStart(2, '0')}min"
+                else -> "${departure.minutesUntil} min"
+            },
             style = TextStyle(
                 color = countdownColor,
                 fontSize = 13.sp,
