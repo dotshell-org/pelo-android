@@ -169,6 +169,27 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             val favorites = favoritesRepository.getFavorites().map { it.uppercase() }.toSet()
             _favoriteLines.value = favorites
             _favoriteStops.value = favoritesRepository.getFavoriteStops()
+
+            // Backfill desserte for favorite stops that don't have it yet
+            // (migration for stops favorited before desserte storage was added)
+            val favoriteStopNames = favoritesRepository.getFavoriteStops()
+            if (favoriteStopNames.isNotEmpty()) {
+                // Wait a bit for WFS stops to be loaded
+                delay(3000)
+                val allStops = getCachedStopsSync()
+                if (allStops.isNotEmpty()) {
+                    for (stopName in favoriteStopNames) {
+                        if (favoritesRepository.getDesserteForStop(stopName) == null) {
+                            val wfsStop = allStops.find {
+                                it.properties.nom.equals(stopName, ignoreCase = true)
+                            }
+                            if (wfsStop != null && wfsStop.properties.desserte.isNotEmpty()) {
+                                favoritesRepository.saveDesserteForStop(stopName, wfsStop.properties.desserte)
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Defer traffic alerts - not critical for initial display
@@ -1061,7 +1082,12 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun toggleFavoriteStop(stopName: String) {
         viewModelScope.launch {
-            val isFavorite = favoritesRepository.toggleFavoriteStop(stopName)
+            // Look up desserte from WFS cached stops for robust storage
+            val desserte = getCachedStopsSync().find {
+                it.properties.nom.equals(stopName, ignoreCase = true)
+            }?.properties?.desserte
+
+            favoritesRepository.toggleFavoriteStop(stopName, desserte)
             _favoriteStops.value = favoritesRepository.getFavoriteStops()
         }
     }

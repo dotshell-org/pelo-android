@@ -84,9 +84,10 @@ class WidgetConfigActivity : ComponentActivity() {
             PeloTheme {
                 WidgetConfigScreen(
                     favoriteStops = favoriteStops,
+                    favoritesRepository = favoritesRepository,
                     schedulesRepository = schedulesRepository,
-                    onConfigComplete = { stopName, lineName, directionId ->
-                        saveWidgetConfig(stopName, lineName, directionId)
+                    onConfigComplete = { stopName, lineName, directionId, desserte ->
+                        saveWidgetConfig(stopName, lineName, directionId, desserte)
                     },
                     onCancel = { finish() }
                 )
@@ -94,7 +95,7 @@ class WidgetConfigActivity : ComponentActivity() {
         }
     }
 
-    private fun saveWidgetConfig(stopName: String, lineName: String?, directionId: Int) {
+    private fun saveWidgetConfig(stopName: String, lineName: String?, directionId: Int, desserte: String) {
         val context = applicationContext
         MainScope().launch {
             val glanceId = GlanceAppWidgetManager(context)
@@ -108,6 +109,7 @@ class WidgetConfigActivity : ComponentActivity() {
                     prefs.remove(PeloWidget.PREF_LINE_NAME)
                 }
                 prefs[PeloWidget.PREF_DIRECTION_ID] = directionId
+                prefs[PeloWidget.PREF_DESSERTE] = desserte
             }
 
             PeloWidget().update(context, glanceId)
@@ -130,8 +132,9 @@ private data class LineDirection(
 @Composable
 private fun WidgetConfigScreen(
     favoriteStops: List<String>,
+    favoritesRepository: FavoritesRepository,
     schedulesRepository: SchedulesRepository,
-    onConfigComplete: (stopName: String, lineName: String?, directionId: Int) -> Unit,
+    onConfigComplete: (stopName: String, lineName: String?, directionId: Int, desserte: String) -> Unit,
     onCancel: () -> Unit
 ) {
     var selectedStop by remember { mutableStateOf<String?>(null) }
@@ -176,11 +179,18 @@ private fun WidgetConfigScreen(
                 )
             } else {
                 // Step 2: Choose mode (all lines or specific line+direction)
+                // Get desserte from favorites (stored from WFS data) with GTFS fallback
+                val desserte = remember(selectedStop) {
+                    favoritesRepository.getDesserteForStop(selectedStop!!)
+                        ?: schedulesRepository.getDesserteForStop(selectedStop!!)
+                        ?: ""
+                }
                 ModeSelectionStep(
                     stopName = selectedStop!!,
+                    desserte = desserte,
                     schedulesRepository = schedulesRepository,
                     onModeSelected = { lineName, directionId ->
-                        onConfigComplete(selectedStop!!, lineName, directionId)
+                        onConfigComplete(selectedStop!!, lineName, directionId, desserte)
                     }
                 )
             }
@@ -251,13 +261,10 @@ private fun StopSelectionStep(
 @Composable
 private fun ModeSelectionStep(
     stopName: String,
+    desserte: String,
     schedulesRepository: SchedulesRepository,
     onModeSelected: (lineName: String?, directionId: Int) -> Unit
 ) {
-    val desserte = remember(stopName) {
-        schedulesRepository.getDesserteForStop(stopName) ?: ""
-    }
-
     // Parse available lines and directions from desserte
     val lineDirections = remember(desserte) {
         desserte.split(",")

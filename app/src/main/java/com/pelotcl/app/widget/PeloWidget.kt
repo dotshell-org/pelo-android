@@ -62,6 +62,7 @@ class PeloWidget : GlanceAppWidget() {
         val PREF_STOP_NAME = stringPreferencesKey("widget_stop_name")
         val PREF_LINE_NAME = stringPreferencesKey("widget_line_name")
         val PREF_DIRECTION_ID = intPreferencesKey("widget_direction_id")
+        val PREF_DESSERTE = stringPreferencesKey("widget_desserte")
     }
 }
 
@@ -71,6 +72,7 @@ private fun WidgetContent(context: Context) {
     val stopName = prefs[PeloWidget.PREF_STOP_NAME]
     val lineName = prefs[PeloWidget.PREF_LINE_NAME]
     val directionId = prefs[PeloWidget.PREF_DIRECTION_ID] ?: 0
+    val desserte = prefs[PeloWidget.PREF_DESSERTE] ?: ""
 
     if (stopName == null) {
         // Not configured
@@ -99,9 +101,6 @@ private fun WidgetContent(context: Context) {
                 context, stopName, lineName, directionId, 4
             )
         } else {
-            val desserte = com.pelotcl.app.data.gtfs.SchedulesRepository
-                .getInstance(context)
-                .getDesserteForStop(stopName) ?: ""
             ScheduleWidgetHelper.getAllUpcomingDepartures(
                 context, stopName, desserte, 5
             )

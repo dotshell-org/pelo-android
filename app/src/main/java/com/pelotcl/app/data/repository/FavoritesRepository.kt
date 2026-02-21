@@ -9,6 +9,7 @@ class FavoritesRepository(private val context: Context) {
     private val prefs by lazy { context.getSharedPreferences("pelo_prefs", Context.MODE_PRIVATE) }
     private val KEY_FAVORITES = "favorites_lines"
     private val KEY_FAVORITE_STOPS = "favorites_stops"
+    private val KEY_STOP_DESSERTE_PREFIX = "stop_desserte_"
 
     fun getFavorites(): Set<String> {
         return prefs.getStringSet(KEY_FAVORITES, emptySet()) ?: emptySet()
@@ -43,12 +44,18 @@ class FavoritesRepository(private val context: Context) {
         prefs.edit().putStringSet(KEY_FAVORITE_STOPS, favorites).apply()
     }
 
-    fun toggleFavoriteStop(stopName: String): Boolean {
+    fun toggleFavoriteStop(stopName: String, desserte: String? = null): Boolean {
         val favorites = getFavoriteStops().toMutableSet()
         if (favorites.contains(stopName)) {
             favorites.remove(stopName)
+            // Clean up desserte when removing
+            prefs.edit().remove(KEY_STOP_DESSERTE_PREFIX + stopName).apply()
         } else {
             favorites.add(stopName)
+            // Store desserte alongside stop name
+            if (!desserte.isNullOrEmpty()) {
+                prefs.edit().putString(KEY_STOP_DESSERTE_PREFIX + stopName, desserte).apply()
+            }
         }
         saveFavoriteStops(favorites)
         return favorites.contains(stopName)
@@ -56,5 +63,13 @@ class FavoritesRepository(private val context: Context) {
 
     fun isFavoriteStop(stopName: String): Boolean {
         return getFavoriteStops().contains(stopName)
+    }
+
+    fun getDesserteForStop(stopName: String): String? {
+        return prefs.getString(KEY_STOP_DESSERTE_PREFIX + stopName, null)
+    }
+
+    fun saveDesserteForStop(stopName: String, desserte: String) {
+        prefs.edit().putString(KEY_STOP_DESSERTE_PREFIX + stopName, desserte).apply()
     }
 }
