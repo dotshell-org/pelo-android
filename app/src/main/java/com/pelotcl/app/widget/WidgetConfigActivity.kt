@@ -54,6 +54,7 @@ import com.pelotcl.app.data.repository.FavoritesRepository
 import com.pelotcl.app.ui.theme.PeloTheme
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
+import androidx.compose.material.icons.filled.Refresh
 
 class WidgetConfigActivity : ComponentActivity() {
 
@@ -86,8 +87,8 @@ class WidgetConfigActivity : ComponentActivity() {
                     favoriteStops = favoriteStops,
                     favoritesRepository = favoritesRepository,
                     schedulesRepository = schedulesRepository,
-                    onConfigComplete = { stopName, lineName, directionId, desserte ->
-                        saveWidgetConfig(stopName, lineName, directionId, desserte)
+                    onConfigComplete = { stopName, lineName, directionId, desserte, refreshInterval ->
+                        saveWidgetConfig(stopName, lineName, directionId, desserte, refreshInterval)
                     },
                     onCancel = { finish() }
                 )
@@ -95,7 +96,7 @@ class WidgetConfigActivity : ComponentActivity() {
         }
     }
 
-    private fun saveWidgetConfig(stopName: String, lineName: String?, directionId: Int, desserte: String) {
+    private fun saveWidgetConfig(stopName: String, lineName: String?, directionId: Int, desserte: String, refreshIntervalMinutes: Int) {
         val context = applicationContext
         MainScope().launch {
             val glanceId = GlanceAppWidgetManager(context)
@@ -110,9 +111,12 @@ class WidgetConfigActivity : ComponentActivity() {
                 }
                 prefs[PeloWidget.PREF_DIRECTION_ID] = directionId
                 prefs[PeloWidget.PREF_DESSERTE] = desserte
+                prefs[PeloWidget.PREF_REFRESH_INTERVAL] = refreshIntervalMinutes
             }
 
             PeloWidget().update(context, glanceId)
+
+            WidgetRefreshScheduler.schedule(context, appWidgetId, refreshIntervalMinutes)
 
             val resultValue = Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
             setResult(RESULT_OK, resultValue)
@@ -136,6 +140,14 @@ private data class LineWithDirections(
 // directionId = -1 means "both directions"
 private const val DIRECTION_BOTH = -1
 
+/** Holds the line/direction choice before picking refresh interval */
+private data class PendingConfig(
+    val stopName: String,
+    val lineName: String?,
+    val directionId: Int,
+    val desserte: String
+)
+
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -143,13 +155,15 @@ private fun WidgetConfigScreen(
     favoriteStops: List<String>,
     favoritesRepository: FavoritesRepository,
     schedulesRepository: SchedulesRepository,
-    onConfigComplete: (stopName: String, lineName: String?, directionId: Int, desserte: String) -> Unit,
+    onConfigComplete: (stopName: String, lineName: String?, directionId: Int, desserte: String, refreshIntervalMinutes: Int) -> Unit,
     onCancel: () -> Unit
 ) {
     var selectedStop by remember { mutableStateOf<String?>(null) }
     var selectedLine by remember { mutableStateOf<LineWithDirections?>(null) }
+    var pendingConfig by remember { mutableStateOf<PendingConfig?>(null) }
 
     val title = when {
+        pendingConfig != null -> "Fréquence de mise à jour"
         selectedLine != null -> "Choisir la direction"
         selectedStop != null -> "Choisir le mode"
         else -> "Choisir un arrêt"
@@ -162,6 +176,10 @@ private fun WidgetConfigScreen(
                 navigationIcon = {
                     IconButton(onClick = {
                         when {
+                            pendingConfig != null -> {
+                                // Go back to direction or line step
+                                pendingConfig = null
+                            }
                             selectedLine != null -> selectedLine = null
                             selectedStop != null -> selectedStop = null
                             else -> onCancel()
@@ -195,13 +213,21 @@ private fun WidgetConfigScreen(
                         ?: ""
                 }
 
-                if (selectedLine == null) {
+                if (pendingConfig != null) {
+                    // Step 4: Choose refresh interval
+                    RefreshIntervalStep(
+                        onIntervalSelected = { intervalMinutes ->
+                            val cfg = pendingConfig!!
+                            onConfigComplete(cfg.stopName, cfg.lineName, cfg.directionId, cfg.desserte, intervalMinutes)
+                        }
+                    )
+                } else if (selectedLine == null) {
                     // Step 2: Choose all lines or a specific line
                     LineSelectionStep(
                         desserte = desserte,
                         schedulesRepository = schedulesRepository,
                         onAllLinesSelected = {
-                            onConfigComplete(selectedStop!!, null, 0, desserte)
+                            pendingConfig = PendingConfig(selectedStop!!, null, 0, desserte)
                         },
                         onLineSelected = { line -> selectedLine = line }
                     )
@@ -210,7 +236,7 @@ private fun WidgetConfigScreen(
                     DirectionSelectionStep(
                         line = selectedLine!!,
                         onDirectionSelected = { directionId ->
-                            onConfigComplete(selectedStop!!, selectedLine!!.lineName, directionId, desserte)
+                            pendingConfig = PendingConfig(selectedStop!!, selectedLine!!.lineName, directionId, desserte)
                         }
                     )
                 }
@@ -452,6 +478,64 @@ private fun DirectionSelectionStep(
                     text = dir.headsign,
                     style = MaterialTheme.typography.bodyLarge
                 )
+            }
+            HorizontalDivider()
+        }
+    }
+}
+
+private data class RefreshOption(
+    val label: String,
+    val minutes: Int
+)
+
+@Composable
+private fun RefreshIntervalStep(
+    onIntervalSelected: (Int) -> Unit
+) {
+    val options = listOf(
+        RefreshOption("1 minute", 1),
+        RefreshOption("5 minutes", 5),
+        RefreshOption("15 minutes", 15),
+        RefreshOption("30 minutes", 30)
+    )
+
+    Column {
+        Text(
+            text = "À quelle fréquence le widget doit-il se mettre à jour ?",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
+        options.forEach { option ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onIntervalSelected(option.minutes) }
+                    .padding(vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = "Toutes les ${option.label}",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    if (option.minutes <= 5) {
+                        Text(
+                            text = if (option.minutes == 1) "Consomme plus de batterie" else "Peut consommer plus de batterie",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
             HorizontalDivider()
         }

@@ -63,6 +63,7 @@ class PeloWidget : GlanceAppWidget() {
         val PREF_LINE_NAME = stringPreferencesKey("widget_line_name")
         val PREF_DIRECTION_ID = intPreferencesKey("widget_direction_id")
         val PREF_DESSERTE = stringPreferencesKey("widget_desserte")
+        val PREF_REFRESH_INTERVAL = intPreferencesKey("widget_refresh_interval")
     }
 }
 
