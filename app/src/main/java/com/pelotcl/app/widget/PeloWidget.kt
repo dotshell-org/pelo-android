@@ -3,6 +3,7 @@ package com.pelotcl.app.widget
 import android.content.Context
 import android.os.Build
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
@@ -42,7 +43,7 @@ import androidx.glance.ImageProvider
 import androidx.glance.appwidget.cornerRadius
 import com.pelotcl.app.MainActivity
 import com.pelotcl.app.R
-import com.pelotcl.app.utils.LineColorHelper
+import com.pelotcl.app.utils.BusIconHelper
 
 class PeloWidget : GlanceAppWidget() {
 
@@ -112,12 +113,16 @@ private fun WidgetContent(context: Context) {
         emptyList()
     }
 
+    val pureBlack = ColorProvider(Color(0xFF000000))
+    val primaryText = ColorProvider(Color(0xFFFFFFFF))
+    val secondaryText = ColorProvider(Color(0xFFB3B3B3))
+
     Column(
         modifier = GlanceModifier
             .fillMaxSize()
-            .background(GlanceTheme.colors.surface)
+            .background(pureBlack)
             .cornerRadius(16.dp)
-            .padding(12.dp)
+            .padding(horizontal = 14.dp, vertical = 12.dp)
             .clickable(actionStartActivity<MainActivity>())
     ) {
         // Header: stop name + refresh button
@@ -125,11 +130,22 @@ private fun WidgetContent(context: Context) {
             modifier = GlanceModifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            if (lineName != null) {
+                val lineIconResId = BusIconHelper.getResourceIdForLine(context, lineName)
+                if (lineIconResId != 0) {
+                    Image(
+                        provider = ImageProvider(lineIconResId),
+                        contentDescription = "Ligne $lineName",
+                        modifier = GlanceModifier.size(width = 36.dp, height = 34.dp)
+                    )
+                    Spacer(modifier = GlanceModifier.width(8.dp))
+                }
+            }
             Text(
                 text = stopName,
                 style = TextStyle(
-                    color = GlanceTheme.colors.onSurface,
-                    fontSize = 14.sp,
+                    color = primaryText,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
                 ),
                 modifier = GlanceModifier.defaultWeight(),
@@ -145,22 +161,11 @@ private fun WidgetContent(context: Context) {
                     provider = ImageProvider(R.drawable.ic_refresh),
                     contentDescription = "Rafraîchir",
                     modifier = GlanceModifier.size(18.dp),
-                    colorFilter = ColorFilter.tint(GlanceTheme.colors.onSurfaceVariant)
+                    colorFilter = ColorFilter.tint(secondaryText)
                 )
             }
         }
-
-        if (lineName != null) {
-            Text(
-                text = "Ligne $lineName",
-                style = TextStyle(
-                    color = GlanceTheme.colors.onSurfaceVariant,
-                    fontSize = 11.sp
-                )
-            )
-        }
-
-        Spacer(modifier = GlanceModifier.height(8.dp))
+        Spacer(modifier = GlanceModifier.height(10.dp))
 
         if (departures.isEmpty()) {
             Box(
@@ -170,14 +175,15 @@ private fun WidgetContent(context: Context) {
                 Text(
                     text = "Aucun départ à venir",
                     style = TextStyle(
-                        color = GlanceTheme.colors.onSurfaceVariant,
-                        fontSize = 12.sp
+                        color = secondaryText,
+                        fontSize = 16.sp
                     )
                 )
             }
         } else {
             departures.forEach { departure ->
                 DepartureRow(
+                    context = context,
                     departure = departure,
                     showLineBadge = lineName == null,
                     timeDisplayMode = widgetStyle.timeDisplayMode
@@ -190,6 +196,7 @@ private fun WidgetContent(context: Context) {
 
 @Composable
 private fun DepartureRow(
+    context: Context,
     departure: UpcomingDeparture,
     showLineBadge: Boolean,
     timeDisplayMode: TimeDisplayMode
@@ -211,20 +218,18 @@ private fun DepartureRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (showLineBadge) {
-            val lineColor = LineColorHelper.getColorForLineString(departure.lineName)
-            Box(
-                modifier = GlanceModifier
-                    .size(width = 32.dp, height = 20.dp)
-                    .background(androidx.compose.ui.graphics.Color(lineColor))
-                    .cornerRadius(4.dp),
-                contentAlignment = Alignment.Center
-            ) {
+            val lineIconResId = BusIconHelper.getResourceIdForLine(context, departure.lineName)
+            if (lineIconResId != 0) {
+                Image(
+                    provider = ImageProvider(lineIconResId),
+                    contentDescription = "Ligne ${departure.lineName}",
+                    modifier = GlanceModifier.size(width = 32.dp, height = 20.dp)
+                )
+            } else {
                 Text(
                     text = departure.lineName,
                     style = TextStyle(
-                        color = ColorProvider(
-                            androidx.compose.ui.graphics.Color.White
-                        ),
+                        color = GlanceTheme.colors.onSurfaceVariant,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -236,8 +241,8 @@ private fun DepartureRow(
         Text(
             text = departure.directionName,
             style = TextStyle(
-                color = GlanceTheme.colors.onSurface,
-                fontSize = 12.sp
+                color = ColorProvider(Color(0xFFFFFFFF)),
+                fontSize = 16.sp
             ),
             modifier = GlanceModifier.defaultWeight(),
             maxLines = 1
@@ -251,7 +256,7 @@ private fun DepartureRow(
             },
             style = TextStyle(
                 color = countdownColor,
-                fontSize = 13.sp,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )
         )

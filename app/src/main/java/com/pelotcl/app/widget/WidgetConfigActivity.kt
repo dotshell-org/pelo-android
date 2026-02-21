@@ -11,6 +11,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -48,6 +49,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -57,7 +60,7 @@ import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.state.updateAppWidgetState
 import com.pelotcl.app.data.gtfs.SchedulesRepository
 import com.pelotcl.app.data.repository.FavoritesRepository
-import com.pelotcl.app.utils.LineColorHelper
+import com.pelotcl.app.utils.BusIconHelper
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 
@@ -269,13 +272,11 @@ private fun WidgetConfigScreen(
     onCancel: () -> Unit
 ) {
     var selectedStop by remember { mutableStateOf<String?>(null) }
-    var selectedLine by remember { mutableStateOf<LineWithDirections?>(null) }
     var pendingConfig by remember { mutableStateOf<PendingConfig?>(null) }
 
     val title = when {
         pendingConfig != null -> "Mise à jour"
         selectedStop != null && !widgetStyle.requiresSpecificLine -> "Arrêt"
-        selectedLine != null -> "Direction"
         selectedStop != null -> "Lignes"
         else -> "Widget"
     }
@@ -283,7 +284,6 @@ private fun WidgetConfigScreen(
     val onBack: () -> Unit = {
         when {
             pendingConfig != null -> pendingConfig = null
-            selectedLine != null -> selectedLine = null
             selectedStop != null -> selectedStop = null
             else -> onCancel()
         }
@@ -328,19 +328,19 @@ private fun WidgetConfigScreen(
                 LaunchedEffect(selectedStop) {
                     pendingConfig = PendingConfig(selectedStop!!, null, 0, desserte)
                 }
-            } else if (selectedLine == null) {
+            } else {
                 LineSelectionStep(
                     desserte = desserte,
                     schedulesRepository = schedulesRepository,
                     allowAllLinesOption = false,
                     onAllLinesSelected = {},
-                    onLineSelected = { line -> selectedLine = line }
-                )
-            } else {
-                DirectionSelectionStep(
-                    line = selectedLine!!,
-                    onDirectionSelected = { directionId ->
-                        pendingConfig = PendingConfig(selectedStop!!, selectedLine!!.lineName, directionId, desserte)
+                    onLineSelected = { line ->
+                        pendingConfig = PendingConfig(
+                            selectedStop!!,
+                            line.lineName,
+                            DIRECTION_BOTH,
+                            desserte
+                        )
                     }
                 )
             }
@@ -524,24 +524,10 @@ private fun LineSelectionStep(
             linesWithDirections.forEachIndexed { index, line ->
                 DarkMenuRow(onClick = { onLineSelected(line) }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Line badge with TCL color
-                        val lineColor = LineColorHelper.getColorForLineString(line.lineName)
-                        Box(
-                            modifier = Modifier
-                                .size(width = 40.dp, height = 24.dp)
-                                .background(
-                                    Color(lineColor),
-                                    RoundedCornerShape(6.dp)
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = line.lineName,
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                        LineIcon(
+                            lineName = line.lineName,
+                            modifier = Modifier.size(width = 40.dp, height = 24.dp)
+                        )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
                             text = line.directions.joinToString(" · ") { it.headsign },
@@ -566,122 +552,29 @@ private fun LineSelectionStep(
     }
 }
 
-// -- Step 3: Direction selection --
-
 @Composable
-private fun DirectionSelectionStep(
-    line: LineWithDirections,
-    onDirectionSelected: (Int) -> Unit
+private fun LineIcon(
+    lineName: String,
+    modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(top = 8.dp)
-    ) {
-        // Line badge header
-        Row(
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val lineColor = LineColorHelper.getColorForLineString(line.lineName)
-            Box(
-                modifier = Modifier
-                    .size(width = 40.dp, height = 24.dp)
-                    .background(Color(lineColor), RoundedCornerShape(6.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = line.lineName,
-                    color = Color.White,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "Ligne ${line.lineName}",
-                color = TextSecondary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium
-            )
-        }
+    val context = LocalContext.current
+    val drawableId = remember(lineName) {
+        BusIconHelper.getResourceIdForLine(context, lineName)
+    }
 
-        // Both directions option
-        if (line.directions.size > 1) {
-            Text(
-                text = "Toutes les directions",
-                color = TextSecondary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-            )
-
-            Column(
-                modifier = Modifier
-                    .padding(horizontal = 16.dp)
-                    .clip(RoundedCornerShape(12.dp))
-            ) {
-                DarkMenuRow(onClick = { onDirectionSelected(DIRECTION_BOTH) }) {
-                    Column {
-                        Text(
-                            text = "Les deux directions",
-                            color = TextPrimary,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            text = line.directions.joinToString(" et ") { it.headsign },
-                            color = TextSecondary,
-                            fontSize = 13.sp,
-                            maxLines = 2
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Text(
-                text = "Ou une seule direction",
-                color = TextSecondary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-            )
-        } else {
-            Text(
-                text = "Direction",
-                color = TextSecondary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-            )
-        }
-
-        Column(
-            modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .clip(RoundedCornerShape(12.dp))
-        ) {
-            line.directions.forEachIndexed { index, dir ->
-                DarkMenuRow(onClick = { onDirectionSelected(dir.directionId) }) {
-                    Text(
-                        text = dir.headsign,
-                        color = TextPrimary,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-                if (index < line.directions.lastIndex) {
-                    HorizontalDivider(
-                        color = DarkDivider,
-                        modifier = Modifier.padding(start = 16.dp)
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
+    if (drawableId != 0) {
+        Image(
+            painter = painterResource(id = drawableId),
+            contentDescription = "Ligne $lineName",
+            modifier = modifier
+        )
+    } else {
+        Text(
+            text = lineName,
+            color = TextPrimary,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = modifier
+        )
     }
 }
