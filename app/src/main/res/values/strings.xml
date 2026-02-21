@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Pelo</string>
+    <string name="widget_description">Prochains départs TCL depuis vos arrêts favoris</string>
 </resources>

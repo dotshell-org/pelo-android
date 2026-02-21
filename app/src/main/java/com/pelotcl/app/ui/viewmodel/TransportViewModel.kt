@@ -102,6 +102,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val _favoriteLines = MutableStateFlow<Set<String>>(emptySet())
     val favoriteLines: StateFlow<Set<String>> = _favoriteLines.asStateFlow()
+    private val _favoriteStops = MutableStateFlow<Set<String>>(emptySet())
+    val favoriteStops: StateFlow<Set<String>> = _favoriteStops.asStateFlow()
     private val _selectedLineName = MutableStateFlow<String?>(null)
     val selectedLineName: StateFlow<String?> = _selectedLineName.asStateFlow()
 
@@ -166,6 +168,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch(Dispatchers.IO) {
             val favorites = favoritesRepository.getFavorites().map { it.uppercase() }.toSet()
             _favoriteLines.value = favorites
+            _favoriteStops.value = favoritesRepository.getFavoriteStops()
         }
 
         // Defer traffic alerts - not critical for initial display
@@ -1053,6 +1056,13 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             }
             favoritesRepository.saveFavorites(current)
             _favoriteLines.value = current
+        }
+    }
+
+    fun toggleFavoriteStop(stopName: String) {
+        viewModelScope.launch {
+            val isFavorite = favoritesRepository.toggleFavoriteStop(stopName)
+            _favoriteStops.value = favoritesRepository.getFavoriteStops()
         }
     }
 

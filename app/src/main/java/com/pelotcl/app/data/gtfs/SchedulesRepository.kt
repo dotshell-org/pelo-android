@@ -412,6 +412,22 @@ class SchedulesRepository(context: Context) {
         return result
     }
 
+    fun getDesserteForStop(stopName: String): String? {
+        try {
+            val db = dbHelper.readableDatabase
+            val cursor = db.rawQuery(
+                "SELECT desserte FROM arrets WHERE nom = ? COLLATE NOCASE LIMIT 1",
+                arrayOf(stopName)
+            )
+            val result = if (cursor.moveToFirst()) cursor.getString(0) else null
+            cursor.close()
+            return result
+        } catch (e: Exception) {
+            Log.e("SchedulesRepository", "Error getting desserte for stop $stopName: ${e.message}")
+            return null
+        }
+    }
+
     /**
      * Retrieves the canonical stop sequence for a line and direction from GTFS data.
      * @param routeName The route/line name (e.g., "86", "A", "T1")

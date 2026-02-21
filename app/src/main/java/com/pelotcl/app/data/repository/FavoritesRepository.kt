@@ -8,6 +8,7 @@ import android.content.Context
 class FavoritesRepository(private val context: Context) {
     private val prefs by lazy { context.getSharedPreferences("pelo_prefs", Context.MODE_PRIVATE) }
     private val KEY_FAVORITES = "favorites_lines"
+    private val KEY_FAVORITE_STOPS = "favorites_stops"
 
     fun getFavorites(): Set<String> {
         return prefs.getStringSet(KEY_FAVORITES, emptySet()) ?: emptySet()
@@ -30,5 +31,30 @@ class FavoritesRepository(private val context: Context) {
         // only save if changed
         saveFavorites(favorites)
         return !favorites.contains(normalized) // return true if it was removed, false otherwise? Keep simple and return true
+    }
+
+    // --- Favorite stops ---
+
+    fun getFavoriteStops(): Set<String> {
+        return prefs.getStringSet(KEY_FAVORITE_STOPS, emptySet()) ?: emptySet()
+    }
+
+    fun saveFavoriteStops(favorites: Set<String>) {
+        prefs.edit().putStringSet(KEY_FAVORITE_STOPS, favorites).apply()
+    }
+
+    fun toggleFavoriteStop(stopName: String): Boolean {
+        val favorites = getFavoriteStops().toMutableSet()
+        if (favorites.contains(stopName)) {
+            favorites.remove(stopName)
+        } else {
+            favorites.add(stopName)
+        }
+        saveFavoriteStops(favorites)
+        return favorites.contains(stopName)
+    }
+
+    fun isFavoriteStop(stopName: String): Boolean {
+        return getFavoriteStops().contains(stopName)
     }
 }

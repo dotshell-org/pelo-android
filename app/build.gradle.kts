@@ -112,6 +112,10 @@ dependencies {
     // WorkManager for background tasks
     implementation(libs.androidx.work.runtime.ktx)
 
+    // Jetpack Glance for home screen widgets
+    implementation("androidx.glance:glance-appwidget:1.1.1")
+    implementation("androidx.glance:glance-material3:1.1.1")
+
     // ProfileInstaller for Baseline Profiles (improves cold start by ~15-30%)
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
 

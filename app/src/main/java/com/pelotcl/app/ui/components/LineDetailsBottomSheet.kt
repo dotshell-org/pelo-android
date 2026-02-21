@@ -172,7 +172,9 @@ fun LineDetailsBottomSheet(
     onStopClick: (String) -> Unit = {},
     onShowAllSchedules: (lineName: String, directionName: String, schedules: List<String>) -> Unit,
     onItineraryClick: (stopName: String) -> Unit = {},
-    onHeaderClick: () -> Unit = {}
+    onHeaderClick: () -> Unit = {},
+    favoriteStops: Set<String> = emptySet(),
+    onToggleFavoriteStop: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -447,6 +449,8 @@ fun LineDetailsBottomSheet(
                                 isFirst = index == 0,
                                 isLast = index == displayedStops.size - 1,
                                 onStopClick = { onStopClick(stop.stopName) },
+                                isFavorite = favoriteStops.contains(stop.stopName),
+                                onToggleFavorite = { onToggleFavoriteStop(stop.stopName) },
                                 modifier = Modifier.padding(horizontal = 24.dp)
                             )
                         }
@@ -933,7 +937,7 @@ private fun ConnectionsSection(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Boolean, isLast: Boolean, onStopClick: () -> Unit = {}, modifier: Modifier = Modifier) {
+private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Boolean, isLast: Boolean, onStopClick: () -> Unit = {}, isFavorite: Boolean = false, onToggleFavorite: () -> Unit = {}, modifier: Modifier = Modifier) {
     // Debug: measure the recompositions of this item
     ListItemRecompositionCounter("LineStops", stop.stopId)
 
@@ -991,6 +995,17 @@ private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Bool
                     }
                 }
             }
+
+            // Favorite heart icon
+            Icon(
+                imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                contentDescription = if (isFavorite) "Retirer des favoris" else "Ajouter aux favoris",
+                tint = if (isFavorite) Color(0xFFEF4444) else Gray700.copy(alpha = 0.4f),
+                modifier = Modifier
+                    .padding(start = 4.dp)
+                    .size(20.dp)
+                    .clickable { onToggleFavorite() }
+            )
         }
     }
 }
