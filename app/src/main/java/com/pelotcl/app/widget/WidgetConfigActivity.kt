@@ -286,32 +286,31 @@ private fun LineSelectionStep(
     onAllLinesSelected: () -> Unit,
     onLineSelected: (LineWithDirections) -> Unit
 ) {
-    // Parse desserte and group by line
+    // Parse desserte to find which lines serve this stop, then enrich with all GTFS directions
     val linesWithDirections = remember(desserte) {
-        val lineDirections = desserte.split(",")
+        // Extract unique line names from desserte
+        val lineNames = desserte.split(",")
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .mapNotNull { entry ->
                 val parts = entry.split(":")
-                if (parts.size == 2) {
-                    val line = parts[0].trim()
-                    val dirLetter = parts[1].trim()
-                    val dirId = when (dirLetter.uppercase()) {
-                        "A" -> 0
-                        "R" -> 1
-                        else -> return@mapNotNull null
-                    }
-                    val displayLine = if (line.equals("NAVI1", ignoreCase = true)) "NAV1" else line
-                    val gtfsLine = if (line.equals("NAV1", ignoreCase = true)) "NAVI1" else line
-                    val headsigns = schedulesRepository.getHeadsigns(gtfsLine)
-                    val headsign = headsigns[dirId] ?: "Direction $dirLetter"
-                    LineDirection(displayLine, dirId, headsign)
-                } else null
+                if (parts.size == 2) parts[0].trim() else null
             }
+            .distinct()
 
-        // Group by line name
-        lineDirections.groupBy { it.lineName }.map { (lineName, dirs) ->
-            LineWithDirections(lineName, dirs.sortedBy { it.directionId })
+        // For each line, get ALL directions from GTFS headsigns (not just desserte entries)
+        lineNames.mapNotNull { line ->
+            val displayLine = if (line.equals("NAVI1", ignoreCase = true)) "NAV1" else line
+            val gtfsLine = if (line.equals("NAV1", ignoreCase = true)) "NAVI1" else line
+            val headsigns = schedulesRepository.getHeadsigns(gtfsLine)
+
+            if (headsigns.isEmpty()) return@mapNotNull null
+
+            val dirs = headsigns.map { (dirId, headsign) ->
+                LineDirection(displayLine, dirId, headsign)
+            }.sortedBy { it.directionId }
+
+            LineWithDirections(displayLine, dirs)
         }
     }
 
