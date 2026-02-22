@@ -360,4 +360,38 @@ class TrafficAlertsRepository(private val context: Context) {
             alert = alert
         )
     }
+
+    /**
+     * Starts the background WebSocket service for receiving traffic alerts
+     * even when the app is in the background or closed.
+     */
+    fun startBackgroundAlertsService(lines: List<String>) {
+        try {
+            com.pelotcl.app.service.WebSocketServiceManager.startTrafficAlertsService(context, lines)
+        } catch (e: Exception) {
+            Log.e("TrafficAlertsRepository", "Failed to start background alerts service", e)
+        }
+    }
+
+    /**
+     * Stops the background WebSocket service.
+     */
+    fun stopBackgroundAlertsService() {
+        try {
+            com.pelotcl.app.service.WebSocketServiceManager.stopTrafficAlertsService(context)
+        } catch (e: Exception) {
+            Log.e("TrafficAlertsRepository", "Failed to stop background alerts service", e)
+        }
+    }
+
+    /**
+     * Checks if the background WebSocket service is running.
+     */
+    fun isBackgroundServiceRunning(): Boolean {
+        return try {
+            com.pelotcl.app.service.WebSocketServiceManager.isServiceRunning(context)
+        } catch (e: Exception) {
+            false
+        }
+    }
 }

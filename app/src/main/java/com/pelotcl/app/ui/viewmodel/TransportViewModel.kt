@@ -7,6 +7,9 @@ import android.util.LruCache
 import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.viewModelScope
 import com.pelotcl.app.data.model.Feature
 import com.pelotcl.app.data.model.SimpleVehiclePosition
@@ -16,6 +19,7 @@ import com.pelotcl.app.data.repository.TransportRepository
 import com.pelotcl.app.data.repository.TrafficAlertPush
 import com.pelotcl.app.data.repository.TrafficAlertsRepository
 import com.pelotcl.app.data.repository.VehiclePositionsRepository
+import com.pelotcl.app.service.WebSocketServiceManager
 import com.pelotcl.app.ui.components.LineSearchResult
 import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.utils.Connection
@@ -125,6 +129,22 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     val alertsTimestampMillis: StateFlow<Long?> = _alertsTimestampMillis.asStateFlow()
     private var trafficAlertsStreamJob: Job? = null
     private var lastTrafficSubscription: Set<String> = emptySet()
+    private var isAppInForeground: Boolean = true
+    private val appLifecycleObserver = object : DefaultLifecycleObserver {
+        override fun onStart(owner: LifecycleOwner) {
+            isAppInForeground = true
+            Log.d("TransportViewModel", "App foregrounded: stopping WS service, resuming in-app stream")
+            WebSocketServiceManager.stopTrafficAlertsService(getApplication())
+            startTrafficAlertsStreaming(forceRestart = true)
+        }
+
+        override fun onStop(owner: LifecycleOwner) {
+            isAppInForeground = false
+            Log.d("TransportViewModel", "App backgrounded: starting WS service, stopping in-app stream")
+            stopTrafficAlertsStreaming()
+            startTrafficAlertsServiceForBackground()
+        }
+    }
 
     // Vehicle positions state for live tracking
     private val vehiclePositionsRepository = VehiclePositionsRepository()
@@ -156,6 +176,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     private var lineDetailScope = CoroutineScope(viewModelScope.coroutineContext + lineDetailJob)
 
     init {
+        ProcessLifecycleOwner.get().lifecycle.addObserver(appLifecycleObserver)
         // Observe connectivity changes
         viewModelScope.launch {
             connectivityObserver.isOnline.collect { online ->
@@ -163,6 +184,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 _isOffline.value = !online
                 if (!online) {
                     stopTrafficAlertsStreaming()
+                    WebSocketServiceManager.stopTrafficAlertsService(getApplication())
                 } else if (wasOffline) {
                     startTrafficAlertsStreaming(forceRestart = true)
                 }
@@ -1457,14 +1479,18 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         stopTrafficAlertsStreaming()
         lastTrafficSubscription = subscription
 
-        trafficAlertsStreamJob = viewModelScope.launch {
-            trafficAlertsRepository.streamTrafficAlerts(subscription.toList()).collect { result ->
-                result.onSuccess { push ->
-                    applyTrafficAlertPush(push)
-                }.onFailure {
-                    Log.w("TransportViewModel", "Traffic WS event error: ${it.message}")
+        if (isAppInForeground) {
+            trafficAlertsStreamJob = viewModelScope.launch {
+                trafficAlertsRepository.streamTrafficAlerts(subscription.toList()).collect { result ->
+                    result.onSuccess { push ->
+                        applyTrafficAlertPush(push)
+                    }.onFailure {
+                        Log.w("TransportViewModel", "Traffic WS event error: ${it.message}")
+                    }
                 }
             }
+        } else {
+            startTrafficAlertsServiceForBackground()
         }
     }
 
@@ -1472,6 +1498,18 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         trafficAlertsStreamJob?.cancel()
         trafficAlertsStreamJob = null
         lastTrafficSubscription = emptySet()
+    }
+
+    private fun startTrafficAlertsServiceForBackground() {
+        if (_isOffline.value) return
+        val subscription = buildTrafficSubscriptionLines()
+        if (subscription.isEmpty()) {
+            Log.d("TransportViewModel", "No subscription lines for WS service")
+            return
+        }
+        Log.d("TransportViewModel", "Starting WS service with lines: ${subscription.joinToString(",")}")
+        WebSocketServiceManager.startTrafficAlertsService(getApplication(), subscription.toList())
+        lastTrafficSubscription = subscription
     }
 
     private fun applyTrafficAlertPush(push: TrafficAlertPush) {
@@ -1577,9 +1615,10 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     override fun onCleared() {
-        super.onCleared()
+        ProcessLifecycleOwner.get().lifecycle.removeObserver(appLifecycleObserver)
         stopTrafficAlertsStreaming()
         stopLiveTracking()
         stopGlobalLive()
+        super.onCleared()
     }
 }
