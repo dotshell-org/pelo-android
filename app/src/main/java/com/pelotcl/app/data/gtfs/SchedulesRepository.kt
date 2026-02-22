@@ -40,6 +40,15 @@ class SchedulesRepository(context: Context) {
             }
         }
 
+        fun mergeDessertes(dessertes: List<String>): String {
+            return dessertes
+                .flatMap { it.split(",") }
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .distinct()
+                .joinToString(",")
+        }
+
         // LRU Cache for schedules: key = "lineName|stopName|directionId|isHoliday"
         // Reduced from 100 to 50 entries to limit memory during rapid navigation
         private val schedulesCache = LruCache<String, List<String>>(50)
@@ -411,6 +420,30 @@ class SchedulesRepository(context: Context) {
         }
         return result
     }
+
+    fun getDesserteForStop(stopName: String): String? {
+        try {
+            val db = dbHelper.readableDatabase
+            val cursor = db.rawQuery(
+                "SELECT desserte FROM arrets WHERE nom = ? COLLATE NOCASE",
+                arrayOf(stopName)
+            )
+            val allDessertes = mutableListOf<String>()
+            while (cursor.moveToNext()) {
+                val desserte = cursor.getString(0)
+                if (!desserte.isNullOrBlank()) {
+                    allDessertes.add(desserte)
+                }
+            }
+            cursor.close()
+            if (allDessertes.isEmpty()) return null
+            return mergeDessertes(allDessertes)
+        } catch (e: Exception) {
+            Log.e("SchedulesRepository", "Error getting desserte for stop $stopName: ${e.message}")
+            return null
+        }
+    }
+
 
     /**
      * Retrieves the canonical stop sequence for a line and direction from GTFS data.

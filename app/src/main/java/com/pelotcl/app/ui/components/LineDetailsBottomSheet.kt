@@ -2,6 +2,7 @@ package com.pelotcl.app.ui.components
 
 import android.os.Build
 import android.util.Log
+import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -37,6 +38,8 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.PriorityHigh
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -172,7 +175,9 @@ fun LineDetailsBottomSheet(
     onStopClick: (String) -> Unit = {},
     onShowAllSchedules: (lineName: String, directionName: String, schedules: List<String>) -> Unit,
     onItineraryClick: (stopName: String) -> Unit = {},
-    onHeaderClick: () -> Unit = {}
+    onHeaderClick: () -> Unit = {},
+    favoriteStops: Set<String> = emptySet(),
+    onToggleFavoriteStop: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -268,6 +273,7 @@ fun LineDetailsBottomSheet(
 
     val isOffline by viewModel.isOffline.collectAsState()
     val alertsTimestampMillis by viewModel.alertsTimestampMillis.collectAsState()
+    val favoriteLines by viewModel.favoriteLines.collectAsState()
 
     val validLineAlerts = remember(lineAlerts) { filterValidAlerts(lineAlerts) }
     val alertSeverity = remember(validLineAlerts) {
@@ -355,13 +361,54 @@ fun LineDetailsBottomSheet(
                         )
                     }
                     
-                    // Favorite button
-                    if (lineInfo.currentStationName == "") {
-                        val favorites by viewModel.favoriteLines.collectAsState()
-                        val isFav = favorites.contains(lineInfo.lineName.uppercase())
-                        IconButton(onClick = { viewModel.toggleFavorite(lineInfo.lineName) }) {
-                            val starIcon = if (isFav) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder
-                            Icon(imageVector = starIcon, contentDescription = if (isFav) "Unfavorite" else "Favorite", tint = if (isFav) Red500 else Color.Gray)
+                    val isLineFavorite = favoriteLines.contains(lineInfo.lineName.uppercase())
+                    val hasSelectedStop = lineInfo.currentStationName.isNotBlank()
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(0.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (hasSelectedStop) {
+                            val isStopFavorite = favoriteStops.contains(lineInfo.currentStationName)
+                            IconButton(
+                                onClick = {
+                                    val wasFavorite = isStopFavorite
+                                    onToggleFavoriteStop(lineInfo.currentStationName)
+                                    Toast.makeText(
+                                        context,
+                                        if (wasFavorite) "Arrêt supprimé des favoris" else "Arrêt ajouté aux favoris",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isStopFavorite) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                    contentDescription = if (isStopFavorite) "Retirer l'arrêt des favoris" else "Ajouter l'arrêt aux favoris",
+                                    tint = if (isStopFavorite) Color(0xFFFFC107) else Color.Gray,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                        }
+
+                        IconButton(
+                            onClick = {
+                                val wasFavorite = isLineFavorite
+                                viewModel.toggleFavorite(lineInfo.lineName)
+                                Toast.makeText(
+                                    context,
+                                    if (wasFavorite) "Ligne supprimée des favoris" else "Ligne ajoutée aux favoris",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            val heartIcon = if (isLineFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder
+                            Icon(
+                                imageVector = heartIcon,
+                                contentDescription = if (isLineFavorite) "Retirer la ligne des favoris" else "Ajouter la ligne aux favoris",
+                                tint = if (isLineFavorite) Red500 else Color.Gray
+                            )
                         }
                     }
                 }
@@ -447,6 +494,7 @@ fun LineDetailsBottomSheet(
                                 isFirst = index == 0,
                                 isLast = index == displayedStops.size - 1,
                                 onStopClick = { onStopClick(stop.stopName) },
+                                isFavorite = favoriteStops.contains(stop.stopName),
                                 modifier = Modifier.padding(horizontal = 24.dp)
                             )
                         }
@@ -933,7 +981,7 @@ private fun ConnectionsSection(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Boolean, isLast: Boolean, onStopClick: () -> Unit = {}, modifier: Modifier = Modifier) {
+private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Boolean, isLast: Boolean, onStopClick: () -> Unit = {}, isFavorite: Boolean = false, modifier: Modifier = Modifier) {
     // Debug: measure the recompositions of this item
     ListItemRecompositionCounter("LineStops", stop.stopId)
 
@@ -978,6 +1026,15 @@ private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Bool
                 modifier = Modifier.weight(1f, fill = false)
             )
 
+            if (isFavorite) {
+                Icon(
+                    imageVector = Icons.Filled.Star,
+                    contentDescription = "Arrêt favori",
+                    tint = Color(0xFFFFC107),
+                    modifier = Modifier.padding(end = 8.dp).size(18.dp)
+                )
+            }
+
             if (filteredConnections.isNotEmpty()) {
                 Spacer(modifier = Modifier.width(8.dp))
                 FlowRow(
@@ -991,6 +1048,7 @@ private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Bool
                     }
                 }
             }
+
         }
     }
 }

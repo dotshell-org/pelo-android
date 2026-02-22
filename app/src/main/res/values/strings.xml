@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">Pelo</string>
+    <string name="widget_label_all_lines_minutes">Prochains passages (min) - Toutes lignes</string>
+    <string name="widget_label_all_lines_clock">Prochains passages (heure) - Toutes lignes</string>
+    <string name="widget_label_line_minutes">Prochains passages (min) - Ligne précise</string>
+    <string name="widget_label_line_clock">Prochains passages (heure) - Ligne précise</string>
 </resources>

@@ -275,6 +275,7 @@ fun PlanScreen(
     val uiState by viewModel.uiState.collectAsState()
     val stopsUiState by viewModel.stopsUiState.collectAsState()
     val favoriteLines by viewModel.favoriteLines.collectAsState()
+    val favoriteStops by viewModel.favoriteStops.collectAsState()
     val vehiclePositions by viewModel.vehiclePositions.collectAsState()
     val isLiveTrackingEnabled by viewModel.isLiveTrackingEnabled.collectAsState()
     val isOffline by viewModel.isOffline.collectAsState()
@@ -1181,7 +1182,9 @@ fun PlanScreen(
                                     scope.launch {
                                         scaffoldSheetState.bottomSheetState.expand()
                                     }
-                                }
+                                },
+                                favoriteStops = favoriteStops,
+                                onToggleFavoriteStop = { viewModel.toggleFavoriteStop(it) }
                             )
                         }
                     }
@@ -1217,7 +1220,9 @@ fun PlanScreen(
                                         sheetContentState = SheetContentState.LINE_DETAILS
                                     }
                                 },
-                                onItineraryClick = onItineraryClick
+                                onItineraryClick = onItineraryClick,
+                                isFavorite = favoriteStops.contains(selectedStation!!.nom),
+                                onToggleFavorite = { viewModel.toggleFavoriteStop(it) }
                             )
                         }
                     }
@@ -1495,14 +1500,18 @@ private fun StationSheetContent(
     stationInfo: StationInfo,
     onDismiss: () -> Unit,
     onLineClick: (String) -> Unit,
-    onItineraryClick: (String) -> Unit = {}
+    onItineraryClick: (String) -> Unit = {},
+    isFavorite: Boolean = false,
+    onToggleFavorite: (String) -> Unit = {}
 ) {
     StationBottomSheet(
         stationInfo = stationInfo,
         sheetState = null,
         onDismiss = onDismiss,
         onLineClick = onLineClick,
-        onItineraryClick = { onItineraryClick(stationInfo.nom) }
+        onItineraryClick = { onItineraryClick(stationInfo.nom) },
+        isFavorite = isFavorite,
+        onToggleFavorite = onToggleFavorite
     )
 }
 
@@ -1519,7 +1528,9 @@ private fun LineDetailsSheetContent(
     onStopClick: (String) -> Unit = {},
     onShowAllSchedules: (lineName: String, directionName: String, schedules: List<String>) -> Unit,
     onItineraryClick: (stopName: String) -> Unit = {},
-    onHeaderClick: () -> Unit = {}
+    onHeaderClick: () -> Unit = {},
+    favoriteStops: Set<String> = emptySet(),
+    onToggleFavoriteStop: (String) -> Unit = {}
 ) {
     LineDetailsBottomSheet(
         viewModel = viewModel,
@@ -1533,7 +1544,9 @@ private fun LineDetailsSheetContent(
         onStopClick = onStopClick,
         onShowAllSchedules = onShowAllSchedules,
         onItineraryClick = onItineraryClick,
-        onHeaderClick = onHeaderClick
+        onHeaderClick = onHeaderClick,
+        favoriteStops = favoriteStops,
+        onToggleFavoriteStop = onToggleFavoriteStop
     )
 }
 

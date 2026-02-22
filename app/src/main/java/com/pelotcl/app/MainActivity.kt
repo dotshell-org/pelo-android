@@ -153,6 +153,19 @@ class MainActivity : ComponentActivity() {
             } catch (e: Exception) {
                 android.util.Log.w("MainActivity", "Raptor preload failed: ${e.message}")
             }
+
+            // Refresh home screen widgets with fresh schedule data
+            delay(3000)
+            try {
+                val widget = com.pelotcl.app.widget.PeloWidget()
+                val manager = androidx.glance.appwidget.GlanceAppWidgetManager(applicationContext)
+                val glanceIds = manager.getGlanceIds(widget.javaClass)
+                for (glanceId in glanceIds) {
+                    widget.update(applicationContext, glanceId)
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("MainActivity", "Widget refresh failed: ${e.message}")
+            }
         }
     }
 }

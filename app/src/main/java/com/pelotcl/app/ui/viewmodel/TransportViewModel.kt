@@ -102,6 +102,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val _favoriteLines = MutableStateFlow<Set<String>>(emptySet())
     val favoriteLines: StateFlow<Set<String>> = _favoriteLines.asStateFlow()
+    private val _favoriteStops = MutableStateFlow<Set<String>>(emptySet())
+    val favoriteStops: StateFlow<Set<String>> = _favoriteStops.asStateFlow()
     private val _selectedLineName = MutableStateFlow<String?>(null)
     val selectedLineName: StateFlow<String?> = _selectedLineName.asStateFlow()
 
@@ -174,6 +176,27 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch(Dispatchers.IO) {
             val favorites = favoritesRepository.getFavorites().map { it.uppercase() }.toSet()
             _favoriteLines.value = favorites
+            _favoriteStops.value = favoritesRepository.getFavoriteStops()
+
+            // Backfill/update desserte for favorite stops (merge all pôle entries)
+            val favoriteStopNames = favoritesRepository.getFavoriteStops()
+            if (favoriteStopNames.isNotEmpty()) {
+                // Wait a bit for WFS stops to be loaded
+                delay(3000)
+                val allStops = getCachedStopsSync()
+                if (allStops.isNotEmpty()) {
+                    for (stopName in favoriteStopNames) {
+                        val matchingDessertes = allStops
+                            .filter { it.properties.nom.equals(stopName, ignoreCase = true) }
+                            .map { it.properties.desserte }
+                            .filter { it.isNotEmpty() }
+                        if (matchingDessertes.isNotEmpty()) {
+                            val merged = com.pelotcl.app.data.gtfs.SchedulesRepository.mergeDessertes(matchingDessertes)
+                            favoritesRepository.saveDesserteForStop(stopName, merged)
+                        }
+                    }
+                }
+            }
         }
 
         // Defer traffic alerts - not critical for initial display
@@ -1018,6 +1041,22 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             favoritesRepository.saveFavorites(current)
             _favoriteLines.value = current
             startTrafficAlertsStreaming(forceRestart = true)
+        }
+    }
+
+    fun toggleFavoriteStop(stopName: String) {
+        viewModelScope.launch {
+            // Merge desserte from ALL WFS stops with the same name (pôle merging)
+            val matchingDessertes = getCachedStopsSync()
+                .filter { it.properties.nom.equals(stopName, ignoreCase = true) }
+                .map { it.properties.desserte }
+                .filter { it.isNotEmpty() }
+            val desserte = if (matchingDessertes.isNotEmpty()) {
+                com.pelotcl.app.data.gtfs.SchedulesRepository.mergeDessertes(matchingDessertes)
+            } else null
+
+            favoritesRepository.toggleFavoriteStop(stopName, desserte)
+            _favoriteStops.value = favoritesRepository.getFavoriteStops()
         }
     }
 

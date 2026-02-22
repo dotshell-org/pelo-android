@@ -18,7 +18,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Accessible
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Directions
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -143,7 +146,9 @@ fun StationBottomSheet(
     sheetState: SheetState?,
     onDismiss: () -> Unit,
     onLineClick: (String) -> Unit = {},
-    onItineraryClick: () -> Unit = {}
+    onItineraryClick: () -> Unit = {},
+    isFavorite: Boolean = false,
+    onToggleFavorite: (String) -> Unit = {}
 ) {
     if (stationInfo != null) {
         val content = @Composable {
@@ -177,6 +182,19 @@ fun StationBottomSheet(
                                 imageVector = Icons.AutoMirrored.Filled.Accessible,
                                 contentDescription = "Station accessible PMR",
                                 tint = Color(0xFF2563EB),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+
+                        // Favorite star button
+                        IconButton(
+                            onClick = { onToggleFavorite(stationInfo.nom) },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                contentDescription = if (isFavorite) "Retirer des favoris" else "Ajouter aux favoris",
+                                tint = if (isFavorite) Color(0xFFFFC107) else Gray700,
                                 modifier = Modifier.size(24.dp)
                             )
                         }
