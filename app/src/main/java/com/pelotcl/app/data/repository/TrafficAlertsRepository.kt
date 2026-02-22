@@ -8,6 +8,7 @@ import com.pelotcl.app.data.model.TrafficAlert
 import com.pelotcl.app.data.model.TrafficAlertsResponse
 import com.pelotcl.app.data.model.TrafficStatusResponse
 import com.pelotcl.app.data.offline.OfflineRepository
+import com.pelotcl.app.utils.DotshellRequestLogger
 import com.pelotcl.app.utils.withRetry
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -46,6 +47,7 @@ class TrafficAlertsRepository(private val context: Context) {
     private val offlineRepo = OfflineRepository.getInstance(context)
     private val gson = Gson()
     private val wsClient = OkHttpClient.Builder()
+        .addInterceptor(DotshellRequestLogger.interceptor("ws"))
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS)
@@ -153,6 +155,7 @@ class TrafficAlertsRepository(private val context: Context) {
 
             val listener = object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
+                    android.util.Log.d("DotshellRequest", "[WS] Connected to $TRAFFIC_ALERTS_WS_URL")
                     val subscribePayload = JsonObject().apply {
                         addProperty("type", "subscribe")
                         add(
@@ -160,26 +163,33 @@ class TrafficAlertsRepository(private val context: Context) {
                             gson.toJsonTree(normalizedLines)
                         )
                     }
-                    webSocket.send(subscribePayload.toString())
+                    val payloadStr = subscribePayload.toString()
+                    android.util.Log.d("DotshellRequest", "[WS] Sending subscribe message: $payloadStr")
+                    webSocket.send(payloadStr)
                 }
 
                 override fun onMessage(webSocket: WebSocket, text: String) {
+                    android.util.Log.d("DotshellRequest", "[WS] Message received: $text")
                     runCatching {
                         parseTrafficAlertMessage(text)
                     }.onSuccess { push ->
                         if (push != null) {
+                            android.util.Log.d("DotshellRequest", "[WS] Alert for line ${push.line}: ${push.alert.title}")
                             trySend(Result.success(push))
                         }
-                    }.onFailure {
+                    }.onFailure { 
+                        android.util.Log.e("DotshellRequest", "[WS] Failed to parse message", it)
                         trySend(Result.failure(it))
                     }
                 }
 
                 override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                    android.util.Log.d("DotshellRequest", "[WS] Closing: code=$code, reason=$reason")
                     webSocket.close(code, reason)
                 }
 
                 override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                    android.util.Log.d("DotshellRequest", "[WS] Connection closed: code=$code, reason=$reason")
                     close()
                 }
 
@@ -188,6 +198,7 @@ class TrafficAlertsRepository(private val context: Context) {
                     t: Throwable,
                     response: Response?
                 ) {
+                    android.util.Log.d("DotshellRequest", "[WS] Connection closed, will reconnect automatically")
                     close(t)
                 }
             }

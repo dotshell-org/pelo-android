@@ -1,6 +1,7 @@
 package com.pelotcl.app.data.api
 
 import android.content.Context
+import com.pelotcl.app.utils.DotshellRequestLogger
 import okhttp3.Cache
 import okhttp3.CacheControl
 import okhttp3.Interceptor
@@ -73,6 +74,7 @@ object RetrofitInstance {
 
             okHttpClient = OkHttpClient.Builder()
                 .cache(cache)
+                .addInterceptor(DotshellRequestLogger.interceptor("http"))
                 .addInterceptor(cacheInterceptor)
                 .addNetworkInterceptor(networkInterceptor)
                 .connectTimeout(30, TimeUnit.SECONDS)
@@ -100,8 +102,12 @@ object RetrofitInstance {
             // Fallback: create without cache if not initialized
             synchronized(this) {
                 if (apiInstance == null) {
+                    val fallbackClient = OkHttpClient.Builder()
+                        .addInterceptor(DotshellRequestLogger.interceptor("http"))
+                        .build()
                     val fallbackRetrofit = Retrofit.Builder()
                         .baseUrl(BASE_URL)
+                        .client(fallbackClient)
                         .addConverterFactory(GsonConverterFactory.create())
                         .build()
                     apiInstance = fallbackRetrofit.create(GrandLyonApi::class.java)

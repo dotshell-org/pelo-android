@@ -5,6 +5,7 @@ import com.pelotcl.app.data.model.SiriData
 import com.pelotcl.app.data.model.SimpleVehiclePosition
 import com.pelotcl.app.data.model.VehicleActivity
 import com.pelotcl.app.data.model.VehiclePositionsResponse
+import com.pelotcl.app.utils.DotshellRequestLogger
 import com.pelotcl.app.utils.withRetry
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -36,6 +37,7 @@ class VehiclePositionsRepository {
     private val api = VehiclePositionsRetrofitInstance.api
     private val gson = Gson()
     private val streamClient = OkHttpClient.Builder()
+        .addInterceptor(DotshellRequestLogger.interceptor("sse"))
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS)
@@ -79,7 +81,8 @@ class VehiclePositionsRepository {
 
             val listener = object : EventSourceListener() {
                 override fun onOpen(eventSource: EventSource, response: Response) {
-                    android.util.Log.d("VehiclePositionsRepo", "SSE connected")
+                    android.util.Log.d("VehiclePositionsRepo", "SSE connected to api.dotshell.eu")
+                    android.util.Log.d("DotshellRequest", "[SSE] Connection established to $VEHICLE_POSITIONS_STREAM_URL")
                 }
 
                 override fun onEvent(
@@ -88,14 +91,25 @@ class VehiclePositionsRepository {
                     type: String?,
                     data: String
                 ) {
-                    if (type == "heartbeat") return
+                    if (type == "heartbeat") {
+                        android.util.Log.d("DotshellRequest", "[SSE] Heartbeat received")
+                        return
+                    }
 
+                    android.util.Log.d("DotshellRequest", "[SSE] Event received: type=$type, id=$id")
                     runCatching { parsePositionsEventData(data) }
-                        .onSuccess { trySend(Result.success(it)) }
-                        .onFailure { trySend(Result.failure(it)) }
+                        .onSuccess { 
+                            android.util.Log.d("DotshellRequest", "[SSE] Successfully parsed ${it.size} vehicle positions")
+                            trySend(Result.success(it))
+                        }
+                        .onFailure { 
+                            android.util.Log.e("DotshellRequest", "[SSE] Failed to parse event data", it)
+                            trySend(Result.failure(it))
+                        }
                 }
 
                 override fun onClosed(eventSource: EventSource) {
+                    android.util.Log.d("DotshellRequest", "[SSE] Connection closed")
                     close()
                 }
 
@@ -104,7 +118,8 @@ class VehiclePositionsRepository {
                     t: Throwable?,
                     response: Response?
                 ) {
-                    close(t ?: Exception("Vehicle positions SSE connection failed"))
+                    android.util.Log.d("DotshellRequest", "[SSE] Connection closed, will reconnect automatically")
+                    close(t ?: Exception("Vehicle positions SSE connection closed"))
                 }
             }
 

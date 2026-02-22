@@ -1,5 +1,6 @@
 package com.pelotcl.app.data.api
 
+import com.pelotcl.app.utils.DotshellRequestLogger
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -32,6 +33,7 @@ object VehiclePositionsRetrofitInstance {
             if (okHttpClient != null) return
 
             okHttpClient = OkHttpClient.Builder()
+                .addInterceptor(DotshellRequestLogger.interceptor("http"))
                 .connectTimeout(15, TimeUnit.SECONDS)
                 .readTimeout(15, TimeUnit.SECONDS)
                 .writeTimeout(15, TimeUnit.SECONDS)
