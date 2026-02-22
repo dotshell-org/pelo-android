@@ -22,6 +22,27 @@ object ScheduleWidgetHelper {
     private const val DIRECTION_BOTH = -1
 
     @RequiresApi(Build.VERSION_CODES.O)
+    private data class ScheduleContext(
+        val repo: SchedulesRepository,
+        val now: LocalTime,
+        val isSchoolHoliday: Boolean,
+        val isPublicHoliday: Boolean
+    )
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun buildScheduleContext(context: Context): ScheduleContext {
+        val repo = SchedulesRepository.getInstance(context)
+        val holidayDetector = HolidayDetector(context)
+        val today = LocalDate.now()
+        return ScheduleContext(
+            repo = repo,
+            now = LocalTime.now(),
+            isSchoolHoliday = holidayDetector.isSchoolHoliday(today),
+            isPublicHoliday = holidayDetector.isFrenchPublicHoliday(today)
+        )
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
     fun getUpcomingDepartures(
         context: Context,
         stopName: String,
@@ -29,16 +50,10 @@ object ScheduleWidgetHelper {
         directionId: Int,
         count: Int = 3
     ): List<UpcomingDeparture> {
-        val repo = SchedulesRepository.getInstance(context)
-        val holidayDetector = HolidayDetector(context)
-
-        val today = LocalDate.now()
-        val isSchoolHoliday = holidayDetector.isSchoolHoliday(today)
-        val isPublicHoliday = holidayDetector.isFrenchPublicHoliday(today)
-        val now = LocalTime.now()
+        val ctx = buildScheduleContext(context)
 
         val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
-        val headsigns = repo.getHeadsigns(gtfsLineName)
+        val headsigns = ctx.repo.getHeadsigns(gtfsLineName)
 
         val directionsToQuery = if (directionId == DIRECTION_BOTH) {
             headsigns.keys.toList().ifEmpty { listOf(0, 1) }
@@ -49,11 +64,11 @@ object ScheduleWidgetHelper {
         val allDepartures = mutableListOf<UpcomingDeparture>()
         for (dir in directionsToQuery) {
             val directionName = headsigns[dir] ?: ""
-            val schedules = repo.getSchedules(
-                gtfsLineName, stopName, dir, isSchoolHoliday, isPublicHoliday
+            val schedules = ctx.repo.getSchedules(
+                gtfsLineName, stopName, dir, ctx.isSchoolHoliday, ctx.isPublicHoliday
             )
             schedules.mapNotNull { time ->
-                minutesUntil(time, now)?.let {
+                minutesUntil(time, ctx.now)?.let {
                     UpcomingDeparture(lineName, directionName, time, it)
                 }
             }.let { allDepartures.addAll(it) }
@@ -71,15 +86,8 @@ object ScheduleWidgetHelper {
         desserteString: String,
         count: Int = 5
     ): List<UpcomingDeparture> {
-        val repo = SchedulesRepository.getInstance(context)
-        val holidayDetector = HolidayDetector(context)
+        val ctx = buildScheduleContext(context)
 
-        val today = LocalDate.now()
-        val isSchoolHoliday = holidayDetector.isSchoolHoliday(today)
-        val isPublicHoliday = holidayDetector.isFrenchPublicHoliday(today)
-        val now = LocalTime.now()
-
-        // Parse desserte string: "86:A,86:R,C3:A,C3:R" -> list of (line, direction_letter)
         val lineDirections = desserteString.split(",")
             .map { it.trim() }
             .filter { it.isNotEmpty() }
@@ -89,17 +97,14 @@ object ScheduleWidgetHelper {
             }
 
         val allDepartures = mutableListOf<UpcomingDeparture>()
-
-        // Group by line to avoid duplicate API calls
         val lineGroups = lineDirections.groupBy { it.first }
 
         for ((line, directions) in lineGroups) {
             val gtfsLineName = if (line.equals("NAV1", ignoreCase = true)) "NAVI1" else line
             val displayLineName = if (gtfsLineName == "NAVI1") "NAV1" else line
-            val headsigns = repo.getHeadsigns(gtfsLineName)
+            val headsigns = ctx.repo.getHeadsigns(gtfsLineName)
 
             for ((_, dirLetter) in directions) {
-                // Map direction letter to direction_id: A=0, R=1
                 val directionId = when (dirLetter.uppercase()) {
                     "A" -> 0
                     "R" -> 1
@@ -107,12 +112,12 @@ object ScheduleWidgetHelper {
                 }
 
                 val directionName = headsigns[directionId] ?: ""
-                val schedules = repo.getSchedules(
-                    gtfsLineName, stopName, directionId, isSchoolHoliday, isPublicHoliday
+                val schedules = ctx.repo.getSchedules(
+                    gtfsLineName, stopName, directionId, ctx.isSchoolHoliday, ctx.isPublicHoliday
                 )
 
                 schedules.mapNotNull { time ->
-                    minutesUntil(time, now)?.let {
+                    minutesUntil(time, ctx.now)?.let {
                         UpcomingDeparture(displayLineName, directionName, time, it)
                     }
                 }.let { allDepartures.addAll(it) }
