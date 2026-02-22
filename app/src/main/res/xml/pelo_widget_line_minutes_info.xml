@@ -10,6 +10,6 @@
     android:configure="com.pelotcl.app.widget.WidgetConfigActivity"
     android:widgetCategory="home_screen"
     android:description="@string/widget_description"
-    android:previewLayout="@layout/widget_preview_minutes"
+    android:previewLayout="@layout/widget_preview_line_minutes"
     android:targetCellWidth="3"
     android:targetCellHeight="2" />

@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FF000000"
+    android:padding="14dp">
+
+    <TextView
+        android:id="@+id/header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
+        android:text="Bellecour"
+        android:textColor="#FFFFFFFF"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:maxLines="1" />
+
+    <TextView
+        android:id="@+id/dep1_dir"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/header"
+        android:layout_toStartOf="@+id/dep1_time"
+        android:layout_marginTop="10dp"
+        android:text="Gare de Vénissieux"
+        android:textColor="#FFFFFFFF"
+        android:textSize="14sp"
+        android:maxLines="1" />
+
+    <TextView
+        android:id="@+id/dep1_time"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/header"
+        android:layout_alignParentEnd="true"
+        android:layout_marginTop="10dp"
+        android:text="3 min"
+        android:textColor="#FF22C55E"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/dep2_dir"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/dep1_dir"
+        android:layout_toStartOf="@+id/dep2_time"
+        android:layout_marginTop="6dp"
+        android:text="Gare de Vénissieux"
+        android:textColor="#FFFFFFFF"
+        android:textSize="14sp"
+        android:maxLines="1" />
+
+    <TextView
+        android:id="@+id/dep2_time"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/dep1_time"
+        android:layout_alignParentEnd="true"
+        android:layout_marginTop="6dp"
+        android:text="8 min"
+        android:textColor="#FF22C55E"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/dep3_dir"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/dep2_dir"
+        android:layout_toStartOf="@+id/dep3_time"
+        android:layout_marginTop="6dp"
+        android:text="Gare de Vénissieux"
+        android:textColor="#FFFFFFFF"
+        android:textSize="14sp"
+        android:maxLines="1" />
+
+    <TextView
+        android:id="@+id/dep3_time"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/dep2_time"
+        android:layout_alignParentEnd="true"
+        android:layout_marginTop="6dp"
+        android:text="15 min"
+        android:textColor="#FF22C55E"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
+</RelativeLayout>
