@@ -4,7 +4,6 @@ import android.content.Context
 import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
@@ -16,12 +15,13 @@ import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.actionRunCallback
+import androidx.glance.appwidget.lazy.LazyColumn
+import androidx.glance.appwidget.lazy.items
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
 import androidx.glance.currentState
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
-import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
@@ -51,15 +51,7 @@ class PeloWidget : GlanceAppWidget() {
 
     override val stateDefinition: GlanceStateDefinition<*> = PreferencesGlanceStateDefinition
 
-    override val sizeMode = SizeMode.Responsive(
-        setOf(
-            DpSize(110.dp, 80.dp),
-            DpSize(180.dp, 110.dp),
-            DpSize(180.dp, 180.dp),
-            DpSize(180.dp, 250.dp),
-            DpSize(180.dp, 320.dp),
-        )
-    )
+    override val sizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         provideContent {
@@ -88,11 +80,12 @@ private fun WidgetContent(context: Context) {
     val desserte = prefs[PeloWidget.PREF_DESSERTE] ?: ""
     val widgetStyle = WidgetStyle.fromId(prefs[PeloWidget.PREF_WIDGET_STYLE]) ?: WidgetStyle.ALL_LINES_MINUTES
 
-    // Dynamic departure count based on widget height
+    // Request enough departures to fill tall widgets; RemoteViews will clip overflow.
     val size = LocalSize.current
-    val headerAndPaddingDp = 60 // 24dp padding + 26dp header + 10dp spacer
-    val rowHeightDp = 28 // 16sp text height + 4dp spacer + margins
-    val maxDepartures = ((size.height.value - headerAndPaddingDp) / rowHeightDp).toInt().coerceIn(1, 12)
+    val headerAndPaddingDp = 52 // 20dp padding + 22dp header + 8dp spacer + 2dp safety margin
+    val rowHeightDp = 25 // 16sp text height + 3dp spacer + 6dp margins (optimized)
+    val calculatedDepartures = ((size.height.value - headerAndPaddingDp) / rowHeightDp).toInt()
+    val maxDepartures = maxOf(calculatedDepartures, 12).coerceAtMost(30)
 
     if (stopName == null) {
         // Not configured
@@ -133,78 +126,85 @@ private fun WidgetContent(context: Context) {
     val primaryText = ColorProvider(Color(0xFFFFFFFF))
     val secondaryText = ColorProvider(Color(0xFFB3B3B3))
 
-    Column(
+    Box(
         modifier = GlanceModifier
             .fillMaxSize()
             .background(pureBlack)
             .cornerRadius(16.dp)
-            .padding(horizontal = 14.dp, vertical = 12.dp)
+            .padding(horizontal = 20.dp, vertical = 16.dp)
             .clickable(actionStartActivity<MainActivity>())
     ) {
-        // Header: stop name + refresh button
-        Row(
-            modifier = GlanceModifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+        LazyColumn(
+            modifier = GlanceModifier.fillMaxSize()
         ) {
-            if (lineName != null) {
-                val lineIconResId = BusIconHelper.getResourceIdForLine(context, lineName)
-                if (lineIconResId != 0) {
-                    Image(
-                        provider = ImageProvider(lineIconResId),
-                        contentDescription = "Ligne $lineName",
-                        modifier = GlanceModifier.size(width = 36.dp, height = 34.dp)
+            item {
+                // Header: stop name + refresh button
+                Row(
+                    modifier = GlanceModifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (lineName != null) {
+                        val lineIconResId = BusIconHelper.getResourceIdForLine(context, lineName)
+                        if (lineIconResId != 0) {
+                            Image(
+                                provider = ImageProvider(lineIconResId),
+                                contentDescription = "Ligne $lineName",
+                                modifier = GlanceModifier.size(width = 36.dp, height = 34.dp)
+                            )
+                            Spacer(modifier = GlanceModifier.width(8.dp))
+                        }
+                    }
+                    Text(
+                        text = stopName,
+                        style = TextStyle(
+                            color = primaryText,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        modifier = GlanceModifier.defaultWeight(),
+                        maxLines = 1
                     )
-                    Spacer(modifier = GlanceModifier.width(8.dp))
+                    Box(
+                        modifier = GlanceModifier
+                            .size(28.dp)
+                            .clickable(actionRunCallback<RefreshWidgetAction>()),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            provider = ImageProvider(R.drawable.ic_refresh),
+                            contentDescription = "Rafraîchir",
+                            modifier = GlanceModifier.size(18.dp),
+                            colorFilter = ColorFilter.tint(secondaryText)
+                        )
+                    }
                 }
+                Spacer(modifier = GlanceModifier.height(10.dp))
             }
-            Text(
-                text = stopName,
-                style = TextStyle(
-                    color = primaryText,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                ),
-                modifier = GlanceModifier.defaultWeight(),
-                maxLines = 1
-            )
-            Box(
-                modifier = GlanceModifier
-                    .size(28.dp)
-                    .clickable(actionRunCallback<RefreshWidgetAction>()),
-                contentAlignment = Alignment.Center
-            ) {
-                Image(
-                    provider = ImageProvider(R.drawable.ic_refresh),
-                    contentDescription = "Rafraîchir",
-                    modifier = GlanceModifier.size(18.dp),
-                    colorFilter = ColorFilter.tint(secondaryText)
-                )
-            }
-        }
-        Spacer(modifier = GlanceModifier.height(10.dp))
-
-        if (departures.isEmpty()) {
-            Box(
-                modifier = GlanceModifier.fillMaxWidth().defaultWeight(),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "Aucun départ à venir",
-                    style = TextStyle(
-                        color = secondaryText,
-                        fontSize = 16.sp
+            if (departures.isEmpty()) {
+                item {
+                    Box(
+                        modifier = GlanceModifier.fillMaxWidth().padding(bottom=6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Aucun départ à venir",
+                            style = TextStyle(
+                                color = secondaryText,
+                                fontSize = 16.sp
+                            )
+                        )
+                    }
+                }
+            } else {
+                items(departures) { departure ->
+                    DepartureRow(
+                        context = context,
+                        departure = departure,
+                        showLineBadge = lineName == null,
+                        timeDisplayMode = widgetStyle.timeDisplayMode
                     )
-                )
-            }
-        } else {
-            departures.forEach { departure ->
-                DepartureRow(
-                    context = context,
-                    departure = departure,
-                    showLineBadge = lineName == null,
-                    timeDisplayMode = widgetStyle.timeDisplayMode
-                )
-                Spacer(modifier = GlanceModifier.height(4.dp))
+                    Spacer(modifier = GlanceModifier.height(6.dp))
+                }
             }
         }
     }
