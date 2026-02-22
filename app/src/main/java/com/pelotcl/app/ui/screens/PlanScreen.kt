@@ -59,10 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.pelotcl.app.R
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.CreationExtras
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -90,7 +87,6 @@ import com.pelotcl.app.utils.LineColorHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -289,21 +285,6 @@ fun PlanScreen(
     var mapStyleVersion by remember { mutableStateOf(0) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val lifecycleOwner = LocalLifecycleOwner.current
-
-    // Lifecycle-aware periodic refresh for traffic alerts (every 5 minutes while app is visible)
-    LaunchedEffect(lifecycleOwner) {
-        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            while (true) {
-                delay(5 * 60 * 1000L) // 5 minutes
-                try {
-                    viewModel.refreshTrafficAlerts()
-                } catch (e: Exception) {
-                    android.util.Log.e("PlanScreen", "Error refreshing traffic alerts", e)
-                }
-            }
-        }
-    }
 
     // Location state
     var userLocation by remember { mutableStateOf(initialUserLocation) }

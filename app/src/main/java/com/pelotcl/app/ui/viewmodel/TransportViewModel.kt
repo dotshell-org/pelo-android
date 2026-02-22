@@ -13,6 +13,7 @@ import com.pelotcl.app.data.model.SimpleVehiclePosition
 import com.pelotcl.app.data.model.StopFeature
 import com.pelotcl.app.data.repository.RaptorRepository
 import com.pelotcl.app.data.repository.TransportRepository
+import com.pelotcl.app.data.repository.TrafficAlertPush
 import com.pelotcl.app.data.repository.TrafficAlertsRepository
 import com.pelotcl.app.data.repository.VehiclePositionsRepository
 import com.pelotcl.app.ui.components.LineSearchResult
@@ -27,7 +28,6 @@ import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.ConnectionsHelper
 import com.pelotcl.app.utils.HolidayDetector
 import java.time.LocalDate
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -121,6 +121,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     // Alerts timestamp for staleness display
     private val _alertsTimestampMillis = MutableStateFlow<Long?>(null)
     val alertsTimestampMillis: StateFlow<Long?> = _alertsTimestampMillis.asStateFlow()
+    private var trafficAlertsStreamJob: Job? = null
+    private var lastTrafficSubscription: Set<String> = emptySet()
 
     // Vehicle positions state for live tracking
     private val vehiclePositionsRepository = VehiclePositionsRepository()
@@ -155,7 +157,13 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         // Observe connectivity changes
         viewModelScope.launch {
             connectivityObserver.isOnline.collect { online ->
+                val wasOffline = _isOffline.value
                 _isOffline.value = !online
+                if (!online) {
+                    stopTrafficAlertsStreaming()
+                } else if (wasOffline) {
+                    startTrafficAlertsStreaming(forceRestart = true)
+                }
             }
         }
 
@@ -172,6 +180,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             delay(1000) // Wait for UI to stabilize
             refreshTrafficAlerts()
+            startTrafficAlertsStreaming(forceRestart = true)
         }
 
         // Load offline data info
@@ -387,21 +396,17 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     companion object {
-        // Adaptive polling intervals
-        private const val VEHICLE_POLL_BASE_MS = 5_000L      // 5s when active & successful
-        private const val VEHICLE_POLL_MAX_BACKOFF_MS = 60_000L // 60s max on consecutive errors
-        private const val VEHICLE_POLL_BACKOFF_FACTOR = 2.0
-        private const val GLOBAL_LIVE_POLL_BASE_MS = 10_000L   // 10s for global live (all vehicles)
+        private val DEFAULT_ALERT_SUBSCRIPTION_LINES = setOf(
+            "A", "B", "C", "D",
+            "F1", "F2",
+            "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10",
+            "NAV1", "NAVI1",
+            "RX"
+        )
     }
 
     /**
-     * Starts live vehicle tracking for the given line with adaptive polling.
-     *
-     * Polling strategy:
-     * - Base interval: 5s on success
-     * - On error: exponential backoff (10s, 20s, 40s, 60s cap)
-     * - On consecutive successes: resets to base interval
-     * - Automatically stops when tracking is disabled
+     * Starts live vehicle tracking for the given line using SSE stream updates.
      */
     fun startLiveTracking(lineName: String) {
         // Don't start live tracking when offline
@@ -417,34 +422,14 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         _isLiveTrackingEnabled.value = true
 
         vehiclePositionsJob = viewModelScope.launch {
-            var currentDelay = VEHICLE_POLL_BASE_MS
-            var consecutiveErrors = 0
-
-            while (_isLiveTrackingEnabled.value) {
-                try {
-                    val result = vehiclePositionsRepository.getVehiclePositionsForLine(lineName)
-                    result.onSuccess { positions ->
-                        _vehiclePositions.value = positions
-                        // Success: reset to base interval
-                        consecutiveErrors = 0
-                        currentDelay = VEHICLE_POLL_BASE_MS
-                    }.onFailure {
-                        consecutiveErrors++
-                        currentDelay = (VEHICLE_POLL_BASE_MS * VEHICLE_POLL_BACKOFF_FACTOR.pow(consecutiveErrors.toDouble()))
-                            .toLong()
-                            .coerceAtMost(VEHICLE_POLL_MAX_BACKOFF_MS)
-                        Log.w("TransportViewModel", "Vehicle polling error ($consecutiveErrors): ${it.message}, next in ${currentDelay}ms")
+            vehiclePositionsRepository.streamAllVehiclePositions().collect { result ->
+                result.onSuccess { allPositions ->
+                    _vehiclePositions.value = allPositions.filter {
+                        it.lineName.equals(lineName, ignoreCase = true)
                     }
-                } catch (e: CancellationException) {
-                    throw e // Don't swallow cancellation
-                } catch (e: Exception) {
-                    consecutiveErrors++
-                    currentDelay = (VEHICLE_POLL_BASE_MS * VEHICLE_POLL_BACKOFF_FACTOR.pow(consecutiveErrors.toDouble()))
-                        .toLong()
-                        .coerceAtMost(VEHICLE_POLL_MAX_BACKOFF_MS)
-                    Log.w("TransportViewModel", "Vehicle polling exception ($consecutiveErrors): ${e.message}, next in ${currentDelay}ms")
+                }.onFailure {
+                    Log.w("TransportViewModel", "Vehicle SSE error: ${it.message}")
                 }
-                delay(currentDelay)
             }
         }
     }
@@ -485,33 +470,12 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         _isGlobalLiveEnabled.value = true
 
         globalLiveJob = viewModelScope.launch {
-            var currentDelay = GLOBAL_LIVE_POLL_BASE_MS
-            var consecutiveErrors = 0
-
-            while (_isGlobalLiveEnabled.value) {
-                try {
-                    val result = vehiclePositionsRepository.getAllVehiclePositions()
-                    result.onSuccess { positions ->
-                        _globalVehiclePositions.value = positions
-                        consecutiveErrors = 0
-                        currentDelay = GLOBAL_LIVE_POLL_BASE_MS
-                    }.onFailure {
-                        consecutiveErrors++
-                        currentDelay = (GLOBAL_LIVE_POLL_BASE_MS * VEHICLE_POLL_BACKOFF_FACTOR.pow(consecutiveErrors.toDouble()))
-                            .toLong()
-                            .coerceAtMost(VEHICLE_POLL_MAX_BACKOFF_MS)
-                        Log.w("TransportViewModel", "Global live polling error ($consecutiveErrors): ${it.message}")
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    consecutiveErrors++
-                    currentDelay = (GLOBAL_LIVE_POLL_BASE_MS * VEHICLE_POLL_BACKOFF_FACTOR.pow(consecutiveErrors.toDouble()))
-                        .toLong()
-                        .coerceAtMost(VEHICLE_POLL_MAX_BACKOFF_MS)
-                    Log.w("TransportViewModel", "Global live polling exception ($consecutiveErrors): ${e.message}")
+            vehiclePositionsRepository.streamAllVehiclePositions().collect { result ->
+                result.onSuccess { positions ->
+                    _globalVehiclePositions.value = positions
+                }.onFailure {
+                    Log.w("TransportViewModel", "Global live SSE error: ${it.message}")
                 }
-                delay(currentDelay)
             }
         }
     }
@@ -1053,15 +1017,18 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             }
             favoritesRepository.saveFavorites(current)
             _favoriteLines.value = current
+            startTrafficAlertsStreaming(forceRestart = true)
         }
     }
 
     fun selectLine(lineName: String) {
         _selectedLineName.value = lineName
+        startTrafficAlertsStreaming(forceRestart = true)
     }
 
     fun clearSelectedLine() {
         _selectedLineName.value = null
+        startTrafficAlertsStreaming(forceRestart = true)
     }
 
     /**
@@ -1427,6 +1394,71 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      * Traffic Alerts Management
      */
 
+    private fun buildTrafficSubscriptionLines(): Set<String> {
+        val selected = _selectedLineName.value
+            ?.trim()
+            ?.uppercase()
+            ?.takeIf { it.isNotEmpty() }
+
+        return buildSet {
+            addAll(DEFAULT_ALERT_SUBSCRIPTION_LINES)
+            addAll(_favoriteLines.value.map { it.uppercase() })
+            if (selected != null) add(selected)
+        }.take(50).toSet()
+    }
+
+    private fun startTrafficAlertsStreaming(forceRestart: Boolean = false) {
+        if (_isOffline.value) return
+
+        val subscription = buildTrafficSubscriptionLines()
+        if (!forceRestart && subscription == lastTrafficSubscription && trafficAlertsStreamJob?.isActive == true) {
+            return
+        }
+
+        stopTrafficAlertsStreaming()
+        lastTrafficSubscription = subscription
+
+        trafficAlertsStreamJob = viewModelScope.launch {
+            trafficAlertsRepository.streamTrafficAlerts(subscription.toList()).collect { result ->
+                result.onSuccess { push ->
+                    applyTrafficAlertPush(push)
+                }.onFailure {
+                    Log.w("TransportViewModel", "Traffic WS event error: ${it.message}")
+                }
+            }
+        }
+    }
+
+    private fun stopTrafficAlertsStreaming() {
+        trafficAlertsStreamJob?.cancel()
+        trafficAlertsStreamJob = null
+        lastTrafficSubscription = emptySet()
+    }
+
+    private fun applyTrafficAlertPush(push: TrafficAlertPush) {
+        val normalizedLine = normalizeLineForAlerts(push.line)
+        val current = _trafficAlerts.value.toMutableMap()
+        val existingForLine = current[normalizedLine].orEmpty()
+
+        val updatedForLine = existingForLine
+            .filterNot { sameAlertIdentity(it, push.alert) }
+            .plus(push.alert)
+
+        current[normalizedLine] = updatedForLine
+        _trafficAlerts.value = current
+        _alertsTimestampMillis.value = System.currentTimeMillis()
+    }
+
+    private fun sameAlertIdentity(
+        first: com.pelotcl.app.data.model.TrafficAlert,
+        second: com.pelotcl.app.data.model.TrafficAlert
+    ): Boolean {
+        return first.alertNumber == second.alertNumber &&
+                first.lineCode.equals(second.lineCode, ignoreCase = true) &&
+                first.title == second.title &&
+                first.message == second.message
+    }
+
     /**
      * Gets traffic status (alert count and last update)
      */
@@ -1503,5 +1535,12 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         } catch (e: Exception) {
             Log.e("TransportViewModel", "Error refreshing traffic alerts", e)
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        stopTrafficAlertsStreaming()
+        stopLiveTracking()
+        stopGlobalLive()
     }
 }

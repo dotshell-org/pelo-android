@@ -98,6 +98,7 @@ dependencies {
     
     // OkHttp for caching and network optimization
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp-sse:4.12.0")
 
     // ViewModel
     implementation(libs.androidx.lifecycle.viewmodel.compose)

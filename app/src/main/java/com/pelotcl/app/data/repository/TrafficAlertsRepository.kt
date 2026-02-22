@@ -9,17 +9,47 @@ import com.pelotcl.app.data.model.TrafficAlertsResponse
 import com.pelotcl.app.data.model.TrafficStatusResponse
 import com.pelotcl.app.data.offline.OfflineRepository
 import com.pelotcl.app.utils.withRetry
+import com.google.gson.Gson
+import com.google.gson.JsonObject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
 import java.util.concurrent.TimeUnit
+
+data class TrafficAlertPush(
+    val line: String,
+    val timestamp: String?,
+    val alert: TrafficAlert
+)
 
 /**
  * Repository for managing traffic alerts data
  */
 class TrafficAlertsRepository(private val context: Context) {
 
+    companion object {
+        private const val TRAFFIC_ALERTS_WS_URL = "wss://api.dotshell.eu/pelo/v1/traffic/alerts/ws"
+        private const val MAX_STREAM_BACKOFF_MS = 60_000L
+    }
+
     private val api = RetrofitInstance.api
     private val cache = TrafficAlertsCache(context)
     private val offlineRepo = OfflineRepository.getInstance(context)
+    private val gson = Gson()
+    private val wsClient = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(0, TimeUnit.SECONDS)
+        .writeTimeout(15, TimeUnit.SECONDS)
+        .build()
     
     /**
      * Fetches traffic status (alert count and last update)
@@ -53,7 +83,7 @@ class TrafficAlertsRepository(private val context: Context) {
      * Fetches all traffic alerts
      */
     suspend fun getTrafficAlerts(): Result<List<TrafficAlert>> {
-        return withContext(kotlinx.coroutines.Dispatchers.IO) {
+        return withContext(Dispatchers.IO) {
             try {
                 // Check cache first
                 val cachedAlerts = cache.getTrafficAlerts()
@@ -102,6 +132,76 @@ class TrafficAlertsRepository(private val context: Context) {
                 }
                 Result.failure(e)
             }
+        }
+    }
+
+    /**
+     * Streams traffic alerts over WebSocket for a subset of lines.
+     * Emits one [TrafficAlertPush] per received alert event and reconnects automatically.
+     */
+    fun streamTrafficAlerts(lines: List<String>): Flow<Result<TrafficAlertPush>> {
+        return callbackFlow {
+            val normalizedLines = lines
+                .map { it.trim().uppercase() }
+                .filter { it.isNotEmpty() }
+                .distinct()
+                .take(50)
+
+            val request = Request.Builder()
+                .url(TRAFFIC_ALERTS_WS_URL)
+                .build()
+
+            val listener = object : WebSocketListener() {
+                override fun onOpen(webSocket: WebSocket, response: Response) {
+                    val subscribePayload = JsonObject().apply {
+                        addProperty("type", "subscribe")
+                        add(
+                            "lines",
+                            gson.toJsonTree(normalizedLines)
+                        )
+                    }
+                    webSocket.send(subscribePayload.toString())
+                }
+
+                override fun onMessage(webSocket: WebSocket, text: String) {
+                    runCatching {
+                        parseTrafficAlertMessage(text)
+                    }.onSuccess { push ->
+                        if (push != null) {
+                            trySend(Result.success(push))
+                        }
+                    }.onFailure {
+                        trySend(Result.failure(it))
+                    }
+                }
+
+                override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                    webSocket.close(code, reason)
+                }
+
+                override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                    close()
+                }
+
+                override fun onFailure(
+                    webSocket: WebSocket,
+                    t: Throwable,
+                    response: Response?
+                ) {
+                    close(t)
+                }
+            }
+
+            val webSocket = wsClient.newWebSocket(request, listener)
+            awaitClose { webSocket.cancel() }
+        }.retryWhen { cause, attempt ->
+            val backoff = (1_000L * (1L shl attempt.coerceAtMost(6).toInt())).coerceAtMost(MAX_STREAM_BACKOFF_MS)
+            Log.w(
+                "TrafficAlertsRepository",
+                "Traffic alerts WS disconnected (${cause.message}), reconnecting in ${backoff}ms"
+            )
+            delay(backoff)
+            true
         }
     }
 
@@ -231,5 +331,22 @@ class TrafficAlertsRepository(private val context: Context) {
         } catch (e: Exception) {
             return true // If we can't parse, consider cache expired
         }
+    }
+
+    private fun parseTrafficAlertMessage(message: String): TrafficAlertPush? {
+        val root = gson.fromJson(message, JsonObject::class.java)
+        val type = root.get("type")?.asString ?: return null
+        if (type != "alert") return null
+
+        val line = root.get("line")?.asString ?: return null
+        val timestamp = root.get("timestamp")?.asString
+        val alertJson = root.get("alert") ?: return null
+        val alert = gson.fromJson(alertJson, TrafficAlert::class.java)
+
+        return TrafficAlertPush(
+            line = line,
+            timestamp = timestamp,
+            alert = alert
+        )
     }
 }
