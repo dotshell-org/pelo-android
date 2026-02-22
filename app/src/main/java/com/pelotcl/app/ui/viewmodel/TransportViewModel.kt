@@ -170,8 +170,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             _favoriteLines.value = favorites
             _favoriteStops.value = favoritesRepository.getFavoriteStops()
 
-            // Backfill desserte for favorite stops that don't have it yet
-            // (migration for stops favorited before desserte storage was added)
+            // Backfill/update desserte for favorite stops (merge all pôle entries)
             val favoriteStopNames = favoritesRepository.getFavoriteStops()
             if (favoriteStopNames.isNotEmpty()) {
                 // Wait a bit for WFS stops to be loaded
@@ -179,13 +178,13 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 val allStops = getCachedStopsSync()
                 if (allStops.isNotEmpty()) {
                     for (stopName in favoriteStopNames) {
-                        if (favoritesRepository.getDesserteForStop(stopName) == null) {
-                            val wfsStop = allStops.find {
-                                it.properties.nom.equals(stopName, ignoreCase = true)
-                            }
-                            if (wfsStop != null && wfsStop.properties.desserte.isNotEmpty()) {
-                                favoritesRepository.saveDesserteForStop(stopName, wfsStop.properties.desserte)
-                            }
+                        val matchingDessertes = allStops
+                            .filter { it.properties.nom.equals(stopName, ignoreCase = true) }
+                            .map { it.properties.desserte }
+                            .filter { it.isNotEmpty() }
+                        if (matchingDessertes.isNotEmpty()) {
+                            val merged = com.pelotcl.app.data.gtfs.SchedulesRepository.mergeDessertes(matchingDessertes)
+                            favoritesRepository.saveDesserteForStop(stopName, merged)
                         }
                     }
                 }
@@ -1082,10 +1081,14 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun toggleFavoriteStop(stopName: String) {
         viewModelScope.launch {
-            // Look up desserte from WFS cached stops for robust storage
-            val desserte = getCachedStopsSync().find {
-                it.properties.nom.equals(stopName, ignoreCase = true)
-            }?.properties?.desserte
+            // Merge desserte from ALL WFS stops with the same name (pôle merging)
+            val matchingDessertes = getCachedStopsSync()
+                .filter { it.properties.nom.equals(stopName, ignoreCase = true) }
+                .map { it.properties.desserte }
+                .filter { it.isNotEmpty() }
+            val desserte = if (matchingDessertes.isNotEmpty()) {
+                com.pelotcl.app.data.gtfs.SchedulesRepository.mergeDessertes(matchingDessertes)
+            } else null
 
             favoritesRepository.toggleFavoriteStop(stopName, desserte)
             _favoriteStops.value = favoritesRepository.getFavoriteStops()

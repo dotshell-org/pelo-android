@@ -9,7 +9,6 @@
     android:initialLayout="@layout/widget_loading"
     android:configure="com.pelotcl.app.widget.WidgetConfigActivity"
     android:widgetCategory="home_screen"
-    android:description="@string/widget_description"
-    android:previewLayout="@layout/widget_preview_clock"
+android:previewLayout="@layout/widget_preview_clock"
     android:targetCellWidth="3"
     android:targetCellHeight="2" />

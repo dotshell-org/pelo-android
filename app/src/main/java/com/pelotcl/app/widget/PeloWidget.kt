@@ -4,11 +4,13 @@ import android.content.Context
 import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
+import androidx.glance.LocalSize
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
@@ -49,7 +51,15 @@ class PeloWidget : GlanceAppWidget() {
 
     override val stateDefinition: GlanceStateDefinition<*> = PreferencesGlanceStateDefinition
 
-    override val sizeMode = SizeMode.Single
+    override val sizeMode = SizeMode.Responsive(
+        setOf(
+            DpSize(110.dp, 80.dp),
+            DpSize(180.dp, 110.dp),
+            DpSize(180.dp, 180.dp),
+            DpSize(180.dp, 250.dp),
+            DpSize(180.dp, 320.dp),
+        )
+    )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         provideContent {
@@ -78,6 +88,12 @@ private fun WidgetContent(context: Context) {
     val desserte = prefs[PeloWidget.PREF_DESSERTE] ?: ""
     val widgetStyle = WidgetStyle.fromId(prefs[PeloWidget.PREF_WIDGET_STYLE]) ?: WidgetStyle.ALL_LINES_MINUTES
 
+    // Dynamic departure count based on widget height
+    val size = LocalSize.current
+    val headerAndPaddingDp = 60 // 24dp padding + 26dp header + 10dp spacer
+    val rowHeightDp = 28 // 16sp text height + 4dp spacer + margins
+    val maxDepartures = ((size.height.value - headerAndPaddingDp) / rowHeightDp).toInt().coerceIn(1, 12)
+
     if (stopName == null) {
         // Not configured
         Box(
@@ -102,11 +118,11 @@ private fun WidgetContent(context: Context) {
     val departures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         if (lineName != null) {
             ScheduleWidgetHelper.getUpcomingDepartures(
-                context, stopName, lineName, directionId, 4
+                context, stopName, lineName, directionId, maxDepartures
             )
         } else {
             ScheduleWidgetHelper.getAllUpcomingDepartures(
-                context, stopName, desserte, 5
+                context, stopName, desserte, maxDepartures
             )
         }
     } else {

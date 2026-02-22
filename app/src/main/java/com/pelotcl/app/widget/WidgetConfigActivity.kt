@@ -299,6 +299,8 @@ private fun WidgetConfigScreen(
         if (selectedStop == null) {
             StopSelectionStep(
                 favoriteStops = favoriteStops,
+                favoritesRepository = favoritesRepository,
+                schedulesRepository = schedulesRepository,
                 onStopSelected = { selectedStop = it }
             )
         } else {
@@ -353,6 +355,8 @@ private fun WidgetConfigScreen(
 @Composable
 private fun StopSelectionStep(
     favoriteStops: List<String>,
+    favoritesRepository: FavoritesRepository,
+    schedulesRepository: SchedulesRepository,
     onStopSelected: (String) -> Unit
 ) {
     if (favoriteStops.isEmpty()) {
@@ -402,21 +406,60 @@ private fun StopSelectionStep(
                     .clip(RoundedCornerShape(12.dp))
             ) {
                 favoriteStops.forEachIndexed { index, stopName ->
+                    val lineNames = remember(stopName) {
+                        val desserte = favoritesRepository.getDesserteForStop(stopName)
+                            ?: schedulesRepository.getDesserteForStop(stopName)
+                            ?: ""
+                        desserte.split(",")
+                            .mapNotNull { entry ->
+                                val parts = entry.split(":")
+                                if (parts.size >= 2) {
+                                    val name = parts[0].trim()
+                                    if (name.equals("NAVI1", ignoreCase = true)) "NAV1" else name
+                                } else null
+                            }
+                            .distinct()
+                    }
+
                     DarkMenuRow(onClick = { onStopSelected(stopName) }) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Filled.Place,
-                                contentDescription = null,
-                                tint = AccentRed,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = stopName,
-                                color = TextPrimary,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Filled.Place,
+                                    contentDescription = null,
+                                    tint = AccentRed,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = stopName,
+                                    color = TextPrimary,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                            if (lineNames.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(
+                                    modifier = Modifier.padding(start = 32.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    lineNames.take(8).forEach { lineName ->
+                                        LineIcon(
+                                            lineName = lineName,
+                                            modifier = Modifier.size(width = 28.dp, height = 16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                    }
+                                    if (lineNames.size > 8) {
+                                        Text(
+                                            text = "+${lineNames.size - 8}",
+                                            color = TextSecondary,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                     if (index < favoriteStops.lastIndex) {
