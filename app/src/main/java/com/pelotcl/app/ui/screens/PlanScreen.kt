@@ -749,7 +749,7 @@ fun PlanScreen(
         }
     }
 
-    // Handle selection from stop options (three dots) - always open station sheet
+    // Handle selection from stop options (target) - mimic map click behavior
     LaunchedEffect(optionsSelectedStop, stopsUiState, mapInstance) {
         if (optionsSelectedStop != null && mapInstance != null && stopsUiState is TransportStopsUiState.Success) {
             val allStops = (stopsUiState as TransportStopsUiState.Success).stops
@@ -779,8 +779,28 @@ fun PlanScreen(
                 }
 
                 zoomToStop(mapInstance!!, stationInfo.nom, allStops)
-                selectedStation = stationInfo
-                sheetContentState = SheetContentState.STATION
+
+                if (stationInfo.lignes.size == 1) {
+                    selectedStation = stationInfo
+                    val lineName = stationInfo.lignes[0]
+                    selectedLine = LineInfo(
+                        lineName = lineName,
+                        currentStationName = stationInfo.nom
+                    )
+
+                    if (!isMetroTramOrFunicular(lineName)) {
+                        viewModel.addLineToLoaded(lineName)
+                        if (isTemporaryBus(lineName)) {
+                            temporaryLoadedBusLines = temporaryLoadedBusLines + lineName
+                        }
+                        delay(100)
+                    }
+
+                    sheetContentState = SheetContentState.LINE_DETAILS
+                } else {
+                    selectedStation = stationInfo
+                    sheetContentState = SheetContentState.STATION
+                }
 
                 onOptionsSelectionHandled()
             }
