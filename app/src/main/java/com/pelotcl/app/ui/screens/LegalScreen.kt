@@ -53,8 +53,7 @@ fun LegalScreen(
             body = "L’Application peut solliciter les permissions suivantes selon les besoins " +
                 "techniques :\n" +
                 "• Localisation : Pour afficher les arrêts proches (traitée localement).\n" +
-                "• Réseau/Internet : Pour récupérer les horaires en temps réel.\n" +
-                "• Notifications : Pour les alertes de trafic."
+                "• Réseau/Internet : Pour récupérer les horaires en temps réel."
         ),
         LegalSection(
             title = "Traitement des données et confidentialité",

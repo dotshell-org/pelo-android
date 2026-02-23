@@ -1,8 +1,6 @@
 package com.pelotcl.app
 
 import android.app.Application
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.content.ComponentCallbacks2
 import android.os.Build
 import android.util.Log
@@ -20,7 +18,6 @@ class PeloApplication : Application(), Configuration.Provider {
 
     companion object {
         private const val TAG = "PeloApplication"
-        const val TRAFFIC_ALERTS_CHANNEL_ID = "traffic_alerts"
         const val TRAFFIC_ALERTS_WORK_NAME = "traffic_alerts_periodic"
     }
 
@@ -34,24 +31,7 @@ class PeloApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "PeloApplication onCreate()")
-        createNotificationChannel()
         scheduleTrafficAlertsWork()
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                TRAFFIC_ALERTS_CHANNEL_ID,
-                "Alertes trafic",
-                NotificationManager.IMPORTANCE_DEFAULT
-            ).apply {
-                description = "Notifications pour les nouvelles alertes de trafic sur vos lignes favorites et les lignes fortes"
-            }
-
-            val notificationManager = getSystemService(NotificationManager::class.java)
-            notificationManager.createNotificationChannel(channel)
-            Log.d(TAG, "Notification channel created")
-        }
     }
 
     override fun onTrimMemory(level: Int) {

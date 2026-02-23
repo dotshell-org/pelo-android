@@ -298,11 +298,6 @@ fun NavBar(modifier: Modifier = Modifier) {
         }
     }
 
-    // Notification permission launcher for Android 13+
-    val notificationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { _ -> }
-
     LaunchedEffect(Unit) {
         val hasPermission = ContextCompat.checkSelfPermission(
             context,
@@ -330,19 +325,6 @@ fun NavBar(modifier: Modifier = Modifier) {
             // Then start continuous location updates for real-time tracking
             LocationHelper.startLocationUpdates(fusedLocationClient) { location ->
                 userLocation = location
-            }
-        }
-        
-        // Request notification permission on Android 13+ (deferred to not overwhelm user)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val hasNotificationPermission = ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-            
-            if (!hasNotificationPermission) {
-                delay(1000) // Slight delay to not overwhelm user with permission requests
-                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
     }

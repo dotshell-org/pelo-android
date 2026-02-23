@@ -5,53 +5,21 @@ import android.util.Log
 import com.pelotcl.app.data.api.RetrofitInstance
 import com.pelotcl.app.data.model.AlertSeverity
 import com.pelotcl.app.data.model.TrafficAlert
-import com.pelotcl.app.data.model.TrafficAlertsResponse
 import com.pelotcl.app.data.model.TrafficStatusResponse
 import com.pelotcl.app.data.offline.OfflineRepository
-import com.pelotcl.app.utils.DotshellRequestLogger
 import com.pelotcl.app.utils.withRetry
-import com.google.gson.Gson
-import com.google.gson.JsonObject
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Response
-import okhttp3.WebSocket
-import okhttp3.WebSocketListener
 import java.util.concurrent.TimeUnit
-
-data class TrafficAlertPush(
-    val line: String,
-    val timestamp: String?,
-    val alert: TrafficAlert
-)
 
 /**
  * Repository for managing traffic alerts data
  */
 class TrafficAlertsRepository(private val context: Context) {
 
-    companion object {
-        private const val TRAFFIC_ALERTS_WS_URL = "wss://api.dotshell.eu/pelo/v1/traffic/alerts/ws"
-        private const val MAX_STREAM_BACKOFF_MS = 60_000L
-    }
-
     private val api = RetrofitInstance.api
     private val cache = TrafficAlertsCache(context)
     private val offlineRepo = OfflineRepository.getInstance(context)
-    private val gson = Gson()
-    private val wsClient = OkHttpClient.Builder()
-        .addInterceptor(DotshellRequestLogger.interceptor("ws"))
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(0, TimeUnit.SECONDS)
-        .writeTimeout(15, TimeUnit.SECONDS)
-        .build()
     
     /**
      * Fetches traffic status (alert count and last update)
@@ -94,6 +62,7 @@ class TrafficAlertsRepository(private val context: Context) {
                 }
                 
                 // Fetch from API with retry on transient failures
+                Log.d("TrafficAlertsRepository", "Fetching traffic alerts from API...")
                 val response = withRetry(maxRetries = 2, initialDelayMs = 500) {
                     api.getTrafficAlerts()
                 }
@@ -134,85 +103,6 @@ class TrafficAlertsRepository(private val context: Context) {
                 }
                 Result.failure(e)
             }
-        }
-    }
-
-    /**
-     * Streams traffic alerts over WebSocket for a subset of lines.
-     * Emits one [TrafficAlertPush] per received alert event and reconnects automatically.
-     */
-    fun streamTrafficAlerts(lines: List<String>): Flow<Result<TrafficAlertPush>> {
-        return callbackFlow {
-            val normalizedLines = lines
-                .map { it.trim().uppercase() }
-                .filter { it.isNotEmpty() }
-                .distinct()
-                .take(50)
-
-            val request = Request.Builder()
-                .url(TRAFFIC_ALERTS_WS_URL)
-                .build()
-
-            val listener = object : WebSocketListener() {
-                override fun onOpen(webSocket: WebSocket, response: Response) {
-                    android.util.Log.d("DotshellRequest", "[WS] Connected to $TRAFFIC_ALERTS_WS_URL")
-                    val subscribePayload = JsonObject().apply {
-                        addProperty("type", "subscribe")
-                        add(
-                            "lines",
-                            gson.toJsonTree(normalizedLines)
-                        )
-                    }
-                    val payloadStr = subscribePayload.toString()
-                    android.util.Log.d("DotshellRequest", "[WS] Sending subscribe message: $payloadStr")
-                    webSocket.send(payloadStr)
-                }
-
-                override fun onMessage(webSocket: WebSocket, text: String) {
-                    android.util.Log.d("DotshellRequest", "[WS] Message received: $text")
-                    runCatching {
-                        parseTrafficAlertMessage(text)
-                    }.onSuccess { push ->
-                        if (push != null) {
-                            android.util.Log.d("DotshellRequest", "[WS] Alert for line ${push.line}: ${push.alert.title}")
-                            trySend(Result.success(push))
-                        }
-                    }.onFailure { 
-                        android.util.Log.e("DotshellRequest", "[WS] Failed to parse message", it)
-                        trySend(Result.failure(it))
-                    }
-                }
-
-                override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                    android.util.Log.d("DotshellRequest", "[WS] Closing: code=$code, reason=$reason")
-                    webSocket.close(code, reason)
-                }
-
-                override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                    android.util.Log.d("DotshellRequest", "[WS] Connection closed: code=$code, reason=$reason")
-                    close()
-                }
-
-                override fun onFailure(
-                    webSocket: WebSocket,
-                    t: Throwable,
-                    response: Response?
-                ) {
-                    android.util.Log.d("DotshellRequest", "[WS] Connection closed, will reconnect automatically")
-                    close(t)
-                }
-            }
-
-            val webSocket = wsClient.newWebSocket(request, listener)
-            awaitClose { webSocket.cancel() }
-        }.retryWhen { cause, attempt ->
-            val backoff = (1_000L * (1L shl attempt.coerceAtMost(6).toInt())).coerceAtMost(MAX_STREAM_BACKOFF_MS)
-            Log.w(
-                "TrafficAlertsRepository",
-                "Traffic alerts WS disconnected (${cause.message}), reconnecting in ${backoff}ms"
-            )
-            delay(backoff)
-            true
         }
     }
 
@@ -344,54 +234,4 @@ class TrafficAlertsRepository(private val context: Context) {
         }
     }
 
-    private fun parseTrafficAlertMessage(message: String): TrafficAlertPush? {
-        val root = gson.fromJson(message, JsonObject::class.java)
-        val type = root.get("type")?.asString ?: return null
-        if (type != "alert") return null
-
-        val line = root.get("line")?.asString ?: return null
-        val timestamp = root.get("timestamp")?.asString
-        val alertJson = root.get("alert") ?: return null
-        val alert = gson.fromJson(alertJson, TrafficAlert::class.java)
-
-        return TrafficAlertPush(
-            line = line,
-            timestamp = timestamp,
-            alert = alert
-        )
-    }
-
-    /**
-     * Starts the background WebSocket service for receiving traffic alerts
-     * even when the app is in the background or closed.
-     */
-    fun startBackgroundAlertsService(lines: List<String>) {
-        try {
-            com.pelotcl.app.service.WebSocketServiceManager.startTrafficAlertsService(context, lines)
-        } catch (e: Exception) {
-            Log.e("TrafficAlertsRepository", "Failed to start background alerts service", e)
-        }
-    }
-
-    /**
-     * Stops the background WebSocket service.
-     */
-    fun stopBackgroundAlertsService() {
-        try {
-            com.pelotcl.app.service.WebSocketServiceManager.stopTrafficAlertsService(context)
-        } catch (e: Exception) {
-            Log.e("TrafficAlertsRepository", "Failed to stop background alerts service", e)
-        }
-    }
-
-    /**
-     * Checks if the background WebSocket service is running.
-     */
-    fun isBackgroundServiceRunning(): Boolean {
-        return try {
-            com.pelotcl.app.service.WebSocketServiceManager.isServiceRunning(context)
-        } catch (e: Exception) {
-            false
-        }
-    }
 }
