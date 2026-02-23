@@ -1,14 +1,21 @@
 package com.pelotcl.app.ui.screens
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
 import android.os.Build
+import android.os.Looper
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -18,8 +25,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,6 +49,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberStandardBottomSheetState
@@ -49,11 +64,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -78,6 +95,7 @@ import com.pelotcl.app.ui.components.MapLibreView
 import com.pelotcl.app.ui.components.StationBottomSheet
 import com.pelotcl.app.ui.components.StationInfo
 import com.pelotcl.app.ui.components.StationSearchResult
+import com.pelotcl.app.data.repository.MapStyle
 import com.pelotcl.app.data.repository.MapStyleRepository
 import com.pelotcl.app.ui.viewmodel.TransportLinesUiState
 import com.pelotcl.app.ui.viewmodel.TransportStopsUiState
@@ -93,6 +111,10 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.painterResource
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
@@ -105,6 +127,15 @@ import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonOptions
 import org.maplibre.android.style.sources.GeoJsonSource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.core.graphics.createBitmap
+import androidx.lifecycle.ViewModel
+import com.google.gson.JsonParser
+import com.pelotcl.app.data.model.Feature
+import com.pelotcl.app.data.model.StopFeature
+import com.pelotcl.app.data.model.StopGeometry
+import com.pelotcl.app.data.model.StopProperties
+import kotlinx.coroutines.delay
+import org.maplibre.android.maps.Style
 
 private const val PRIORITY_STOPS_MIN_ZOOM = 12.5f
 private const val TRAM_STOPS_MIN_ZOOM = 14.0f
@@ -154,8 +185,8 @@ private fun getVehicleMarkerType(lineName: String): VehicleMarkerType {
 }
 
 private fun ensureVehicleMarkerImage(
-    mapStyle: org.maplibre.android.maps.Style,
-    context: android.content.Context,
+    mapStyle: Style,
+    context: Context,
     iconName: String,
     color: Int,
     markerType: VehicleMarkerType,
@@ -163,17 +194,17 @@ private fun ensureVehicleMarkerImage(
 ) {
     if (mapStyle.getImage(iconName) != null) return
 
-    val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = android.graphics.Canvas(bitmap)
 
-    val circlePaint = android.graphics.Paint().apply {
+    val circlePaint = Paint().apply {
         this.color = color
         isAntiAlias = true
-        style = android.graphics.Paint.Style.FILL
+        style = Paint.Style.FILL
     }
     canvas.drawCircle(size / 2f, size / 2f, size / 2f, circlePaint)
 
-    fun drawCenteredDrawable(drawable: android.graphics.drawable.Drawable, maxSize: Int) {
+    fun drawCenteredDrawable(drawable: Drawable, maxSize: Int) {
         val intrinsicWidth = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else maxSize
         val intrinsicHeight = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else maxSize
         val scale = minOf(maxSize.toFloat() / intrinsicWidth, maxSize.toFloat() / intrinsicHeight)
@@ -187,14 +218,14 @@ private fun ensureVehicleMarkerImage(
 
     when (markerType) {
         VehicleMarkerType.BUS -> {
-            val busDrawable = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_bus_vehicle)
+            val busDrawable = ContextCompat.getDrawable(context, R.drawable.ic_bus_vehicle)
             busDrawable?.let { drawable ->
                 drawCenteredDrawable(drawable, (size * 0.65f).toInt())
             }
         }
 
         VehicleMarkerType.TRAM -> {
-            val tramDrawable = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_tramway_vehicle)
+            val tramDrawable = ContextCompat.getDrawable(context, R.drawable.ic_tramway_vehicle)
             tramDrawable?.let { drawable ->
                 drawCenteredDrawable(drawable, (size * 0.65f).toInt())
             }
@@ -244,15 +275,91 @@ private data class MapFilterState(
     val stopsUiState: TransportStopsUiState
 )
 
+@Composable
+private fun MapStyleSelector(
+    modifier: Modifier = Modifier,
+    selectedStyle: MapStyle,
+    styles: List<MapStyle>,
+    isExpanded: Boolean,
+    isStyleEnabled: (MapStyle) -> Boolean,
+    onToggleExpanded: () -> Unit,
+    onStyleSelected: (MapStyle) -> Unit
+) {
+    Row(
+        modifier = modifier
+            .animateContentSize(animationSpec = tween(durationMillis = 220))
+            .clip(RoundedCornerShape(12.dp)),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val visibleStyles = if (isExpanded) {
+            listOf(selectedStyle) + styles.filterNot { it == selectedStyle }
+        } else {
+            listOf(selectedStyle)
+        }
+        visibleStyles.forEach { style ->
+            val enabled = isStyleEnabled(style)
+            MapStylePreviewTile(
+                style = style,
+                isSelected = style == selectedStyle,
+                isEnabled = enabled,
+                onClick = {
+                    if (isExpanded) {
+                        if (enabled) onStyleSelected(style)
+                    } else {
+                        onToggleExpanded()
+                    }
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun MapStylePreviewTile(
+    style: MapStyle,
+    isSelected: Boolean,
+    isEnabled: Boolean,
+    onClick: () -> Unit
+) {
+    val imageRes = when (style) {
+        MapStyle.POSITRON -> R.drawable.visu_positron
+        MapStyle.DARK_MATTER -> R.drawable.visu_dark_matter
+        MapStyle.BRIGHT -> R.drawable.visu_osm_bright
+        MapStyle.LIBERTY -> R.drawable.visu_liberty
+        MapStyle.SATELLITE -> R.drawable.visu_satellite
+    }
+    val alpha = if (isEnabled) 1f else 0.4f
+    Box(
+        modifier = Modifier
+            .size(60.dp)
+            .border(
+                width = (0.5).dp,
+                color = Color.Gray,
+                shape = RoundedCornerShape(12.dp)
+            )
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(enabled = isEnabled, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painterResource(id = imageRes),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize().scale(1.1F),
+            alpha = alpha
+        )
+    }
+}
+
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlanScreen(
     modifier: Modifier = Modifier,
-    contentPadding: androidx.compose.foundation.layout.PaddingValues = androidx.compose.foundation.layout.PaddingValues(0.dp),
+    contentPadding: PaddingValues = PaddingValues(0.dp),
     viewModel: TransportViewModel = viewModel(
         factory = object : ViewModelProvider.Factory {
-            override fun <T : androidx.lifecycle.ViewModel> create(
+            override fun <T : ViewModel> create(
                 modelClass: Class<T>,
                 extras: CreationExtras
             ): T {
@@ -308,6 +415,10 @@ fun PlanScreen(
     val mapStyleRepository = remember { MapStyleRepository(context) }
     val offlineDataInfo by viewModel.offlineDataInfo.collectAsState()
     var mapStyleUrl by remember { mutableStateOf(mapStyleRepository.getSelectedStyle().styleUrl) }
+    var selectedMapStyle by remember {
+        mutableStateOf(mapStyleRepository.getEffectiveStyle(isOffline, offlineDataInfo.downloadedMapStyles))
+    }
+    var isMapStyleMenuExpanded by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(isVisible, isOffline, offlineDataInfo.downloadedMapStyles) {
         if (isVisible) {
             val effectiveStyle = mapStyleRepository.getEffectiveStyle(
@@ -316,12 +427,13 @@ fun PlanScreen(
             if (effectiveStyle.styleUrl != mapStyleUrl) {
                 mapStyleUrl = effectiveStyle.styleUrl
             }
+            selectedMapStyle = effectiveStyle
         }
     }
 
     // Bottom sheet state for BottomSheetScaffold
     val bottomSheetState = rememberStandardBottomSheetState(
-        initialValue = androidx.compose.material3.SheetValue.Hidden,
+        initialValue = SheetValue.Hidden,
         skipHiddenState = false
     )
     val scaffoldSheetState = rememberBottomSheetScaffoldState(
@@ -383,20 +495,20 @@ fun PlanScreen(
     // resets to null, leaving an empty expanded sheet.
     LaunchedEffect(sheetContentState, scaffoldSheetState.bottomSheetState.currentValue) {
         if (sheetContentState == null &&
-            scaffoldSheetState.bottomSheetState.currentValue != androidx.compose.material3.SheetValue.Hidden) {
+            scaffoldSheetState.bottomSheetState.currentValue != SheetValue.Hidden) {
             scaffoldSheetState.bottomSheetState.hide()
         }
     }
 
     val latestSheetContentState by rememberUpdatedState(sheetContentState)
-    var previousSheetValue by remember { mutableStateOf<androidx.compose.material3.SheetValue?>(null) }
+    var previousSheetValue by remember { mutableStateOf<SheetValue?>(null) }
     LaunchedEffect(scaffoldSheetState.bottomSheetState.currentValue) {
         val current = scaffoldSheetState.bottomSheetState.currentValue
         val previous = previousSheetValue
 
         if (current != previous) {
-            val justBecameHidden = current == androidx.compose.material3.SheetValue.Hidden
-            val swipedDownToPartial = current == androidx.compose.material3.SheetValue.PartiallyExpanded && previous == androidx.compose.material3.SheetValue.Expanded
+            val justBecameHidden = current == SheetValue.Hidden
+            val swipedDownToPartial = current == SheetValue.PartiallyExpanded && previous == SheetValue.Expanded
 
             if (justBecameHidden || (swipedDownToPartial && latestSheetContentState == SheetContentState.STATION)) {
                 sheetContentState = null
@@ -468,7 +580,7 @@ fun PlanScreen(
         val map = mapInstance ?: return@LaunchedEffect
 
         // Extract lines from both Success and PartialSuccess states
-        val lines: List<com.pelotcl.app.data.model.Feature> = when (val state = uiState) {
+        val lines: List<Feature> = when (val state = uiState) {
             is TransportLinesUiState.Success -> state.lines
             is TransportLinesUiState.PartialSuccess -> state.lines
             else -> return@LaunchedEffect
@@ -596,7 +708,7 @@ fun PlanScreen(
                     }
                     selectedLine = null
                     sheetContentState = null
-                    kotlinx.coroutines.delay(100)
+                    delay(100)
                 }
 
                 zoomToStop(mapInstance!!, stationInfo.nom, allStops)
@@ -614,7 +726,7 @@ fun PlanScreen(
                         if (isTemporaryBus(lineName)) {
                             temporaryLoadedBusLines = temporaryLoadedBusLines + lineName
                         }
-                        kotlinx.coroutines.delay(100)
+                        delay(100)
                     }
 
                     sheetContentState = SheetContentState.LINE_DETAILS
@@ -648,7 +760,7 @@ fun PlanScreen(
 
                             scaffoldSheetState.bottomSheetState.partialExpand()
 
-                            kotlinx.coroutines.delay(300)
+                            delay(300)
                         }
 
                         if (clickedStationInfo.lignes.size == 1) {
@@ -664,7 +776,7 @@ fun PlanScreen(
                                 if (isTemporaryBus(lineName)) {
                                     temporaryLoadedBusLines = temporaryLoadedBusLines + lineName
                                 }
-                                kotlinx.coroutines.delay(100)
+                                delay(100)
                             }
 
                             sheetContentState = SheetContentState.LINE_DETAILS
@@ -698,7 +810,7 @@ fun PlanScreen(
                             if (isTemporaryBus(lineName)) {
                                 temporaryLoadedBusLines = temporaryLoadedBusLines + lineName
                             }
-                            kotlinx.coroutines.delay(100)
+                            delay(100)
                         }
 
                         sheetContentState = SheetContentState.LINE_DETAILS
@@ -984,7 +1096,7 @@ fun PlanScreen(
             .collectLatest { filterState ->
                 // This block is automatically cancelled if a new state arrives
                 // Extract lines from both Success and PartialSuccess states
-                val lines: List<com.pelotcl.app.data.model.Feature> = when (val state = filterState.uiState) {
+                val lines: List<Feature> = when (val state = filterState.uiState) {
                     is TransportLinesUiState.Success -> state.lines
                     is TransportLinesUiState.PartialSuccess -> state.lines
                     else -> return@collectLatest
@@ -1044,7 +1156,7 @@ fun PlanScreen(
                 if (isTemporaryBus(name)) {
                     temporaryLoadedBusLines = temporaryLoadedBusLines + name
                 }
-                kotlinx.coroutines.delay(100)
+                delay(100)
             }
 
             sheetContentState = SheetContentState.LINE_DETAILS
@@ -1152,7 +1264,7 @@ fun PlanScreen(
                                             if (isTemporaryBus(lineName)) {
                                                 temporaryLoadedBusLines = temporaryLoadedBusLines + lineName
                                             }
-                                            kotlinx.coroutines.delay(100)
+                                            delay(100)
                                             sheetContentState = SheetContentState.LINE_DETAILS
                                         }
                                     } else {
@@ -1213,7 +1325,7 @@ fun PlanScreen(
                                             if (isTemporaryBus(lineName)) {
                                                 temporaryLoadedBusLines = temporaryLoadedBusLines + lineName
                                             }
-                                            kotlinx.coroutines.delay(100)
+                                            delay(100)
                                             sheetContentState = SheetContentState.LINE_DETAILS
                                         }
                                     } else {
@@ -1256,7 +1368,7 @@ fun PlanScreen(
                         mapInstance = map
                         // Add listener to detect when user moves the map
                         map.addOnCameraMoveStartedListener { reason ->
-                            if (reason == org.maplibre.android.maps.MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
+                            if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
                                 isCenteredOnUser = false
                             }
                         }
@@ -1264,6 +1376,42 @@ fun PlanScreen(
                 },
                 userLocation = userLocation,
                 centerOnUserLocation = shouldCenterOnUser
+            )
+
+            if (isMapStyleMenuExpanded) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) {
+                            isMapStyleMenuExpanded = false
+                        }
+                )
+            }
+
+            MapStyleSelector(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 16.dp, bottom = 122.dp),
+                selectedStyle = selectedMapStyle,
+                styles = MapStyle.entries,
+                isExpanded = isMapStyleMenuExpanded,
+                isStyleEnabled = { style ->
+                    !isOffline || style.key in offlineDataInfo.downloadedMapStyles
+                },
+                onToggleExpanded = { isMapStyleMenuExpanded = !isMapStyleMenuExpanded },
+                onStyleSelected = { style ->
+                    mapStyleRepository.saveSelectedStyle(style)
+                    val effectiveStyle = mapStyleRepository.getEffectiveStyle(
+                        isOffline,
+                        offlineDataInfo.downloadedMapStyles
+                    )
+                    selectedMapStyle = effectiveStyle
+                    mapStyleUrl = effectiveStyle.styleUrl
+                    isMapStyleMenuExpanded = false
+                }
             )
 
             if (uiState is TransportLinesUiState.Loading || stopsUiState is TransportStopsUiState.Loading) {
@@ -1281,7 +1429,7 @@ fun PlanScreen(
 
             // Recenter button
             AnimatedVisibility(
-                visible = userLocation != null && !isCenteredOnUser,
+                visible = userLocation != null && !isCenteredOnUser && !isMapStyleMenuExpanded,
                 enter = fadeIn(),
                 exit = fadeOut(),
                 modifier = Modifier
@@ -1315,7 +1463,7 @@ fun PlanScreen(
                         drawCircle(
                             color = Color.White,
                             radius = size.minDimension / 2.5f,
-                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 7f)
+                            style = Stroke(width = 7f)
                         )
                     }
                 }
@@ -1388,7 +1536,7 @@ fun PlanScreen(
                     elevation = ButtonDefaults.buttonElevation(
                         defaultElevation = 4.dp
                     ),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    contentPadding = PaddingValues(
                         start = 15.dp,
                         end = 16.dp,
                         top = 8.dp,
@@ -1433,7 +1581,7 @@ fun PlanScreen(
             }
         }
 
-        androidx.compose.material3.ModalBottomSheet(
+        ModalBottomSheet(
             onDismissRequest = onLinesSheetDismiss,
             containerColor = Color.White,
             sheetState = modalBottomSheetState
@@ -1452,14 +1600,14 @@ fun PlanScreen(
                             if (isTemporaryBus(lineName)) {
                                 temporaryLoadedBusLines = temporaryLoadedBusLines + lineName
                             }
-                            kotlinx.coroutines.delay(100)
+                            delay(100)
 
                             selectedLine = LineInfo(
                                 lineName = lineName,
                                 currentStationName = ""
                             )
                             sheetContentState = SheetContentState.LINE_DETAILS
-                            kotlinx.coroutines.delay(50)
+                            delay(50)
                             scaffoldSheetState.bottomSheetState.partialExpand()
                         }
                     } else {
@@ -1474,7 +1622,7 @@ fun PlanScreen(
 
                             if (!isLoaded) {
                                 viewModel.addLineToLoaded(lineName)
-                                kotlinx.coroutines.delay(100)
+                                delay(100)
                             }
 
                             selectedLine = LineInfo(
@@ -1482,7 +1630,7 @@ fun PlanScreen(
                                 currentStationName = ""
                             )
                             sheetContentState = SheetContentState.LINE_DETAILS
-                            kotlinx.coroutines.delay(50)
+                            delay(50)
                             scaffoldSheetState.bottomSheetState.partialExpand()
                         }
                     }
@@ -1552,7 +1700,7 @@ private fun LineDetailsSheetContent(
 
 private fun filterMapLines(
     map: MapLibreMap,
-    allLines: List<com.pelotcl.app.data.model.Feature>,
+    allLines: List<Feature>,
     selectedLineName: String
 ): Int {
     map.getStyle { style ->
@@ -1582,7 +1730,7 @@ private fun filterMapLines(
 
 private fun zoomToLine(
     map: MapLibreMap,
-    allLines: List<com.pelotcl.app.data.model.Feature>,
+    allLines: List<Feature>,
     selectedLineName: String
 ) {
     val lineFeatures = allLines.filter {
@@ -1621,7 +1769,7 @@ private fun zoomToLine(
 private fun zoomToStop(
     map: MapLibreMap,
     stopName: String,
-    allStops: List<com.pelotcl.app.data.model.StopFeature>
+    allStops: List<StopFeature>
 ) {
     fun normalizeStopName(name: String): String {
         return name.filter { it.isLetter() }.lowercase()
@@ -1654,7 +1802,7 @@ private fun zoomToStop(
 }
 
 private fun filterMapStops(
-    style: org.maplibre.android.maps.Style,
+    style: Style,
     selectedLineName: String
 ) {
     val priorityLayerPrefix = "transport-stops-layer-priority"
@@ -1701,8 +1849,8 @@ private fun filterMapStopsWithSelectedStop(
     map: MapLibreMap,
     selectedLineName: String,
     selectedStopName: String?,
-    allStops: List<com.pelotcl.app.data.model.StopFeature>,
-    allLines: List<com.pelotcl.app.data.model.Feature>,
+    allStops: List<StopFeature>,
+    allLines: List<Feature>,
     viewModel: TransportViewModel? = null
 ) {
     map.getStyle { style ->
@@ -1774,11 +1922,11 @@ private fun filterMapStopsWithSelectedStop(
 }
 
 private fun addCircleLayerForLineStops(
-    style: org.maplibre.android.maps.Style,
+    style: Style,
     selectedLineName: String,
     selectedStopName: String,
-    allStops: List<com.pelotcl.app.data.model.StopFeature>,
-    allLines: List<com.pelotcl.app.data.model.Feature>,
+    allStops: List<StopFeature>,
+    allLines: List<Feature>,
     viewModel: TransportViewModel? = null
 ) {
     fun normalizeStopName(name: String): String {
@@ -1844,7 +1992,7 @@ private fun addCircleLayerForLineStops(
         // Update existing source data without recreating
         existingSource.setGeoJson(circlesGeoJson.toString())
         // Update layer color (stroke color may have changed for different line)
-        (style.getLayer("line-stops-circles") as? org.maplibre.android.style.layers.CircleLayer)?.setProperties(
+        (style.getLayer("line-stops-circles") as? CircleLayer)?.setProperties(
             PropertyFactory.circleStrokeColor(lineColor)
         )
     } else {
@@ -1852,7 +2000,7 @@ private fun addCircleLayerForLineStops(
         val circlesSource = GeoJsonSource("line-stops-circles-source", circlesGeoJson.toString())
         style.addSource(circlesSource)
 
-        val circlesLayer = org.maplibre.android.style.layers.CircleLayer("line-stops-circles", "line-stops-circles-source").apply {
+        val circlesLayer = CircleLayer("line-stops-circles", "line-stops-circles-source").apply {
             setProperties(
                 PropertyFactory.circleRadius(6f),
                 PropertyFactory.circleColor("#FFFFFF"),
@@ -1869,7 +2017,7 @@ private fun addCircleLayerForLineStops(
 
 private fun showAllMapLines(
     map: MapLibreMap,
-    allLines: List<com.pelotcl.app.data.model.Feature>
+    allLines: List<Feature>
 ) {
     map.getStyle { style ->
         allLines.forEach { feature ->
@@ -1896,7 +2044,7 @@ private fun showAllMapLines(
 }
 
 private fun showAllMapStops(
-    style: org.maplibre.android.maps.Style
+    style: Style
 ) {
     val priorityLayerPrefix = "transport-stops-layer-priority"
     val tramLayerPrefix = "transport-stops-layer-tram"
@@ -1938,7 +2086,7 @@ private fun showAllMapStops(
 
 private fun addLineToMap(
     map: MapLibreMap,
-    feature: com.pelotcl.app.data.model.Feature
+    feature: Feature
 ) {
     map.getStyle { style ->
         val sourceId = "line-${feature.properties.ligne}-${feature.properties.codeTrace}"
@@ -1987,8 +2135,8 @@ private var currentMapClickListener: MapLibreMap.OnMapClickListener? = null
 
 private suspend fun addStopsToMap(
     map: MapLibreMap,
-    stops: List<com.pelotcl.app.data.model.StopFeature>,
-    context: android.content.Context,
+    stops: List<StopFeature>,
+    context: Context,
     onStationClick: (StationInfo) -> Unit = {},
     onLineClick: (String) -> Unit = {},
     scope: CoroutineScope,
@@ -2083,7 +2231,7 @@ private suspend fun addStopsToMap(
         scope.launch(Dispatchers.IO) {
             val allCached = viewModel?.hasAllIcons(requiredIcons) == true
 
-            val bitmaps: Map<String, android.graphics.Bitmap> = if (allCached) {
+            val bitmaps: Map<String, Bitmap> = if (allCached) {
                 // All icons are cached - retrieve them directly without snapshot copy
                 requiredIcons.mapNotNull { iconName ->
                     viewModel?.getIconBitmap(iconName)?.let { iconName to it }
@@ -2099,13 +2247,13 @@ private suspend fun addStopsToMap(
                         if (resourceId != 0) {
                             val drawable = ContextCompat.getDrawable(context, resourceId)
                             drawable?.let { d ->
-                                val bitmap = if (d is android.graphics.drawable.BitmapDrawable) {
+                                val bitmap = if (d is BitmapDrawable) {
                                     d.bitmap
                                 } else {
-                                    val bitmap = androidx.core.graphics.createBitmap(
+                                    val bitmap = createBitmap(
                                         d.intrinsicWidth.coerceAtLeast(1),
                                         d.intrinsicHeight.coerceAtLeast(1),
-                                        android.graphics.Bitmap.Config.ARGB_8888
+                                        Bitmap.Config.ARGB_8888
                                     )
                                     val canvas = android.graphics.Canvas(bitmap)
                                     d.setBounds(0, 0, canvas.width, canvas.height)
@@ -2143,7 +2291,7 @@ private suspend fun addStopsToMap(
                 style.addSource(stopsSource)
 
                 // 1. Cluster Circles (Aggregated stops)
-                val clusterLayer = org.maplibre.android.style.layers.CircleLayer("clusters", sourceId).apply {
+                val clusterLayer = CircleLayer("clusters", sourceId).apply {
                     setProperties(
                         PropertyFactory.circleColor(
                             Expression.step(
@@ -2291,7 +2439,7 @@ private suspend fun addStopsToMap(
                                 val lignesJson = if (props.has("lignes")) props.get("lignes").asString else "[]"
 
                                 val lignes = try {
-                                    val jsonArray = com.google.gson.JsonParser.parseString(lignesJson).asJsonArray
+                                    val jsonArray = JsonParser.parseString(lignesJson).asJsonArray
                                     jsonArray.map { it.asString }
                                 } catch (_: Exception) {
                                     emptyList()
@@ -2356,7 +2504,7 @@ private suspend fun addStopsToMap(
     }
 }
 
-private fun createGeoJsonFromFeature(feature: com.pelotcl.app.data.model.Feature): String {
+private fun createGeoJsonFromFeature(feature: Feature): String {
     val geoJsonObject = JsonObject().apply {
         addProperty("type", "Feature")
 
@@ -2390,13 +2538,13 @@ private fun createGeoJsonFromFeature(feature: com.pelotcl.app.data.model.Feature
     return geoJsonObject.toString()
 }
 
-private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>): List<com.pelotcl.app.data.model.StopFeature> {
+private fun mergeStopsByName(stops: List<StopFeature>): List<StopFeature> {
     fun normalizeStopName(name: String): String {
         return name.filter { it.isLetter() }.lowercase()
     }
 
-    val strongLineStops = mutableListOf<com.pelotcl.app.data.model.StopFeature>()
-    val weakLineStops = mutableListOf<com.pelotcl.app.data.model.StopFeature>()
+    val strongLineStops = mutableListOf<StopFeature>()
+    val weakLineStops = mutableListOf<StopFeature>()
 
     stops.forEach { stop ->
         val allLines = BusIconHelper.getAllLinesForStop(stop)
@@ -2406,11 +2554,11 @@ private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>
         if (strongLines.isNotEmpty()) {
             val strongDesserte = strongLines.joinToString(", ")
             strongLineStops.add(
-                com.pelotcl.app.data.model.StopFeature(
+                StopFeature(
                     type = stop.type,
                     id = stop.id,
                     geometry = stop.geometry,
-                    properties = com.pelotcl.app.data.model.StopProperties(
+                    properties = StopProperties(
                         id = stop.properties.id,
                         nom = stop.properties.nom,
                         desserte = strongDesserte,
@@ -2433,11 +2581,11 @@ private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>
         if (weakLines.isNotEmpty()) {
             val weakDesserte = weakLines.joinToString(", ")
             weakLineStops.add(
-                com.pelotcl.app.data.model.StopFeature(
+                StopFeature(
                     type = stop.type,
                     id = "${stop.id}-weak",
                     geometry = stop.geometry,
-                    properties = com.pelotcl.app.data.model.StopProperties(
+                    properties = StopProperties(
                         id = stop.properties.id,
                         nom = stop.properties.nom,
                         desserte = weakDesserte,
@@ -2476,16 +2624,16 @@ private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>
             // Calculate average position (centroid) for all stops with same name
             val avgLon = stopsGroup.map { it.geometry.coordinates[0] }.average()
             val avgLat = stopsGroup.map { it.geometry.coordinates[1] }.average()
-            val mergedGeometry = com.pelotcl.app.data.model.StopGeometry(
+            val mergedGeometry = StopGeometry(
                 type = "Point",
                 coordinates = listOf(avgLon, avgLat)
             )
 
-            com.pelotcl.app.data.model.StopFeature(
+            StopFeature(
                 type = firstStop.type,
                 id = firstStop.id,
                 geometry = mergedGeometry,
-                properties = com.pelotcl.app.data.model.StopProperties(
+                properties = StopProperties(
                     id = firstStop.properties.id,
                     nom = firstStop.properties.nom,
                     desserte = mergedDesserte,
@@ -2514,7 +2662,7 @@ private fun mergeStopsByName(stops: List<com.pelotcl.app.data.model.StopFeature>
  * GC pressure and allocation time by ~60-70% compared to the Gson approach.
  */
 private fun createStopsGeoJsonFromStops(
-    stops: List<com.pelotcl.app.data.model.StopFeature>,
+    stops: List<StopFeature>,
     validIcons: Set<String>
 ): String {
     val mergedStops = mergeStopsByName(stops)
@@ -2670,7 +2818,7 @@ private fun startLocationUpdates(
         fusedLocationClient.requestLocationUpdates(
             locationRequest,
             locationCallback!!,
-            android.os.Looper.getMainLooper()
+            Looper.getMainLooper()
         )
     } catch (_: SecurityException) {
         // Permission denied

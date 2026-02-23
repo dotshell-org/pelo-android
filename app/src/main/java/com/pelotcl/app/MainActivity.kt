@@ -67,7 +67,6 @@ import com.pelotcl.app.ui.screens.ContactScreen
 import com.pelotcl.app.ui.screens.CreditsScreen
 import com.pelotcl.app.ui.screens.ItineraryScreen
 import com.pelotcl.app.ui.screens.LegalScreen
-import com.pelotcl.app.ui.screens.MapStyleScreen
 import com.pelotcl.app.ui.screens.PlanScreen
 import com.pelotcl.app.ui.screens.ItinerarySettingsScreen
 import com.pelotcl.app.ui.screens.OfflineSettingsScreen
@@ -200,7 +199,6 @@ private enum class Destination(
         const val LEGAL = "legal"
         const val CREDITS = "credits"
         const val CONTACT = "contact"
-        const val MAP_STYLE = "map_style"
         const val ITINERARY_SETTINGS = "itinerary_settings"
         const val OFFLINE_SETTINGS = "offline_settings"
     }
@@ -358,7 +356,7 @@ fun NavBar(modifier: Modifier = Modifier) {
     val currentRoute = navBackStackEntry?.destination?.route
 
     // Gérer la barre de statut selon l'écran actif
-    // Les écrans Settings et ses sous-écrans (About, Legal, Credits, Contact, MapStyle) ont un fond noir
+    // Les écrans Settings et ses sous-écrans (About, Legal, Credits, Contact) ont un fond noir
     DisposableEffect(currentRoute) {
         val activity = context as? ComponentActivity
         val darkBackgroundRoutes = listOf(
@@ -367,7 +365,6 @@ fun NavBar(modifier: Modifier = Modifier) {
             Destination.LEGAL,
             Destination.CREDITS,
             Destination.CONTACT,
-            Destination.MAP_STYLE,
             Destination.ITINERARY_SETTINGS,
             Destination.OFFLINE_SETTINGS
         )
@@ -426,7 +423,6 @@ fun NavBar(modifier: Modifier = Modifier) {
                                         Destination.LEGAL,
                                         Destination.CREDITS,
                                         Destination.CONTACT,
-                                        Destination.MAP_STYLE,
                                         Destination.ITINERARY_SETTINGS,
                                         Destination.OFFLINE_SETTINGS
                                     )
@@ -640,9 +636,6 @@ private fun AppNavHost(
                 onItineraryClick = {
                     navController.navigate(Destination.ITINERARY_SETTINGS)
                 },
-                onMapStyleClick = {
-                    navController.navigate(Destination.MAP_STYLE)
-                },
                 onLegalClick = {
                     navController.navigate(Destination.LEGAL)
                 },
@@ -654,13 +647,6 @@ private fun AppNavHost(
                 },
                 onOfflineClick = {
                     navController.navigate(Destination.OFFLINE_SETTINGS)
-                }
-            )
-        }
-        composable(Destination.MAP_STYLE) {
-            MapStyleScreen(
-                onBackClick = {
-                    navController.popBackStack()
                 }
             )
         }

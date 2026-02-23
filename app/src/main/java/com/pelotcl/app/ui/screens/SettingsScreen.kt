@@ -58,7 +58,6 @@ fun SettingsScreen(
     onBackClick: () -> Unit,
     onSystemBack: () -> Unit,
     onItineraryClick: () -> Unit,
-    onMapStyleClick: () -> Unit,
     onLegalClick: () -> Unit,
     onCreditsClick: () -> Unit,
     onContactClick: () -> Unit,
@@ -175,11 +174,6 @@ fun SettingsScreen(
                 SettingsMenuRow(
                     title = "Itinéraire",
                     onClick = onItineraryClick
-                )
-                HorizontalDivider(color = Color(0xFF3A3A3C))
-                SettingsMenuRow(
-                    title = "Fond de carte",
-                    onClick = onMapStyleClick
                 )
                 HorizontalDivider(color = Color(0xFF3A3A3C))
                 SettingsMenuRow(
