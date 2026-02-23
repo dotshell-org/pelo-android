@@ -62,6 +62,7 @@ import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.data.repository.SearchHistoryRepository
 import com.pelotcl.app.data.repository.SearchHistoryItem
 import com.pelotcl.app.data.repository.SearchType
+import com.pelotcl.app.data.repository.MapStyle
 import com.pelotcl.app.ui.screens.AboutScreen
 import com.pelotcl.app.ui.screens.ContactScreen
 import com.pelotcl.app.ui.screens.CreditsScreen
@@ -235,6 +236,8 @@ fun NavBar(modifier: Modifier = Modifier) {
     var lineSearchResults by remember { mutableStateOf<List<LineSearchResult>>(emptyList()) }
     var searchHistory by remember { mutableStateOf<List<SearchHistoryItem>>(emptyList()) }
     var selectedStationFromSearch by remember { mutableStateOf<StationSearchResult?>(null) }
+    var currentMapStyle by remember { mutableStateOf(MapStyle.POSITRON) }
+    var isSearchExpanded by remember { mutableStateOf(false) }
     
     // Load search history on startup
     LaunchedEffect(Unit) {
@@ -489,7 +492,11 @@ fun NavBar(modifier: Modifier = Modifier) {
                         itineraryDestinationStop = stopName
                     },
                     initialUserLocation = userLocation,
-                    isVisible = selectedDestination == Destination.PLAN.ordinal
+                    isVisible = selectedDestination == Destination.PLAN.ordinal,
+                    onMapStyleChanged = { style ->
+                        currentMapStyle = style
+                    },
+                    isSearchExpanded = isSearchExpanded
                 )
                 
                 // Settings screens - displayed on top when on settings tab
@@ -589,6 +596,8 @@ fun NavBar(modifier: Modifier = Modifier) {
                     searchHistoryRepository.removeFromHistory(historyItem.query, historyItem.type)
                     searchHistory = searchHistoryRepository.getSearchHistory()
                 },
+                showDarkOutline = currentMapStyle == MapStyle.DARK_MATTER,
+                onExpandedChange = { expanded -> isSearchExpanded = expanded },
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()

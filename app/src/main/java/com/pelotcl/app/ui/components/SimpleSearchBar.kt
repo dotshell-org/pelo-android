@@ -2,6 +2,7 @@ package com.pelotcl.app.ui.components
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +21,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
@@ -44,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -118,6 +121,8 @@ fun SimpleSearchBar(
     onHistoryItemClick: (SearchHistoryItem) -> Unit = {},
     onHistoryItemRemove: (SearchHistoryItem) -> Unit = {},
     onQueryChange: (String) -> Unit = {},
+    showDarkOutline: Boolean = false,
+    onExpandedChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
@@ -159,8 +164,13 @@ fun SimpleSearchBar(
         }
     }
 
+    fun setExpandedState(next: Boolean) {
+        expanded = next
+        onExpandedChange(next)
+    }
+
     Box(
-        (if (expanded) 
+        (if (expanded)
             Modifier
                 .fillMaxSize()
                 .background(Color.Black)
@@ -168,10 +178,10 @@ fun SimpleSearchBar(
                     indication = null,
                     interactionSource = remember { MutableInteractionSource() }
                 ) {
-                    expanded = false
+                    setExpandedState(false)
                     keyboardController?.hide()
                 }
-         else modifier)
+        else modifier)
             .semantics { isTraversalGroup = true }
             .padding(0.dp)
     ) {
@@ -183,6 +193,13 @@ fun SimpleSearchBar(
                 .padding(horizontal = if (expanded) 0.dp else 10.dp),
             inputField = {
                 SearchBarDefaults.InputField(
+                    modifier = if (showDarkOutline && !expanded) {
+                        Modifier
+                            .clip(RoundedCornerShape(28.dp))
+                            .border(1.dp, Color.Gray, RoundedCornerShape(28.dp))
+                    } else {
+                        Modifier
+                    },
                     query = query,
                     onQueryChange = { q ->
                         query = q
@@ -192,13 +209,13 @@ fun SimpleSearchBar(
                         searchResults.firstOrNull()?.let {
                             onSearch(it)
                         }
-                        expanded = false
+                        setExpandedState(false)
                         query = ""
                     },
                     expanded = expanded,
                     onExpandedChange = { shouldExpand ->
                         if (shouldExpand || (searchHistory.isEmpty() && !keyboardHiddenByScroll)) {
-                            expanded = shouldExpand
+                            setExpandedState(shouldExpand)
                         }
                     },
                     placeholder = { Text("Rechercher", color = Color.White) },
@@ -208,7 +225,8 @@ fun SimpleSearchBar(
                             contentDescription = "Search",
                             tint = Red500,
                             modifier = Modifier
-                                .padding(start = if (expanded) 32.dp else 0.dp,
+                                .padding(
+                                    start = if (expanded) 32.dp else 0.dp,
                                     end = if (expanded) 12.dp else 0.dp
                                 )
                         )
@@ -230,7 +248,7 @@ fun SimpleSearchBar(
             expanded = expanded,
             onExpandedChange = { shouldExpand ->
                 if (shouldExpand || (searchHistory.isEmpty() && !keyboardHiddenByScroll)) {
-                    expanded = shouldExpand
+                    setExpandedState(shouldExpand)
                 }
             },
             colors = SearchBarDefaults.colors(
@@ -353,7 +371,7 @@ fun SimpleSearchBar(
                                 .clickable {
                                     onHistoryItemClick(historyItem)
                                     query = ""
-                                    expanded = false
+                                    setExpandedState(false)
                                 }
                                 .fillMaxWidth()
                         )
@@ -375,7 +393,7 @@ fun SimpleSearchBar(
                                 lineResult = unifiedResult.result,
                                 onClick = {
                                     query = ""
-                                    expanded = false
+                                    setExpandedState(false)
                                     onLineSearch(unifiedResult.result)
                                 }
                             )
@@ -385,7 +403,7 @@ fun SimpleSearchBar(
                                 result = unifiedResult.result,
                                 onClick = {
                                     query = ""
-                                    expanded = false
+                                    setExpandedState(false)
                                     onSearch(unifiedResult.result)
                                 }
                             )
@@ -401,7 +419,7 @@ fun SimpleSearchBar(
                             indication = null,
                             interactionSource = remember { MutableInteractionSource() }
                         ) {
-                            expanded = false
+                            setExpandedState(false)
                             keyboardController?.hide()
                         }
                 )

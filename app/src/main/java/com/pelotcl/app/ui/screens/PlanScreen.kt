@@ -28,6 +28,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -377,7 +378,9 @@ fun PlanScreen(
     onSearchSelectionHandled: () -> Unit = {},
     onItineraryClick: (stopName: String) -> Unit = {},
     initialUserLocation: LatLng? = null,
-    isVisible: Boolean = true
+    isVisible: Boolean = true,
+    onMapStyleChanged: (MapStyle) -> Unit = {},
+    isSearchExpanded: Boolean = false
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val stopsUiState by viewModel.stopsUiState.collectAsState()
@@ -419,6 +422,7 @@ fun PlanScreen(
         mutableStateOf(mapStyleRepository.getEffectiveStyle(isOffline, offlineDataInfo.downloadedMapStyles))
     }
     var isMapStyleMenuExpanded by rememberSaveable { mutableStateOf(false) }
+    val isDarkMatterStyle = selectedMapStyle == MapStyle.DARK_MATTER
     LaunchedEffect(isVisible, isOffline, offlineDataInfo.downloadedMapStyles) {
         if (isVisible) {
             val effectiveStyle = mapStyleRepository.getEffectiveStyle(
@@ -429,6 +433,9 @@ fun PlanScreen(
             }
             selectedMapStyle = effectiveStyle
         }
+    }
+    LaunchedEffect(selectedMapStyle) {
+        onMapStyleChanged(selectedMapStyle)
     }
 
     // Bottom sheet state for BottomSheetScaffold
@@ -1446,7 +1453,17 @@ fun PlanScreen(
                             isCenteredOnUser = true
                         }
                     },
-                    modifier = Modifier.size(56.dp),
+                    modifier = Modifier
+                        .size(56.dp)
+                        .then(
+                            if (isDarkMatterStyle && !isSearchExpanded) {
+                                Modifier
+                                    .clip(CircleShape)
+                                    .border(1.dp, Color.Gray, CircleShape)
+                            } else {
+                                Modifier
+                            }
+                        ),
                     containerColor = Color.Black,
                     shape = CircleShape,
                     elevation = FloatingActionButtonDefaults.elevation(
@@ -1513,7 +1530,7 @@ fun PlanScreen(
                     isActiveNoVehicles -> Color(0xFF9CA3AF) // Gray when active but no vehicles
                     else -> Color.Black // Black when inactive
                 }
-                
+                val showLiveBorder = isDarkMatterStyle && buttonColor == Color.Black && !isSearchExpanded
                 Button(
                     onClick = {
                         if (isLiveModeEnabled) {
@@ -1529,6 +1546,7 @@ fun PlanScreen(
                             } ?: viewModel.toggleGlobalLive()
                         }
                     },
+                    border = if (showLiveBorder) BorderStroke(1.dp, Color.Gray) else null,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = buttonColor
                     ),
