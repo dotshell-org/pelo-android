@@ -376,6 +376,8 @@ fun PlanScreen(
     onLinesSheetDismiss: () -> Unit = {},
     searchSelectedStop: StationSearchResult? = null,
     onSearchSelectionHandled: () -> Unit = {},
+    optionsSelectedStop: StationSearchResult? = null,
+    onOptionsSelectionHandled: () -> Unit = {},
     onItineraryClick: (stopName: String) -> Unit = {},
     initialUserLocation: LatLng? = null,
     isVisible: Boolean = true,
@@ -743,6 +745,44 @@ fun PlanScreen(
                 }
 
                 onSearchSelectionHandled()
+            }
+        }
+    }
+
+    // Handle selection from stop options (three dots) - always open station sheet
+    LaunchedEffect(optionsSelectedStop, stopsUiState, mapInstance) {
+        if (optionsSelectedStop != null && mapInstance != null && stopsUiState is TransportStopsUiState.Success) {
+            val allStops = (stopsUiState as TransportStopsUiState.Success).stops
+
+            val targetStop = allStops.find {
+                it.properties.nom.equals(optionsSelectedStop.stopName, ignoreCase = true)
+            }
+
+            if (targetStop != null) {
+                val lines = BusIconHelper.getAllLinesForStop(targetStop)
+                val stationInfo = StationInfo(
+                    nom = targetStop.properties.nom,
+                    lignes = lines,
+                    isPmr = targetStop.properties.pmr,
+                    desserte = targetStop.properties.desserte
+                )
+
+                if (sheetContentState == SheetContentState.LINE_DETAILS || sheetContentState == SheetContentState.ALL_SCHEDULES) {
+                    selectedLine?.let { lineInfo ->
+                        if (!isMetroTramOrFunicular(lineInfo.lineName)) {
+                            viewModel.removeLineFromLoaded(lineInfo.lineName)
+                        }
+                    }
+                    selectedLine = null
+                    sheetContentState = null
+                    delay(100)
+                }
+
+                zoomToStop(mapInstance!!, stationInfo.nom, allStops)
+                selectedStation = stationInfo
+                sheetContentState = SheetContentState.STATION
+
+                onOptionsSelectionHandled()
             }
         }
     }

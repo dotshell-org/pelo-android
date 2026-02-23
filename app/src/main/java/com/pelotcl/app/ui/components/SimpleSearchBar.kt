@@ -25,7 +25,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -116,13 +118,16 @@ fun SimpleSearchBar(
     searchResults: List<StationSearchResult>,
     lineSearchResults: List<LineSearchResult> = emptyList(),
     searchHistory: List<SearchHistoryItem> = emptyList(),
+    favoriteStops: List<SearchHistoryItem> = emptyList(),
     onSearch: (StationSearchResult) -> Unit,
     onLineSearch: (LineSearchResult) -> Unit = {},
     onHistoryItemClick: (SearchHistoryItem) -> Unit = {},
     onHistoryItemRemove: (SearchHistoryItem) -> Unit = {},
+    onHistoryItemOptionsClick: (SearchHistoryItem) -> Unit = {},
     onQueryChange: (String) -> Unit = {},
     showDarkOutline: Boolean = false,
     onExpandedChange: (Boolean) -> Unit = {},
+    onStopOptionsClick: (StationSearchResult) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
@@ -288,93 +293,73 @@ fun SimpleSearchBar(
                         // Consume clicks to prevent them from closing the search bar
                     }
             ) {
-                // Show search history when query is empty
-                if (query.isEmpty() && searchHistory.isNotEmpty()) {
-                    Text(
-                        "Recherches récentes",
-                        color = Color.White.copy(alpha = 0.6f),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-                    )
-                    searchHistory.forEach { historyItem ->
-                        ListItem(
-                            headlineContent = {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(start = 24.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.History,
-                                        contentDescription = null,
-                                        tint = Color.White.copy(alpha = 0.5f),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.size(12.dp))
-                                    Column(
-                                        modifier = Modifier.weight(1f),
-                                        verticalArrangement = Arrangement.spacedBy((-6).dp)
-                                    ) {
-                                        Text(
-                                            historyItem.query,
-                                            color = Color.White,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                        if (historyItem.type == SearchType.LINE) {
-                                            Text(
-                                                "Ligne",
-                                                color = Color.White.copy(alpha = 0.5f),
-                                                fontSize = 12.sp
-                                            )
-                                        } else if (historyItem.lines.isNotEmpty()) {
-                                            Spacer(modifier = Modifier.size(10.dp))
-                                            Row(
-                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                historyItem.lines.forEach { lineName ->
-                                                    if (isStrongLine(lineName)) {
-                                                        SearchConnectionBadge(lineName = lineName)
-                                                    }
-                                                }
-                                            }
-                                            FlowRow(
-                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                                verticalArrangement = Arrangement.spacedBy((-8).dp)
-                                            ) {
-                                                historyItem.lines.forEach { lineName ->
-                                                    if (!isStrongLine(lineName)) {
-                                                        SearchConnectionBadge(lineName = lineName)
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                    IconButton(
-                                        onClick = { onHistoryItemRemove(historyItem) }
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Close,
-                                            contentDescription = "Supprimer",
-                                            tint = Color.White.copy(alpha = 0.5f),
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
-                            },
-                            colors = ListItemDefaults.colors(containerColor = Color.Black),
-                            modifier = Modifier
-                                .clickable {
+                if (query.isEmpty()) {
+                    if (favoriteStops.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = null,
+                                tint = Color.Gray,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.size(8.dp))
+                            Text(
+                                "Arrêts favoris",
+                                color = Color.White.copy(alpha = 0.6f),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        favoriteStops.forEach { historyItem ->
+                            HistoryListItem(
+                                historyItem = historyItem,
+                                showRemove = false,
+                                onClick = {
                                     onHistoryItemClick(historyItem)
                                     query = ""
                                     setExpandedState(false)
-                                }
-                                .fillMaxWidth()
-                        )
+                                },
+                                onOptionsClick = { onHistoryItemOptionsClick(historyItem) },
+                                onRemoveClick = {}
+                            )
+                        }
+                    }
+
+                    if (searchHistory.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.History,
+                                contentDescription = null,
+                                tint = Color.White.copy(alpha = 0.5f),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.size(8.dp))
+                            Text(
+                                "Recherches récentes",
+                                color = Color.White.copy(alpha = 0.6f),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        searchHistory.forEach { historyItem ->
+                            HistoryListItem(
+                                historyItem = historyItem,
+                                showRemove = true,
+                                onClick = {
+                                    onHistoryItemClick(historyItem)
+                                    query = ""
+                                    setExpandedState(false)
+                                },
+                                onOptionsClick = { onHistoryItemOptionsClick(historyItem) },
+                                onRemoveClick = { onHistoryItemRemove(historyItem) }
+                            )
+                        }
                     }
                 }
                 
@@ -405,6 +390,12 @@ fun SimpleSearchBar(
                                     query = ""
                                     setExpandedState(false)
                                     onSearch(unifiedResult.result)
+                                },
+                                onOptionsClick = {
+                                    query = ""
+                                    onQueryChange("")
+                                    setExpandedState(false)
+                                    onStopOptionsClick(unifiedResult.result)
                                 }
                             )
                         }
@@ -474,7 +465,8 @@ private fun SearchConnectionBadge(lineName: String) {
 @Composable
 private fun StopSearchResultItem(
     result: StationSearchResult,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onOptionsClick: () -> Unit
 ) {
         ListItem(
         headlineContent = {
@@ -514,6 +506,110 @@ private fun StopSearchResultItem(
                     }
                 }
                 Spacer(modifier = Modifier.size(4.dp))
+            }
+        },
+        trailingContent = {
+            IconButton(
+                onClick = onOptionsClick,
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(
+                                imageVector = Icons.Default.MyLocation,
+                    contentDescription = "Options",
+                    tint = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Black),
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .fillMaxWidth()
+    )
+}
+
+@Composable
+private fun HistoryListItem(
+    historyItem: SearchHistoryItem,
+    showRemove: Boolean,
+    onClick: () -> Unit,
+    onOptionsClick: () -> Unit,
+    onRemoveClick: () -> Unit
+) {
+    ListItem(
+        headlineContent = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 24.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy((-6).dp)
+                ) {
+                    Text(
+                        historyItem.query,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        fontWeight = FontWeight.Medium
+                    )
+                    if (historyItem.type == SearchType.LINE) {
+                        Text(
+                            "Ligne",
+                            color = Color.White.copy(alpha = 0.5f),
+                            fontSize = 12.sp
+                        )
+                    } else if (historyItem.lines.isNotEmpty()) {
+                        Spacer(modifier = Modifier.size(10.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            historyItem.lines.forEach { lineName ->
+                                if (isStrongLine(lineName)) {
+                                    SearchConnectionBadge(lineName = lineName)
+                                }
+                            }
+                        }
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalArrangement = Arrangement.spacedBy((-8).dp)
+                        ) {
+                            historyItem.lines.forEach { lineName ->
+                                if (!isStrongLine(lineName)) {
+                                    SearchConnectionBadge(lineName = lineName)
+                                }
+                            }
+                        }
+                    }
+                }
+                if (historyItem.type == SearchType.STOP) {
+                    IconButton(
+                        onClick = onOptionsClick,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MyLocation,
+                            contentDescription = "Options",
+                            tint = Color.Gray,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                if (showRemove) {
+                    IconButton(
+                        onClick = onRemoveClick
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Supprimer",
+                            tint = Color.White.copy(alpha = 0.5f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
             }
         },
         colors = ListItemDefaults.colors(containerColor = Color.Black),

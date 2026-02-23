@@ -31,6 +31,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -206,6 +207,7 @@ private enum class Destination(
 }
 
 @RequiresApi(Build.VERSION_CODES.O)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NavBar(modifier: Modifier = Modifier) {
     val navController = rememberNavController()
@@ -238,10 +240,28 @@ fun NavBar(modifier: Modifier = Modifier) {
     var selectedStationFromSearch by remember { mutableStateOf<StationSearchResult?>(null) }
     var currentMapStyle by remember { mutableStateOf(MapStyle.POSITRON) }
     var isSearchExpanded by remember { mutableStateOf(false) }
+    var stopOptionsSelectedStop by remember { mutableStateOf<StationSearchResult?>(null) }
+    val favoriteStops by viewModel.favoriteStops.collectAsState()
+    var favoriteStopItems by remember { mutableStateOf<List<SearchHistoryItem>>(emptyList()) }
     
     // Load search history on startup
     LaunchedEffect(Unit) {
         searchHistory = searchHistoryRepository.getSearchHistory()
+    }
+
+    LaunchedEffect(favoriteStops) {
+        favoriteStopItems = favoriteStops.map { stopName ->
+            val lines = try {
+                viewModel.searchStops(stopName).firstOrNull()?.lines ?: emptyList()
+            } catch (_: Exception) {
+                emptyList()
+            }
+            SearchHistoryItem(
+                query = stopName,
+                type = SearchType.STOP,
+                lines = lines
+            )
+        }
     }
     
     // User location for itinerary (continuously updated)
@@ -487,6 +507,8 @@ fun NavBar(modifier: Modifier = Modifier) {
                     },
                     searchSelectedStop = selectedStationFromSearch,
                     onSearchSelectionHandled = { selectedStationFromSearch = null },
+                    optionsSelectedStop = stopOptionsSelectedStop,
+                    onOptionsSelectionHandled = { stopOptionsSelectedStop = null },
                     viewModel = viewModel,
                     onItineraryClick = { stopName ->
                         itineraryDestinationStop = stopName
@@ -552,6 +574,7 @@ fun NavBar(modifier: Modifier = Modifier) {
                 searchResults = stationSearchResults,
                 lineSearchResults = lineSearchResults,
                 searchHistory = searchHistory,
+                favoriteStops = favoriteStopItems,
                 onQueryChange = { query ->
                     searchQuery = query
                 },
@@ -598,6 +621,25 @@ fun NavBar(modifier: Modifier = Modifier) {
                 },
                 showDarkOutline = currentMapStyle == MapStyle.DARK_MATTER,
                 onExpandedChange = { expanded -> isSearchExpanded = expanded },
+                onStopOptionsClick = { stopResult ->
+                    searchHistoryRepository.addToHistory(
+                        SearchHistoryItem(
+                            query = stopResult.stopName,
+                            type = SearchType.STOP,
+                            lines = stopResult.lines
+                        )
+                    )
+                    searchHistory = searchHistoryRepository.getSearchHistory()
+                    stopOptionsSelectedStop = stopResult
+                },
+                onHistoryItemOptionsClick = { historyItem ->
+                    if (historyItem.type == SearchType.STOP) {
+                        stopOptionsSelectedStop = StationSearchResult(
+                            stopName = historyItem.query,
+                            lines = historyItem.lines
+                        )
+                    }
+                },
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
