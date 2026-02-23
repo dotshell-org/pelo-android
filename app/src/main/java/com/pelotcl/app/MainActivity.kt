@@ -76,6 +76,7 @@ import com.pelotcl.app.ui.screens.SettingsScreen
 import com.pelotcl.app.ui.theme.PeloTheme
 import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
+import com.pelotcl.app.ui.viewmodel.TransportStopsUiState
 import com.pelotcl.app.data.api.RetrofitInstance
 import com.pelotcl.app.data.cache.TransportCache
 import com.pelotcl.app.utils.BusIconHelper
@@ -243,19 +244,18 @@ fun NavBar(modifier: Modifier = Modifier) {
     var stopOptionsSelectedStop by remember { mutableStateOf<StationSearchResult?>(null) }
     val favoriteStops by viewModel.favoriteStops.collectAsState()
     var favoriteStopItems by remember { mutableStateOf<List<SearchHistoryItem>>(emptyList()) }
+    val stopsUiState by viewModel.stopsUiState.collectAsState()
     
     // Load search history on startup
     LaunchedEffect(Unit) {
         searchHistory = searchHistoryRepository.getSearchHistory()
     }
 
-    LaunchedEffect(favoriteStops) {
+    LaunchedEffect(favoriteStops, stopsUiState) {
+        val stops = (stopsUiState as? TransportStopsUiState.Success)?.stops
         favoriteStopItems = favoriteStops.map { stopName ->
-            val lines = try {
-                viewModel.searchStops(stopName).firstOrNull()?.lines ?: emptyList()
-            } catch (_: Exception) {
-                emptyList()
-            }
+            val stop = stops?.find { it.properties.nom.equals(stopName, ignoreCase = true) }
+            val lines = stop?.let { BusIconHelper.getAllLinesForStop(it) } ?: emptyList()
             SearchHistoryItem(
                 query = stopName,
                 type = SearchType.STOP,

@@ -186,7 +186,8 @@ fun LineDetailsBottomSheet(
     onItineraryClick: (stopName: String) -> Unit = {},
     onHeaderClick: () -> Unit = {},
     favoriteStops: Set<String> = emptySet(),
-    onToggleFavoriteStop: (String) -> Unit = {}
+    onToggleFavoriteStop: (String) -> Unit = {},
+    onHeaderLineCountChanged: (Int) -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -366,7 +367,10 @@ fun LineDetailsBottomSheet(
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = Color.Black,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            onTextLayout = { result ->
+                                onHeaderLineCountChanged(result.lineCount)
+                            }
                         )
                     }
                     

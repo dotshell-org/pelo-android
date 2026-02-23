@@ -462,6 +462,7 @@ fun PlanScreen(
     var zoomBeforeLiveTracking by remember { mutableStateOf<Double?>(null) }
 
     var sheetContentState by remember { mutableStateOf<SheetContentState?>(null) }
+    var headerLineCount by remember { mutableStateOf(2) }
     val selectedLineNameFromViewModel by viewModel.selectedLineName.collectAsState()
 
     // Track previous sheetContentState to detect transitions
@@ -1275,8 +1276,13 @@ fun PlanScreen(
         }
     }
 
+    val extraHeaderPeek = if (sheetContentState == SheetContentState.LINE_DETAILS && headerLineCount > 2) {
+        ((headerLineCount - 2).coerceAtLeast(0) * 20).dp
+    } else {
+        0.dp
+    }
     val peekHeight = when(sheetContentState) {
-        SheetContentState.LINE_DETAILS, SheetContentState.ALL_SCHEDULES -> bottomPadding + 160.dp
+        SheetContentState.LINE_DETAILS, SheetContentState.ALL_SCHEDULES -> bottomPadding + 160.dp + extraHeaderPeek
         SheetContentState.STATION -> 0.dp
         else -> 0.dp
     }
@@ -1363,7 +1369,8 @@ fun PlanScreen(
                                     }
                                 },
                                 favoriteStops = favoriteStops,
-                                onToggleFavoriteStop = { viewModel.toggleFavoriteStop(it) }
+                                onToggleFavoriteStop = { viewModel.toggleFavoriteStop(it) },
+                                onHeaderLineCountChanged = { count -> headerLineCount = count }
                             )
                         }
                     }
@@ -1756,7 +1763,8 @@ private fun LineDetailsSheetContent(
     onItineraryClick: (stopName: String) -> Unit = {},
     onHeaderClick: () -> Unit = {},
     favoriteStops: Set<String> = emptySet(),
-    onToggleFavoriteStop: (String) -> Unit = {}
+    onToggleFavoriteStop: (String) -> Unit = {},
+    onHeaderLineCountChanged: (Int) -> Unit = {}
 ) {
     LineDetailsBottomSheet(
         viewModel = viewModel,
@@ -1772,7 +1780,8 @@ private fun LineDetailsSheetContent(
         onItineraryClick = onItineraryClick,
         onHeaderClick = onHeaderClick,
         favoriteStops = favoriteStops,
-        onToggleFavoriteStop = onToggleFavoriteStop
+        onToggleFavoriteStop = onToggleFavoriteStop,
+        onHeaderLineCountChanged = onHeaderLineCountChanged
     )
 }
 
