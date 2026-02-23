@@ -54,6 +54,7 @@ import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -167,10 +168,8 @@ fun SimpleSearchBar(
                     indication = null,
                     interactionSource = remember { MutableInteractionSource() }
                 ) {
-                    if (query.isEmpty()) {
-                        expanded = false
-                        keyboardController?.hide()
-                    }
+                    expanded = false
+                    keyboardController?.hide()
                 }
          else modifier)
             .semantics { isTraversalGroup = true }
@@ -402,10 +401,8 @@ fun SimpleSearchBar(
                             indication = null,
                             interactionSource = remember { MutableInteractionSource() }
                         ) {
-                            if (query.isEmpty()) {
-                                expanded = false
-                                keyboardController?.hide()
-                            }
+                            expanded = false
+                            keyboardController?.hide()
                         }
                 )
                 
@@ -414,7 +411,9 @@ fun SimpleSearchBar(
                         headlineContent = {
                             Text(
                                 "Aucun résultat",
-                                color = Color.White.copy(alpha = 0.6f)
+                                color = Color.White.copy(alpha = 0.6f),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
                             )
                         },
                         colors = ListItemDefaults.colors(containerColor = Color.Black),
