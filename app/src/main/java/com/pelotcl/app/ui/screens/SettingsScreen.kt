@@ -124,7 +124,7 @@ fun SettingsScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Top
         ) {
-            Spacer(modifier = Modifier.height(80.dp))
+            Spacer(modifier = Modifier.height(100.dp))
             val rotation by animateFloatAsState(
                 targetValue = if (isEasterEggActive) 3600f else 0f,
                 animationSpec = tween(10000),
