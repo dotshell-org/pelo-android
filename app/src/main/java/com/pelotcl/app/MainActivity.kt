@@ -571,6 +571,7 @@ fun NavBar(modifier: Modifier = Modifier) {
                     )
                     searchHistory = searchHistoryRepository.getSearchHistory()
                     
+                    // onSearch launches itinerary (main click behavior)
                     itineraryDestinationStop = result.stopName
                     searchQuery = ""
                 },
@@ -593,7 +594,7 @@ fun NavBar(modifier: Modifier = Modifier) {
                         // Open line details (via PlanScreen's LaunchedEffect)
                         viewModel.selectLine(historyItem.query)
                     } else {
-                        // Search for the stop
+                        // Main click on history item launches itinerary
                         itineraryDestinationStop = historyItem.query
                     }
                 },
@@ -612,10 +613,12 @@ fun NavBar(modifier: Modifier = Modifier) {
                         )
                     )
                     searchHistory = searchHistoryRepository.getSearchHistory()
+                    // onStopOptionsClick shows stop details (button click behavior)
                     stopOptionsSelectedStop = stopResult
                 },
                 onHistoryItemOptionsClick = { historyItem ->
                     if (historyItem.type == SearchType.STOP) {
+                        // Button click on history item shows stop details
                         stopOptionsSelectedStop = StationSearchResult(
                             stopName = historyItem.query,
                             lines = historyItem.lines

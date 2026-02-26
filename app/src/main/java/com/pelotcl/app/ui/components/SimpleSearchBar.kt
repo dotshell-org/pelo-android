@@ -20,12 +20,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Directions
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -66,7 +70,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pelotcl.app.data.repository.SearchHistoryItem
 import com.pelotcl.app.data.repository.SearchType
+import com.pelotcl.app.ui.theme.Gray800
+import com.pelotcl.app.ui.theme.Gray900
 import com.pelotcl.app.ui.theme.Red500
+import com.pelotcl.app.ui.theme.Slate900
+import com.pelotcl.app.ui.theme.Stone900
 import com.pelotcl.app.utils.BusIconHelper
 
 @Immutable
@@ -509,21 +517,26 @@ private fun StopSearchResultItem(
             }
         },
         trailingContent = {
-            IconButton(
-                onClick = onOptionsClick,
-                modifier = Modifier.size(40.dp)
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(Stone900)
+                    .clickable(onClick = onClick)
             ) {
                 Icon(
-                                imageVector = Icons.Default.MyLocation,
-                    contentDescription = "Options",
-                    tint = Color.White.copy(alpha = 0.7f),
-                    modifier = Modifier.size(20.dp)
+                    imageVector = Icons.Default.Directions,
+                    contentDescription = "Itinéraire",
+                    tint = Color.White,
+                    modifier = Modifier
+                        .size(17.dp)
+                        .align(Alignment.Center)
                 )
             }
         },
         colors = ListItemDefaults.colors(containerColor = Color.Black),
         modifier = Modifier
-            .clickable(onClick = onClick)
+            .clickable(onClick = onOptionsClick)
             .fillMaxWidth()
     )
 }
@@ -586,15 +599,20 @@ private fun HistoryListItem(
                     }
                 }
                 if (historyItem.type == SearchType.STOP) {
-                    IconButton(
-                        onClick = onOptionsClick,
-                        modifier = Modifier.size(40.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(Stone900)
+                            .clickable(onClick = onClick)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.MyLocation,
-                            contentDescription = "Options",
-                            tint = Color.Gray,
-                            modifier = Modifier.size(20.dp)
+                            imageVector = Icons.Default.Directions,
+                            contentDescription = "Itinéraire",
+                            tint = Color.White,
+                            modifier = Modifier
+                                .size(17.dp)
+                                .align(Alignment.Center)
                         )
                     }
                 }
@@ -614,7 +632,7 @@ private fun HistoryListItem(
         },
         colors = ListItemDefaults.colors(containerColor = Color.Black),
         modifier = Modifier
-            .clickable(onClick = onClick)
+            .clickable(onClick = onOptionsClick)
             .fillMaxWidth()
     )
 }
