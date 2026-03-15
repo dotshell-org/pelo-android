@@ -12,7 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -243,7 +243,7 @@ private fun ClickableLink(
         )
         Spacer(modifier = Modifier.width(6.dp))
         Icon(
-            imageVector = Icons.Filled.OpenInNew,
+            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
             contentDescription = "Ouvrir",
             tint = Color(0xFF3B82F6),
             modifier = Modifier

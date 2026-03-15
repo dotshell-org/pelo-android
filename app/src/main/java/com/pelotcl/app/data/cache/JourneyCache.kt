@@ -335,10 +335,10 @@ class JourneyCache private constructor(context: Context) {
      */
     fun trimMemory(level: Int) {
         when {
-            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> {
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> {
                 memoryCache.evictAll()
             }
-            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_MODERATE -> {
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> {
                 memoryCache.trimToSize(memoryCache.maxSize() / 2)
             }
         }

@@ -111,10 +111,10 @@ object BusIconHelper {
      */
     fun trimCache(level: Int) {
         when {
-            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> {
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> {
                 desserteCache.evictAll()
             }
-            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_MODERATE -> {
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> {
                 desserteCache.trimToSize(desserteCache.maxSize() / 2)
             }
         }

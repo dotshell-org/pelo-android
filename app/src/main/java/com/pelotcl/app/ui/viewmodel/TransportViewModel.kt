@@ -641,13 +641,13 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      */
     fun trimBitmapCache(level: Int) {
         when {
-            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> {
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> {
                 iconBitmapCache.evictAll()
             }
-            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_MODERATE -> {
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> {
                 iconBitmapCache.trimToSize(iconBitmapCache.maxSize() / 2)
             }
-            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> {
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> {
                 iconBitmapCache.trimToSize(iconBitmapCache.maxSize() * 3 / 4)
             }
         }

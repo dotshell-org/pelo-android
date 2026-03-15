@@ -76,12 +76,15 @@ class SchedulesRepository(context: Context) {
          */
         fun trimCaches(level: Int) {
             when {
-                level >= android.content.ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> {
-                    clearCaches()
+                level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> {
+                    schedulesCache.evictAll()
+                    headsignsCache.evictAll()
+                    searchCache.evictAll()
+                    stopSequencesCache.evictAll()
                     INSTANCE?.allStopsCache = null
                     INSTANCE?.normalizedNamesCache = null
                 }
-                level >= android.content.ComponentCallbacks2.TRIM_MEMORY_MODERATE -> {
+                level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> {
                     schedulesCache.trimToSize(schedulesCache.maxSize() / 2)
                     headsignsCache.trimToSize(headsignsCache.maxSize() / 2)
                     searchCache.trimToSize(searchCache.maxSize() / 2)
@@ -270,7 +273,7 @@ class SchedulesRepository(context: Context) {
                         }
                         .filter { it.isNotEmpty() }
                 } else {
-                    emptyList()
+                    listOf()
                 }
 
                 // Fusionner les lignes pour le même arrêt
@@ -300,14 +303,16 @@ class SchedulesRepository(context: Context) {
                     ?.filter { SearchUtils.fuzzyContains(it.properties.nom, query) }
                     ?.forEach { stop ->
                         val desserteRaw = stop.properties.desserte
-                        val lines = desserteRaw?.takeIf { !it.isBlank() }
-                            ?.split(',')
-                            ?.mapNotNull { part ->
-                                val trimmed = part.trim()
-                                if (trimmed.isEmpty()) null else trimmed.substringBefore(":").trim()
-                            }
-                            ?.filter { it.isNotEmpty() }
-                            ?: emptyList()
+                        val lines = if (desserteRaw.isNullOrBlank()) {
+                            listOf()
+                        } else {
+                            desserteRaw.split(',')
+                                .mapNotNull { part ->
+                                    val trimmed = part.trim()
+                                    if (trimmed.isEmpty()) null else trimmed.substringBefore(":").trim()
+                                }
+                                .filter { it.isNotEmpty() }
+                        }
 
                         val name = stop.properties.nom
                         stopsByName.getOrPut(name) { mutableListOf() }.addAll(lines)
@@ -321,7 +326,6 @@ class SchedulesRepository(context: Context) {
                     .sortedWith(compareBy<StationSearchResult>({ !SearchUtils.fuzzyStartsWith(it.stopName, query) }, { it.stopName }))
                     .take(50)
                     .toList()
-                    ?: emptyList()
             } catch (t: Throwable) {
                 Log.e("SchedulesRepository", "Fallback search failed: ${t.message}")
                 emptyList()

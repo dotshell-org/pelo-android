@@ -36,7 +36,7 @@ class PeloApplication : Application(), Configuration.Provider {
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        if (level >= ComponentCallbacks2.TRIM_MEMORY_MODERATE) {
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) {
             Log.d(TAG, "onTrimMemory level=$level, trimming caches")
             SchedulesRepository.trimCaches(level)
             BusIconHelper.trimCache(level)

@@ -2,7 +2,5 @@
 <resources>
 
     <style name="Theme.Pelo" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:windowSplashScreenBackground">#000000</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
     </style>
 </resources>
