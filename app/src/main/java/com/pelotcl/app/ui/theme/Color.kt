@@ -1,3 +1,5 @@
+@file:Suppress("Unused")
+
 package com.pelotcl.app.ui.theme
 
 import androidx.compose.ui.graphics.Color

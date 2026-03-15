@@ -116,17 +116,14 @@ object LineStopsCache {
         }
         
         // Otherwise, check that all words match in order
-        if (words1.size == words2.size) {
-            return words1.zip(words2).all { (w1, w2) ->
-                w1 == w2 || 
-                (w1.length == 1 && w2.startsWith(w1)) ||
-                (w2.length == 1 && w1.startsWith(w2)) ||
-                (w1.length >= 3 && w2.startsWith(w1)) ||
-                (w2.length >= 3 && w1.startsWith(w2))
-            }
+        return words1.zip(words2).all { (w1, w2) ->
+            w1 == w2 ||
+            (w1.length == 1 && w2.startsWith(w1)) ||
+            (w2.length == 1 && w1.startsWith(w2)) ||
+            (w1.length >= 3 && w2.startsWith(w1)) ||
+            (w2.length >= 3 && w1.startsWith(w2))
         }
-        
-        return false
+
     }
     
     /**
@@ -251,12 +248,5 @@ object LineStopsCache {
             )
         }
     }
-    
-    /**
-     * Checks if a line is in the cache
-     */
-    fun hasLineInCache(lineName: String): Boolean {
-        return metroStops.containsKey(lineName.uppercase()) || 
-               tramStops.containsKey(lineName.uppercase())
-    }
+
 }

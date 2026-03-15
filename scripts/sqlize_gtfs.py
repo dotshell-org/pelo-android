@@ -104,13 +104,13 @@ def process_gtfs_schedules(zip_path, output_dir):
 
         def sort_lines_key(line):
             line_u = line.upper()
-            if line_u in ['A', 'B', 'C', 'D']: return (0, line_u)
-            if line_u.startswith('F'): return (1, line_u)
-            if line_u.startswith('NAV'): return (2, line_u)
-            if line_u.startswith('T') and not line_u.startswith('TB'): return (3, int(line_u[1:]) if line_u[1:].isdigit() else 99)
-            if line_u.startswith('C'): return (4, int(line_u[1:]) if line_u[1:].isdigit() else 99)
-            if line_u.isdigit(): return (5, int(line_u))
-            return (6, line_u)
+            if line_u in ['A', 'B', 'C', 'D']: return 0, line_u
+            if line_u.startswith('F'): return 1, line_u
+            if line_u.startswith('NAV'): return 2, line_u
+            if line_u.startswith('T') and not line_u.startswith('TB'): return 3, int(line_u[1:]) if line_u[1:].isdigit() else 99
+            if line_u.startswith('C'): return 4, int(line_u[1:]) if line_u[1:].isdigit() else 99
+            if line_u.isdigit(): return 5, int(line_u)
+            return 6, line_u
 
         stops_aggregation = final_df.groupby('station_name')['route_name'].unique().reset_index()
 

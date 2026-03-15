@@ -6,15 +6,11 @@ import android.util.LruCache
 import com.pelotcl.app.data.repository.IntermediateStop
 import com.pelotcl.app.data.repository.JourneyLeg
 import com.pelotcl.app.data.repository.JourneyResult
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.io.FileInputStream
@@ -70,9 +66,6 @@ class JourneyCache private constructor(context: Context) {
         @Volatile
         private var INSTANCE: JourneyCache? = null
 
-        // Coroutine scope for background operations
-        private val cacheScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
         fun getInstance(context: Context): JourneyCache {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: JourneyCache(context.applicationContext).also {
@@ -81,19 +74,6 @@ class JourneyCache private constructor(context: Context) {
             }
         }
 
-        /**
-         * Clear all caches (call when GTFS data is updated)
-         * Note: If no cache instance exists yet, this operation is silently skipped
-         */
-        fun clearAllCaches() {
-            cacheScope.launch {
-                // Capture instance in local variable to avoid race condition with volatile INSTANCE
-                val instance = INSTANCE
-                if (instance != null) {
-                    instance.clearAll()
-                }
-            }
-        }
     }
 
     /**
@@ -193,16 +173,6 @@ class JourneyCache private constructor(context: Context) {
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to preload journey cache: ${e.message}")
-        }
-    }
-
-    /**
-     * Clear all caches (memory and disk)
-     */
-    suspend fun clearAll() = withContext(Dispatchers.IO) {
-        mutex.withLock {
-            memoryCache.evictAll()
-            cacheDir.listFiles()?.forEach { it.delete() }
         }
     }
 
@@ -344,26 +314,6 @@ class JourneyCache private constructor(context: Context) {
         }
     }
 
-    /**
-     * Get cache statistics for debugging
-     */
-    fun getStats(): CacheStats {
-        val diskFiles = cacheDir.listFiles() ?: emptyArray()
-        val diskSize = diskFiles.sumOf { it.length() }
-        return CacheStats(
-            memoryEntries = memoryCache.size(),
-            diskEntries = diskFiles.size,
-            diskSizeBytes = diskSize
-        )
-    }
-
-    data class CacheStats(
-        val memoryEntries: Int,
-        val diskEntries: Int,
-        val diskSizeBytes: Long
-    ) {
-        val diskSizeKB: Long get() = diskSizeBytes / 1024
-    }
 }
 
 /**

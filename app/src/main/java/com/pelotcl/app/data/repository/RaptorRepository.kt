@@ -275,16 +275,6 @@ class RaptorRepository private constructor(private val context: Context) {
     }
 
     /**
-     * Get the current active period ID
-     */
-    fun getCurrentPeriod(): String? = raptorLibrary?.getCurrentPeriod()
-
-    /**
-     * Get all available period IDs
-     */
-    fun getAvailablePeriods(): Set<String> = raptorLibrary?.getAvailablePeriods() ?: emptySet()
-
-    /**
      * Build HashMap indexes for O(1) stop lookups.
      * Called once during initialization.
      */
@@ -356,32 +346,6 @@ class RaptorRepository private constructor(private val context: Context) {
         } catch (e: Exception) {
             Log.e("RaptorRepository", "Error searching stops: ${e.message}", e)
             emptyList()
-        }
-    }
-
-    /**
-     * Find the closest stop to the given GPS coordinates
-     * Uses Dispatchers.Default as this is CPU-bound distance calculation.
-     */
-    suspend fun findClosestStop(latitude: Double, longitude: Double): RaptorStop? = withContext(Dispatchers.Default) {
-        ensureInitialized()
-        try {
-            // Find the closest stop by calculating distance
-            stopsCache.minByOrNull { stop ->
-                val latDiff = stop.lat - latitude
-                val lonDiff = stop.lon - longitude
-                sqrt(latDiff.pow(2) + lonDiff.pow(2))
-            }?.let { stop ->
-                RaptorStop(
-                    id = stop.id,
-                    name = stop.name,
-                    lat = stop.lat,
-                    lon = stop.lon
-                )
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error finding closest stop: ${e.message}", e)
-            null
         }
     }
 
@@ -759,12 +723,6 @@ class RaptorRepository private constructor(private val context: Context) {
         return sb.toString()
     }
 
-    private fun formatTimeFromSeconds(seconds: Int): String {
-        val hours = seconds / 3600
-        val minutes = (seconds % 3600) / 60
-        return "%02d:%02d".format(hours, minutes)
-    }
-
     /**
      * Preload journey cache from disk to memory.
      * Call at app startup for faster initial queries.
@@ -781,12 +739,6 @@ class RaptorRepository private constructor(private val context: Context) {
         journeyDiskCache.cleanupExpired()
     }
 
-    /**
-     * Get cache statistics for debugging/monitoring.
-     */
-    fun getCacheStats(): JourneyCache.CacheStats {
-        return journeyDiskCache.getStats()
-    }
     private fun getCurrentTimeInSeconds(): Int {
         val calendar = Calendar.getInstance()
         val hours = calendar.get(Calendar.HOUR_OF_DAY)
@@ -881,7 +833,7 @@ data class JourneyLeg(
  */
 @Serializable
 private data class HolidaysData(
-    val school_year: String,
+    val schoolYear: String,
     val location: HolidayLocation,
     val holidays: List<HolidayEntry>
 )
@@ -909,6 +861,6 @@ private data class HolidayEntry(
  */
 private data class HolidayPeriod(
     val name: String,
-    val startDate: java.time.LocalDate,
-    val endDate: java.time.LocalDate
+    val startDate: LocalDate,
+    val endDate: LocalDate
 )

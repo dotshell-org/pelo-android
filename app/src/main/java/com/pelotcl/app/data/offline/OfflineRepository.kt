@@ -7,13 +7,13 @@ import com.pelotcl.app.data.model.StopFeature
 import com.pelotcl.app.data.model.TrafficAlert
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
+import androidx.core.content.edit
 
 /** Data older than 7 days is considered stale and a refresh is recommended. */
 const val STALE_THRESHOLD_MS = 7L * 24 * 60 * 60 * 1000
@@ -70,17 +70,6 @@ class OfflineRepository(private val context: Context) {
         private const val KEY_SELECTED_MAP_STYLES = "selected_map_styles"
         private const val KEY_DATA_VERSION = "offline_data_version"
         private const val DATA_VERSION = 1
-
-        @Volatile
-        private var INSTANCE: OfflineRepository? = null
-
-        fun getInstance(context: Context): OfflineRepository {
-            return INSTANCE ?: synchronized(this) {
-                INSTANCE ?: OfflineRepository(context.applicationContext).also {
-                    INSTANCE = it
-                }
-            }
-        }
     }
 
     // ===== SAVE METHODS =====
@@ -138,22 +127,6 @@ class OfflineRepository(private val context: Context) {
         }
         val filesOnDisk = busDir.listFiles()?.size ?: 0
         Log.d(TAG, "Saved page: ${grouped.size} lines, ${lines.size} features, saved=$savedCount, filesOnDisk=$filesOnDisk")
-    }
-
-    /**
-     * Saves bus lines grouped by line name into individual files (bus/C5.json.gz, bus/44.json.gz, etc.)
-     * to avoid loading all 10k features at once (OOM risk).
-     */
-    suspend fun saveBusLines(lines: List<Feature>) = withContext(Dispatchers.IO) {
-        clearBusLines()
-        val safeLines = lines.sanitizeForSerialization()
-        // Group by line name and save each separately
-        val grouped = safeLines.groupBy { it.properties.ligne.uppercase() }
-        for ((lineName, features) in grouped) {
-            val safeFileName = lineName.replace(Regex("[^A-Za-z0-9_-]"), "_") + ".json.gz"
-            writeCompressedTo(File(busDir, safeFileName), features)
-        }
-        Log.d(TAG, "Saved ${grouped.size} bus line files (${lines.size} total features)")
     }
 
     suspend fun saveNavigoneLines(lines: List<Feature>) =
@@ -282,14 +255,10 @@ class OfflineRepository(private val context: Context) {
     // ===== METADATA =====
 
     fun markDownloadComplete() {
-        prefs.edit()
-            .putLong(KEY_LAST_DOWNLOAD, System.currentTimeMillis())
-            .putInt(KEY_DATA_VERSION, DATA_VERSION)
-            .apply()
-    }
-
-    fun setMapTilesDownloaded(downloaded: Boolean) {
-        prefs.edit().putBoolean(KEY_MAP_TILES_DOWNLOADED, downloaded).apply()
+        prefs.edit {
+            putLong(KEY_LAST_DOWNLOAD, System.currentTimeMillis())
+                .putInt(KEY_DATA_VERSION, DATA_VERSION)
+            }
     }
 
     fun getDownloadedMapStyles(): Set<String> {
@@ -298,17 +267,17 @@ class OfflineRepository(private val context: Context) {
         // Migration: if old boolean was true, assume positron was downloaded
         if (prefs.getBoolean(KEY_MAP_TILES_DOWNLOADED, false)) {
             val migrated = setOf("positron")
-            prefs.edit().putStringSet(KEY_DOWNLOADED_MAP_STYLES, migrated).apply()
+            prefs.edit { putStringSet(KEY_DOWNLOADED_MAP_STYLES, migrated)}
             return migrated
         }
         return emptySet()
     }
 
     fun setDownloadedMapStyles(styles: Set<String>) {
-        prefs.edit()
-            .putStringSet(KEY_DOWNLOADED_MAP_STYLES, styles)
-            .putBoolean(KEY_MAP_TILES_DOWNLOADED, styles.isNotEmpty())
-            .apply()
+        prefs.edit {
+            putStringSet(KEY_DOWNLOADED_MAP_STYLES, styles)
+                .putBoolean(KEY_MAP_TILES_DOWNLOADED, styles.isNotEmpty())
+            }
     }
 
     fun getSelectedMapStyles(): Set<String> {
@@ -316,7 +285,7 @@ class OfflineRepository(private val context: Context) {
     }
 
     fun setSelectedMapStyles(styles: Set<String>) {
-        prefs.edit().putStringSet(KEY_SELECTED_MAP_STYLES, styles).apply()
+        prefs.edit { putStringSet(KEY_SELECTED_MAP_STYLES, styles)}
     }
 
     fun getOfflineDataInfo(): OfflineDataInfo {
@@ -339,31 +308,6 @@ class OfflineRepository(private val context: Context) {
             downloadedMapStyles = downloadedStyles,
             busLinesCount = busCount
         )
-    }
-
-    fun isOfflineDataAvailable(): Boolean {
-        return prefs.getLong(KEY_LAST_DOWNLOAD, 0L) > 0L &&
-                offlineDir.listFiles()?.isNotEmpty() == true
-    }
-
-    fun getLastDownloadTimestamp(): Long {
-        return prefs.getLong(KEY_LAST_DOWNLOAD, 0L)
-    }
-
-    /**
-     * Deletes all offline data files (not map tiles, which are managed by MapLibre).
-     */
-    suspend fun deleteOfflineData() = withContext(Dispatchers.IO) {
-        busDir.listFiles()?.forEach { it.delete() }
-        offlineDir.listFiles()?.forEach {
-            if (it.isDirectory) it.deleteRecursively() else it.delete()
-        }
-        prefs.edit()
-            .remove(KEY_LAST_DOWNLOAD)
-            .remove(KEY_DATA_VERSION)
-            .remove(KEY_MAP_TILES_DOWNLOADED)
-            .remove(KEY_DOWNLOADED_MAP_STYLES)
-            .apply()
     }
 
     // ===== INTERNAL =====

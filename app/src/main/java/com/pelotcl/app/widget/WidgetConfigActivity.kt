@@ -197,9 +197,7 @@ private fun DarkMenuRow(
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {
-                        isPressed = true
                         tryAwaitRelease()
-                        isPressed = false
                     },
                     onTap = { onClick() }
                 )
@@ -334,8 +332,6 @@ private fun WidgetConfigScreen(
                 LineSelectionStep(
                     desserte = desserte,
                     schedulesRepository = schedulesRepository,
-                    allowAllLinesOption = false,
-                    onAllLinesSelected = {},
                     onLineSelected = { line ->
                         pendingConfig = PendingConfig(
                             selectedStop!!,
@@ -481,8 +477,6 @@ private fun StopSelectionStep(
 private fun LineSelectionStep(
     desserte: String,
     schedulesRepository: SchedulesRepository,
-    allowAllLinesOption: Boolean,
-    onAllLinesSelected: () -> Unit,
     onLineSelected: (LineWithDirections) -> Unit
 ) {
     val linesWithDirections = remember(desserte) {
@@ -516,43 +510,9 @@ private fun LineSelectionStep(
             .verticalScroll(rememberScrollState())
             .padding(top = 8.dp)
     ) {
-        if (allowAllLinesOption) {
-            Text(
-                text = "Mode d'affichage",
-                color = TextSecondary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-            )
-
-            Column(
-                modifier = Modifier
-                    .padding(horizontal = 16.dp)
-                    .clip(RoundedCornerShape(12.dp))
-            ) {
-                DarkMenuRow(onClick = onAllLinesSelected) {
-                    Column {
-                        Text(
-                            text = "Toutes les lignes",
-                            color = TextPrimary,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            text = "Prochains départs de toutes les lignes",
-                            color = TextSecondary,
-                            fontSize = 13.sp
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-        }
-
         // Specific lines
         Text(
-            text = if (allowAllLinesOption) "Ou une ligne spécifique" else "Choisir une ligne",
+            text = "Choisir une ligne",
             color = TextSecondary,
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,

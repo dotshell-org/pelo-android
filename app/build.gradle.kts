@@ -1,4 +1,3 @@
-import org.gradle.kotlin.dsl.getByName
 import java.util.Properties
 
 plugins {
@@ -84,7 +83,7 @@ android {
 
 dependencies {
     implementation(libs.material)
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.process)
@@ -95,17 +94,17 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     // Foundation for TextFieldState (text2) APIs
-    implementation("androidx.compose.foundation:foundation")
+    implementation(libs.androidx.compose.foundation)
 
     // Navigation and Material Icons
-    implementation("androidx.navigation:navigation-compose:2.8.3")
-    implementation("androidx.compose.material:material-icons-extended:1.7.3")
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.compose.material.icons.extended)
 
     // MapLibre
     implementation(libs.maplibre.android)
 
     // Location Services
-    implementation("com.google.android.gms:play-services-location:21.0.1")
+    implementation(libs.google.play.services.location)
 
     // Retrofit for network calls
     implementation(libs.retrofit)
@@ -113,15 +112,15 @@ dependencies {
     implementation(libs.gson)
     
     // OkHttp for caching and network optimization
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.squareup.okhttp3:okhttp-sse:4.12.0")
+    implementation(libs.okhttp)
+    implementation(libs.okhttp.sse)
 
     // ViewModel
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.compose.ui.geometry)
 
     // Raptor-KT
-    implementation("eu.dotshell:raptor-kt:1.5.0")
+    implementation(libs.raptor.kt)
 
     // Kotlinx Serialization for fast JSON caching
     implementation(libs.kotlinx.serialization.json)
@@ -130,11 +129,11 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
 
     // Jetpack Glance for home screen widgets
-    implementation("androidx.glance:glance-appwidget:1.1.1")
-    implementation("androidx.glance:glance-material3:1.1.1")
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.glance.material3)
 
     // ProfileInstaller for Baseline Profiles (improves cold start by ~15-30%)
-    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
+    implementation(libs.androidx.profileinstaller)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

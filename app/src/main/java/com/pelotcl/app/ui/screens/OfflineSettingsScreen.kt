@@ -35,10 +35,12 @@ import kotlin.math.PI
 import kotlin.math.sin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pelotcl.app.R
 import com.pelotcl.app.data.offline.OfflineDataInfo
 import com.pelotcl.app.data.offline.OfflineDownloadState
 import com.pelotcl.app.data.offline.OfflineRepository
@@ -59,7 +61,7 @@ fun OfflineSettingsScreen(
     val offlineDataInfo by viewModel.offlineDataInfo.collectAsState()
     val downloadState by viewModel.offlineDataManager.downloadState.collectAsState()
     val isOffline by viewModel.isOffline.collectAsState()
-    val offlineRepository = remember { OfflineRepository.getInstance(context) }
+    val offlineRepository = remember { OfflineRepository(context) }
     var selectedMapStyles by remember { mutableStateOf(offlineRepository.getSelectedMapStyles().ifEmpty { setOf(MapStyle.POSITRON.key) }) }
 
     Box(
@@ -79,7 +81,7 @@ fun OfflineSettingsScreen(
             Spacer(modifier = Modifier.height(60.dp))
             Icon(
                 imageVector = if (offlineDataInfo.isAvailable) Icons.Filled.CheckCircle else Icons.Filled.CloudOff,
-                contentDescription = null,
+                contentDescription = if (offlineDataInfo.isAvailable) stringResource(R.string.offline_available) else stringResource(R.string.offline_unavailable),
                 tint = if (offlineDataInfo.isAvailable) Color(0xFF4CAF50) else Color.Gray,
                 modifier = Modifier.size(48.dp)
             )
@@ -140,7 +142,7 @@ fun OfflineSettingsScreen(
                     ) {
                         Icon(
                             Icons.Filled.Close,
-                            contentDescription = null,
+                            contentDescription = stringResource(R.string.cancel_download),
                             modifier = Modifier.size(18.dp),
                             tint = Color.Gray
                         )
@@ -159,7 +161,7 @@ fun OfflineSettingsScreen(
                         ),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(Icons.Filled.CloudDownload, null, modifier = Modifier.size(20.dp), tint = Color.White)
+                        Icon(Icons.Filled.CloudDownload, stringResource(R.string.download_data), modifier = Modifier.size(20.dp), tint = Color.White)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = if (offlineDataInfo.isAvailable) "Mettre à jour" else "Télécharger les données",
@@ -198,7 +200,7 @@ private fun CategoryHeader(icon: ImageVector, title: String) {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp, horizontal = 4.dp)
     ) {
-        Icon(icon, null, tint = Color.White, modifier = Modifier.size(20.dp))
+        Icon(icon, stringResource(R.string.category_header), tint = Color.White, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(8.dp))
         Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
     }
@@ -281,14 +283,14 @@ private fun MapStyleSelectionCard(
                             .background(if (isSelected) Color(0xFFE60000) else Color.Transparent),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (isSelected) Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                        if (isSelected) Icon(Icons.Default.Check, stringResource(R.string.selected), tint = Color.White, modifier = Modifier.size(16.dp))
                     }
 
                     Spacer(modifier = Modifier.width(16.dp))
                     Text(style.displayName, color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
 
                     if (isDownloaded && isSelected) {
-                        Icon(Icons.Filled.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(18.dp))
+                        Icon(Icons.Filled.CheckCircle, stringResource(R.string.downloaded), tint = Color(0xFF4CAF50), modifier = Modifier.size(18.dp))
                     }
                 }
                 if (index < styles.size - 1) {
@@ -321,7 +323,7 @@ private fun OfflineStatusCard(info: OfflineDataInfo, context: Context) {
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Warning,
-                        contentDescription = null,
+                        contentDescription = stringResource(R.string.stale_data_warning),
                         tint = Color(0xFFFF9800),
                         modifier = Modifier.size(18.dp)
                     )

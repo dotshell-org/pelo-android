@@ -55,7 +55,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -82,7 +81,6 @@ import androidx.compose.runtime.Immutable
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.Connection
 import com.pelotcl.app.utils.LineColorHelper
-import com.pelotcl.app.utils.ListItemRecompositionCounter
 import com.pelotcl.app.utils.TransportType
 import com.pelotcl.app.data.model.AlertSeverity
 import kotlinx.coroutines.Dispatchers
@@ -129,9 +127,9 @@ private fun getScheduleColorBasedOnTime(scheduleTime: String): Color {
             return Green500
         }
 
-        return when {
-            diffMinutes in 0..<2 -> Red500
-            diffMinutes in 2..<15 -> Orange500
+        return when (diffMinutes) {
+            in 0..<2 -> Red500
+            in 2..<15 -> Orange500
             else -> Green500
         }
     } catch (_: Exception) {
@@ -385,11 +383,10 @@ fun LineDetailsBottomSheet(
                             val isStopFavorite = favoriteStops.contains(lineInfo.currentStationName)
                             IconButton(
                                 onClick = {
-                                    val wasFavorite = isStopFavorite
                                     onToggleFavoriteStop(lineInfo.currentStationName)
                                     Toast.makeText(
                                         context,
-                                        if (wasFavorite) "Arrêt supprimé des favoris" else "Arrêt ajouté aux favoris",
+                                        if (isStopFavorite) "Arrêt supprimé des favoris" else "Arrêt ajouté aux favoris",
                                         Toast.LENGTH_SHORT
                                     ).show()
                                 },
@@ -406,11 +403,10 @@ fun LineDetailsBottomSheet(
 
                         IconButton(
                             onClick = {
-                                val wasFavorite = isLineFavorite
                                 viewModel.toggleFavorite(lineInfo.lineName)
                                 Toast.makeText(
                                     context,
-                                    if (wasFavorite) "Ligne supprimée des favoris" else "Ligne ajoutée aux favoris",
+                                    if (isLineFavorite) "Ligne supprimée des favoris" else "Ligne ajoutée aux favoris",
                                     Toast.LENGTH_SHORT
                                 ).show()
                             },
@@ -535,8 +531,8 @@ fun LineDetailsBottomSheet(
 @Composable
 private fun TrafficAlertsSection(
     alerts: List<com.pelotcl.app.data.model.TrafficAlert>,
+    modifier: Modifier = Modifier,
     alertsTimestampMillis: Long? = null,
-    modifier: Modifier = Modifier
 ) {
     if (alerts.isEmpty()) {
         return
@@ -738,7 +734,7 @@ private fun NextSchedulesSection(
         if (lineInfo.currentStationName.isNotBlank()) {
             // Wait briefly for headsigns if they were just requested
             if (headsigns.isEmpty()) {
-                kotlinx.coroutines.delay(100)
+                delay(100)
             }
             viewModel.computeAvailableDirections(lineInfo.lineName, lineInfo.currentStationName)
         }
@@ -994,10 +990,15 @@ private fun ConnectionsSection(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun StopItemWithLine(stop: LineStopInfo, lineColor: Color, isFirst: Boolean, isLast: Boolean, onStopClick: () -> Unit = {}, isFavorite: Boolean = false, modifier: Modifier = Modifier) {
-    // Debug: measure the recompositions of this item
-    ListItemRecompositionCounter("LineStops", stop.stopId)
-
+private fun StopItemWithLine(
+    stop: LineStopInfo,
+    lineColor: Color,
+    isFirst: Boolean,
+    isLast: Boolean,
+    modifier: Modifier = Modifier,
+    onStopClick: () -> Unit = {},
+    isFavorite: Boolean = false
+) {
     Row(
         modifier = modifier.fillMaxWidth().padding(vertical = 4.dp).height(IntrinsicSize.Min).clickable { onStopClick() },
         verticalAlignment = Alignment.CenterVertically

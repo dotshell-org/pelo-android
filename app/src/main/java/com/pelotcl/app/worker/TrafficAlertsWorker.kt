@@ -5,7 +5,6 @@ import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.pelotcl.app.data.model.TrafficAlert
-import com.pelotcl.app.data.repository.FavoritesRepository
 import com.pelotcl.app.data.repository.TrafficAlertsRepository
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -17,26 +16,10 @@ class TrafficAlertsWorker(
     
     companion object {
         private const val TAG = "TrafficAlertsWorker"
-        private const val PREFS_NAME = "traffic_alerts_worker"
-        private const val KEY_NOTIFIED_ALERTS = "notified_alert_ids"
-        
-        // Major lines that should always trigger notifications
-        private val MAJOR_LINES = setOf(
-            // Metro
-            "A", "B", "C", "D",
-            // Tram
-            "T1", "T2", "T3", "T4", "T5", "T6", "T7",
-            // Funicular
-            "F1", "F2",
-            // Navigone
-            "NAVI1",
-            // Trambus
-            "TB11", "TB12"
-        )
+
     }
     
     private val trafficAlertsRepository = TrafficAlertsRepository(applicationContext)
-    private val prefs = applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     override suspend fun doWork(): Result {
         return try {
@@ -72,25 +55,4 @@ class TrafficAlertsWorker(
         }
     }
 
-    private fun generateAlertId(alert: TrafficAlert): String {
-        // Create a unique ID based on alert properties
-        return "${alert.alertNumber}_${alert.lineCode}_${alert.startDate}"
-    }
-
-    private fun getNotifiedAlertIds(): Set<String> {
-        return prefs.getStringSet(KEY_NOTIFIED_ALERTS, emptySet()) ?: emptySet()
-    }
-
-    private fun saveNotifiedAlertIds(ids: Set<String>) {
-        prefs.edit().putStringSet(KEY_NOTIFIED_ALERTS, ids).apply()
-    }
-
-    private fun cleanupOldNotifiedIds(currentValidAlerts: List<TrafficAlert>) {
-        val currentAlertIds = currentValidAlerts.map { generateAlertId(it) }.toSet()
-        val notifiedIds = getNotifiedAlertIds()
-
-        // Keep only IDs that still exist in current alerts
-        val cleanedIds = notifiedIds.intersect(currentAlertIds)
-        saveNotifiedAlertIds(cleanedIds)
-    }
 }

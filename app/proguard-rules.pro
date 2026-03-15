@@ -81,7 +81,7 @@
 -dontwarn sun.misc.**
 
 # Application classes that will be serialized/deserialized over Gson
--keep class com.pelotcl.app.data.model.** { *; }
+-keep class com.pelotcl.app.data.model.TrafficAlert { *; }
 
 # Prevent proguard from stripping interface information from TypeAdapter, TypeAdapterFactory,
 # JsonSerializer, JsonDeserializer instances (so they can be used in @JsonAdapter)
@@ -102,9 +102,31 @@
 -dontwarn org.openjsse.**
 
 # ==================== Raptor-KT ====================
--keep class io.raptor.** { *; }
--keep class eu.dotshell.** { *; }
+# Keep only the specific Raptor classes that are actually used
+-keep class io.raptor.PeriodData { *; }
+-keep class io.raptor.RaptorLibrary { *; }
+-keep class io.raptor.model.Stop { *; }
 
 # ==================== MapLibre ====================
--keep class org.maplibre.** { *; }
--dontwarn org.maplibre.**
+# Keep specific MapLibre classes used in the app
+-keep class org.maplibre.android.MapLibre { *; }
+-keep class org.maplibre.android.camera.CameraPosition { *; }
+-keep class org.maplibre.android.camera.CameraUpdateFactory { *; }
+-keep class org.maplibre.android.geometry.LatLng { *; }
+-keep class org.maplibre.android.geometry.LatLngBounds { *; }
+-keep class org.maplibre.android.maps.MapLibreMap { *; }
+-keep class org.maplibre.android.maps.MapView { *; }
+-keep class org.maplibre.android.maps.Style { *; }
+-keep class org.maplibre.android.offline.OfflineManager { *; }
+-keep class org.maplibre.android.offline.OfflineRegion { *; }
+-keep class org.maplibre.android.offline.OfflineRegionError { *; }
+-keep class org.maplibre.android.offline.OfflineRegionStatus { *; }
+-keep class org.maplibre.android.offline.OfflineTilePyramidRegionDefinition { *; }
+-keep class org.maplibre.android.style.expressions.Expression { *; }
+-keep class org.maplibre.android.style.layers.CircleLayer { *; }
+-keep class org.maplibre.android.style.layers.LineLayer { *; }
+-keep class org.maplibre.android.style.layers.PropertyFactory { *; }
+-keep class org.maplibre.android.style.layers.SymbolLayer { *; }
+-keep class org.maplibre.android.style.sources.GeoJsonOptions { *; }
+-keep class org.maplibre.android.style.sources.GeoJsonSource { *; }
+-dontwarn org.maplibre.android.**

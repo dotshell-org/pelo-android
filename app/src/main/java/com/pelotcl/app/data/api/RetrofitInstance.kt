@@ -116,14 +116,4 @@ object RetrofitInstance {
             }
         }
 
-    /**
-     * Clear the HTTP cache
-     */
-    fun clearCache() {
-        try {
-            okHttpClient?.cache?.evictAll()
-        } catch (e: Exception) {
-            android.util.Log.e("RetrofitInstance", "Error clearing HTTP cache", e)
-        }
-    }
 }

@@ -11,7 +11,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.io.FileInputStream
@@ -19,6 +18,7 @@ import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
+import androidx.core.content.edit
 
 /**
  * In-memory and disk cache class for transport data.
@@ -26,7 +26,7 @@ import java.util.zip.GZIPOutputStream
  * for reduced disk I/O and storage.
  * Avoids repeated API calls and improves performance.
  */
-class TransportCache(private val context: Context) {
+class TransportCache(context: Context) {
 
     // High-performance JSON parser with optimized settings
     private val json = Json {
@@ -73,54 +73,6 @@ class TransportCache(private val context: Context) {
         private const val FILE_TRAMBUS_LINES = "trambus_lines.json.gz"
         private const val FILE_STOPS = "stops.json.gz"
 
-        // Cache schema version - increment when model classes change
-        private const val CACHE_VERSION = 3  // Incremented for navigone/trambus cache
-        private const val KEY_CACHE_VERSION = "cache_version"
-
-        @Volatile
-        private var INSTANCE: TransportCache? = null
-        
-        fun getInstance(context: Context): TransportCache {
-            return INSTANCE ?: synchronized(this) {
-                INSTANCE ?: TransportCache(context.applicationContext).also {
-                    INSTANCE = it
-                    it.checkCacheVersion()
-                }
-            }
-        }
-    }
-
-    /**
-     * Check and invalidate cache if version changed
-     */
-    private fun checkCacheVersion() {
-        val storedVersion = prefs.getInt(KEY_CACHE_VERSION, 0)
-        if (storedVersion != CACHE_VERSION) {
-            clearAllCache()
-            prefs.edit().putInt(KEY_CACHE_VERSION, CACHE_VERSION).apply()
-        }
-    }
-
-    /**
-     * Clear all cached data
-     */
-    fun clearAllCache() {
-        metroLinesCache = null
-        tramLinesCache = null
-        busLinesCache = null
-        navigoneLinesCache = null
-        trambusLinesCache = null
-        stopsCache = null
-        metroLinesTimestamp = 0
-        tramLinesTimestamp = 0
-        busLinesTimestamp = 0
-        navigoneLinesTimestamp = 0
-        trambusLinesTimestamp = 0
-        stopsTimestamp = 0
-
-        // Clear disk cache
-        cacheDir.listFiles()?.forEach { it.delete() }
-        prefs.edit().clear().putInt(KEY_CACHE_VERSION, CACHE_VERSION).apply()
     }
 
     /**
@@ -173,7 +125,7 @@ class TransportCache(private val context: Context) {
         metroLinesTimestamp = System.currentTimeMillis()
 
         // Save timestamp to prefs and data to file asynchronously
-        prefs.edit().putLong(KEY_METRO_LINES_TIMESTAMP, metroLinesTimestamp).apply()
+        prefs.edit { putLong(KEY_METRO_LINES_TIMESTAMP, metroLinesTimestamp)}
         writeToCompressedFile(FILE_METRO_LINES, lines.sanitizeForSerialization())
     }
     
@@ -208,7 +160,7 @@ class TransportCache(private val context: Context) {
         tramLinesTimestamp = System.currentTimeMillis()
 
         // Save timestamp to prefs and data to file asynchronously
-        prefs.edit().putLong(KEY_TRAM_LINES_TIMESTAMP, tramLinesTimestamp).apply()
+        prefs.edit { putLong(KEY_TRAM_LINES_TIMESTAMP, tramLinesTimestamp)}
         writeToCompressedFile(FILE_TRAM_LINES, lines.sanitizeForSerialization())
     }
     
@@ -242,7 +194,7 @@ class TransportCache(private val context: Context) {
         navigoneLinesCache = lines
         navigoneLinesTimestamp = System.currentTimeMillis()
 
-        prefs.edit().putLong(KEY_NAVIGONE_LINES_TIMESTAMP, navigoneLinesTimestamp).apply()
+        prefs.edit { putLong(KEY_NAVIGONE_LINES_TIMESTAMP, navigoneLinesTimestamp)}
         writeToCompressedFile(FILE_NAVIGONE_LINES, lines.sanitizeForSerialization())
     }
 
@@ -276,7 +228,7 @@ class TransportCache(private val context: Context) {
         trambusLinesCache = lines
         trambusLinesTimestamp = System.currentTimeMillis()
 
-        prefs.edit().putLong(KEY_TRAMBUS_LINES_TIMESTAMP, trambusLinesTimestamp).apply()
+        prefs.edit { putLong(KEY_TRAMBUS_LINES_TIMESTAMP, trambusLinesTimestamp)}
         writeToCompressedFile(FILE_TRAMBUS_LINES, lines.sanitizeForSerialization())
     }
 
@@ -302,16 +254,7 @@ class TransportCache(private val context: Context) {
 
         null
     }
-    
-    /**
-     * Saves bus lines to cache (MEMORY ONLY)
-     * Bus lines are too large for disk storage
-     */
-    suspend fun saveBusLines(lines: List<Feature>) = mutex.withLock {
-        busLinesCache = lines
-        busLinesTimestamp = System.currentTimeMillis()
-    }
-    
+
     /**
      * Retrieves bus lines from cache (MEMORY ONLY)
      * Buses are not persisted to disk because they're too large
@@ -335,7 +278,7 @@ class TransportCache(private val context: Context) {
         stopsTimestamp = System.currentTimeMillis()
         
         // Save timestamp to prefs and data to compressed file
-        prefs.edit().putLong(KEY_STOPS_TIMESTAMP, stopsTimestamp).apply()
+        prefs.edit { putLong(KEY_STOPS_TIMESTAMP, stopsTimestamp) }
         writeToCompressedFile(FILE_STOPS, stops)
     }
     
@@ -360,21 +303,6 @@ class TransportCache(private val context: Context) {
         }
         
         null
-    }
-
-    /**
-     * Check if metro/tram cache is populated in memory (for fast sync check)
-     */
-    fun hasMemoryCache(): Boolean {
-        return metroLinesCache != null && tramLinesCache != null
-    }
-
-    /**
-     * Check if all main line caches are populated (for complete startup check)
-     */
-    fun hasFullMemoryCache(): Boolean {
-        return metroLinesCache != null && tramLinesCache != null &&
-               navigoneLinesCache != null && trambusLinesCache != null
     }
 
     /**
@@ -474,41 +402,4 @@ class TransportCache(private val context: Context) {
         null
     }
 
-    /**
-     * Returns stops from cache even if expired (stale).
-     */
-    suspend fun getStopsStale(): List<StopFeature>? = mutex.withLock {
-        if (stopsCache != null) {
-            return@withLock stopsCache
-        }
-
-        val stops = readFromCompressedFile<List<StopFeature>>(FILE_STOPS)
-        if (stops != null) {
-            stopsCache = stops
-            stopsTimestamp = prefs.getLong(KEY_STOPS_TIMESTAMP, 0)
-            return@withLock stops
-        }
-
-        null
-    }
-
-    /**
-     * Check if the cache needs refresh (expired but has data).
-     * Returns true if cache exists but is stale.
-     */
-    fun needsRefresh(): Boolean {
-        val metroExpired = metroLinesCache != null && !isTimestampValid(metroLinesTimestamp)
-        val tramExpired = tramLinesCache != null && !isTimestampValid(tramLinesTimestamp)
-        val navigoneExpired = navigoneLinesCache != null && !isTimestampValid(navigoneLinesTimestamp)
-        val trambusExpired = trambusLinesCache != null && !isTimestampValid(trambusLinesTimestamp)
-
-        return metroExpired || tramExpired || navigoneExpired || trambusExpired
-    }
-
-    /**
-     * Check if we have any cached data available (stale or fresh).
-     */
-    fun hasAnyCachedData(): Boolean {
-        return metroLinesCache != null || tramLinesCache != null
-    }
 }

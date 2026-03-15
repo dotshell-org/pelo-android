@@ -53,9 +53,9 @@ import kotlin.math.sqrt
 @Stable
 sealed class TransportLinesUiState {
     data object Loading : TransportLinesUiState()
-    data class PartialSuccess(val lines: List<Feature>, val source: String) : TransportLinesUiState()
+    data class PartialSuccess(val lines: List<Feature>) : TransportLinesUiState()
     data class Success(val lines: List<Feature>) : TransportLinesUiState()
-    data class Error(val message: String) : TransportLinesUiState()
+    data object Error : TransportLinesUiState()
 }
 
 /**
@@ -65,7 +65,7 @@ sealed class TransportLinesUiState {
 sealed class TransportStopsUiState {
     data object Loading : TransportStopsUiState()
     data class Success(val stops: List<StopFeature>) : TransportStopsUiState()
-    data class Error(val message: String) : TransportStopsUiState()
+    data object Error : TransportStopsUiState()
 }
 
 /**
@@ -115,7 +115,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
     // Connectivity and offline state
     private val connectivityObserver = ConnectivityObserver.getInstance(application.applicationContext)
-    val offlineDataManager = OfflineDataManager.getInstance(application.applicationContext)
+    val offlineDataManager = OfflineDataManager(application.applicationContext)
 
     private val _isOffline = MutableStateFlow(false)
     val isOffline: StateFlow<Boolean> = _isOffline.asStateFlow()
@@ -125,8 +125,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     // Alerts timestamp for staleness display
     private val _alertsTimestampMillis = MutableStateFlow<Long?>(null)
     val alertsTimestampMillis: StateFlow<Long?> = _alertsTimestampMillis.asStateFlow()
-    private var trafficAlertsStreamJob: Job? = null
-    private var lastTrafficSubscription: Set<String> = emptySet()
     private var isAppInForeground: Boolean = true
     private val appLifecycleObserver = object : DefaultLifecycleObserver {
         override fun onStart(owner: LifecycleOwner) {
@@ -235,15 +233,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         offlineDataManager.cancelDownload()
         offlineDownloadJob?.cancel()
         offlineDownloadJob = null
-    }
-
-    /**
-     * Deletes all offline data from viewModelScope.
-     */
-    fun deleteOfflineData() {
-        viewModelScope.launch {
-            offlineDataManager.deleteAllOfflineData()
-        }
     }
 
     /**
@@ -412,27 +401,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         _allSchedules.value = emptyList()
         _nextSchedules.value = emptyList()
         _availableDirections.value = emptyList()
-    }
-
-    /**
-     * Toggles live vehicle tracking for the given line.
-     */
-    fun toggleLiveTracking(lineName: String) {
-        if (_isLiveTrackingEnabled.value) {
-            stopLiveTracking()
-        } else {
-            startLiveTracking(lineName)
-        }
-    }
-
-    companion object {
-        private val DEFAULT_ALERT_SUBSCRIPTION_LINES = setOf(
-            "A", "B", "C", "D",
-            "F1", "F2",
-            "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10",
-            "NAV1", "NAVI1",
-            "RX"
-        )
     }
 
     /**
@@ -634,26 +602,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         iconBitmapCache.put(name, bitmap)
     }
 
-    /**
-     * Reduces bitmap cache size based on memory pressure level.
-     * Call from Application.onTrimMemory() to respond to system memory pressure.
-     * @param level The trim level from ComponentCallbacks2 (TRIM_MEMORY_*)
-     */
-    fun trimBitmapCache(level: Int) {
-        when {
-            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> {
-                iconBitmapCache.evictAll()
-            }
-            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> {
-                iconBitmapCache.trimToSize(iconBitmapCache.maxSize() / 2)
-            }
-            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> {
-                iconBitmapCache.trimToSize(iconBitmapCache.maxSize() * 3 / 4)
-            }
-        }
-    }
-
-
 
     /**
      * Preloads lines and stops at launch, builds transfers index,
@@ -717,7 +665,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                         // Keep stale cache if refresh failed and we had cached data
                         val linesAfterFailure = _uiState.value
                         if (linesAfterFailure !is TransportLinesUiState.Success && linesAfterFailure !is TransportLinesUiState.PartialSuccess) {
-                            _uiState.value = TransportLinesUiState.Error(e.message ?: "Failed to load lines")
+                            _uiState.value = TransportLinesUiState.Error
                         }
                     }
                 }
@@ -738,6 +686,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                         }
                     }.onFailure { e ->
                         Log.w("TransportViewModel", "Preload: failed loading stops: ${e.message}")
+                        _stopsUiState.value = TransportStopsUiState.Error
                     }
                 }
 
@@ -848,9 +797,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     _stopsUiState.value = TransportStopsUiState.Success(stopCollection.features)
                 }
                 .onFailure { exception ->
-                    _stopsUiState.value = TransportStopsUiState.Error(
-                        exception.message ?: "An error occurred while loading stops"
-                    )
+                    _stopsUiState.value = TransportStopsUiState.Error
                 }
         }
     }
@@ -884,7 +831,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
         for (stop in allStops) {
             val normalizedName = normalizeStopName(stop.properties.nom)
-            val prefix = if (normalizedName.length >= 4) normalizedName.substring(0, 4) else normalizedName
+            val prefix = if (normalizedName.length >= 4) normalizedName.take(4) else normalizedName
 
             // Only search candidates sharing the same prefix
             var foundGroup: String? = null
@@ -991,7 +938,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                         _uiState.value = TransportLinesUiState.Success(progress.lines)
                         Log.d("TransportViewModel", "Lines loading complete: ${progress.lines.size} lines")
                     } else {
-                        _uiState.value = TransportLinesUiState.PartialSuccess(progress.lines, progress.source)
+                        _uiState.value = TransportLinesUiState.PartialSuccess(progress.lines)
                         Log.d("TransportViewModel", "Lines partial load (${progress.source}): ${progress.lines.size} lines")
                     }
                 }
@@ -1004,9 +951,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     _uiState.value = TransportLinesUiState.Success(currentState.lines)
                     Log.w("TransportViewModel", "Keeping partial data due to error: ${currentState.lines.size} lines")
                 } else {
-                    _uiState.value = TransportLinesUiState.Error(
-                        e.message ?: "An error occurred"
-                    )
+                    _uiState.value = TransportLinesUiState.Error
                 }
             }
         }
@@ -1060,10 +1005,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      */
     fun addLineToLoaded(lineName: String) {
         lineDetailScope.launch {
-            val currentState = _uiState.value
-
             // Get current lines from Success or PartialSuccess state
-            val currentLines = when (currentState) {
+            val currentLines = when (val currentState = _uiState.value) {
                 is TransportLinesUiState.Success -> currentState.lines
                 is TransportLinesUiState.PartialSuccess -> currentState.lines
                 else -> {
@@ -1105,10 +1048,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      * Removes a specific line from loaded lines (to clean up temporary bus lines)
      */
     fun removeLineFromLoaded(lineName: String) {
-        val currentState = _uiState.value
-
         // Get current lines from Success or PartialSuccess state
-        val currentLines = when (currentState) {
+        val currentLines = when (val currentState = _uiState.value) {
             is TransportLinesUiState.Success -> currentState.lines
             is TransportLinesUiState.PartialSuccess -> currentState.lines
             else -> {
@@ -1149,7 +1090,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             // Build a map of normalized name -> official stop name and connections
             val normalizedToStop = allStops.associateBy { normalizeStopName(it.properties.nom) }
 
-            val result = gtfsSequences.mapNotNull { (stationName, sequence) ->
+            val result = gtfsSequences.map { (stationName, sequence) ->
                 // Try to find the matching stop in allStops
                 val normalizedGtfsName = normalizeStopName(stationName)
                 val matchingStop = normalizedToStop[normalizedGtfsName]
@@ -1236,8 +1177,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         }
 
         // Get all line traces to order stops
-        val currentState = _uiState.value
-        val currentLines = when (currentState) {
+        val currentLines = when (val currentState = _uiState.value) {
             is TransportLinesUiState.Success -> currentState.lines
             is TransportLinesUiState.PartialSuccess -> currentState.lines
             else -> null
@@ -1411,23 +1351,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 },
                 { line -> line }
             ))
-    }
-
-    private fun sameAlertIdentity(
-        first: com.pelotcl.app.data.model.TrafficAlert,
-        second: com.pelotcl.app.data.model.TrafficAlert
-    ): Boolean {
-        return first.alertNumber == second.alertNumber &&
-                first.lineCode.equals(second.lineCode, ignoreCase = true) &&
-                first.title == second.title &&
-                first.message == second.message
-    }
-
-    /**
-     * Gets traffic status (alert count and last update)
-     */
-    fun getTrafficStatus() = viewModelScope.launch {
-        trafficAlertsRepository.getTrafficStatus()
     }
 
     /**

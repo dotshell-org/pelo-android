@@ -32,59 +32,7 @@ class SpatialGrid(
         grid.clear()
         stops.forEach { addStop(it) }
     }
-    
-    /**
-     * Query stops within a bounding box
-     * @param minLon Minimum longitude
-     * @param minLat Minimum latitude
-     * @param maxLon Maximum longitude
-     * @param maxLat Maximum latitude
-     * @return List of stops within the bounding box
-     */
-    fun queryBoundingBox(
-        minLon: Double,
-        minLat: Double,
-        maxLon: Double,
-        maxLat: Double
-    ): List<StopFeature> {
-        val result = mutableListOf<StopFeature>()
-        val minCell = getCellKey(minLon, minLat)
-        val maxCell = getCellKey(maxLon, maxLat)
-        
-        for (x in minCell.first..maxCell.first) {
-            for (y in minCell.second..maxCell.second) {
-                grid[Pair(x, y)]?.let { stops ->
-                    stops.forEach { stop ->
-                        val coords = stop.geometry.coordinates
-                        if (coords.size >= 2) {
-                            val lon = coords[0]
-                            val lat = coords[1]
-                            if (lon in minLon..maxLon && lat in minLat..maxLat) {
-                                result.add(stop)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        return result
-    }
-    
-    /**
-     * Get all stops in the grid
-     */
-    fun getAllStops(): List<StopFeature> {
-        return grid.values.flatten()
-    }
-    
-    /**
-     * Clear the grid
-     */
-    fun clear() {
-        grid.clear()
-    }
-    
+
     /**
      * Get the number of stops in the grid
      */

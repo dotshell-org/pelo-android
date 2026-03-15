@@ -1,8 +1,6 @@
 package com.pelotcl.app
 
 import android.app.Application
-import android.content.ComponentCallbacks2
-import android.os.Build
 import android.util.Log
 import androidx.work.Configuration
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -36,7 +34,7 @@ class PeloApplication : Application(), Configuration.Provider {
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        if (level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) {
+        if (level >= TRIM_MEMORY_BACKGROUND) {
             Log.d(TAG, "onTrimMemory level=$level, trimming caches")
             SchedulesRepository.trimCaches(level)
             BusIconHelper.trimCache(level)

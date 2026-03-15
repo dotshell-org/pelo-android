@@ -4,7 +4,6 @@ import com.pelotcl.app.data.model.FeatureCollection
 import com.google.gson.JsonObject
 import com.pelotcl.app.data.model.StopCollection
 import com.pelotcl.app.data.model.TrafficAlertsResponse
-import com.pelotcl.app.data.model.TrafficStatusResponse
 import retrofit2.http.GET
 import retrofit2.http.Query
 
@@ -124,23 +123,6 @@ interface GrandLyonApi {
     ): FeatureCollection
 
     /**
-     * Retrieves TCL navigone (river shuttle) stops from Grand Lyon's WFS API
-     * This includes stops for the NAV1 line
-     */
-    @GET("geoserver/sytral/ows")
-    suspend fun getNavigoneStops(
-        @Query("SERVICE") service: String = "WFS",
-        @Query("VERSION") version: String = "2.0.0",
-        @Query("request") request: String = "GetFeature",
-        @Query("typename") typename: String = "sytral:tcl_sytral.tclarretfluv",
-        @Query("outputFormat") outputFormat: String = "application/json",
-        @Query("SRSNAME") srsName: String = "EPSG:4171",
-        @Query("startIndex") startIndex: Int = 0,
-        @Query("sortby") sortBy: String = "gid",
-        @Query("count") count: Int = 1000
-    ): com.pelotcl.app.data.model.StopCollection
-
-    /**
      * Retrieves TCL transport stops from Grand Lyon's WFS API
      * 
      * @param service Service type (WFS)
@@ -164,7 +146,7 @@ interface GrandLyonApi {
         @Query("startIndex") startIndex: Int = 0,
         @Query("sortby") sortBy: String = "gid",
         @Query("count") count: Int = 10000
-    ): com.pelotcl.app.data.model.StopCollection
+    ): StopCollection
 
     /**
      * Récupère la géométrie de la ligne Rhônexpress (RX) depuis l'API WFS (brut JSON)
@@ -182,12 +164,6 @@ interface GrandLyonApi {
         @Query("sortby") sortBy: String = "gid",
         @Query("count") count: Int = 1000
     ): JsonObject
-
-    /**
-     * Récupère le statut du trafic (nombre d'alertes)
-     */
-    @GET("https://api.dotshell.eu/pelo/v1/traffic/status")
-    suspend fun getTrafficStatus(): TrafficStatusResponse
 
     /**
      * Récupère les alertes de trafic pour toutes les lignes

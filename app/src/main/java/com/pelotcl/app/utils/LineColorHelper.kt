@@ -1,6 +1,7 @@
 package com.pelotcl.app.utils
 
 import com.pelotcl.app.data.model.Feature
+import androidx.core.graphics.toColorInt
 
 /**
  * Utilitaire pour déterminer la couleur d'une ligne de transport selon son type
@@ -78,25 +79,7 @@ object LineColorHelper {
             (upperLine.startsWith("T") && !upperLine.startsWith("TB")) -> TRAM_COLOR
             else -> BUS_COLOR
         }
-        return android.graphics.Color.parseColor(hexColor)
+        return hexColor.toColorInt()
     }
-    
-    /**
-     * Retourne une description du type de ligne
-     */
-    fun getLineTypeDescription(feature: Feature): String {
-        val ligne = feature.properties.ligne
-        val familleTransport = feature.properties.familleTransport
-        val nomTypeLigne = feature.properties.nomTypeLigne.lowercase()
-        
-        return when {
-            // Trambus → afficher comme "Tram"
-            ligne.uppercase().startsWith("TB") -> "Tram $ligne"
-            familleTransport == "MET" -> "Métro $ligne"
-            ligne == "F1" || ligne == "F2" || nomTypeLigne.contains("funiculaire") -> "Funiculaire $ligne"
-            familleTransport == "BAT" || ligne.uppercase().startsWith("NAV") -> "Navigône $ligne"
-            familleTransport == "TRA" || familleTransport == "TRAM" -> "Tram $ligne"
-            else -> "Bus $ligne"
-        }
-    }
+
 }

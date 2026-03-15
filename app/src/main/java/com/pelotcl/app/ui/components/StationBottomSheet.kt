@@ -43,7 +43,6 @@ import androidx.compose.ui.unit.dp
 import com.pelotcl.app.ui.theme.Gray200
 import com.pelotcl.app.ui.theme.Gray700
 import com.pelotcl.app.utils.BusIconHelper
-import com.pelotcl.app.utils.ListItemRecompositionCounter
 
 /**
  * Station data for display in the bottom sheet
@@ -273,9 +272,6 @@ private fun LineListItem(
     lineName: String,
     onClick: () -> Unit
 ) {
-    // Debug: measure the recompositions of this item
-    ListItemRecompositionCounter("StationLines", lineName)
-
     @Suppress("ComposeLocalContext") // Context access needed for dynamic resource loading
     val context = LocalContext.current
     val resourceId = remember(lineName) {
@@ -317,20 +313,3 @@ private fun LineListItem(
     }
 }
 
-/**
- * Convertit un nom de ligne en nom de drawable
- * (même logique que BusIconHelper mais dupliquée ici pour éviter les dépendances circulaires)
- */
-private fun getDrawableNameForLine(lineName: String): String {
-    if (lineName.isBlank()) {
-        return ""
-    }
-    
-    val isNumericOnly = lineName.all { it.isDigit() }
-    
-    return if (isNumericOnly) {
-        "_$lineName"
-    } else {
-        lineName.lowercase()
-    }
-}

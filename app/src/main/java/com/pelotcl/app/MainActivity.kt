@@ -19,7 +19,6 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Route
@@ -56,7 +55,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.google.android.gms.location.LocationServices
-import com.pelotcl.app.ui.components.LinesBottomSheet
 import com.pelotcl.app.ui.components.LineSearchResult
 import com.pelotcl.app.ui.components.SimpleSearchBar
 import com.pelotcl.app.ui.components.StationSearchResult
@@ -86,7 +84,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
-import org.maplibre.android.MapLibre
 import org.maplibre.android.geometry.LatLng
 
 class MainActivity : ComponentActivity() {
@@ -104,7 +101,7 @@ class MainActivity : ComponentActivity() {
             try {
                 // Parallel cache and SQLite warmup - these are needed for initial UI
                 val cacheJob = launch {
-                    val cache = TransportCache.getInstance(applicationContext)
+                    val cache = TransportCache(applicationContext)
                     cache.preloadFromDisk()
                 }
                 val sqliteJob = launch {
@@ -275,7 +272,7 @@ fun NavBar(modifier: Modifier = Modifier) {
     
     // Track if itinerary map view is open (for navbar back behavior)
     var isItineraryMapViewOpen by remember { mutableStateOf(false) }
-    var backFromMapTrigger by remember { mutableStateOf(0) }
+    var backFromMapTrigger by remember { mutableIntStateOf(0) }
 
     val scope = rememberCoroutineScope()
     
@@ -507,21 +504,8 @@ fun NavBar(modifier: Modifier = Modifier) {
                 if (selectedDestination == Destination.PARAMETRES.ordinal) {
                     AppNavHost(
                         navController = navController,
-                        startDestination = Destination.PARAMETRES,
-                        contentPadding = contentPadding,
-                        showLinesSheet = showLinesSheet,
-                        onBottomSheetStateChanged = { isOpen -> isBottomSheetOpen = isOpen },
-                        onLinesSheetDismiss = {
-                            showLinesSheet = false
-                        },
-                        searchSelectedStop = selectedStationFromSearch,
-                        onSearchSelectionHandled = { selectedStationFromSearch = null },
                         modifier = Modifier,
                         viewModel = viewModel,
-                        userLocation = userLocation,
-                        onItineraryClick = { stopName ->
-                            itineraryDestinationStop = stopName
-                        },
                         onNavigateToPlan = {
                             selectedDestination = Destination.PLAN.ordinal
                         }
@@ -637,22 +621,13 @@ fun NavBar(modifier: Modifier = Modifier) {
 @Composable
 private fun AppNavHost(
     navController: androidx.navigation.NavHostController,
-    startDestination: Destination,
-    contentPadding: androidx.compose.foundation.layout.PaddingValues,
-    showLinesSheet: Boolean,
-    onBottomSheetStateChanged: (Boolean) -> Unit,
-    onLinesSheetDismiss: () -> Unit,
-    searchSelectedStop: StationSearchResult?,
-    onSearchSelectionHandled: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: TransportViewModel,
-    userLocation: LatLng?,
-    onItineraryClick: (String) -> Unit,
     onNavigateToPlan: () -> Unit
 ) {
     NavHost(
         navController = navController,
-        startDestination = startDestination.route,
+        startDestination = Destination.PARAMETRES.route,
         modifier = modifier,
         enterTransition = { EnterTransition.None },
         exitTransition = { ExitTransition.None },

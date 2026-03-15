@@ -2,8 +2,6 @@ package com.pelotcl.app.utils
 
 import kotlinx.coroutines.delay
 import java.io.IOException
-import java.net.SocketTimeoutException
-import java.net.UnknownHostException
 
 /**
  * Retry a suspend function with exponential backoff
@@ -34,9 +32,7 @@ suspend fun <T> withRetry(
             
             // Only retry on transient network errors
             val shouldRetry = when (e) {
-                is IOException,
-                is SocketTimeoutException,
-                is UnknownHostException -> true
+                is IOException -> true
                 else -> false
             }
             

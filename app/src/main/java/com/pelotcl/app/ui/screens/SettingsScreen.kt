@@ -46,7 +46,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.activity.compose.BackHandler
@@ -61,8 +60,8 @@ fun SettingsScreen(
     onLegalClick: () -> Unit,
     onCreditsClick: () -> Unit,
     onContactClick: () -> Unit,
-    onOfflineClick: () -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onOfflineClick: () -> Unit = {}
 ) {
     var clickCount by remember { mutableIntStateOf(0) }
     var isEasterEggActive by remember { mutableStateOf(false) }
@@ -215,10 +214,10 @@ fun SettingsScreen(
 @Composable
 private fun SettingsMenuRow(
     title: String,
+    modifier: Modifier = Modifier,
     subtitle: String? = null,
     onClick: (() -> Unit)?,
-    showChevron: Boolean = true,
-    modifier: Modifier = Modifier
+    showChevron: Boolean = true
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()

@@ -31,8 +31,6 @@ class OfflineMapManager(private val context: Context) {
     companion object {
         private const val TAG = "OfflineMapManager"
         private const val REGION_NAME_PREFIX = "pelo_lyon_tcl_"
-        // Legacy region name for migration
-        private const val LEGACY_REGION_NAME = "pelo_lyon_tcl"
 
         // Lyon metropolitan area bounding box (covers the full TCL network)
         private val LYON_BOUNDS = LatLngBounds.Builder()
@@ -48,17 +46,6 @@ class OfflineMapManager(private val context: Context) {
         private const val PIXEL_RATIO = 1.0f
 
         fun regionNameForStyle(styleKey: String): String = "$REGION_NAME_PREFIX$styleKey"
-
-        @Volatile
-        private var INSTANCE: OfflineMapManager? = null
-
-        fun getInstance(context: Context): OfflineMapManager {
-            return INSTANCE ?: synchronized(this) {
-                INSTANCE ?: OfflineMapManager(context.applicationContext).also {
-                    INSTANCE = it
-                }
-            }
-        }
     }
 
     private val _downloadState = MutableStateFlow<MapTilesDownloadState>(MapTilesDownloadState.Idle)
@@ -149,74 +136,4 @@ class OfflineMapManager(private val context: Context) {
         _downloadState.value = MapTilesDownloadState.Idle
     }
 
-    /**
-     * Deletes all offline map regions for Pelo (both legacy and per-style).
-     */
-    fun deleteOfflineRegions(onComplete: () -> Unit = {}) {
-        OfflineManager.getInstance(context).listOfflineRegions(
-            object : OfflineManager.ListOfflineRegionsCallback {
-                override fun onList(offlineRegions: Array<OfflineRegion>?) {
-                    if (offlineRegions.isNullOrEmpty()) {
-                        onComplete()
-                        return
-                    }
-
-                    val peloRegions = offlineRegions.filter { region ->
-                        val name = try { region.metadata.toString(Charsets.UTF_8) } catch (e: Exception) { null }
-                        name != null && (name.startsWith(REGION_NAME_PREFIX) || name == LEGACY_REGION_NAME)
-                    }
-
-                    if (peloRegions.isEmpty()) {
-                        onComplete()
-                        return
-                    }
-
-                    var remaining = peloRegions.size
-                    for (region in peloRegions) {
-                        region.delete(object : OfflineRegion.OfflineRegionDeleteCallback {
-                            override fun onDelete() {
-                                Log.d(TAG, "Offline region deleted")
-                                remaining--
-                                if (remaining <= 0) onComplete()
-                            }
-
-                            override fun onError(error: String) {
-                                Log.e(TAG, "Error deleting offline region: $error")
-                                remaining--
-                                if (remaining <= 0) onComplete()
-                            }
-                        })
-                    }
-                }
-
-                override fun onError(error: String) {
-                    Log.e(TAG, "Error listing offline regions: $error")
-                    onComplete()
-                }
-            }
-        )
-    }
-
-    /**
-     * Checks if an offline region exists for a specific style.
-     */
-    fun checkExistingRegion(regionName: String, callback: (Boolean) -> Unit) {
-        OfflineManager.getInstance(context).listOfflineRegions(
-            object : OfflineManager.ListOfflineRegionsCallback {
-                override fun onList(offlineRegions: Array<OfflineRegion>?) {
-                    val exists = offlineRegions?.any { region ->
-                        try {
-                            region.metadata.toString(Charsets.UTF_8) == regionName
-                        } catch (e: Exception) { false }
-                    } ?: false
-                    callback(exists)
-                }
-
-                override fun onError(error: String) {
-                    Log.e(TAG, "Error checking offline regions: $error")
-                    callback(false)
-                }
-            }
-        )
-    }
 }

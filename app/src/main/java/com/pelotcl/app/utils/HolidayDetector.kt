@@ -13,17 +13,17 @@ data class Holiday(
     val endDate: LocalDate?
 )
 
-class HolidayDetector(private val context: Context) {
+class HolidayDetector(context: Context) {
 
     private val holidays: List<Holiday>
 
     init {
-        val jsonString = loadJsonFromAssets(context, "holidays.json")
+        val jsonString = loadJsonFromAssets(context)
         holidays = parseHolidays(jsonString)
     }
 
-    private fun loadJsonFromAssets(context: Context, fileName: String): String {
-        return context.assets.open(fileName).bufferedReader().use { it.readText() }
+    private fun loadJsonFromAssets(context: Context): String {
+        return context.assets.open("holidays.json").bufferedReader().use { it.readText() }
     }
 
     @SuppressLint("NewApi")

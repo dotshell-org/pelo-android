@@ -1,21 +1,17 @@
 package com.pelotcl.app.data.repository
 
-import com.pelotcl.app.data.api.VehiclePositionsRetrofitInstance
 import com.pelotcl.app.data.model.SiriData
 import com.pelotcl.app.data.model.SimpleVehiclePosition
 import com.pelotcl.app.data.model.VehicleActivity
 import com.pelotcl.app.data.model.VehiclePositionsResponse
 import com.pelotcl.app.utils.DotshellRequestLogger
-import com.pelotcl.app.utils.withRetry
 import com.google.gson.Gson
 import com.google.gson.JsonObject
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.retryWhen
-import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -34,7 +30,6 @@ class VehiclePositionsRepository {
         private const val MAX_STREAM_BACKOFF_MS = 30_000L
     }
 
-    private val api = VehiclePositionsRetrofitInstance.api
     private val gson = Gson()
     private val streamClient = OkHttpClient.Builder()
         .addInterceptor(DotshellRequestLogger.interceptor("sse"))
@@ -42,31 +37,6 @@ class VehiclePositionsRepository {
         .readTimeout(0, TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS)
         .build()
-
-    /**
-     * Fetches all vehicle positions from the SIRI-lite API
-     *
-     * @return List of all vehicle positions across the entire network
-     */
-    suspend fun getAllVehiclePositions(): Result<List<SimpleVehiclePosition>> {
-        return withContext(Dispatchers.IO) {
-            try {
-                val response = withRetry(maxRetries = 2, initialDelayMs = 500) {
-                    api.getVehiclePositions()
-                }
-
-                if (!response.success) {
-                    return@withContext Result.failure(Exception("API returned success=false"))
-                }
-
-                val positions = extractPositionsFromSiriData(response.data)
-
-                Result.success(positions)
-            } catch (e: Exception) {
-                Result.failure(e)
-            }
-        }
-    }
 
     /**
      * Streams all vehicle positions from the mirror API using SSE.
@@ -133,18 +103,6 @@ class VehiclePositionsRepository {
             )
             delay(backoff)
             true
-        }
-    }
-
-    /**
-     * Fetches all vehicle positions and filters them by the given line name
-     *
-     * @param lineName The line name to filter by (e.g., "67", "C3", "T1")
-     * @return List of vehicle positions for the specified line
-     */
-    suspend fun getVehiclePositionsForLine(lineName: String): Result<List<SimpleVehiclePosition>> {
-        return getAllVehiclePositions().map { positions ->
-            positions.filter { it.lineName.equals(lineName, ignoreCase = true) }
         }
     }
 
@@ -220,7 +178,7 @@ class VehiclePositionsRepository {
             val afterDoubleDots = parts[1]
             val colonIndex = afterDoubleDots.indexOf(":")
             if (colonIndex > 0) {
-                return afterDoubleDots.substring(0, colonIndex)
+                return afterDoubleDots.take(colonIndex)
             }
             return afterDoubleDots
         }

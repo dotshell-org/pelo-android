@@ -3,18 +3,24 @@ package com.pelotcl.app.widget
 import android.content.Context
 import android.os.Build
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.glance.ColorFilter
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
+import androidx.glance.Image
+import androidx.glance.ImageProvider
 import androidx.glance.LocalSize
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.actionRunCallback
+import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.lazy.LazyColumn
 import androidx.glance.appwidget.lazy.items
 import androidx.glance.appwidget.provideContent
@@ -35,14 +41,6 @@ import androidx.glance.state.PreferencesGlanceStateDefinition
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
-import androidx.glance.unit.ColorProvider
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.intPreferencesKey
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.glance.ColorFilter
-import androidx.glance.Image
-import androidx.glance.ImageProvider
-import androidx.glance.appwidget.cornerRadius
 import com.pelotcl.app.MainActivity
 import com.pelotcl.app.R
 import com.pelotcl.app.utils.BusIconHelper
@@ -122,14 +120,10 @@ private fun WidgetContent(context: Context) {
         emptyList()
     }
 
-    val pureBlack = ColorProvider(Color(0xFF000000))
-    val primaryText = ColorProvider(Color(0xFFFFFFFF))
-    val secondaryText = ColorProvider(Color(0xFFB3B3B3))
-
     Box(
         modifier = GlanceModifier
             .fillMaxSize()
-            .background(pureBlack)
+            .background(GlanceTheme.colors.surface) // Utilisez la couleur de surface du thème
             .cornerRadius(16.dp)
             .padding(horizontal = 20.dp, vertical = 16.dp)
             .clickable(actionStartActivity<MainActivity>())
@@ -157,7 +151,7 @@ private fun WidgetContent(context: Context) {
                     Text(
                         text = stopName,
                         style = TextStyle(
-                            color = primaryText,
+                            color = GlanceTheme.colors.onSurface, // Utilisez la couleur onSurface du thème
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold
                         ),
@@ -174,7 +168,7 @@ private fun WidgetContent(context: Context) {
                             provider = ImageProvider(R.drawable.ic_refresh),
                             contentDescription = "Rafraîchir",
                             modifier = GlanceModifier.size(18.dp),
-                            colorFilter = ColorFilter.tint(secondaryText)
+                            colorFilter = ColorFilter.tint(GlanceTheme.colors.onSurfaceVariant) // Utilisez la couleur onSurfaceVariant du thème
                         )
                     }
                 }
@@ -189,7 +183,7 @@ private fun WidgetContent(context: Context) {
                         Text(
                             text = "Aucun départ à venir",
                             style = TextStyle(
-                                color = secondaryText,
+                                color = GlanceTheme.colors.onSurfaceVariant, // Utilisez la couleur onSurfaceVariant du thème
                                 fontSize = 16.sp
                             )
                         )
@@ -218,15 +212,9 @@ private fun DepartureRow(
     timeDisplayMode: TimeDisplayMode
 ) {
     val countdownColor = when {
-        departure.minutesUntil <= 2 -> ColorProvider(
-            androidx.compose.ui.graphics.Color(0xFFEF4444)
-        )
-        departure.minutesUntil <= 5 -> ColorProvider(
-            androidx.compose.ui.graphics.Color(0xFFF59E0B)
-        )
-        else -> ColorProvider(
-            androidx.compose.ui.graphics.Color(0xFF22C55E)
-        )
+        departure.minutesUntil <= 2 -> GlanceTheme.colors.error
+        departure.minutesUntil <= 5 -> GlanceTheme.colors.primary
+        else -> GlanceTheme.colors.secondary
     }
 
     Row(
@@ -257,7 +245,7 @@ private fun DepartureRow(
         Text(
             text = departure.directionName,
             style = TextStyle(
-                color = ColorProvider(Color(0xFFFFFFFF)),
+                color = GlanceTheme.colors.onSurface, // Utilisez la couleur onSurface du thème
                 fontSize = 16.sp
             ),
             modifier = GlanceModifier.defaultWeight(),

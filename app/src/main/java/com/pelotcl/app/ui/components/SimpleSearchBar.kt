@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,22 +15,18 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Directions
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,6 +42,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -54,11 +52,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.traversalIndex
@@ -68,12 +68,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pelotcl.app.R
 import com.pelotcl.app.data.repository.SearchHistoryItem
 import com.pelotcl.app.data.repository.SearchType
-import com.pelotcl.app.ui.theme.Gray800
-import com.pelotcl.app.ui.theme.Gray900
 import com.pelotcl.app.ui.theme.Red500
-import com.pelotcl.app.ui.theme.Slate900
 import com.pelotcl.app.ui.theme.Stone900
 import com.pelotcl.app.utils.BusIconHelper
 
@@ -90,24 +88,18 @@ data class LineSearchResult(
     val category: String = ""
 )
 
-/**
- * Unified search result for sorting lines and stops together
- */
 private sealed class UnifiedSearchResult {
     abstract val sortKey: String
-    
+
     data class Line(val result: LineSearchResult) : UnifiedSearchResult() {
         override val sortKey: String = result.lineName.uppercase()
     }
-    
+
     data class Stop(val result: StationSearchResult) : UnifiedSearchResult() {
         override val sortKey: String = result.stopName.uppercase()
     }
 }
 
-/**
- * Checks if a line is a "strong line" (metro, tram, funicular, etc.)
- */
 private fun isStrongLine(line: String): Boolean {
     val upperLine = line.uppercase()
     return when {
@@ -123,6 +115,7 @@ private fun isStrongLine(line: String): Boolean {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SimpleSearchBar(
+    modifier: Modifier = Modifier,
     searchResults: List<StationSearchResult>,
     lineSearchResults: List<LineSearchResult> = emptyList(),
     searchHistory: List<SearchHistoryItem> = emptyList(),
@@ -135,8 +128,7 @@ fun SimpleSearchBar(
     onQueryChange: (String) -> Unit = {},
     showDarkOutline: Boolean = false,
     onExpandedChange: (Boolean) -> Unit = {},
-    onStopOptionsClick: (StationSearchResult) -> Unit = {},
-    modifier: Modifier = Modifier
+    onStopOptionsClick: (StationSearchResult) -> Unit = {}
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -144,36 +136,16 @@ fun SimpleSearchBar(
     val density = LocalDensity.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val imeHeight = WindowInsets.ime.getBottom(density)
-    
-    var previousImeHeight by remember { mutableStateOf(0) }
+
+    var previousImeHeight by remember { mutableIntStateOf(0) }
     var keyboardHiddenByScroll by remember { mutableStateOf(false) }
+
     LaunchedEffect(imeHeight, searchHistory.isEmpty()) {
-        if (
-            previousImeHeight > 0 &&
-            imeHeight == 0 &&
-            query.isEmpty() &&
-            expanded &&
-            !keyboardHiddenByScroll &&
-            searchHistory.isEmpty()
-        ) {
+        if (previousImeHeight > 0 && imeHeight == 0 && query.isEmpty() && expanded && !keyboardHiddenByScroll && searchHistory.isEmpty()) {
             expanded = false
         }
-        // Reset the flag when keyboard state changes
         if (imeHeight > 0) {
             keyboardHiddenByScroll = false
-        }
-        previousImeHeight = imeHeight
-    }
-
-    fun isStrongLine(line: String): Boolean {
-        val upperLine = line.uppercase()
-        return when {
-            upperLine in setOf("A", "B", "C", "D") -> true
-            upperLine in setOf("F1", "F2") -> true
-            upperLine.startsWith("NAV") -> true
-            upperLine.startsWith("T") -> true
-            upperLine == "RX" -> true
-            else -> false
         }
     }
 
@@ -183,20 +155,18 @@ fun SimpleSearchBar(
     }
 
     Box(
-        (if (expanded)
-            Modifier
-                .fillMaxSize()
-                .background(Color.Black)
-                .clickable(
-                    indication = null,
-                    interactionSource = remember { MutableInteractionSource() }
-                ) {
+        modifier = (if (expanded) Modifier.fillMaxSize().background(Color.Black) else modifier)
+            .semantics { isTraversalGroup = true }
+            .padding(0.dp)
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() }
+            ) {
+                if (expanded) {
                     setExpandedState(false)
                     keyboardController?.hide()
                 }
-        else modifier)
-            .semantics { isTraversalGroup = true }
-            .padding(0.dp)
+            }
     ) {
         SearchBar(
             modifier = Modifier
@@ -219,9 +189,7 @@ fun SimpleSearchBar(
                         onQueryChange(q)
                     },
                     onSearch = {
-                        searchResults.firstOrNull()?.let {
-                            onSearch(it)
-                        }
+                        searchResults.firstOrNull()?.let { onSearch(it) }
                         setExpandedState(false)
                         query = ""
                     },
@@ -237,11 +205,10 @@ fun SimpleSearchBar(
                             imageVector = Icons.Default.Search,
                             contentDescription = "Search",
                             tint = Red500,
-                            modifier = Modifier
-                                .padding(
-                                    start = if (expanded) 32.dp else 0.dp,
-                                    end = if (expanded) 12.dp else 0.dp
-                                )
+                            modifier = Modifier.padding(
+                                start = if (expanded) 32.dp else 0.dp,
+                                end = if (expanded) 12.dp else 0.dp
+                            )
                         )
                     },
                     colors = TextFieldDefaults.colors(
@@ -270,8 +237,7 @@ fun SimpleSearchBar(
             )
         ) {
             val scrollState = rememberScrollState()
-            
-            // Hide keyboard when scrolling
+
             LaunchedEffect(scrollState) {
                 snapshotFlow { scrollState.isScrollInProgress }
                     .collect { isScrolling ->
@@ -281,7 +247,7 @@ fun SimpleSearchBar(
                         }
                     }
             }
-            
+
             Column(
                 Modifier
                     .padding(top = 12.dp, bottom = 28.dp)
@@ -297,30 +263,11 @@ fun SimpleSearchBar(
                     .clickable(
                         indication = null,
                         interactionSource = remember { MutableInteractionSource() }
-                    ) {
-                        // Consume clicks to prevent them from closing the search bar
-                    }
+                    ) {}
             ) {
                 if (query.isEmpty()) {
                     if (favoriteStops.isNotEmpty()) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Star,
-                                contentDescription = null,
-                                tint = Color.Gray,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.size(8.dp))
-                            Text(
-                                "Arrêts favoris",
-                                color = Color.White.copy(alpha = 0.6f),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
+                        SectionHeader(icon = Icons.Default.Star, text = "Arrêts favoris")
                         favoriteStops.forEach { historyItem ->
                             HistoryListItem(
                                 historyItem = historyItem,
@@ -337,24 +284,7 @@ fun SimpleSearchBar(
                     }
 
                     if (searchHistory.isNotEmpty()) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.History,
-                                contentDescription = null,
-                                tint = Color.White.copy(alpha = 0.5f),
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.size(8.dp))
-                            Text(
-                                "Recherches récentes",
-                                color = Color.White.copy(alpha = 0.6f),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
+                        SectionHeader(icon = Icons.Default.History, text = "Recherches récentes")
                         searchHistory.forEach { historyItem ->
                             HistoryListItem(
                                 historyItem = historyItem,
@@ -370,15 +300,13 @@ fun SimpleSearchBar(
                         }
                     }
                 }
-                
-                // Combine and sort line and stop results alphabetically
+
                 val combinedResults = remember(lineSearchResults, searchResults) {
                     val lines = lineSearchResults.map { UnifiedSearchResult.Line(it) }
                     val stops = searchResults.map { UnifiedSearchResult.Stop(it) }
                     (lines + stops).sortedBy { it.sortKey }
                 }
-                
-                // Show combined results sorted alphabetically
+
                 combinedResults.forEach { unifiedResult ->
                     when (unifiedResult) {
                         is UnifiedSearchResult.Line -> {
@@ -409,7 +337,7 @@ fun SimpleSearchBar(
                         }
                     }
                 }
-                
+
                 Spacer(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -422,7 +350,7 @@ fun SimpleSearchBar(
                             keyboardController?.hide()
                         }
                 )
-                
+
                 if (searchResults.isEmpty() && lineSearchResults.isEmpty() && query.isNotEmpty()) {
                     ListItem(
                         headlineContent = {
@@ -443,28 +371,36 @@ fun SimpleSearchBar(
 }
 
 @Composable
+private fun SectionHeader(icon: ImageVector, text: String) {
+    Row(
+        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = text,
+            tint = Color.White.copy(alpha = 0.6f),
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(modifier = Modifier.size(8.dp))
+        Text(
+            text = text,
+            color = Color.White.copy(alpha = 0.6f),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+@Composable
 private fun SearchConnectionBadge(lineName: String) {
     val context = LocalContext.current
     val resourceId = BusIconHelper.getResourceIdForLine(context, lineName)
     
-    // Check if the resource actually exists
-    val hasValidResource = remember(resourceId) {
-        if (resourceId != 0) {
-            try {
-                context.resources.getResourceName(resourceId)
-                true
-            } catch (e: Exception) {
-                false
-            }
-        } else {
-            false
-        }
-    }
-
-    if (hasValidResource) {
+    if (resourceId != 0) {
         Image(
             painter = painterResource(id = resourceId),
-            contentDescription = null,
+            contentDescription = stringResource(R.string.line_icon, lineName),
             modifier = Modifier.size(30.dp)
         )
     }
@@ -476,12 +412,9 @@ private fun StopSearchResultItem(
     onClick: () -> Unit,
     onOptionsClick: () -> Unit
 ) {
-        ListItem(
+    ListItem(
         headlineContent = {
-            Column(
-                modifier = Modifier
-                    .padding(horizontal = 24.dp)
-            ) {
+            Column(modifier = Modifier.padding(horizontal = 24.dp)) {
                 Spacer(modifier = Modifier.size(6.dp))
                 Text(
                     result.stopName,
@@ -617,9 +550,7 @@ private fun HistoryListItem(
                     }
                 }
                 if (showRemove) {
-                    IconButton(
-                        onClick = onRemoveClick
-                    ) {
+                    IconButton(onClick = onRemoveClick) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Supprimer",
@@ -644,21 +575,8 @@ private fun LineSearchResultItem(
 ) {
     val context = LocalContext.current
     val resourceId = BusIconHelper.getResourceIdForLine(context, lineResult.lineName)
-    
-    // Check if the resource actually exists
-    val hasValidResource = remember(resourceId) {
-        if (resourceId != 0) {
-            try {
-                context.resources.getResourceName(resourceId)
-                true
-            } catch (e: Exception) {
-                false
-            }
-        } else {
-            false
-        }
-    }
-    
+    val modeBusId = BusIconHelper.getResourceIdForDrawableName(context, "mode_bus")
+
     ListItem(
         headlineContent = {
             Row(
@@ -667,17 +585,16 @@ private fun LineSearchResultItem(
                     .padding(horizontal = 24.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (hasValidResource) {
+                if (resourceId != 0) {
                     Image(
                         painter = painterResource(id = resourceId),
-                        contentDescription = null,
+                        contentDescription = stringResource(R.string.line_icon, lineResult.lineName),
                         modifier = Modifier.size(40.dp)
                     )
-                } else {
-                    val modeBusId = BusIconHelper.getResourceIdForDrawableName(context, "mode_bus")
+                } else if (modeBusId != 0) {
                     Image(
                         painter = painterResource(id = modeBusId),
-                        contentDescription = null,
+                        contentDescription = stringResource(R.string.bus_mode_icon),
                         modifier = Modifier.size(30.dp)
                     )
                 }
@@ -703,15 +620,12 @@ private fun LineSearchResultItem(
 @Preview(showBackground = true)
 @Composable
 fun PreviewLineSearchResultItem() {
-    // Exemple de données fictives (Mock)
-    // Note : Assure-toi que les propriétés correspondent à ta classe LineSearchResult
     val mockResult = LineSearchResult(
         lineName = "F1",
         category = "Funiculaire"
     )
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        // Cas standard
         LineSearchResultItem(
             lineResult = mockResult,
             onClick = { /* Action de clic ici */ }

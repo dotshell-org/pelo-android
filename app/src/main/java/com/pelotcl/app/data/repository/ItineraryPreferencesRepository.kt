@@ -1,6 +1,7 @@
 package com.pelotcl.app.data.repository
 
 import android.content.Context
+import androidx.core.content.edit
 
 /**
  * Repository for managing itinerary routing preferences using SharedPreferences.
@@ -11,25 +12,25 @@ class ItineraryPreferencesRepository(private val context: Context) {
         context.getSharedPreferences("pelo_itinerary_prefs", Context.MODE_PRIVATE)
     }
 
-    private val KEY_ENABLE_JD_LINES = "enable_jd_lines"
-    private val KEY_ENABLE_RX_LINE = "enable_rx_line"
+    private val keyEnableJDLines = "enable_jd_lines"
+    private val keyEnableRXLine = "enable_rx_line"
 
     /**
      * Check if Junior Direct (JD) lines should be included in routing.
      * Default: true (enabled)
      */
     fun isJdLinesEnabled(): Boolean {
-        if (!prefs.contains(KEY_ENABLE_JD_LINES)) {
-            prefs.edit().putBoolean(KEY_ENABLE_JD_LINES, true).apply()
+        if (!prefs.contains(keyEnableJDLines)) {
+            prefs.edit { putBoolean(keyEnableJDLines, true)}
         }
-        return prefs.getBoolean(KEY_ENABLE_JD_LINES, true)
+        return prefs.getBoolean(keyEnableJDLines, true)
     }
 
     /**
      * Enable or disable Junior Direct (JD) lines in routing.
      */
     fun setJdLinesEnabled(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_ENABLE_JD_LINES, enabled).apply()
+        prefs.edit { putBoolean(keyEnableJDLines, enabled)}
     }
 
     /**
@@ -37,17 +38,17 @@ class ItineraryPreferencesRepository(private val context: Context) {
      * Default: true (enabled)
      */
     fun isRxLineEnabled(): Boolean {
-        if (!prefs.contains(KEY_ENABLE_RX_LINE)) {
-            prefs.edit().putBoolean(KEY_ENABLE_RX_LINE, true).apply()
+        if (!prefs.contains(keyEnableRXLine)) {
+            prefs.edit { putBoolean(keyEnableRXLine, true)}
         }
-        return prefs.getBoolean(KEY_ENABLE_RX_LINE, true)
+        return prefs.getBoolean(keyEnableRXLine, true)
     }
 
     /**
      * Enable or disable RhôneExpress (RX) line in routing.
      */
     fun setRxLineEnabled(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_ENABLE_RX_LINE, enabled).apply()
+        prefs.edit { putBoolean(keyEnableRXLine, enabled) }
     }
 
     /**

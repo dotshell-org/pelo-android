@@ -3,6 +3,7 @@ package com.pelotcl.app.data.repository
 import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import androidx.core.content.edit
 
 /**
  * Model for a search history item that can be either a stop or a line
@@ -66,7 +67,7 @@ class SearchHistoryRepository(context: Context) {
         
         // Save to preferences
         val json = gson.toJson(trimmedHistory)
-        prefs.edit().putString(KEY_SEARCH_HISTORY, json).apply()
+        prefs.edit { putString(KEY_SEARCH_HISTORY, json)}
     }
     
     /**
@@ -78,13 +79,7 @@ class SearchHistoryRepository(context: Context) {
             it.query.equals(query, ignoreCase = true) && it.type == type 
         }
         val json = gson.toJson(history)
-        prefs.edit().putString(KEY_SEARCH_HISTORY, json).apply()
+        prefs.edit { putString(KEY_SEARCH_HISTORY, json)}
     }
-    
-    /**
-     * Clear all search history
-     */
-    fun clearHistory() {
-        prefs.edit().remove(KEY_SEARCH_HISTORY).apply()
-    }
+
 }

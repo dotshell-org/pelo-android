@@ -1,6 +1,7 @@
 package com.pelotcl.app.data.repository
 
 import android.content.Context
+import androidx.core.content.edit
 
 /**
  * Enum representing available map styles.
@@ -60,9 +61,9 @@ enum class MapStyle(
 /**
  * Categories for map styles
  */
-enum class MapStyleCategory(val displayName: String) {
-    STANDARD("Cartes standard"),
-    SATELLITE("Vue satellite")
+enum class MapStyleCategory() {
+    STANDARD,
+    SATELLITE
 }
 
 /**
@@ -73,14 +74,14 @@ class MapStyleRepository(private val context: Context) {
         context.getSharedPreferences("pelo_map_prefs", Context.MODE_PRIVATE) 
     }
     
-    private val KEY_MAP_STYLE = "selected_map_style"
+    private val keyMapStyle = "selected_map_style"
 
     /**
      * Get the currently selected map style.
      * Defaults to POSITRON if no style is saved.
      */
     fun getSelectedStyle(): MapStyle {
-        val styleKey = prefs.getString(KEY_MAP_STYLE, MapStyle.POSITRON.key)
+        val styleKey = prefs.getString(keyMapStyle, MapStyle.POSITRON.key)
         return MapStyle.fromKey(styleKey ?: MapStyle.POSITRON.key)
     }
 
@@ -88,28 +89,7 @@ class MapStyleRepository(private val context: Context) {
      * Save the selected map style.
      */
     fun saveSelectedStyle(style: MapStyle) {
-        prefs.edit().putString(KEY_MAP_STYLE, style.key).apply()
-    }
-
-    /**
-     * Get all available map styles.
-     */
-    fun getAllStyles(): List<MapStyle> {
-        return MapStyle.entries.toList()
-    }
-    
-    /**
-     * Get all available map style categories.
-     */
-    fun getAllCategories(): List<MapStyleCategory> {
-        return MapStyleCategory.entries.toList()
-    }
-    
-    /**
-     * Get styles by category.
-     */
-    fun getStylesByCategory(category: MapStyleCategory): List<MapStyle> {
-        return MapStyle.getByCategory(category)
+        prefs.edit { putString(keyMapStyle, style.key) }
     }
 
     /**

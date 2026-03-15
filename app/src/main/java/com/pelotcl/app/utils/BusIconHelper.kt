@@ -52,19 +52,6 @@ object BusIconHelper {
     }
 
     /**
-     * Extracts the first bus line from a stop and returns the corresponding drawable name
-     *
-     * @param stopFeature The transport stop
-     * @return The drawable name (without the .xml extension) or null if no line found
-     */
-    fun getIconNameForStop(stopFeature: StopFeature): String? {
-        val lines = getAllLinesForStop(stopFeature)
-        if (lines.isEmpty()) return null
-        val firstLine = lines.first()
-        return getDrawableNameForLine(firstLine)
-    }
-
-    /**
      * Returns all lines serving a stop (line names).
      * Results are cached by desserte string to avoid repeated parsing.
      */
@@ -88,21 +75,13 @@ object BusIconHelper {
     fun preloadResourceIds(context: Context) {
         if (resourceIdCache.isNotEmpty()) return
         try {
-            val drawableClass = Class.forName("${context.packageName}.R\$drawable")
+            val drawableClass = Class.forName($$"$${context.packageName}.R$drawable")
             for (field in drawableClass.fields) {
                 resourceIdCache[field.name] = field.getInt(null)
             }
         } catch (e: Exception) {
             android.util.Log.w("BusIconHelper", "Failed to preload resource IDs: ${e.message}")
         }
-    }
-
-    /**
-     * Clears the desserte cache. Call when data source changes or under memory pressure.
-     */
-    fun clearCache() {
-        desserteCache.evictAll()
-        resourceIdCache.clear()
     }
 
     /**
@@ -120,13 +99,6 @@ object BusIconHelper {
         }
     }
 
-    /**
-     * Returns the drawable names for all lines at a stop, in order
-     */
-    fun getAllDrawableNamesForStop(stopFeature: StopFeature): List<String> {
-        return getAllLinesForStop(stopFeature).map { getDrawableNameForLine(it) }
-    }
-    
     /**
      * Converts a line name to a drawable name (public version)
      * Normalizes line names and converts to drawable format
@@ -233,21 +205,5 @@ object BusIconHelper {
             lineName.lowercase()
         }
     }
-    
-    /**
-     * Checks if a drawable exists for a given line
-     * Note: This function should be extended to check for actual file existence
-     * 
-     * @param lineName The line name
-     * @return true if a drawable should exist, false otherwise
-     */
-    fun hasIconForLine(lineName: String): Boolean {
-        if (lineName.isBlank()) {
-            return false
-        }
-        
-        // For now, assume all lines have an icon
-        // This logic can be extended as needed
-        return true
-    }
+
 }

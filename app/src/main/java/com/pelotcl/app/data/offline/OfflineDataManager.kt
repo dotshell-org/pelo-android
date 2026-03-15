@@ -36,7 +36,7 @@ sealed class OfflineDownloadState {
  * Orchestrates the download of all offline data:
  * transport lines (including ALL bus lines), stops, traffic alerts, and map tiles.
  */
-class OfflineDataManager(private val context: Context) {
+class OfflineDataManager(context: Context) {
 
     companion object {
         private const val TAG = "OfflineDataManager"
@@ -49,22 +49,11 @@ class OfflineDataManager(private val context: Context) {
         private const val WEIGHT_STOPS = 0.05f
         private const val WEIGHT_ALERTS = 0.02f
         private const val WEIGHT_MAP_TILES = 0.73f
-
-        @Volatile
-        private var INSTANCE: OfflineDataManager? = null
-
-        fun getInstance(context: Context): OfflineDataManager {
-            return INSTANCE ?: synchronized(this) {
-                INSTANCE ?: OfflineDataManager(context.applicationContext).also {
-                    INSTANCE = it
-                }
-            }
-        }
     }
 
     private val api = RetrofitInstance.api
-    private val offlineRepository = OfflineRepository.getInstance(context)
-    private val offlineMapManager = OfflineMapManager.getInstance(context)
+    private val offlineRepository = OfflineRepository(context)
+    private val offlineMapManager = OfflineMapManager(context)
     private val schedulesRepository = com.pelotcl.app.data.gtfs.SchedulesRepository.getInstance(context)
 
     private val _downloadState = MutableStateFlow<OfflineDownloadState>(OfflineDownloadState.Idle)
@@ -76,8 +65,6 @@ class OfflineDataManager(private val context: Context) {
     fun refreshInfo() {
         _offlineDataInfo.value = offlineRepository.getOfflineDataInfo()
     }
-
-    fun isOfflineDataAvailable(): Boolean = offlineRepository.isOfflineDataAvailable()
 
     /**
      * Cancels an ongoing download.
@@ -99,7 +86,7 @@ class OfflineDataManager(private val context: Context) {
 
         withContext(Dispatchers.IO) {
             try {
-                var cumulativeProgress = 0f
+                var cumulativeProgress: Float
                 val dataWeight = WEIGHT_METRO_TRAM + WEIGHT_NAVIGONE_TRAMBUS + WEIGHT_RX + WEIGHT_STOPS + WEIGHT_ALERTS
 
                 // ============================================================
@@ -409,20 +396,6 @@ class OfflineDataManager(private val context: Context) {
     }
 
     /**
-     * Deletes all offline data (files + map tiles).
-     */
-    suspend fun deleteAllOfflineData() {
-        withContext(Dispatchers.IO) {
-            offlineRepository.deleteOfflineData()
-            offlineMapManager.deleteOfflineRegions {
-                offlineRepository.setDownloadedMapStyles(emptySet())
-            }
-            _downloadState.value = OfflineDownloadState.Idle
-            _offlineDataInfo.value = offlineRepository.getOfflineDataInfo()
-        }
-    }
-
-    /**
      * Fetches Rhônexpress features from WFS API (replicating TransportRepository logic).
      */
     private suspend fun fetchRhonexpressFeatures(): List<Feature> {
@@ -486,8 +459,7 @@ class OfflineDataManager(private val context: Context) {
 
         return try {
             val primary = mapJsonToFeatures(api.getRhonexpressRaw())
-            if (primary.isNotEmpty()) primary
-            else mapJsonToFeatures(api.getRhonexpressRaw(srsName = "EPSG:4171"))
+            primary.ifEmpty { mapJsonToFeatures(api.getRhonexpressRaw(srsName = "EPSG:4171")) }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to fetch Rhônexpress: ${e.message}")
             emptyList()

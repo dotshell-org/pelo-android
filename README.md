@@ -1,10 +1,10 @@
-<p align="center">
-<img src="pelo-icon.png" alt="Pelo Logo" width="120" height="120">
+<p style="text-align: center;">
+<img src="pelo-icon.png" alt="Pelo Logo" width="1024" height="1024">
 </p>
 
-<h1 align="center">Pelo</h1>
+<h1 style="text-align: center;">Pelo</h1>
 
-<p align="center">
+<p style="text-align: center;">
 <strong>Public transport app for Lyon and its surroundings</strong>
 </p>
 

@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -43,9 +42,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -76,7 +73,6 @@ import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -110,10 +106,9 @@ import com.pelotcl.app.ui.theme.Gray700
 import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import androidx.compose.runtime.Immutable
-import com.pelotcl.app.ui.theme.Gray500
+import androidx.compose.runtime.mutableIntStateOf
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LineColorHelper
-import com.pelotcl.app.utils.ListItemRecompositionCounter
 import com.pelotcl.app.utils.LocationHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -310,7 +305,6 @@ fun ItineraryScreen(
                     name = closestStop.name,
                     stopIds = allStopsWithName.map { it.id }
                 )
-                lastLocationUsedForDeparture = userLocation
             }
         }
     }
@@ -443,7 +437,6 @@ fun ItineraryScreen(
                     }
 
                     // Mark that initial load is complete
-                    isInitialLoad = false
 
                     journeys = results
                     if (results.isEmpty()) {
@@ -857,9 +850,8 @@ fun ItineraryScreen(
                     },
                     onTimeSelected = { timeSeconds ->
                         selectedTimeSeconds = timeSeconds
-                        showTimePicker = false
                     },
-                    onDismiss = { showTimePicker = false }
+                    onDismiss = { }
                 )
             }
             
@@ -869,9 +861,8 @@ fun ItineraryScreen(
                     initialDate = selectedDate ?: LocalDate.now(),
                     onDateSelected = { date ->
                         selectedDate = date
-                        showDatePicker = false
                     },
-                    onDismiss = { showDatePicker = false }
+                    onDismiss = { }
                 )
             }
         } // End of else block for selectedJourney == null
@@ -1178,8 +1169,6 @@ private fun JourneyLegItem(
     isFirst: Boolean,
     isLast: Boolean
 ) {
-    // Debug: measure the recompositions of this leg
-    ListItemRecompositionCounter("JourneyLegs", "${leg.fromStopId}_${leg.departureTime}")
 
     val context = LocalContext.current
     val lineColor = if (leg.isWalking) Gray700 else Color(LineColorHelper.getColorForLineString(leg.routeName ?: ""))
@@ -1668,8 +1657,8 @@ private fun TimePickerDialog(
     // Round initial minute to nearest 5 minutes
     val initialMinute = ((initialTimeSeconds % 3600) / 60 / 5) * 5
     
-    var selectedHour by remember { mutableStateOf(initialHour) }
-    var selectedMinute by remember { mutableStateOf(initialMinute) }
+    var selectedHour by remember { mutableIntStateOf(initialHour) }
+    var selectedMinute by remember { mutableIntStateOf(initialMinute) }
     
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -1698,7 +1687,7 @@ private fun TimePickerDialog(
                             )
                         }
                         Text(
-                            text = String.format(java.util.Locale.ROOT, "%02d", selectedHour),
+                            text = String.format(Locale.ROOT, "%02d", selectedHour),
                             color = Color.White,
                             fontSize = 48.sp,
                             fontWeight = FontWeight.Bold
@@ -1730,7 +1719,7 @@ private fun TimePickerDialog(
                             )
                         }
                         Text(
-                            text = String.format(java.util.Locale.ROOT, "%02d", selectedMinute),
+                            text = String.format(Locale.ROOT, "%02d", selectedMinute),
                             color = Color.White,
                             fontSize = 48.sp,
                             fontWeight = FontWeight.Bold
@@ -1788,7 +1777,7 @@ private fun TimePickerDialog(
 private fun formatTimeSeconds(seconds: Int): String {
     val hours = (seconds / 3600) % 24
     val minutes = (seconds % 3600) / 60
-    return String.format(java.util.Locale.ROOT, "%02d:%02d", hours, minutes)
+    return String.format(Locale.ROOT, "%02d:%02d", hours, minutes)
 }
 
 /**
@@ -1830,7 +1819,7 @@ private fun DatePickerDialog(
     }
     
     val monthFormatter = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.FRENCH)
-    val dayOfWeekFormatter = DateTimeFormatter.ofPattern("E", Locale.FRENCH)
+    DateTimeFormatter.ofPattern("E", Locale.FRENCH)
     
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Card(

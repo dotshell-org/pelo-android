@@ -234,9 +234,8 @@ class SchedulesRepository(context: Context) {
     suspend fun searchStopsByName(query: String): List<StationSearchResult> {
         // Don't cache very short queries (too many results, not useful)
         val normalizedQuery = SearchUtils.normalizeForSearch(query)
-        val cacheKey = normalizedQuery
-        if (cacheKey.length >= 2) {
-            searchCache.get(cacheKey)?.let { return it }
+        if (normalizedQuery.length >= 2) {
+            searchCache.get(normalizedQuery)?.let { return it }
         }
 
         val results = mutableListOf<StationSearchResult>()
@@ -303,7 +302,7 @@ class SchedulesRepository(context: Context) {
                     ?.filter { SearchUtils.fuzzyContains(it.properties.nom, query) }
                     ?.forEach { stop ->
                         val desserteRaw = stop.properties.desserte
-                        val lines = if (desserteRaw.isNullOrBlank()) {
+                        val lines = if (desserteRaw.isBlank()) {
                             listOf()
                         } else {
                             desserteRaw.split(',')
@@ -323,7 +322,7 @@ class SchedulesRepository(context: Context) {
                 stopsByName.map { (name, lines) ->
                     StationSearchResult(name, lines.distinct(), pmrByName[name] ?: false)
                 }
-                    .sortedWith(compareBy<StationSearchResult>({ !SearchUtils.fuzzyStartsWith(it.stopName, query) }, { it.stopName }))
+                    .sortedWith(compareBy({ !SearchUtils.fuzzyStartsWith(it.stopName, query) }, { it.stopName }))
                     .take(50)
                     .toList()
             } catch (t: Throwable) {
@@ -333,8 +332,8 @@ class SchedulesRepository(context: Context) {
         }
 
         // Cache the results (only for queries with 2+ chars)
-        if (results.isNotEmpty() && cacheKey.length >= 2) {
-            searchCache.put(cacheKey, results)
+        if (results.isNotEmpty() && normalizedQuery.length >= 2) {
+            searchCache.put(normalizedQuery, results)
         }
 
         return results
@@ -474,23 +473,6 @@ class SchedulesRepository(context: Context) {
             }
         } catch (e: Exception) {
             Log.e("SchedulesRepository", "Error getting stop sequences for $routeName dir $directionId", e)
-        }
-        return result
-    }
-
-    /**
-     * Retrieves all available stop sequences for a line (both directions).
-     * @param routeName The route/line name
-     * @return Map of directionId to list of (station_name, stop_sequence)
-     */
-    fun getAllStopSequences(routeName: String): Map<Int, List<Pair<String, Int>>> {
-        val result = mutableMapOf<Int, List<Pair<String, Int>>>()
-        // Try both directions
-        for (directionId in listOf(0, 1)) {
-            val sequences = getStopSequences(routeName, directionId)
-            if (sequences.isNotEmpty()) {
-                result[directionId] = sequences
-            }
         }
         return result
     }

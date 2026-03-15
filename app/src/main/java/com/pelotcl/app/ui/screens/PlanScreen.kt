@@ -23,7 +23,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
@@ -61,6 +60,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -74,7 +74,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.pelotcl.app.R
 import androidx.lifecycle.ViewModelProvider
@@ -113,9 +112,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
@@ -195,7 +194,7 @@ private fun ensureVehicleMarkerImage(
 ) {
     if (mapStyle.getImage(iconName) != null) return
 
-    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val bitmap = createBitmap(size, size)
     val canvas = android.graphics.Canvas(bitmap)
 
     val circlePaint = Paint().apply {
@@ -302,7 +301,6 @@ private fun MapStyleSelector(
             val enabled = isStyleEnabled(style)
             MapStylePreviewTile(
                 style = style,
-                isSelected = style == selectedStyle,
                 isEnabled = enabled,
                 onClick = {
                     if (isExpanded) {
@@ -319,7 +317,6 @@ private fun MapStyleSelector(
 @Composable
 private fun MapStylePreviewTile(
     style: MapStyle,
-    isSelected: Boolean,
     isEnabled: Boolean,
     onClick: () -> Unit
 ) {
@@ -345,7 +342,7 @@ private fun MapStylePreviewTile(
     ) {
         Image(
             painter = painterResource(id = imageRes),
-            contentDescription = null,
+            contentDescription = stringResource(R.string.map_style_preview),
             modifier = Modifier.fillMaxSize().scale(1.1F),
             alpha = alpha
         )
@@ -395,7 +392,7 @@ fun PlanScreen(
     val globalVehiclePositions by viewModel.globalVehiclePositions.collectAsState()
     var mapInstance by remember { mutableStateOf<MapLibreMap?>(null) }
     // Incremented each time the map style is reloaded, to force LaunchedEffects to re-run
-    var mapStyleVersion by remember { mutableStateOf(0) }
+    var mapStyleVersion by remember { mutableIntStateOf(0) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -454,7 +451,7 @@ fun PlanScreen(
     var allSchedulesInfo by remember { mutableStateOf<AllSchedulesInfo?>(null) }
 
     // Preserve selected direction when navigating to/from schedule details
-    var selectedDirection by remember { mutableStateOf(0) }
+    var selectedDirection by remember { mutableIntStateOf(0) }
 
     var temporaryLoadedBusLines by remember { mutableStateOf<Set<String>>(emptySet()) }
 
@@ -462,7 +459,7 @@ fun PlanScreen(
     var zoomBeforeLiveTracking by remember { mutableStateOf<Double?>(null) }
 
     var sheetContentState by remember { mutableStateOf<SheetContentState?>(null) }
-    var headerLineCount by remember { mutableStateOf(2) }
+    var headerLineCount by remember { mutableIntStateOf(2) }
     val selectedLineNameFromViewModel by viewModel.selectedLineName.collectAsState()
 
     // Track previous sheetContentState to detect transitions
@@ -496,7 +493,6 @@ fun PlanScreen(
                 scaffoldSheetState.bottomSheetState.partialExpand()
             }
         }
-        previousSheetContentState = sheetContentState
     }
 
     // Auto-hide the bottom sheet when content state is null but sheet is still visible
@@ -524,8 +520,6 @@ fun PlanScreen(
                 sheetContentState = null
             }
         }
-
-        previousSheetValue = current
     }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -584,7 +578,7 @@ fun PlanScreen(
 
 
     // Track the number of lines currently displayed to avoid unnecessary map updates
-    var lastDisplayedLinesCount by remember { mutableStateOf(0) }
+    var lastDisplayedLinesCount by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(uiState, mapInstance, mapStyleVersion) {
         val map = mapInstance ?: return@LaunchedEffect
@@ -601,7 +595,6 @@ fun PlanScreen(
 
         // Only update map if we have new lines (optimization to avoid redundant updates)
         if (lines.size == lastDisplayedLinesCount) return@LaunchedEffect
-        lastDisplayedLinesCount = lines.size
 
         // Prepare GeoJSON in background
         val allLinesGeoJson = withContext(Dispatchers.Default) {
@@ -928,7 +921,7 @@ fun PlanScreen(
         val selectedNotTrackableLine = selectedLine?.lineName?.takeIf { isLineContext && !isLiveTrackableLine(it) }
 
         if (selectedTrackableLine != null) {
-            if (isGlobalLiveEnabled || !isLiveTrackingEnabled) {
+            if (isGlobalLiveEnabled) {
                 viewModel.startLiveTracking(selectedTrackableLine)
             }
         } else if (selectedNotTrackableLine != null) {
@@ -954,7 +947,6 @@ fun PlanScreen(
         if (isLiveTrackingEnabled) {
             val currentZoom = map.cameraPosition.zoom
             // Save current zoom level before zooming out
-            zoomBeforeLiveTracking = currentZoom
             // Only zoom out if current zoom is higher than LIVE_MODE_ZOOM_LEVEL
             if (currentZoom > LIVE_MODE_ZOOM_LEVEL) {
                 map.animateCamera(
@@ -969,7 +961,6 @@ fun PlanScreen(
                     CameraUpdateFactory.zoomTo(savedZoom),
                     500 // Animation duration in ms
                 )
-                zoomBeforeLiveTracking = null
             }
         }
     }
@@ -1123,14 +1114,12 @@ fun PlanScreen(
         val map = mapInstance ?: return@LaunchedEffect
         if (isGlobalLiveEnabled) {
             val currentZoom = map.cameraPosition.zoom
-            zoomBeforeGlobalLive = currentZoom
             if (currentZoom > 11.0) {
                 map.animateCamera(CameraUpdateFactory.zoomTo(11.0), 500)
             }
         } else {
             zoomBeforeGlobalLive?.let { savedZoom ->
                 map.animateCamera(CameraUpdateFactory.zoomTo(savedZoom), 500)
-                zoomBeforeGlobalLive = null
             }
         }
     }
@@ -1236,14 +1225,13 @@ fun PlanScreen(
 
     // Handle back button press - close sheets/selections before exiting app
     BackHandler(enabled = sheetContentState != null || selectedLine != null || selectedStation != null) {
-        when {
-            // If viewing all schedules, go back to line details
-            sheetContentState == SheetContentState.ALL_SCHEDULES -> {
+        when (sheetContentState) {
+            SheetContentState.ALL_SCHEDULES -> {
                 allSchedulesInfo = null
                 sheetContentState = SheetContentState.LINE_DETAILS
             }
             // If viewing line details, go back to station (if came from station) or close
-            sheetContentState == SheetContentState.LINE_DETAILS -> {
+            SheetContentState.LINE_DETAILS -> {
                 // Clean up temporary bus lines
                 selectedLine?.let { lineInfo ->
                     val lineName = lineInfo.lineName
@@ -1263,7 +1251,7 @@ fun PlanScreen(
                 }
             }
             // If viewing station, close it
-            sheetContentState == SheetContentState.STATION -> {
+            SheetContentState.STATION -> {
                 selectedStation = null
                 sheetContentState = null
             }
@@ -1370,7 +1358,7 @@ fun PlanScreen(
                                 },
                                 favoriteStops = favoriteStops,
                                 onToggleFavoriteStop = { viewModel.toggleFavoriteStop(it) },
-                                onHeaderLineCountChanged = { count -> headerLineCount = count }
+                                onHeaderLineCountChanged = { count -> }
                             )
                         }
                     }
@@ -1660,7 +1648,7 @@ fun PlanScreen(
     if (showLinesSheet) {
         val modalBottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-        LaunchedEffect(showLinesSheet) {
+        LaunchedEffect(true) {
             if (!showLinesSheet) {
                 modalBottomSheetState.hide()
             }
@@ -1697,8 +1685,7 @@ fun PlanScreen(
                         }
                     } else {
                         scope.launch {
-                            val currentState = uiState
-                            val currentLines = when (currentState) {
+                            val currentLines = when (val currentState = uiState) {
                                 is TransportLinesUiState.Success -> currentState.lines
                                 is TransportLinesUiState.PartialSuccess -> currentState.lines
                                 else -> emptyList()
@@ -1916,7 +1903,7 @@ private fun filterMapStops(
                     Expression.eq(Expression.get(linePropertyName), true)
                 )
             )
-            layer.setMinZoom(PRIORITY_STOPS_MIN_ZOOM)
+            layer.minZoom = PRIORITY_STOPS_MIN_ZOOM
         }
 
         (style.getLayer("$secondaryLayerPrefix-$idx") as? SymbolLayer)?.let { layer ->
@@ -1927,7 +1914,7 @@ private fun filterMapStops(
                     Expression.eq(Expression.get(linePropertyName), true)
                 )
             )
-            layer.setMinZoom(PRIORITY_STOPS_MIN_ZOOM)
+            layer.minZoom = PRIORITY_STOPS_MIN_ZOOM
         }
     }
 }
@@ -1969,7 +1956,7 @@ private fun filterMapStopsWithSelectedStop(
                         Expression.eq(Expression.get("normalized_nom"), normalizedSelectedStop)
                     )
                 )
-                layer.setMinZoom(SELECTED_STOP_MIN_ZOOM)
+                layer.minZoom = SELECTED_STOP_MIN_ZOOM
             }
 
             (style.getLayer("$tramLayerPrefix-$idx") as? SymbolLayer)?.let { layer ->
@@ -1981,7 +1968,7 @@ private fun filterMapStopsWithSelectedStop(
                         Expression.eq(Expression.get("normalized_nom"), normalizedSelectedStop)
                     )
                 )
-                layer.setMinZoom(SELECTED_STOP_MIN_ZOOM)
+                layer.minZoom = SELECTED_STOP_MIN_ZOOM
             }
 
             (style.getLayer("$secondaryLayerPrefix-$idx") as? SymbolLayer)?.let { layer ->
@@ -1993,7 +1980,7 @@ private fun filterMapStopsWithSelectedStop(
                         Expression.eq(Expression.get("normalized_nom"), normalizedSelectedStop)
                     )
                 )
-                layer.setMinZoom(SELECTED_STOP_MIN_ZOOM)
+                layer.minZoom = SELECTED_STOP_MIN_ZOOM
             }
         }
 
@@ -2096,7 +2083,7 @@ private fun addCircleLayerForLineStops(
                 PropertyFactory.circleOpacity(1.0f),
                 PropertyFactory.circleStrokeOpacity(1.0f)
             )
-            setMinZoom(SELECTED_STOP_MIN_ZOOM)
+            minZoom = SELECTED_STOP_MIN_ZOOM
         }
         style.addLayer(circlesLayer)
     }
@@ -2146,7 +2133,7 @@ private fun showAllMapStops(
                     Expression.eq(Expression.get("slot"), idx)
                 )
             )
-            layer.setMinZoom(PRIORITY_STOPS_MIN_ZOOM)
+            layer.minZoom = PRIORITY_STOPS_MIN_ZOOM
         }
 
         (style.getLayer("$tramLayerPrefix-$idx") as? SymbolLayer)?.let { layer ->
@@ -2156,7 +2143,7 @@ private fun showAllMapStops(
                     Expression.eq(Expression.get("slot"), idx)
                 )
             )
-            layer.setMinZoom(TRAM_STOPS_MIN_ZOOM)
+            layer.minZoom = TRAM_STOPS_MIN_ZOOM
         }
 
         (style.getLayer("$secondaryLayerPrefix-$idx") as? SymbolLayer)?.let { layer ->
@@ -2166,7 +2153,7 @@ private fun showAllMapStops(
                     Expression.eq(Expression.get("slot"), idx)
                 )
             )
-            layer.setMinZoom(SECONDARY_STOPS_MIN_ZOOM)
+            layer.minZoom = SECONDARY_STOPS_MIN_ZOOM
         }
     }
 }
@@ -2232,69 +2219,66 @@ private suspend fun addStopsToMap(
     // OPTIMIZATION: Try to use cached GeoJSON + usedSlots if available
     val cachedData = viewModel?.getCachedStopsGeoJson(stops)
 
-    val (stopsGeoJson, requiredIcons, usedSlots) = if (cachedData != null) {
-        // Full cache hit — GeoJSON, icons, AND usedSlots are all cached
+    val (stopsGeoJson, requiredIcons, usedSlots) = // Full cache hit — GeoJSON, icons, AND usedSlots are all cached
         cachedData
-    } else {
-        // Compute GeoJSON and cache it
-        withContext(Dispatchers.Default) {
-            val requiredIcons = mutableSetOf<String>()
-            val usedSlots = mutableSetOf<Int>()
+            ?: // Compute GeoJSON and cache it
+            withContext(Dispatchers.Default) {
+                val requiredIcons = mutableSetOf<String>()
+                val usedSlots = mutableSetOf<Int>()
 
-            // Use centralized BusIconHelper cache for resource ID lookups
-            fun checkIconAvailable(name: String): Boolean {
-                return BusIconHelper.getResourceIdForDrawableName(context, name) != 0
-            }
-
-            // Add mode icons to required icons
-            listOf("mode_bus", "mode_chrono", "mode_jd").forEach { modeIcon ->
-                if (checkIconAvailable(modeIcon)) {
-                    requiredIcons.add(modeIcon)
+                // Use centralized BusIconHelper cache for resource ID lookups
+                fun checkIconAvailable(name: String): Boolean {
+                    return BusIconHelper.getResourceIdForDrawableName(context, name) != 0
                 }
-            }
 
-            stops.forEach { stop ->
-                val lineNames = BusIconHelper.getAllLinesForStop(stop)
-                if (lineNames.isEmpty()) return@forEach
-
-                // Separate lignes fortes from bus lines
-                val lignesFortes = lineNames.filter { isMetroTramOrFunicular(it) }
-                val busLines = lineNames.filter { !isMetroTramOrFunicular(it) }
-
-                // Add line icons for lignes fortes only
-                lignesFortes.forEach { lineName ->
-                    val drawableName = BusIconHelper.getDrawableNameForLineName(lineName)
-                    if (checkIconAvailable(drawableName)) {
-                        requiredIcons.add(drawableName)
+                // Add mode icons to required icons
+                listOf("mode_bus", "mode_chrono", "mode_jd").forEach { modeIcon ->
+                    if (checkIconAvailable(modeIcon)) {
+                        requiredIcons.add(modeIcon)
                     }
                 }
 
-                // Calculate usedSlots
-                val uniqueModes = busLines.mapNotNull { getModeIconForLine(it) }.distinct()
-                    .filter { checkIconAvailable(it) }
-                val validLignesFortes = lignesFortes.count { lineName ->
-                    val drawableName = BusIconHelper.getDrawableNameForLineName(lineName)
-                    checkIconAvailable(drawableName)
-                }
-                val n = validLignesFortes + uniqueModes.size
-                if (n > 0) {
-                    var slot = -(n - 1)
-                    repeat(n) {
-                        usedSlots.add(slot)
-                        slot += 2
+                stops.forEach { stop ->
+                    val lineNames = BusIconHelper.getAllLinesForStop(stop)
+                    if (lineNames.isEmpty()) return@forEach
+
+                    // Separate lignes fortes from bus lines
+                    val lignesFortes = lineNames.filter { isMetroTramOrFunicular(it) }
+                    val busLines = lineNames.filter { !isMetroTramOrFunicular(it) }
+
+                    // Add line icons for lignes fortes only
+                    lignesFortes.forEach { lineName ->
+                        val drawableName = BusIconHelper.getDrawableNameForLineName(lineName)
+                        if (checkIconAvailable(drawableName)) {
+                            requiredIcons.add(drawableName)
+                        }
+                    }
+
+                    // Calculate usedSlots
+                    val uniqueModes = busLines.mapNotNull { getModeIconForLine(it) }.distinct()
+                        .filter { checkIconAvailable(it) }
+                    val validLignesFortes = lignesFortes.count { lineName ->
+                        val drawableName = BusIconHelper.getDrawableNameForLineName(lineName)
+                        checkIconAvailable(drawableName)
+                    }
+                    val n = validLignesFortes + uniqueModes.size
+                    if (n > 0) {
+                        var slot = -(n - 1)
+                        repeat(n) {
+                            usedSlots.add(slot)
+                            slot += 2
+                        }
                     }
                 }
+
+                // Pass all stops to merge function, using StringBuilder for fast GeoJSON creation
+                val stopsGeoJson = createStopsGeoJsonFromStops(stops, requiredIcons)
+
+                // Cache the result for future use (including usedSlots)
+                viewModel?.cacheStopsGeoJson(stops, stopsGeoJson, requiredIcons, usedSlots)
+
+                Triple(stopsGeoJson, requiredIcons, usedSlots)
             }
-
-            // Pass all stops to merge function, using StringBuilder for fast GeoJSON creation
-            val stopsGeoJson = createStopsGeoJsonFromStops(stops, requiredIcons)
-
-            // Cache the result for future use (including usedSlots)
-            viewModel?.cacheStopsGeoJson(stops, stopsGeoJson, requiredIcons, usedSlots)
-
-            Triple(stopsGeoJson, requiredIcons, usedSlots)
-        }
-    }
 
     map.getStyle { style ->
         val sourceId = "transport-stops"

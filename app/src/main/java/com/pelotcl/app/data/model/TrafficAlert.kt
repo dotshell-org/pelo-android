@@ -90,38 +90,13 @@ data class TrafficAlertsResponse(
 )
 
 /**
- * Représente la réponse API pour le statut du trafic
- */
-data class TrafficStatusResponse(
-    @SerializedName("success")
-    val success: Boolean,
-    
-    @SerializedName("data")
-    val data: TrafficStatusData,
-    
-    @SerializedName("timestamp")
-    val timestamp: String,
-    
-    @SerializedName("lastUpdated")
-    val lastUpdated: String
-)
-
-data class TrafficStatusData(
-    @SerializedName("count")
-    val alertCount: Int,
-    
-    @SerializedName("lastUpdated")
-    val lastUpdated: String
-)
-
-/**
  * Enumération des types de sévérité des alertes
  */
-enum class AlertSeverity(val level: Int, val displayName: String, val color: Long) {
-    SIGNIFICANT_DELAYS(20, "Retards significatifs", 0xFFFF5722), // Orange
-    OTHER_EFFECT(30, "Autres effets", 0xFF2196F3), // Blue
-    INFORMATION(40, "Information", 0xFF4CAF50), // Green
-    UNKNOWN(0, "Inconnu", 0xFF9E9E9E); // Gray
+enum class AlertSeverity(val level: Int, val color: Long) {
+    SIGNIFICANT_DELAYS(20, 0xFFFF5722), // Orange
+    OTHER_EFFECT(30, 0xFF2196F3), // Blue
+    INFORMATION(40, 0xFF4CAF50), // Green
+    UNKNOWN(0, 0xFF9E9E9E); // Gray
 
     companion object {
         fun fromSeverityType(severityType: String, severityLevel: Int): AlertSeverity {
@@ -129,7 +104,7 @@ enum class AlertSeverity(val level: Int, val displayName: String, val color: Lon
                 "SIGNIFICANT_DELAYS" -> SIGNIFICANT_DELAYS
                 "OTHER_EFFECT" -> OTHER_EFFECT
                 "INFORMATION" -> INFORMATION
-                else -> values().firstOrNull { it.level == severityLevel } ?: UNKNOWN
+                else -> entries.firstOrNull { it.level == severityLevel } ?: UNKNOWN
             }
         }
     }

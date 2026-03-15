@@ -2,7 +2,6 @@
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#FF000000"
     android:padding="14dp">
 
     <!-- Header with line icon -->
@@ -12,6 +11,7 @@
         android:layout_height="34dp"
         android:layout_alignParentTop="true"
         android:layout_alignParentStart="true"
+        android:contentDescription="@string/todo"
         android:src="@drawable/d"
         android:scaleType="fitCenter" />
 
@@ -23,7 +23,7 @@
         android:layout_toEndOf="@id/header_icon"
         android:layout_marginStart="8dp"
         android:layout_marginTop="4dp"
-        android:text="Bellecour"
+        android:text="@string/bellecour"
         android:textColor="#FFFFFFFF"
         android:textSize="18sp"
         android:textStyle="bold"
@@ -37,7 +37,7 @@
         android:layout_below="@id/header_icon"
         android:layout_toStartOf="@+id/dep1_time"
         android:layout_marginTop="10dp"
-        android:text="Gare de Vénissieux"
+        android:text="@string/gare_de_v_nissieux"
         android:textColor="#FFFFFFFF"
         android:textSize="14sp"
         android:maxLines="1" />
@@ -49,7 +49,7 @@
         android:layout_below="@id/header_icon"
         android:layout_alignParentEnd="true"
         android:layout_marginTop="10dp"
-        android:text="14:35"
+        android:text="@string/_14_35"
         android:textColor="#FF22C55E"
         android:textSize="14sp"
         android:textStyle="bold" />
@@ -62,7 +62,7 @@
         android:layout_below="@id/dep1_dir"
         android:layout_toStartOf="@+id/dep2_time"
         android:layout_marginTop="6dp"
-        android:text="Gare de Vénissieux"
+        android:text="@string/gare_de_v_nissieux"
         android:textColor="#FFFFFFFF"
         android:textSize="14sp"
         android:maxLines="1" />
@@ -74,7 +74,7 @@
         android:layout_below="@id/dep1_time"
         android:layout_alignParentEnd="true"
         android:layout_marginTop="6dp"
-        android:text="14:52"
+        android:text="@string/_14_52"
         android:textColor="#FF22C55E"
         android:textSize="14sp"
         android:textStyle="bold" />
@@ -87,7 +87,7 @@
         android:layout_below="@id/dep2_dir"
         android:layout_toStartOf="@+id/dep3_time"
         android:layout_marginTop="6dp"
-        android:text="Gare de Vénissieux"
+        android:text="@string/gare_de_v_nissieux"
         android:textColor="#FFFFFFFF"
         android:textSize="14sp"
         android:maxLines="1" />
@@ -99,7 +99,7 @@
         android:layout_below="@id/dep2_time"
         android:layout_alignParentEnd="true"
         android:layout_marginTop="6dp"
-        android:text="15:10"
+        android:text="@string/_15_10"
         android:textColor="#FF22C55E"
         android:textSize="14sp"
         android:textStyle="bold" />
