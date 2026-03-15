@@ -32,7 +32,7 @@ class WidgetAlarmReceiver : BroadcastReceiver() {
                 val intervalMinutes = getRefreshIntervalMinutes(prefs)
                 WidgetRefreshScheduler.scheduleNext(context, appWidgetId, intervalMinutes)
             } catch (_: Exception) {
-                // Widget may have been removed
+
             } finally {
                 pendingResult.finish()
             }

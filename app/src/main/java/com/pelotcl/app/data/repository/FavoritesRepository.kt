@@ -31,7 +31,7 @@ class FavoritesRepository(private val context: Context) {
         }
         // only save if changed
         saveFavorites(favorites)
-        return !favorites.contains(normalized) // return true if it was removed, false otherwise? Keep simple and return true
+        return !favorites.contains(normalized)
     }
 
     // --- Favorite stops ---

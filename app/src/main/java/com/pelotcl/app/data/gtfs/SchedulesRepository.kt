@@ -68,16 +68,7 @@ class SchedulesRepository(context: Context) {
         @Volatile
         private var isDatabaseWarmedUp = false
 
-        /**
-         * Clear all caches (call when data is updated)
-         */
-        @Suppress("unused") // Public API for cache invalidation when GTFS data is updated
-        fun clearCaches() {
-            schedulesCache.evictAll()
-            headsignsCache.evictAll()
-            searchCache.evictAll()
-            stopSequencesCache.evictAll()
-        }
+
 
         /**
          * Trim caches under memory pressure.
@@ -712,7 +703,7 @@ class SchedulesRepository(context: Context) {
         }
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-            // Close this DB and delete it, the next getReadableDatabase call will re-copy
+
             context.deleteDatabase(DB_NAME)
         }
 

@@ -111,7 +111,7 @@ class JourneyCache private constructor(context: Context) {
             if (age < MEMORY_CACHE_VALIDITY_MS) {
                 return memoryCached.journeys.map { it.toJourneyResult() }
             } else {
-                // Expired, remove from memory
+
                 memoryCache.remove(cacheKey)
             }
         }

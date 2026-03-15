@@ -104,22 +104,7 @@ class RaptorRepository private constructor(private val context: Context) {
             }
         }
 
-        /**
-         * Clear all journey caches (memory and disk).
-         * Call when underlying GTFS data changes.
-         */
-        @Suppress("unused") // Public API for cache invalidation when GTFS data is updated
-        fun clearJourneyCache() {
-            journeyCache.evictAll()
-            journeyCacheTimestamps.clear()
-            JourneyCache.clearAllCaches()
-        }
 
-        /**
-         * Check if instance exists without creating it
-         */
-        @Suppress("unused") // Public API to check singleton state
-        fun hasInstance(): Boolean = INSTANCE != null
     }
 
     @Volatile

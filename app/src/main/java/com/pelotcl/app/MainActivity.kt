@@ -478,7 +478,7 @@ fun NavBar(modifier: Modifier = Modifier) {
             // Keep PlanScreen always mounted to preserve map state
             // Settings and other screens are displayed on top when active
             Box(modifier = Modifier.fillMaxSize()) {
-                // PlanScreen is ALWAYS mounted (never conditionally removed)
+
                 // This preserves the map state when navigating to settings and back
                 PlanScreen(
                     contentPadding = contentPadding,

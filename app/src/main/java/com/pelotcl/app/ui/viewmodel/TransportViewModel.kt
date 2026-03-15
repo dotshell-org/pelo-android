@@ -653,27 +653,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    /**
-     * Clears all cached data for performance optimization.
-     * Call when data sources are updated.
-     */
-    @Suppress("unused") // Public API for cache invalidation when GTFS data is updated
-    fun clearAllCaches() {
-        lineStopsCache.evictAll()
-        iconBitmapCache.evictAll()
-        connectionsIndex = emptyMap()
-        stopsByLineIndex = emptyMap()
-        cachedStops = null
-        // Clear GeoJSON cache
-        cachedStopsGeoJson = null
-        cachedRequiredIcons = null
-        cachedUsedSlots = null
-        cachedStopsHash = 0
-        // Clear spatial grid
-        spatialGrid.build(emptyList())
-        // Clear BusIconHelper cache
-        BusIconHelper.clearCache()
-    }
+
 
     /**
      * Preloads lines and stops at launch, builds transfers index,
@@ -1137,7 +1117,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
 
-        // Filter to remove the line
+
         val updatedLines = currentLines.filter {
             !lineName.equals(it.properties.ligne, ignoreCase = true)
         }
@@ -1358,7 +1338,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
 
-        // Fallback: if no trace found, at least remove duplicates
+
         val uniqueStops = lineStops.distinctBy { stop ->
             normalizeStopName(stop.properties.nom)
         }

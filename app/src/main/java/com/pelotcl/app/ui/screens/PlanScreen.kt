@@ -581,7 +581,7 @@ fun PlanScreen(
         viewModel.preloadStops()
     }
 
-// deleted
+
 
     // Track the number of lines currently displayed to avoid unnecessary map updates
     var lastDisplayedLinesCount by remember { mutableStateOf(0) }
@@ -2215,7 +2215,7 @@ private fun addLineToMap(
     }
 }
 
-// deleted
+
 
 // Holder for the current map click listener to allow removal before adding a new one
 private var currentMapClickListener: MapLibreMap.OnMapClickListener? = null
@@ -2302,7 +2302,7 @@ private suspend fun addStopsToMap(
         val tramLayerPrefix = "transport-stops-layer-tram"
         val secondaryLayerPrefix = "transport-stops-layer-secondary"
 
-        // Clean up previous layers - remove all slot-based layers
+
         (-25..25).forEach { idx ->
             style.getLayer("$priorityLayerPrefix-$idx")?.let { style.removeLayer(it) }
             style.getLayer("$tramLayerPrefix-$idx")?.let { style.removeLayer(it) }

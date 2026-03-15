@@ -18,7 +18,7 @@ abstract class BasePeloWidgetReceiver : GlanceAppWidgetReceiver() {
 
     override fun onDeleted(context: Context, appWidgetIds: IntArray) {
         super.onDeleted(context, appWidgetIds)
-        // Cancel workers for deleted widgets
+
         appWidgetIds.forEach { id ->
             WidgetRefreshScheduler.cancel(context, id)
         }
