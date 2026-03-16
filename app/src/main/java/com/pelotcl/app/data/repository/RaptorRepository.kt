@@ -193,7 +193,9 @@ class RaptorRepository private constructor(private val context: Context) {
     private fun loadSchoolHolidays() {
         try {
             val json = context.assets.open("holidays.json").bufferedReader().use { it.readText() }
-            val holidaysData = Json.decodeFromString<HolidaysData>(json)
+            // Configure Json to ignore unknown keys as fallback
+            val jsonConfig = Json { ignoreUnknownKeys = true }
+            val holidaysData = jsonConfig.decodeFromString<HolidaysData>(json)
             schoolHolidays = holidaysData.holidays.mapNotNull { holiday ->
                 val startDate = try {
                     LocalDate.parse(holiday.startDateInclusive, DateTimeFormatter.ISO_DATE)
@@ -834,6 +836,7 @@ data class JourneyLeg(
  */
 @Serializable
 private data class HolidaysData(
+    @kotlinx.serialization.SerialName("school_year")
     val schoolYear: String,
     val location: HolidayLocation,
     val holidays: List<HolidayEntry>

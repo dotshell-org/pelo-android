@@ -502,11 +502,8 @@ private fun HistoryListItem(
                         fontWeight = FontWeight.Medium
                     )
                     if (historyItem.type == SearchType.LINE) {
-                        Text(
-                            "Ligne",
-                            color = Color.White.copy(alpha = 0.5f),
-                            fontSize = 12.sp
-                        )
+                        // Show line icon for LINE type history items
+                        SearchConnectionBadge(lineName = historyItem.query)
                     } else if (historyItem.lines.isNotEmpty()) {
                         Spacer(modifier = Modifier.size(10.dp))
                         Row(
@@ -563,7 +560,7 @@ private fun HistoryListItem(
         },
         colors = ListItemDefaults.colors(containerColor = Color.Black),
         modifier = Modifier
-            .clickable(onClick = onOptionsClick)
+            .clickable(onClick = if (historyItem.type == SearchType.LINE) onClick else onOptionsClick)
             .fillMaxWidth()
     )
 }

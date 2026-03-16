@@ -29,7 +29,12 @@ object LineColorHelper {
     fun getColorForLine(feature: Feature): String {
         val ligne = feature.properties.ligne
         val familleTransport = feature.properties.familleTransport
-        val nomTypeLigne = feature.properties.nomTypeLigne.lowercase()
+        val nomTypeLigne = feature.properties.nomTypeLigne?.lowercase()
+        
+        // Safe null checks for all conditions - return default bus color if any property is null
+        if (ligne == null || familleTransport == null) {
+            return BUS_COLOR
+        }
         
         return when {
             // Rhône Express
@@ -38,17 +43,17 @@ object LineColorHelper {
             ligne.equals("TB12", ignoreCase = true) -> TRAMBUS_TB12_COLOR
             // Trambus (jaune)
             ligne.uppercase().startsWith("TB") -> TRAMBUS_COLOR
-            // Metros
+            // Metros (only if ligne and familleTransport are not null)
             ligne == "A" && familleTransport == "MET" -> METRO_A_COLOR
             ligne == "B" && familleTransport == "MET" -> METRO_B_COLOR
             ligne == "C" && familleTransport == "MET" -> METRO_C_COLOR
             ligne == "D" && familleTransport == "MET" -> METRO_D_COLOR
             
             // Funicular (detection by line name or type)
-            ligne == "F1" || ligne == "F2" || nomTypeLigne.contains("funiculaire") -> FUNICULAR_COLOR
+            ligne == "F1" || ligne == "F2" || nomTypeLigne?.contains("funiculaire") == true -> FUNICULAR_COLOR
             
             // Navigone (water shuttle) - famille_transport = "BAT" (bateau)
-            familleTransport == "BAT" || ligne.uppercase().startsWith("NAV") || nomTypeLigne.contains("fluvial") -> NAVIGONE_COLOR
+            familleTransport == "BAT" || ligne.uppercase().startsWith("NAV") || nomTypeLigne?.contains("fluvial") == true -> NAVIGONE_COLOR
             
             // Trams (famille TRA ou TRAM)
             familleTransport == "TRA" || familleTransport == "TRAM" -> TRAM_COLOR

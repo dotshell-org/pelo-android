@@ -1797,9 +1797,17 @@ private fun filterMapLines(
 
         // Also hide/show individual line layers (for lignes fortes)
         allLines.forEach { feature ->
-            val individualLayerId = "layer-${feature.properties.ligne}-${feature.properties.codeTrace}"
+            val ligne = feature.properties.ligne
+            val codeTrace = feature.properties.codeTrace
+            
+            // Skip if essential properties are null
+            if (ligne == null || codeTrace == null) {
+                return@forEach
+            }
+            
+            val individualLayerId = "layer-${ligne}-${codeTrace}"
             style.getLayer(individualLayerId)?.let { layer ->
-                val shouldBeVisible = feature.properties.ligne.equals(selectedLineName, ignoreCase = true)
+                val shouldBeVisible = ligne.equals(selectedLineName, ignoreCase = true)
                 layer.setProperties(
                     PropertyFactory.visibility(if (shouldBeVisible) "visible" else "none")
                 )
@@ -1816,7 +1824,7 @@ private fun zoomToLine(
     selectedLineName: String
 ) {
     val lineFeatures = allLines.filter {
-        it.properties.ligne.equals(selectedLineName, ignoreCase = true)
+        it.properties.ligne?.equals(selectedLineName, ignoreCase = true) == true
     }
 
     if (lineFeatures.isEmpty()) return
@@ -2103,8 +2111,16 @@ private fun showAllMapLines(
 ) {
     map.getStyle { style ->
         allLines.forEach { feature ->
-            val layerId = "layer-${feature.properties.ligne}-${feature.properties.codeTrace}"
-            val sourceId = "line-${feature.properties.ligne}-${feature.properties.codeTrace}"
+            val ligne = feature.properties.ligne
+            val codeTrace = feature.properties.codeTrace
+            
+            // Skip if essential properties are null
+            if (ligne == null || codeTrace == null) {
+                return@forEach
+            }
+            
+            val layerId = "layer-${ligne}-${codeTrace}"
+            val sourceId = "line-${ligne}-${codeTrace}"
 
             val existingLayer = style.getLayer(layerId)
             if (existingLayer == null) {
@@ -2171,8 +2187,16 @@ private fun addLineToMap(
     feature: Feature
 ) {
     map.getStyle { style ->
-        val sourceId = "line-${feature.properties.ligne}-${feature.properties.codeTrace}"
-        val layerId = "layer-${feature.properties.ligne}-${feature.properties.codeTrace}"
+        val ligne = feature.properties.ligne
+        val codeTrace = feature.properties.codeTrace
+        
+        // Skip if essential properties are null
+        if (ligne == null || codeTrace == null) {
+            return@getStyle
+        }
+
+        val sourceId = "line-${ligne}-${codeTrace}"
+        val layerId = "layer-${ligne}-${codeTrace}"
 
         style.getLayer(layerId)?.let { style.removeLayer(it) }
         style.getSource(sourceId)?.let { style.removeSource(it) }
@@ -2184,10 +2208,11 @@ private fun addLineToMap(
 
         val lineColor = LineColorHelper.getColorForLine(feature)
 
-        val upperLineName = feature.properties.ligne.uppercase()
+        val upperLineName = ligne.uppercase()
+        val familleTransport = feature.properties.familleTransport
         val lineWidth = when {
-            feature.properties.familleTransport == "BAT" || upperLineName.startsWith("NAV") -> 2f
-            feature.properties.familleTransport == "TRA" || feature.properties.familleTransport == "TRAM" || upperLineName.startsWith("TB") -> 2f
+            familleTransport == "BAT" || upperLineName.startsWith("NAV") -> 2f
+            familleTransport == "TRA" || familleTransport == "TRAM" || upperLineName.startsWith("TB") -> 2f
             else -> 4f
         }
 
@@ -2607,9 +2632,9 @@ private fun createGeoJsonFromFeature(feature: Feature): String {
         add("geometry", geometryObject)
 
         val propertiesObject = JsonObject().apply {
-            addProperty("ligne", feature.properties.ligne)
-            addProperty("nom_trace", feature.properties.nomTrace)
-            addProperty("couleur", feature.properties.couleur)
+            addProperty("ligne", feature.properties.ligne ?: "")
+            addProperty("nom_trace", feature.properties.nomTrace ?: "")
+            addProperty("couleur", feature.properties.couleur ?: "")
         }
         add("properties", propertiesObject)
     }
