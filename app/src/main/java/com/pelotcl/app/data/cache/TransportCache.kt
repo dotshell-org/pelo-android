@@ -76,6 +76,48 @@ class TransportCache(context: Context) {
     }
 
     /**
+     * Check if any cached data is available (even if expired).
+     * Useful for offline mode or immediate display while refreshing.
+     */
+    fun hasAnyCachedData(): Boolean {
+        // Check memory cache first (fastest) - no lock needed for volatile reads
+        if (metroLinesCache != null || tramLinesCache != null || stopsCache != null) {
+            return true
+        }
+        
+        // Check disk cache timestamps - no lock needed for SharedPreferences read
+        val hasDiskCache = prefs.getLong(KEY_METRO_LINES_TIMESTAMP, 0) > 0 ||
+                          prefs.getLong(KEY_TRAM_LINES_TIMESTAMP, 0) > 0 ||
+                          prefs.getLong(KEY_STOPS_TIMESTAMP, 0) > 0
+        
+        return hasDiskCache
+    }
+
+    /**
+     * Check if cache needs refresh (has data but expired).
+     * Useful to decide whether to show stale data while refreshing.
+     */
+    suspend fun needsCacheRefresh(): Boolean {
+        // If no cache at all, we need to load
+        if (!hasAnyCachedData()) return true
+        
+        // Check if any of the main caches are expired
+        val now = System.currentTimeMillis()
+        
+        val metroExpired = prefs.getLong(KEY_METRO_LINES_TIMESTAMP, 0) > 0 &&
+                          (now - prefs.getLong(KEY_METRO_LINES_TIMESTAMP, 0)) >= CACHE_VALIDITY_DURATION
+        
+        val tramExpired = prefs.getLong(KEY_TRAM_LINES_TIMESTAMP, 0) > 0 &&
+                         (now - prefs.getLong(KEY_TRAM_LINES_TIMESTAMP, 0)) >= CACHE_VALIDITY_DURATION
+        
+        val stopsExpired = prefs.getLong(KEY_STOPS_TIMESTAMP, 0) > 0 &&
+                          (now - prefs.getLong(KEY_STOPS_TIMESTAMP, 0)) >= CACHE_VALIDITY_DURATION
+        
+        // If any main cache is expired, we should refresh
+        return metroExpired || tramExpired || stopsExpired
+    }
+
+    /**
      * Checks if a timestamp is still valid
      */
     private fun isTimestampValid(timestamp: Long): Boolean {

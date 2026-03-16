@@ -410,6 +410,13 @@ class RaptorRepository private constructor(private val context: Context) {
     ): List<JourneyResult> = withContext(Dispatchers.Default) {
         ensureInitialized()
         ensureCorrectPeriod(date) // Auto-select period based on selected date
+        
+        // Early return for empty inputs to avoid unnecessary computation
+        if (originStopIds.isEmpty() || destinationStopIds.isEmpty()) {
+            Log.w(TAG, "getOptimizedPaths: origin or destination stop IDs are empty, skipping calculation")
+            return@withContext emptyList()
+        }
+        
         try {
             val depTime = departureTimeSeconds ?: getCurrentTimeInSeconds()
             
@@ -439,14 +446,8 @@ class RaptorRepository private constructor(private val context: Context) {
                 return@withContext diskCached
             }
 
-            if (originStopIds.isEmpty()) {
-                Log.w(TAG, "getOptimizedPaths: originStopIds is empty!")
-                return@withContext emptyList()
-            }
-            if (destinationStopIds.isEmpty()) {
-                Log.w(TAG, "getOptimizedPaths: destinationStopIds is empty!")
-                return@withContext emptyList()
-            }
+            // Note: Empty checks already handled above, no need to check again
+            Log.d(TAG, "getOptimizedPaths: Cache miss, calculating with Raptor for ${originStopIds.size} origin(s) -> ${destinationStopIds.size} destination(s)")
 
             // Level 3: Calculate with Raptor
             val journeys = raptorLibrary?.getOptimizedPaths(

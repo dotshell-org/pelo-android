@@ -96,10 +96,16 @@ class VehiclePositionsRepository {
             val eventSource = EventSources.createFactory(streamClient).newEventSource(request, listener)
             awaitClose { eventSource.cancel() }
         }.retryWhen { cause, attempt ->
+            // Ajouter une limite maximale de tentatives (10) pour éviter les boucles infinies
+            if (attempt >= 10) {
+                android.util.Log.e("VehiclePositionsRepo", "Max retries reached, giving up")
+                return@retryWhen false
+            }
+
             val backoff = (1_000L * (1L shl attempt.coerceAtMost(5).toInt())).coerceAtMost(MAX_STREAM_BACKOFF_MS)
             android.util.Log.w(
                 "VehiclePositionsRepo",
-                "SSE disconnected (${cause.message}), reconnecting in ${backoff}ms"
+                "SSE disconnected (${cause.message}), reconnecting in ${backoff}ms (attempt $attempt/10)"
             )
             delay(backoff)
             true

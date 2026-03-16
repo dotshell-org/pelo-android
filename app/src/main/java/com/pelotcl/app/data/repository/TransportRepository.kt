@@ -34,6 +34,10 @@ class TransportRepository(context: Context? = null) {
     suspend fun getAllLines(): Result<FeatureCollection> {
         return withContext(kotlinx.coroutines.Dispatchers.Default) {
             try {
+                // Quick check: if cache has fresh data, use it immediately
+                val cacheHasData = cache?.hasAnyCachedData() ?: false
+                val cacheNeedsRefresh = cache?.needsCacheRefresh() ?: true
+                
                 // Try to load all line types from cache first
                 val cachedMetro = cache?.getMetroLines()
                 val cachedTram = cache?.getTramLines()
@@ -44,8 +48,8 @@ class TransportRepository(context: Context? = null) {
                 val trams: FeatureCollection
 
                 // Load metro and tram (from cache or API)
-                if (cachedMetro != null && cachedTram != null) {
-                    // Cache hit: use cached data
+                if (cachedMetro != null && cachedTram != null && !cacheNeedsRefresh) {
+                    // Cache hit with fresh data: use cached data
                     metroFuniculaire = FeatureCollection(
                         type = "FeatureCollection",
                         features = cachedMetro,
@@ -61,7 +65,7 @@ class TransportRepository(context: Context? = null) {
                         numberReturned = cachedTram.size
                     )
                 } else {
-                    // Cache miss: load from API with retry on transient failures
+                    // Cache miss or expired: load from API with retry on transient failures
                     metroFuniculaire = withRetry(maxRetries = 2, initialDelayMs = 1000) {
                         api.getTransportLines()
                     }

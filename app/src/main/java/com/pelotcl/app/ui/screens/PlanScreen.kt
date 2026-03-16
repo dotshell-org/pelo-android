@@ -971,6 +971,9 @@ fun PlanScreen(
         val positions = vehiclePositions
         val line = selectedLine
 
+        // Ajouter un délai pour éviter les mises à jour trop fréquentes
+        delay(100)
+
         map.getStyle { style ->
             // Remove existing vehicle layers and sources
             style.getLayer("vehicle-positions-layer")?.let { style.removeLayer(it) }
@@ -1038,6 +1041,9 @@ fun PlanScreen(
     LaunchedEffect(globalVehiclePositions, mapInstance, mapStyleVersion) {
         val map = mapInstance ?: return@LaunchedEffect
         val positions = globalVehiclePositions
+
+        // Ajouter un délai pour éviter les mises à jour trop fréquentes
+        delay(100)
 
         map.getStyle { style ->
             // Clean up existing global layers/sources
@@ -1148,9 +1154,11 @@ fun PlanScreen(
                 stopsUiState = stopsUiState
             )
         }
-            .debounce(300) // Wait 300ms before processing to batch rapid changes
+            .debounce(500) // Augmenter à 500ms pour moins de réactivité mais plus de stabilité
             .distinctUntilChanged() // Skip redundant emissions
             .collectLatest { filterState ->
+                // Ajouter un petit délai avant de traiter
+                delay(50)
                 // This block is automatically cancelled if a new state arrives
                 // Extract lines from both Success and PartialSuccess states
                 val lines: List<Feature> = when (val state = filterState.uiState) {
