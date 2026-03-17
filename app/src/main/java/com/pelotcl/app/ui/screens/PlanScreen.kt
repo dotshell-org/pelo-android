@@ -2,8 +2,8 @@ package com.pelotcl.app.ui.screens
 
 import android.Manifest
 import android.content.Context
-import android.content.res.Resources
 import android.content.pm.PackageManager
+import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Paint
@@ -11,12 +11,11 @@ import android.graphics.RectF
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.os.Build
-import android.os.Looper
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.RequiresApi
 import androidx.annotation.DrawableRes
+import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -25,15 +24,14 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -47,24 +45,21 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.BottomSheetScaffold
-import androidx.compose.material3.SearchBar
-import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SearchBar
+import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -82,40 +77,49 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import com.pelotcl.app.R
+import androidx.core.graphics.createBitmap
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.CreationExtras
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationCallback
-import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import com.google.gson.JsonParser
+import com.pelotcl.app.R
+import com.pelotcl.app.data.model.Feature
+import com.pelotcl.app.data.model.StopFeature
+import com.pelotcl.app.data.model.StopGeometry
+import com.pelotcl.app.data.model.StopProperties
+import com.pelotcl.app.data.repository.JourneyResult
+import com.pelotcl.app.data.repository.MapStyle
+import com.pelotcl.app.data.repository.MapStyleRepository
 import com.pelotcl.app.ui.components.AllSchedulesSheetContent
 import com.pelotcl.app.ui.components.InlineItinerarySheetContent
 import com.pelotcl.app.ui.components.LineDetailsBottomSheet
@@ -125,32 +129,28 @@ import com.pelotcl.app.ui.components.MapLibreView
 import com.pelotcl.app.ui.components.StationBottomSheet
 import com.pelotcl.app.ui.components.StationInfo
 import com.pelotcl.app.ui.components.StationSearchResult
-import com.pelotcl.app.ui.screens.SelectedStop
-import com.pelotcl.app.data.repository.MapStyle
-import com.pelotcl.app.data.repository.MapStyleRepository
-import com.pelotcl.app.data.repository.JourneyResult
+import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportLinesUiState
 import com.pelotcl.app.ui.viewmodel.TransportStopsUiState
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LineColorHelper
-import com.pelotcl.app.ui.theme.Red500
+import com.pelotcl.app.utils.LocationHelper.startLocationUpdates
+import com.pelotcl.app.utils.LocationHelper.stopLocationUpdates
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.LineLayer
@@ -158,18 +158,6 @@ import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonOptions
 import org.maplibre.android.style.sources.GeoJsonSource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.core.graphics.createBitmap
-import androidx.lifecycle.ViewModel
-import com.google.gson.JsonParser
-import com.pelotcl.app.data.model.Feature
-import com.pelotcl.app.data.model.StopFeature
-import com.pelotcl.app.data.model.StopGeometry
-import com.pelotcl.app.data.model.StopProperties
-import com.pelotcl.app.utils.LocationHelper.startLocationUpdates
-import com.pelotcl.app.utils.LocationHelper.stopLocationUpdates
-import kotlinx.coroutines.delay
-import org.maplibre.android.maps.Style
 import java.util.Locale
 
 private const val PRIORITY_STOPS_MIN_ZOOM = 12.5f
@@ -420,8 +408,8 @@ private fun calculateInSampleSize(
     var inSampleSize = 1
 
     if (height > reqHeight || width > reqWidth) {
-        var halfHeight = height / 2
-        var halfWidth = width / 2
+        val halfHeight = height / 2
+        val halfWidth = width / 2
 
         while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
             inSampleSize *= 2
@@ -454,8 +442,8 @@ private fun MapStyleSelectionSheet(
                 .padding(horizontal = 20.dp, vertical = 12.dp)
         ) {
             Text(
-                text = "Fond de carte",
-                fontWeight = FontWeight.Bold
+                text = "Thème",
+                color = Color.Black
             )
             Spacer(modifier = Modifier.size(16.dp))
 
@@ -569,7 +557,6 @@ fun PlanScreen(
     onItinerarySelectionHandled: () -> Unit = {},
     optionsSelectedStop: StationSearchResult? = null,
     onOptionsSelectionHandled: () -> Unit = {},
-    onItineraryClick: (stopName: String) -> Unit = {},
     initialUserLocation: LatLng? = null,
     isVisible: Boolean = true,
     onMapStyleChanged: (MapStyle) -> Unit = {},
@@ -635,27 +622,11 @@ fun PlanScreen(
     }
 
     var sheetContentState by remember { mutableStateOf<SheetContentState?>(null) }
-    var isItineraryUltraCollapsed by remember { mutableStateOf(false) }
 
     // Bottom sheet state for BottomSheetScaffold
     val bottomSheetState = rememberStandardBottomSheetState(
         initialValue = SheetValue.Hidden,
-        skipHiddenState = false,
-        confirmValueChange = { nextValue ->
-            if (sheetContentState == SheetContentState.ITINERARY) {
-                when (nextValue) {
-                    SheetValue.Hidden -> {
-                        // Third state: when user drags below partial, keep partial and show ultra-collapsed header.
-                        isItineraryUltraCollapsed = true
-                        false
-                    }
-                    SheetValue.PartiallyExpanded -> true
-                    else -> true
-                }
-            } else {
-                true
-            }
-        }
+        skipHiddenState = false
     )
     val scaffoldSheetState = rememberBottomSheetScaffoldState(
         bottomSheetState = bottomSheetState
@@ -685,7 +656,6 @@ fun PlanScreen(
     // Save zoom level before live tracking to restore it when disabled
     var zoomBeforeLiveTracking by remember { mutableStateOf<Double?>(null) }
 
-    var headerLineCount by remember { mutableIntStateOf(2) }
     val selectedLineNameFromViewModel by viewModel.selectedLineName.collectAsState()
 
     // Track previous sheetContentState to detect transitions
@@ -709,8 +679,6 @@ fun PlanScreen(
                     SheetValue.Hidden -> scaffoldSheetState.bottomSheetState.hide()
                 }
             }
-            requestedSheetValueForNextContent = null
-            previousSheetContentState = sheetContentState
             return@LaunchedEffect
         }
 
@@ -756,13 +724,9 @@ fun PlanScreen(
 
         if (sheetContentState == SheetContentState.ITINERARY &&
             previousSheetContentState != SheetContentState.ITINERARY) {
-            isItineraryUltraCollapsed = false
             scope.launch {
-                if (isSheetExpandedOrExpanding) {
-                    scaffoldSheetState.bottomSheetState.expand()
-                } else {
-                    scaffoldSheetState.bottomSheetState.partialExpand()
-                }
+                // Itinerary opens expanded by default.
+                scaffoldSheetState.bottomSheetState.expand()
             }
         }
 
@@ -818,7 +782,7 @@ fun PlanScreen(
         if (itineraryDepartureStop == null) {
             val location = userLocation
             val stops = (stopsUiState as? TransportStopsUiState.Success)?.stops
-            if (location != null && !stops.isNullOrEmpty()) {
+            if (location != null) {
                 val nearestStops = viewModel.raptorRepository.findNearestStops(
                     latitude = location.latitude,
                     longitude = location.longitude,
@@ -827,7 +791,8 @@ fun PlanScreen(
                 val nearestStopNames = nearestStops.map { it.name }.distinct()
                 itineraryNearbyDepartureStops = nearestStopNames
 
-                val nearestStopName = nearestStopNames.firstOrNull() ?: findNearestStopName(location, stops)
+                val nearestStopName = nearestStopNames.firstOrNull()
+                    ?: stops?.let { findNearestStopName(location, it) }
                 if (!nearestStopName.isNullOrBlank()) {
                     val ids = viewModel.raptorRepository.searchStopsByName(nearestStopName).map { it.id }
                     if (ids.isNotEmpty()) {
@@ -859,23 +824,6 @@ fun PlanScreen(
 
             if (justBecameHidden) {
                 sheetContentState = null
-            }
-        }
-
-        previousSheetValue = current
-    }
-
-    LaunchedEffect(
-        sheetContentState,
-        scaffoldSheetState.bottomSheetState.currentValue,
-        scaffoldSheetState.bottomSheetState.targetValue
-    ) {
-        if (sheetContentState == SheetContentState.ITINERARY && isItineraryUltraCollapsed) {
-            val isGoingUp =
-                scaffoldSheetState.bottomSheetState.targetValue == SheetValue.Expanded ||
-                    scaffoldSheetState.bottomSheetState.currentValue == SheetValue.Expanded
-            if (isGoingUp) {
-                isItineraryUltraCollapsed = false
             }
         }
     }
@@ -1084,17 +1032,15 @@ fun PlanScreen(
 
     // Handle itinerary selection from top search bar to keep continuity in PlanScreen
     LaunchedEffect(itinerarySelectedStopName) {
-        val stopName = itinerarySelectedStopName
-        if (!stopName.isNullOrBlank()) {
-            requestedSheetValueForNextContent = if (isSheetExpandedOrExpanding) {
-                SheetValue.Expanded
-            } else {
-                SheetValue.PartiallyExpanded
-            }
-            itineraryInitialStopName = stopName
-            itineraryArrivalQuery = stopName
-            val raptorStops = viewModel.raptorRepository.searchStopsByName(stopName)
-            itineraryArrivalStop = SelectedStop(name = stopName, stopIds = raptorStops.map { it.id })
+        if (!itinerarySelectedStopName.isNullOrBlank()) {
+            itineraryDepartureStop = null
+            itineraryDepartureQuery = ""
+            itineraryDepartureResults = emptyList()
+            itineraryNearbyDepartureStops = emptyList()
+            itineraryInitialStopName = itinerarySelectedStopName
+            itineraryArrivalQuery = itinerarySelectedStopName
+            val raptorStops = viewModel.raptorRepository.searchStopsByName(itinerarySelectedStopName)
+            itineraryArrivalStop = SelectedStop(name = itinerarySelectedStopName, stopIds = raptorStops.map { it.id })
             sheetContentState = SheetContentState.ITINERARY
             onItinerarySelectionHandled()
         }
@@ -1650,18 +1596,13 @@ fun PlanScreen(
         }
     }
 
-    val extraHeaderPeek = if (sheetContentState == SheetContentState.LINE_DETAILS && headerLineCount > 2) {
-        ((headerLineCount - 2).coerceAtLeast(0) * 20).dp
-    } else {
-        0.dp
-    }
     val stationCollapsedPeekHeight = bottomPadding + 300.dp
-    val itineraryUltraCollapsedPeekHeight = bottomPadding + 108.dp
+    val itineraryCollapsedPeekHeight = bottomPadding + 100.dp
     val peekHeight = when(sheetContentState) {
         SheetContentState.LINE_DETAILS -> stationCollapsedPeekHeight
         SheetContentState.ALL_SCHEDULES -> stationCollapsedPeekHeight
         SheetContentState.STATION -> stationCollapsedPeekHeight
-        SheetContentState.ITINERARY -> if (isItineraryUltraCollapsed) itineraryUltraCollapsedPeekHeight else stationCollapsedPeekHeight
+        SheetContentState.ITINERARY -> itineraryCollapsedPeekHeight
         else -> 0.dp
     }
     val unifiedSheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
@@ -1762,13 +1703,18 @@ fun PlanScreen(
                                     sheetContentState = SheetContentState.ALL_SCHEDULES
                                 },
                                 onItineraryClick = { stopName ->
-                                    requestedSheetValueForNextContent = if (isSheetExpandedOrExpanding) {
-                                        SheetValue.Expanded
-                                    } else {
-                                        SheetValue.PartiallyExpanded
-                                    }
+                                    requestedSheetValueForNextContent = SheetValue.Expanded
+                                    itineraryDepartureStop = null
+                                    itineraryDepartureQuery = ""
+                                    itineraryDepartureResults = emptyList()
+                                    itineraryNearbyDepartureStops = emptyList()
                                     itineraryInitialStopName = stopName
-                                    sheetContentState = SheetContentState.ITINERARY
+                                    scope.launch {
+                                        val raptorStops = viewModel.raptorRepository.searchStopsByName(stopName)
+                                        itineraryArrivalStop = SelectedStop(name = stopName, stopIds = raptorStops.map { it.id })
+                                        itineraryArrivalQuery = stopName
+                                        sheetContentState = SheetContentState.ITINERARY
+                                    }
                                 },
                                 onHeaderClick = {
                                     scope.launch {
@@ -1777,7 +1723,7 @@ fun PlanScreen(
                                 },
                                 favoriteStops = favoriteStops,
                                 onToggleFavoriteStop = { viewModel.toggleFavoriteStop(it) },
-                                onHeaderLineCountChanged = { count -> }
+                                onHeaderLineCountChanged = { _ -> }
                             )
                         }
                     }
@@ -1827,13 +1773,18 @@ fun PlanScreen(
                                 isFavoriteStop = favoriteStops.any { it.equals(selectedStation!!.nom, ignoreCase = true) },
                                 onToggleFavoriteStop = { viewModel.toggleFavoriteStop(selectedStation!!.nom) },
                                 onItineraryClick = { stopName ->
-                                    requestedSheetValueForNextContent = if (isSheetExpandedOrExpanding) {
-                                        SheetValue.Expanded
-                                    } else {
-                                        SheetValue.PartiallyExpanded
-                                    }
+                                    requestedSheetValueForNextContent = SheetValue.Expanded
+                                    itineraryDepartureStop = null
+                                    itineraryDepartureQuery = ""
+                                    itineraryDepartureResults = emptyList()
+                                    itineraryNearbyDepartureStops = emptyList()
                                     itineraryInitialStopName = stopName
-                                    sheetContentState = SheetContentState.ITINERARY
+                                    scope.launch {
+                                        val raptorStops = viewModel.raptorRepository.searchStopsByName(stopName)
+                                        itineraryArrivalStop = SelectedStop(name = stopName, stopIds = raptorStops.map { it.id })
+                                        itineraryArrivalQuery = stopName
+                                        sheetContentState = SheetContentState.ITINERARY
+                                    }
                                 }
                             )
                         }
@@ -1841,19 +1792,16 @@ fun PlanScreen(
                     SheetContentState.ALL_SCHEDULES -> {
                         if (allSchedulesInfo != null) {
                             val schedulesForCurrentDirection =
-                                if (allSchedules.isNotEmpty()) allSchedules else allSchedulesInfo!!.schedules
+                                allSchedules.ifEmpty { allSchedulesInfo!!.schedules }
                             val resolvedAllSchedulesInfo = allSchedulesInfo!!.copy(
                                 directionName = headsigns[selectedDirection] ?: allSchedulesInfo!!.directionName,
                                 schedules = schedulesForCurrentDirection
                             )
-                            val allSchedulesDirections = if (allSchedulesInfo!!.availableDirections.isNotEmpty()) {
-                                allSchedulesInfo!!.availableDirections
-                            } else {
-                                availableDirections
-                            }
-                            val allSchedulesHeadsigns = if (allSchedulesInfo!!.headsigns.isNotEmpty()) {
-                                allSchedulesInfo!!.headsigns
-                            } else {
+                            val allSchedulesDirections =
+                                allSchedulesInfo!!.availableDirections.ifEmpty {
+                                    availableDirections
+                                }
+                            val allSchedulesHeadsigns = allSchedulesInfo!!.headsigns.ifEmpty {
                                 headsigns
                             }
                             AllSchedulesSheetContent(
@@ -1886,70 +1834,37 @@ fun PlanScreen(
                         }
                     }
                     SheetContentState.ITINERARY -> {
-                        if (isItineraryUltraCollapsed) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = "Itineraire",
-                                    style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.Black
-                                )
-
-                                IconButton(
-                                    onClick = {
-                                        itineraryInitialStopName = null
-                                        itineraryDepartureStop = null
-                                        itineraryArrivalStop = null
-                                        itineraryDepartureQuery = ""
-                                        itineraryArrivalQuery = ""
-                                        itineraryDepartureResults = emptyList()
-                                        itineraryArrivalResults = emptyList()
-                                        itineraryJourneys = emptyList()
-                                        selectedItineraryJourney = null
-                                        isItineraryUltraCollapsed = false
-                                        sheetContentState = null
-                                    }
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "Fermer",
-                                        tint = Color.Black
-                                    )
+                        InlineItinerarySheetContent(
+                            viewModel = viewModel,
+                            departureStop = itineraryDepartureStop,
+                            arrivalStop = itineraryArrivalStop,
+                            maxHeight = itinerarySheetMaxHeight,
+                            nearbyDepartureStops = itineraryNearbyDepartureStops,
+                            onDepartureFallbackSelected = { fallbackDeparture ->
+                                itineraryDepartureStop = fallbackDeparture
+                            },
+                            onJourneysChanged = { journeys ->
+                                itineraryJourneys = journeys
+                                itineraryResultsVersion++
+                            },
+                            onSelectedJourneyChanged = { journey ->
+                                selectedItineraryJourney = journey
+                            },
+                            onClose = {
+                                scope.launch {
+                                    scaffoldSheetState.bottomSheetState.hide()
                                 }
+                                itineraryInitialStopName = null
+                                itineraryDepartureStop = null
+                                itineraryArrivalStop = null
+                                itineraryDepartureQuery = ""
+                                itineraryArrivalQuery = ""
+                                itineraryDepartureResults = emptyList()
+                                itineraryArrivalResults = emptyList()
+                                itineraryNearbyDepartureStops = emptyList()
+                                sheetContentState = null
                             }
-                        } else {
-                            InlineItinerarySheetContent(
-                                viewModel = viewModel,
-                                departureStop = itineraryDepartureStop,
-                                arrivalStop = itineraryArrivalStop,
-                                maxHeight = itinerarySheetMaxHeight,
-                                nearbyDepartureStops = itineraryNearbyDepartureStops,
-                                onDepartureFallbackSelected = { fallbackDeparture ->
-                                    itineraryDepartureStop = fallbackDeparture
-                                },
-                                onJourneysChanged = { journeys ->
-                                    itineraryJourneys = journeys
-                                    itineraryResultsVersion++
-                                },
-                                onSelectedJourneyChanged = { journey ->
-                                    selectedItineraryJourney = journey
-                                },
-                                onClose = {
-                                    scope.launch {
-                                        scaffoldSheetState.bottomSheetState.hide()
-                                    }
-                                    itineraryInitialStopName = null
-                                    isItineraryUltraCollapsed = false
-                                    sheetContentState = null
-                                }
-                            )
-                        }
+                        )
                     }
                     null -> {}
                 }
@@ -2272,11 +2187,9 @@ fun PlanScreen(
                     if (isDepartureSearch) {
                         itineraryDepartureStop = selectedStop
                         itineraryDepartureQuery = ""
-                        itineraryDepartureResults = emptyList()
                     } else {
                         itineraryArrivalStop = selectedStop
                         itineraryArrivalQuery = ""
-                        itineraryArrivalResults = emptyList()
                     }
                     itinerarySearchTarget = null
                 }
@@ -2719,7 +2632,7 @@ private fun zoomToLine(
     selectedLineName: String
 ) {
     val lineFeatures = allLines.filter {
-        it.properties.ligne?.equals(selectedLineName, ignoreCase = true) == true
+        it.properties.ligne.equals(selectedLineName, ignoreCase = true)
     }
 
     if (lineFeatures.isEmpty()) return
@@ -3223,11 +3136,6 @@ private fun addLineToMap(
     map.getStyle { style ->
         val ligne = feature.properties.ligne
         val codeTrace = feature.properties.codeTrace
-        
-        // Skip if essential properties are null
-        if (ligne == null || codeTrace == null) {
-            return@getStyle
-        }
 
         val sourceId = "line-${ligne}-${codeTrace}"
         val layerId = "layer-${ligne}-${codeTrace}"
@@ -3372,7 +3280,7 @@ private suspend fun addStopsToMap(
             val bitmaps: Map<String, Bitmap> = if (allCached) {
                 // All icons are cached - retrieve them directly without snapshot copy
                 requiredIcons.mapNotNull { iconName ->
-                    viewModel?.getIconBitmap(iconName)?.let { iconName to it }
+                    viewModel.getIconBitmap(iconName)?.let { iconName to it }
                 }.toMap()
             } else {
                 // Load missing bitmaps and cache them individually
@@ -3666,8 +3574,8 @@ private fun createGeoJsonFromFeature(feature: Feature): String {
         add("geometry", geometryObject)
 
         val propertiesObject = JsonObject().apply {
-            addProperty("ligne", feature.properties.ligne ?: "")
-            addProperty("nom_trace", feature.properties.nomTrace ?: "")
+            addProperty("ligne", feature.properties.ligne)
+            addProperty("nom_trace", feature.properties.nomTrace)
             addProperty("couleur", feature.properties.couleur ?: "")
         }
         add("properties", propertiesObject)
@@ -3924,48 +3832,4 @@ private fun escapeJsonString(s: String): String {
         }
     }
     return sb.toString()
-}
-
-private var locationCallback: LocationCallback? = null
-
-@Suppress("MissingPermission") // Permission is checked before calling this function
-private fun startLocationUpdates(
-    fusedLocationClient: FusedLocationProviderClient,
-    onLocationUpdate: (LatLng) -> Unit
-) {
-    try {
-        // Create location request for real-time updates
-        val locationRequest = LocationRequest.Builder(
-            Priority.PRIORITY_HIGH_ACCURACY,
-            1000L // Update every seconds
-        ).apply {
-            setMinUpdateIntervalMillis(2000L) // Fastest update interval: 2 seconds
-            setWaitForAccurateLocation(false)
-        }.build()
-
-        // Create location callback
-        locationCallback = object : LocationCallback() {
-            override fun onLocationResult(locationResult: LocationResult) {
-                locationResult.lastLocation?.let { location ->
-                    onLocationUpdate(LatLng(location.latitude, location.longitude))
-                }
-            }
-        }
-
-        // Start receiving location updates
-        fusedLocationClient.requestLocationUpdates(
-            locationRequest,
-            locationCallback!!,
-            Looper.getMainLooper()
-        )
-    } catch (_: SecurityException) {
-        // Permission denied
-    }
-}
-
-private fun stopLocationUpdates(fusedLocationClient: FusedLocationProviderClient) {
-    locationCallback?.let {
-        fusedLocationClient.removeLocationUpdates(it)
-        locationCallback = null
-    }
 }

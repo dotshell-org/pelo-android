@@ -85,7 +85,9 @@ fun InlineItinerarySheetContent(
         errorText = null
         selectedJourney = null
         try {
-            val date = selectedDate ?: LocalDate.now()
+            val today = LocalDate.now()
+            val date = selectedDate ?: today
+            var autoSwitchedToTomorrow = false
             journeys = withContext(Dispatchers.IO) {
                 if (timeMode == TimeMode.ARRIVAL) {
                     raptorRepository.getOptimizedPathsArriveBy(
@@ -136,8 +138,40 @@ fun InlineItinerarySheetContent(
                 }
             }
 
+            if (journeys.isEmpty() && timeMode == TimeMode.DEPARTURE && date == today) {
+                val hasServiceEarlierToday = withContext(Dispatchers.IO) {
+                    raptorRepository.getOptimizedPaths(
+                        originStopIds = departureStopIds,
+                        destinationStopIds = arrivalStopIds,
+                        departureTimeSeconds = 0,
+                        date = today,
+                        blockedRouteNames = emptySet()
+                    ).isNotEmpty()
+                }
+
+                if (hasServiceEarlierToday) {
+                    val tomorrow = today.plusDays(1)
+                    journeys = withContext(Dispatchers.IO) {
+                        raptorRepository.getOptimizedPaths(
+                            originStopIds = departureStopIds,
+                            destinationStopIds = arrivalStopIds,
+                            departureTimeSeconds = 0,
+                            date = tomorrow,
+                            blockedRouteNames = emptySet()
+                        )
+                    }
+                    selectedDate = tomorrow
+                    selectedTimeSeconds = 0
+                    autoSwitchedToTomorrow = true
+                }
+            }
+
             if (journeys.isEmpty()) {
-                errorText = "Aucun itineraire trouve"
+                errorText = if (autoSwitchedToTomorrow) {
+                    "Aucun itineraire trouve pour demain a minuit"
+                } else {
+                    "Aucun itineraire trouve"
+                }
             }
         } catch (_: Exception) {
             errorText = "Erreur lors du calcul d'itineraire"

@@ -13,10 +13,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -485,9 +482,6 @@ fun NavBar(modifier: Modifier = Modifier) {
                     optionsSelectedStop = stopOptionsSelectedStop,
                     onOptionsSelectionHandled = { stopOptionsSelectedStop = null },
                     viewModel = viewModel,
-                    onItineraryClick = { stopName ->
-                        itineraryDestinationStop = stopName
-                    },
                     initialUserLocation = userLocation,
                     isVisible = selectedDestination == Destination.PLAN.ordinal,
                     onMapStyleChanged = { style ->

@@ -338,6 +338,7 @@ fun ItineraryScreen(
     // Calculate journey when both stops are selected and have IDs resolved
     // Also recalculate when time mode, selected time, or date changes
     LaunchedEffect(departureStop, arrivalStop, isRaptorReady, timeMode, selectedTimeSeconds, selectedDate) {
+        Log.d("ItineraryScreen", "Main LaunchedEffect triggered: date=${selectedDate}, time=${selectedTimeSeconds}")
         if (departureStop != null && arrivalStop != null &&
             departureStop!!.stopIds.isNotEmpty() && arrivalStop!!.stopIds.isNotEmpty()) {
             isLoading = true
@@ -348,7 +349,9 @@ fun ItineraryScreen(
             scope.launch {
                 try {
                     var results: List<JourneyResult>
-                    val searchDate = selectedDate ?: LocalDate.now()
+                    val today = LocalDate.now()
+                    val searchDate = selectedDate ?: today
+                    var autoSwitchedToTomorrow = false
                     
                     // Get current blocked route patterns from preferences
                     val blockedRouteNames = itineraryPrefsRepo.getBlockedRoutePatterns()
@@ -363,17 +366,6 @@ fun ItineraryScreen(
                                 date = searchDate,
                                 blockedRouteNames = blockedRouteNames
                             )
-
-                            // If no results with selected/current time, try with 9:00 AM as fallback test
-                            if (results.isEmpty() && selectedTimeSeconds == null) {
-                                results = raptorRepository.getOptimizedPaths(
-                                    originStopIds = departureStop!!.stopIds,
-                                    destinationStopIds = arrivalStop!!.stopIds,
-                                    departureTimeSeconds = 9 * 3600, // 9:00 AM
-                                    date = searchDate,
-                                    blockedRouteNames = blockedRouteNames
-                                )
-                            }
                         }
                         TimeMode.ARRIVAL -> {
                             // Search by arrival time (arrive by X)
@@ -409,20 +401,10 @@ fun ItineraryScreen(
                             results = raptorRepository.getOptimizedPaths(
                                 originStopIds = fallbackStopIds,
                                 destinationStopIds = arrivalStop!!.stopIds,
+                                departureTimeSeconds = selectedTimeSeconds,
                                 date = searchDate,
                                 blockedRouteNames = blockedRouteNames
                             )
-
-                            // If no results, try 9:00 AM
-                            if (results.isEmpty()) {
-                                results = raptorRepository.getOptimizedPaths(
-                                    originStopIds = fallbackStopIds,
-                                    destinationStopIds = arrivalStop!!.stopIds,
-                                    departureTimeSeconds = 9 * 3600,
-                                    date = searchDate,
-                                    blockedRouteNames = blockedRouteNames
-                                )
-                            }
 
                             if (results.isNotEmpty()) {
                                 // Found a route from a fallback stop - update departure
@@ -436,12 +418,45 @@ fun ItineraryScreen(
                         }
                     }
 
+                    // If today's search failed but service exists earlier today, it's likely too late.
+                    // In that case, automatically switch to tomorrow at 00:00.
+                    if (results.isEmpty() && timeMode == TimeMode.DEPARTURE && searchDate == today) {
+                        val hasServiceEarlierToday = raptorRepository.getOptimizedPaths(
+                            originStopIds = departureStop!!.stopIds,
+                            destinationStopIds = arrivalStop!!.stopIds,
+                            departureTimeSeconds = 0,
+                            date = today,
+                            blockedRouteNames = blockedRouteNames
+                        ).isNotEmpty()
+
+                        if (hasServiceEarlierToday) {
+                            val tomorrow = today.plusDays(1)
+                            results = raptorRepository.getOptimizedPaths(
+                                originStopIds = departureStop!!.stopIds,
+                                destinationStopIds = arrivalStop!!.stopIds,
+                                departureTimeSeconds = 0,
+                                date = tomorrow,
+                                blockedRouteNames = blockedRouteNames
+                            )
+
+                            selectedDate = tomorrow
+                            selectedTimeSeconds = 0
+                            autoSwitchedToTomorrow = true
+                        }
+                    }
+
                     // Mark that initial load is complete
                     isInitialLoad = false
 
                     journeys = results
                     if (results.isEmpty()) {
-                        errorMessage = "Aucun itinéraire trouvé"
+                        errorMessage = if (autoSwitchedToTomorrow) {
+                            "Aucun itinéraire trouvé pour demain à minuit"
+                        } else {
+                            "Aucun itinéraire trouvé"
+                        }
+                    } else if (autoSwitchedToTomorrow) {
+                        fallbackInfoMessage = "Plus de départ aujourd'hui. Résultats affichés pour Demain à 00:00"
                     }
                 } catch (e: Exception) {
                     Log.e("ItineraryScreen", "Error calculating journey", e)
@@ -450,21 +465,6 @@ fun ItineraryScreen(
                     isLoading = false
                 }
             }
-        }
-    }
-
-    // Handle automatic fallback to tomorrow at midnight when no results are found
-    LaunchedEffect(journeys, selectedDate, selectedTimeSeconds) {
-        if (journeys.isEmpty() && (selectedDate == null || selectedDate == LocalDate.now())) {
-            // Give a moment for the UI to update with the error message
-            delay(1000)
-
-            // Automatically try with tomorrow at midnight
-            selectedDate = LocalDate.now().plusDays(1) // Demain
-            selectedTimeSeconds = 0 // Minuit (0 secondes depuis minuit)
-
-            // Show informative message
-            errorMessage = "Aucun itinéraire trouvé pour aujourd'hui. Recherche automatique pour demain à minuit..."
         }
     }
 
