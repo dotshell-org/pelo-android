@@ -279,7 +279,13 @@ fun SimpleSearchBar(
                                     query = ""
                                     setExpandedState(false)
                                 },
-                                onOptionsClick = { onHistoryItemOptionsClick(historyItem) },
+                                onOptionsClick = {
+                                    query = ""
+                                    onQueryChange("")
+                                    setExpandedState(false)
+                                    keyboardController?.hide()
+                                    onHistoryItemOptionsClick(historyItem)
+                                },
                                 onRemoveClick = { onHistoryItemRemove(historyItem) }
                             )
                         }

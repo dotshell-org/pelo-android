@@ -603,6 +603,7 @@ fun PlanScreen(
     )
     var selectedStation by remember { mutableStateOf<StationInfo?>(null) }
     var selectedLine by remember { mutableStateOf<LineInfo?>(null) }
+    var requestedSheetValueForNextContent by remember { mutableStateOf<SheetValue?>(null) }
 
     var allSchedulesInfo by remember { mutableStateOf<AllSchedulesInfo?>(null) }
 
@@ -620,15 +621,43 @@ fun PlanScreen(
 
     // Track previous sheetContentState to detect transitions
     var previousSheetContentState by remember { mutableStateOf<SheetContentState?>(null) }
+    val isSheetExpandedOrExpanding =
+        scaffoldSheetState.bottomSheetState.currentValue == SheetValue.Expanded ||
+            scaffoldSheetState.bottomSheetState.targetValue == SheetValue.Expanded
 
     LaunchedEffect(sheetContentState, selectedStation) {
         onSheetStateChanged(sheetContentState != null)
-        if (sheetContentState == SheetContentState.STATION && selectedStation != null) {
+
+        val requestedValue = requestedSheetValueForNextContent
+        if (requestedValue != null &&
+            sheetContentState != null &&
+            sheetContentState != previousSheetContentState) {
             scope.launch {
-                scaffoldSheetState.bottomSheetState.expand()
+                when (requestedValue) {
+                    SheetValue.Expanded -> scaffoldSheetState.bottomSheetState.expand()
+                    SheetValue.PartiallyExpanded -> scaffoldSheetState.bottomSheetState.partialExpand()
+                    SheetValue.Hidden -> scaffoldSheetState.bottomSheetState.hide()
+                }
+            }
+            requestedSheetValueForNextContent = null
+            previousSheetContentState = sheetContentState
+            return@LaunchedEffect
+        }
+
+        if (sheetContentState == SheetContentState.STATION &&
+            selectedStation != null &&
+            previousSheetContentState != SheetContentState.STATION) {
+            scope.launch {
+                if (previousSheetContentState == SheetContentState.LINE_DETAILS &&
+                    isSheetExpandedOrExpanding) {
+                    scaffoldSheetState.bottomSheetState.expand()
+                } else {
+                    scaffoldSheetState.bottomSheetState.partialExpand()
+                }
             }
         }
-        // Auto-expand when transitioning to LINE_DETAILS:
+        // Open line details in partially expanded mode by default to preserve
+        // visual continuity while still allowing users to fully expand or hide.
         // - from STATION (clicked on a line from station details)
         // - or from null but with a station selected (clicked on a stop with only one line)
         // Don't auto-expand when coming from lines menu (currentStationName is empty)
@@ -637,7 +666,12 @@ fun PlanScreen(
             (previousSheetContentState == SheetContentState.STATION ||
                     selectedLine?.currentStationName?.isNotBlank() == true)) {
             scope.launch {
-                scaffoldSheetState.bottomSheetState.expand()
+                if (previousSheetContentState == SheetContentState.STATION &&
+                    isSheetExpandedOrExpanding) {
+                    scaffoldSheetState.bottomSheetState.expand()
+                } else {
+                    scaffoldSheetState.bottomSheetState.partialExpand()
+                }
             }
         }
         // Partial expand (show sheet but collapsed) when clicking directly on a line from the map
@@ -649,6 +683,9 @@ fun PlanScreen(
                 scaffoldSheetState.bottomSheetState.partialExpand()
             }
         }
+
+        // Keep transition history in sync for the next state change.
+        previousSheetContentState = sheetContentState
     }
 
     // Auto-hide the bottom sheet when content state is null but sheet is still visible
@@ -670,12 +707,13 @@ fun PlanScreen(
 
         if (current != previous) {
             val justBecameHidden = current == SheetValue.Hidden
-            val swipedDownToPartial = current == SheetValue.PartiallyExpanded && previous == SheetValue.Expanded
 
-            if (justBecameHidden || (swipedDownToPartial && latestSheetContentState == SheetContentState.STATION)) {
+            if (justBecameHidden) {
                 sheetContentState = null
             }
         }
+
+        previousSheetValue = current
     }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -872,27 +910,8 @@ fun PlanScreen(
 
                 zoomToStop(mapInstance!!, stationInfo.nom, allStops)
 
-                if (stationInfo.lignes.size == 1) {
-                    selectedStation = stationInfo
-                    val lineName = stationInfo.lignes[0]
-                    selectedLine = LineInfo(
-                        lineName = lineName,
-                        currentStationName = stationInfo.nom
-                    )
-
-                    if (!isMetroTramOrFunicular(lineName)) {
-                        viewModel.addLineToLoaded(lineName)
-                        if (isTemporaryBus(lineName)) {
-                            temporaryLoadedBusLines = temporaryLoadedBusLines + lineName
-                        }
-                        delay(100)
-                    }
-
-                    sheetContentState = SheetContentState.LINE_DETAILS
-                } else {
-                    selectedStation = stationInfo
-                    sheetContentState = SheetContentState.STATION
-                }
+                selectedStation = stationInfo
+                sheetContentState = SheetContentState.STATION
 
                 onSearchSelectionHandled()
             }
@@ -930,27 +949,8 @@ fun PlanScreen(
 
                 zoomToStop(mapInstance!!, stationInfo.nom, allStops)
 
-                if (stationInfo.lignes.size == 1) {
-                    selectedStation = stationInfo
-                    val lineName = stationInfo.lignes[0]
-                    selectedLine = LineInfo(
-                        lineName = lineName,
-                        currentStationName = stationInfo.nom
-                    )
-
-                    if (!isMetroTramOrFunicular(lineName)) {
-                        viewModel.addLineToLoaded(lineName)
-                        if (isTemporaryBus(lineName)) {
-                            temporaryLoadedBusLines = temporaryLoadedBusLines + lineName
-                        }
-                        delay(100)
-                    }
-
-                    sheetContentState = SheetContentState.LINE_DETAILS
-                } else {
-                    selectedStation = stationInfo
-                    sheetContentState = SheetContentState.STATION
-                }
+                selectedStation = stationInfo
+                sheetContentState = SheetContentState.STATION
 
                 onOptionsSelectionHandled()
             }
@@ -980,27 +980,8 @@ fun PlanScreen(
                             delay(300)
                         }
 
-                        if (clickedStationInfo.lignes.size == 1) {
-                            selectedStation = clickedStationInfo
-                            val lineName = clickedStationInfo.lignes[0]
-                            selectedLine = LineInfo(
-                                lineName = lineName,
-                                currentStationName = clickedStationInfo.nom
-                            )
-
-                            if (!isMetroTramOrFunicular(lineName)) {
-                                viewModel.addLineToLoaded(lineName)
-                                if (isTemporaryBus(lineName)) {
-                                    temporaryLoadedBusLines = temporaryLoadedBusLines + lineName
-                                }
-                                delay(100)
-                            }
-
-                            sheetContentState = SheetContentState.LINE_DETAILS
-                        } else {
-                            selectedStation = clickedStationInfo
-                            sheetContentState = SheetContentState.STATION
-                        }
+                        selectedStation = clickedStationInfo
+                        sheetContentState = SheetContentState.STATION
                     }
                 }, onLineClick = { lineName ->
                     scope.launch {
@@ -1406,8 +1387,8 @@ fun PlanScreen(
                         viewModel.removeLineFromLoaded(lineName)
                     }
                 }
-                if (selectedStation != null && (selectedStation?.lignes?.size ?: 0) > 1) {
-                    // Go back to station view if station has multiple lines
+                if (selectedStation != null) {
+                    // Go back to station view when line details were opened from a stop
                     selectedLine = null
                     sheetContentState = SheetContentState.STATION
                 } else {
@@ -1436,15 +1417,19 @@ fun PlanScreen(
     } else {
         0.dp
     }
+    val stationCollapsedPeekHeight = bottomPadding + 300.dp
     val peekHeight = when(sheetContentState) {
-        SheetContentState.LINE_DETAILS, SheetContentState.ALL_SCHEDULES -> bottomPadding + 160.dp + extraHeaderPeek
-        SheetContentState.STATION -> 0.dp
+        SheetContentState.LINE_DETAILS -> stationCollapsedPeekHeight
+        SheetContentState.ALL_SCHEDULES -> bottomPadding + 160.dp + extraHeaderPeek
+        SheetContentState.STATION -> stationCollapsedPeekHeight
         else -> 0.dp
     }
+    val unifiedSheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
 
     BottomSheetScaffold(
         scaffoldState = scaffoldSheetState,
         sheetPeekHeight = peekHeight,
+        sheetShape = unifiedSheetShape,
         modifier = modifier,
         sheetContainerColor = Color.White,
         sheetContent = {
@@ -1470,12 +1455,22 @@ fun PlanScreen(
                                         }
                                     }
 
-                                    scope.launch {
-                                        scaffoldSheetState.bottomSheetState.hide()
+                                    if (selectedStation != null) {
+                                        requestedSheetValueForNextContent = if (isSheetExpandedOrExpanding) {
+                                            SheetValue.Expanded
+                                        } else {
+                                            SheetValue.PartiallyExpanded
+                                        }
+                                        selectedLine = null
+                                        sheetContentState = SheetContentState.STATION
+                                    } else {
+                                        scope.launch {
+                                            scaffoldSheetState.bottomSheetState.hide()
+                                        }
+                                        selectedLine = null
+                                        selectedStation = null
+                                        sheetContentState = null
                                     }
-                                    selectedLine = null
-                                    selectedStation = null
-                                    sheetContentState = null
                                 },
                                 onLineClick = { lineName ->
                                     // Cancel pending operations and clear states from previous line to prevent OOM
@@ -1533,15 +1528,26 @@ fun PlanScreen(
                         if (selectedStation != null) {
                             StationSheetContent(
                                 stationInfo = selectedStation!!,
+                                viewModel = viewModel,
                                 onDismiss = {
                                     scope.launch {
                                         scaffoldSheetState.bottomSheetState.hide()
                                     }
                                     sheetContentState = null
                                 },
-                                onLineClick = { lineName ->
+                                onDepartureClick = { lineName, directionId, _ ->
                                     // Cancel pending operations and clear states from previous line to prevent OOM
                                     viewModel.resetLineDetailState()
+                                    val shouldKeepExpanded =
+                                        scaffoldSheetState.bottomSheetState.currentValue == SheetValue.Expanded ||
+                                            scaffoldSheetState.bottomSheetState.targetValue == SheetValue.Expanded
+                                    requestedSheetValueForNextContent = if (shouldKeepExpanded) {
+                                        SheetValue.Expanded
+                                    } else {
+                                        SheetValue.PartiallyExpanded
+                                    }
+
+                                    selectedDirection = directionId
 
                                     selectedLine = LineInfo(
                                         lineName = lineName,
@@ -1561,6 +1567,8 @@ fun PlanScreen(
                                         sheetContentState = SheetContentState.LINE_DETAILS
                                     }
                                 },
+                                isFavoriteStop = favoriteStops.any { it.equals(selectedStation!!.nom, ignoreCase = true) },
+                                onToggleFavoriteStop = { viewModel.toggleFavoriteStop(selectedStation!!.nom) },
                                 onItineraryClick = onItineraryClick
                             )
                         }
@@ -1672,7 +1680,8 @@ fun PlanScreen(
 
             // Unified LIVE button (global when no selected bus line, line-specific otherwise)
             val isLineContext = sheetContentState == SheetContentState.LINE_DETAILS || sheetContentState == SheetContentState.ALL_SCHEDULES
-            val controlsTopPadding = if (isLineContext) 36.dp else 146.dp
+            // When a sheet is open, place controls where favorites row usually sits.
+            val controlsTopPadding = if (sheetContentState != null) 100.dp else 146.dp
             val selectedTrackableLineName = selectedLine?.lineName?.takeIf { isLineContext && isLiveTrackableLine(it) }
             val hasSelectedNotTrackableLine = selectedLine?.lineName?.let { isLineContext && !isLiveTrackableLine(it) } == true
             val showLiveButton = !isOffline && !hasSelectedNotTrackableLine
@@ -1893,15 +1902,21 @@ fun PlanScreen(
 @Composable
 private fun StationSheetContent(
     stationInfo: StationInfo,
+    viewModel: TransportViewModel,
     onDismiss: () -> Unit,
-    onLineClick: (String) -> Unit,
+    onDepartureClick: (lineName: String, directionId: Int, departureTime: String) -> Unit,
+    isFavoriteStop: Boolean = false,
+    onToggleFavoriteStop: () -> Unit = {},
     onItineraryClick: (String) -> Unit = {}
 ) {
     StationBottomSheet(
         stationInfo = stationInfo,
         sheetState = null,
         onDismiss = onDismiss,
-        onLineClick = onLineClick,
+        viewModel = viewModel,
+        onDepartureClick = onDepartureClick,
+        isFavoriteStop = isFavoriteStop,
+        onToggleFavoriteStop = onToggleFavoriteStop,
         onItineraryClick = { onItineraryClick(stationInfo.nom) }
     )
 }

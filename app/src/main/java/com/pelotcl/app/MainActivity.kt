@@ -556,8 +556,8 @@ fun NavBar(modifier: Modifier = Modifier) {
         // Favorites row sits below search bar and contains the create button + favorites chips
         val favoritesBarTopPosition = searchBarHeight + 38.dp
         
-        // Search Bar - stays at the very top as requested
-        if (selectedDestination == Destination.PLAN.ordinal && !isBottomSheetOpen && !showLinesSheet && itineraryDestinationStop == null) {
+        // Search Bar - keep visible on Plan, including when station/line detail sheets are open.
+        if (selectedDestination == Destination.PLAN.ordinal && !showLinesSheet && itineraryDestinationStop == null) {
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -639,8 +639,8 @@ fun NavBar(modifier: Modifier = Modifier) {
             }
         }
 
-        // Favorites row - includes add button and all favorites in one horizontal scrollable list
-        if (selectedDestination == Destination.PLAN.ordinal && !isBottomSheetOpen && !showLinesSheet && itineraryDestinationStop == null) {
+        // Favorites row - hidden while a sheet is open to free space for map controls.
+        if (selectedDestination == Destination.PLAN.ordinal && !isBottomSheetOpen && !showLinesSheet && itineraryDestinationStop == null && !isSearchExpanded) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()

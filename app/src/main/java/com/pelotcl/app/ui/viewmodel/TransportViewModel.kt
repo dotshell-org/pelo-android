@@ -73,6 +73,13 @@ sealed class TransportStopsUiState {
  */
 class TransportViewModel(application: Application) : AndroidViewModel(application) {
 
+    data class StopDeparturePreview(
+        val lineName: String,
+        val directionId: Int,
+        val directionName: String,
+        val nextDeparture: String
+    )
+
     private val repository = TransportRepository(application.applicationContext)
     private val trafficAlertsRepository = TrafficAlertsRepository(application.applicationContext)
 
@@ -406,6 +413,111 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         _allSchedules.value = emptyList()
         _nextSchedules.value = emptyList()
         _availableDirections.value = emptyList()
+    }
+
+    /**
+     * Returns one next-departure preview per available direction for all provided lines at a stop.
+     */
+    suspend fun getNextDeparturesForStop(
+        stopName: String,
+        lines: List<String>
+    ): List<StopDeparturePreview> = withContext(Dispatchers.IO) {
+        if (stopName.isBlank() || lines.isEmpty()) {
+            return@withContext emptyList()
+        }
+
+        val today = LocalDate.now()
+        val isSchoolHoliday = holidayDetector.isSchoolHoliday(today)
+        val isPublicHoliday = holidayDetector.isFrenchPublicHoliday(today)
+        val currentMinutes = java.util.Calendar.getInstance().let { it.get(java.util.Calendar.HOUR_OF_DAY) * 60 + it.get(java.util.Calendar.MINUTE) }
+
+        val normalizedLines = lines
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinctBy { it.uppercase() }
+
+        val lineOrder = normalizedLines
+            .mapIndexed { index, line -> line.uppercase() to index }
+            .toMap()
+
+        val previews = mutableListOf<StopDeparturePreview>()
+
+        normalizedLines.forEach { displayLineName ->
+            val gtfsLineName = if (displayLineName.equals("NAV1", ignoreCase = true)) "NAVI1" else displayLineName
+            val headsigns = schedulesRepository.getHeadsigns(gtfsLineName)
+            val candidateDirections = headsigns.keys.ifEmpty { setOf(0, 1) }.toList().sorted()
+
+            candidateDirections.forEach { directionId ->
+                val schedules = schedulesRepository.getSchedules(
+                    lineName = gtfsLineName,
+                    stopName = stopName,
+                    directionId = directionId,
+                    isSchoolHoliday = isSchoolHoliday,
+                    isPublicHoliday = isPublicHoliday
+                )
+
+                if (schedules.isEmpty()) {
+                    return@forEach
+                }
+
+                val nextDeparture = pickNextDeparture(schedules, currentMinutes) ?: return@forEach
+                val directionName = headsigns[directionId] ?: "Direction ${directionId + 1}"
+
+                previews.add(
+                    StopDeparturePreview(
+                        lineName = displayLineName,
+                        directionId = directionId,
+                        directionName = directionName,
+                        nextDeparture = nextDeparture
+                    )
+                )
+            }
+        }
+
+        previews.sortedWith(
+            compareBy<StopDeparturePreview> { lineOrder[it.lineName.uppercase()] ?: Int.MAX_VALUE }
+                .thenBy { it.directionId }
+                .thenBy { parseTimeToMinutes(it.nextDeparture) ?: Int.MAX_VALUE }
+        )
+    }
+
+    private fun pickNextDeparture(schedules: List<String>, currentMinutes: Int): String? {
+        val normalized = schedules
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+
+        if (normalized.isEmpty()) {
+            return null
+        }
+
+        val nextToday = normalized.firstOrNull { time ->
+            val minutes = parseTimeToMinutes(time) ?: return@firstOrNull false
+            minutes >= currentMinutes
+        }
+
+        return nextToday ?: normalized.first()
+    }
+
+    private fun parseTimeToMinutes(rawTime: String): Int? {
+        val clean = if (rawTime.count { it == ':' } >= 2) {
+            rawTime.substringBeforeLast(":")
+        } else {
+            rawTime
+        }
+
+        val parts = clean.split(":")
+        if (parts.size < 2) {
+            return null
+        }
+
+        val hours = parts[0].toIntOrNull() ?: return null
+        val minutes = parts[1].toIntOrNull() ?: return null
+        if (minutes !in 0..59) {
+            return null
+        }
+
+        return (hours * 60) + minutes
     }
 
     /**
