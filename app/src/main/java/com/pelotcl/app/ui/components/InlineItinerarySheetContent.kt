@@ -55,6 +55,8 @@ fun InlineItinerarySheetContent(
     maxHeight: Dp,
     nearbyDepartureStops: List<String> = emptyList(),
     onDepartureFallbackSelected: (SelectedStop) -> Unit = {},
+    onJourneysChanged: (List<JourneyResult>) -> Unit = {},
+    onSelectedJourneyChanged: (JourneyResult?) -> Unit = {},
     onClose: () -> Unit
 ) {
     val raptorRepository = viewModel.raptorRepository
@@ -146,6 +148,14 @@ fun InlineItinerarySheetContent(
 
     LaunchedEffect(departureStop, arrivalStop, timeMode, selectedTimeSeconds, selectedDate) {
         recalc()
+    }
+
+    LaunchedEffect(journeys) {
+        onJourneysChanged(journeys)
+    }
+
+    LaunchedEffect(selectedJourney) {
+        onSelectedJourneyChanged(selectedJourney)
     }
 
     Column(

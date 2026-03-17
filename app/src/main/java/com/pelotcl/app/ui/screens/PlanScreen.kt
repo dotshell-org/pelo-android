@@ -128,6 +128,7 @@ import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.ui.screens.SelectedStop
 import com.pelotcl.app.data.repository.MapStyle
 import com.pelotcl.app.data.repository.MapStyleRepository
+import com.pelotcl.app.data.repository.JourneyResult
 import com.pelotcl.app.ui.viewmodel.TransportLinesUiState
 import com.pelotcl.app.ui.viewmodel.TransportStopsUiState
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
@@ -169,6 +170,7 @@ import com.pelotcl.app.utils.LocationHelper.startLocationUpdates
 import com.pelotcl.app.utils.LocationHelper.stopLocationUpdates
 import kotlinx.coroutines.delay
 import org.maplibre.android.maps.Style
+import java.util.Locale
 
 private const val PRIORITY_STOPS_MIN_ZOOM = 12.5f
 private const val TRAM_STOPS_MIN_ZOOM = 14.0f
@@ -632,10 +634,28 @@ fun PlanScreen(
         onMapStyleChanged(selectedMapStyle)
     }
 
+    var sheetContentState by remember { mutableStateOf<SheetContentState?>(null) }
+    var isItineraryUltraCollapsed by remember { mutableStateOf(false) }
+
     // Bottom sheet state for BottomSheetScaffold
     val bottomSheetState = rememberStandardBottomSheetState(
         initialValue = SheetValue.Hidden,
-        skipHiddenState = false
+        skipHiddenState = false,
+        confirmValueChange = { nextValue ->
+            if (sheetContentState == SheetContentState.ITINERARY) {
+                when (nextValue) {
+                    SheetValue.Hidden -> {
+                        // Third state: when user drags below partial, keep partial and show ultra-collapsed header.
+                        isItineraryUltraCollapsed = true
+                        false
+                    }
+                    SheetValue.PartiallyExpanded -> true
+                    else -> true
+                }
+            } else {
+                true
+            }
+        }
     )
     val scaffoldSheetState = rememberBottomSheetScaffoldState(
         bottomSheetState = bottomSheetState
@@ -651,6 +671,9 @@ fun PlanScreen(
     var itineraryDepartureResults by remember { mutableStateOf<List<StationSearchResult>>(emptyList()) }
     var itineraryArrivalResults by remember { mutableStateOf<List<StationSearchResult>>(emptyList()) }
     var itineraryNearbyDepartureStops by remember { mutableStateOf<List<String>>(emptyList()) }
+    var itineraryJourneys by remember { mutableStateOf<List<JourneyResult>>(emptyList()) }
+    var selectedItineraryJourney by remember { mutableStateOf<JourneyResult?>(null) }
+    var itineraryResultsVersion by remember { mutableIntStateOf(0) }
 
     var allSchedulesInfo by remember { mutableStateOf<AllSchedulesInfo?>(null) }
 
@@ -662,7 +685,6 @@ fun PlanScreen(
     // Save zoom level before live tracking to restore it when disabled
     var zoomBeforeLiveTracking by remember { mutableStateOf<Double?>(null) }
 
-    var sheetContentState by remember { mutableStateOf<SheetContentState?>(null) }
     var headerLineCount by remember { mutableIntStateOf(2) }
     val selectedLineNameFromViewModel by viewModel.selectedLineName.collectAsState()
 
@@ -734,6 +756,7 @@ fun PlanScreen(
 
         if (sheetContentState == SheetContentState.ITINERARY &&
             previousSheetContentState != SheetContentState.ITINERARY) {
+            isItineraryUltraCollapsed = false
             scope.launch {
                 if (isSheetExpandedOrExpanding) {
                     scaffoldSheetState.bottomSheetState.expand()
@@ -826,7 +849,6 @@ fun PlanScreen(
         }
     }
 
-    val latestSheetContentState by rememberUpdatedState(sheetContentState)
     var previousSheetValue by remember { mutableStateOf<SheetValue?>(null) }
     LaunchedEffect(scaffoldSheetState.bottomSheetState.currentValue) {
         val current = scaffoldSheetState.bottomSheetState.currentValue
@@ -841,6 +863,21 @@ fun PlanScreen(
         }
 
         previousSheetValue = current
+    }
+
+    LaunchedEffect(
+        sheetContentState,
+        scaffoldSheetState.bottomSheetState.currentValue,
+        scaffoldSheetState.bottomSheetState.targetValue
+    ) {
+        if (sheetContentState == SheetContentState.ITINERARY && isItineraryUltraCollapsed) {
+            val isGoingUp =
+                scaffoldSheetState.bottomSheetState.targetValue == SheetValue.Expanded ||
+                    scaffoldSheetState.bottomSheetState.currentValue == SheetValue.Expanded
+            if (isGoingUp) {
+                isItineraryUltraCollapsed = false
+            }
+        }
     }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -1189,6 +1226,39 @@ fun PlanScreen(
             }
             temporaryLoadedBusLines = emptySet()
         }
+
+        if (sheetContentState != SheetContentState.ITINERARY) {
+            itineraryJourneys = emptyList()
+            selectedItineraryJourney = null
+        }
+    }
+
+    LaunchedEffect(mapInstance, mapStyleVersion, sheetContentState, itineraryJourneys, selectedItineraryJourney, isMapStyleMenuExpanded) {
+        if (isMapStyleMenuExpanded) return@LaunchedEffect
+        val map = mapInstance ?: return@LaunchedEffect
+
+        if (sheetContentState != SheetContentState.ITINERARY) {
+            map.getStyle { style ->
+                clearItineraryLayers(style)
+            }
+            return@LaunchedEffect
+        }
+
+        hideMapLines(map)
+        drawItinerariesOnMap(
+            map = map,
+            journeys = itineraryJourneys,
+            selectedJourney = selectedItineraryJourney
+        )
+    }
+
+    LaunchedEffect(mapInstance, sheetContentState, itineraryResultsVersion, isMapStyleMenuExpanded) {
+        if (isMapStyleMenuExpanded) return@LaunchedEffect
+        if (sheetContentState != SheetContentState.ITINERARY) return@LaunchedEffect
+        val map = mapInstance ?: return@LaunchedEffect
+        if (itineraryJourneys.isEmpty()) return@LaunchedEffect
+
+        zoomToItineraries(map, itineraryJourneys)
     }
 
     // Keep LIVE mode active while switching between global and per-line context.
@@ -1485,6 +1555,8 @@ fun PlanScreen(
                         }
                         else -> {}
                     }
+                } else if (currentSheetState == SheetContentState.ITINERARY) {
+                    hideMapLines(map)
                 } else {
                     showAllMapLines(map, lines)
                 }
@@ -1584,11 +1656,12 @@ fun PlanScreen(
         0.dp
     }
     val stationCollapsedPeekHeight = bottomPadding + 300.dp
+    val itineraryUltraCollapsedPeekHeight = bottomPadding + 108.dp
     val peekHeight = when(sheetContentState) {
         SheetContentState.LINE_DETAILS -> stationCollapsedPeekHeight
         SheetContentState.ALL_SCHEDULES -> stationCollapsedPeekHeight
         SheetContentState.STATION -> stationCollapsedPeekHeight
-        SheetContentState.ITINERARY -> stationCollapsedPeekHeight
+        SheetContentState.ITINERARY -> if (isItineraryUltraCollapsed) itineraryUltraCollapsedPeekHeight else stationCollapsedPeekHeight
         else -> 0.dp
     }
     val unifiedSheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
@@ -1813,23 +1886,70 @@ fun PlanScreen(
                         }
                     }
                     SheetContentState.ITINERARY -> {
-                        InlineItinerarySheetContent(
-                            viewModel = viewModel,
-                            departureStop = itineraryDepartureStop,
-                            arrivalStop = itineraryArrivalStop,
-                            maxHeight = itinerarySheetMaxHeight,
-                            nearbyDepartureStops = itineraryNearbyDepartureStops,
-                            onDepartureFallbackSelected = { fallbackDeparture ->
-                                itineraryDepartureStop = fallbackDeparture
-                            },
-                            onClose = {
-                                scope.launch {
-                                    scaffoldSheetState.bottomSheetState.hide()
+                        if (isItineraryUltraCollapsed) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "Itineraire",
+                                    style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Black
+                                )
+
+                                IconButton(
+                                    onClick = {
+                                        itineraryInitialStopName = null
+                                        itineraryDepartureStop = null
+                                        itineraryArrivalStop = null
+                                        itineraryDepartureQuery = ""
+                                        itineraryArrivalQuery = ""
+                                        itineraryDepartureResults = emptyList()
+                                        itineraryArrivalResults = emptyList()
+                                        itineraryJourneys = emptyList()
+                                        selectedItineraryJourney = null
+                                        isItineraryUltraCollapsed = false
+                                        sheetContentState = null
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Fermer",
+                                        tint = Color.Black
+                                    )
                                 }
-                                itineraryInitialStopName = null
-                                sheetContentState = null
                             }
-                        )
+                        } else {
+                            InlineItinerarySheetContent(
+                                viewModel = viewModel,
+                                departureStop = itineraryDepartureStop,
+                                arrivalStop = itineraryArrivalStop,
+                                maxHeight = itinerarySheetMaxHeight,
+                                nearbyDepartureStops = itineraryNearbyDepartureStops,
+                                onDepartureFallbackSelected = { fallbackDeparture ->
+                                    itineraryDepartureStop = fallbackDeparture
+                                },
+                                onJourneysChanged = { journeys ->
+                                    itineraryJourneys = journeys
+                                    itineraryResultsVersion++
+                                },
+                                onSelectedJourneyChanged = { journey ->
+                                    selectedItineraryJourney = journey
+                                },
+                                onClose = {
+                                    scope.launch {
+                                        scaffoldSheetState.bottomSheetState.hide()
+                                    }
+                                    itineraryInitialStopName = null
+                                    isItineraryUltraCollapsed = false
+                                    sheetContentState = null
+                                }
+                            )
+                        }
                     }
                     null -> {}
                 }
@@ -2059,54 +2179,65 @@ fun PlanScreen(
                         .padding(top = 8.dp, start = 10.dp, end = 10.dp),
                     verticalArrangement = Arrangement.spacedBy(0.dp)
                 ) {
-                    ItinerarySearchBarField(
-                        selectedStop = itineraryDepartureStop,
-                        onClick = {
-                            itinerarySearchTarget = ItineraryFieldTarget.DEPARTURE
-                            itineraryDepartureQuery = itineraryDepartureQuery.ifBlank {
-                                itineraryDepartureStop?.name ?: ""
-                            }
-                            itineraryDepartureResults = emptyList()
-                            itinerarySearchFocusNonce++
-                        },
-                        icon = Icons.Default.MyLocation,
-                        placeholder = "Arret de depart"
-                    )
-
-                    Row(
-                        modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 10.dp),
-                        horizontalArrangement = Arrangement.Center
+                    Box(
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.SwapVert,
-                            contentDescription = "Inverser",
-                            tint = Color.Black,
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(0.dp)
+                        ) {
+                            ItinerarySearchBarField(
+                                selectedStop = itineraryDepartureStop,
+                                onClick = {
+                                    itinerarySearchTarget = ItineraryFieldTarget.DEPARTURE
+                                    itineraryDepartureQuery = itineraryDepartureQuery.ifBlank {
+                                        itineraryDepartureStop?.name ?: ""
+                                    }
+                                    itineraryDepartureResults = emptyList()
+                                    itinerarySearchFocusNonce++
+                                },
+                                icon = Icons.Default.MyLocation,
+                                placeholder = "Arret de depart"
+                            )
+
+                            ItinerarySearchBarField(
+                                modifier = Modifier.offset(y = (-18).dp),
+                                selectedStop = itineraryArrivalStop,
+                                onClick = {
+                                    itinerarySearchTarget = ItineraryFieldTarget.ARRIVAL
+                                    itineraryArrivalQuery = itineraryArrivalQuery.ifBlank {
+                                        itineraryArrivalStop?.name ?: ""
+                                    }
+                                    itineraryArrivalResults = emptyList()
+                                    itinerarySearchFocusNonce++
+                                },
+                                icon = Icons.Default.Search,
+                                placeholder = "Arret d'arrivee"
+                            )
+                        }
+
+                        Box(
                             modifier = Modifier
-                                .size(26.dp)
+                                .align(Alignment.Center)
+                                .offset(y = 10.dp)
+                                .size(42.dp)
+                                .clip(CircleShape)
+                                .background(Color.White)
                                 .clickable {
                                     val previousDeparture = itineraryDepartureStop
                                     itineraryDepartureStop = itineraryArrivalStop
                                     itineraryArrivalStop = previousDeparture
-                                }
-                        )
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SwapVert,
+                                contentDescription = "Inverser",
+                                tint = Color.Black,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
                     }
-
-                    ItinerarySearchBarField(
-                        modifier = Modifier.offset(y = (-30).dp),
-                        selectedStop = itineraryArrivalStop,
-                        onClick = {
-                            itinerarySearchTarget = ItineraryFieldTarget.ARRIVAL
-                            itineraryArrivalQuery = itineraryArrivalQuery.ifBlank {
-                                itineraryArrivalStop?.name ?: ""
-                            }
-                            itineraryArrivalResults = emptyList()
-                            itinerarySearchFocusNonce++
-                        },
-                        icon = Icons.Default.Search,
-                        placeholder = "Arret d'arrivee"
-                    )
                 }
             }
 
@@ -2869,11 +3000,155 @@ private fun addCircleLayerForLineStops(
     }
 }
 
+private fun hideMapLines(
+    map: MapLibreMap
+) {
+    map.getStyle { style ->
+        style.getLayer("all-lines-layer")?.setProperties(PropertyFactory.visibility("none"))
+
+        style.layers
+            .map { it.id }
+            .filter { it.startsWith("layer-") }
+            .forEach { layerId ->
+                style.getLayer(layerId)?.setProperties(PropertyFactory.visibility("none"))
+        }
+
+        style.getLayer("line-stops-circles")?.let { style.removeLayer(it) }
+        style.getSource("line-stops-circles-source")?.let { style.removeSource(it) }
+    }
+}
+
+private fun clearItineraryLayers(style: Style) {
+    val layerIds = style.layers.map { it.id }.filter { it.startsWith("inline-itinerary-") }
+    layerIds.forEach { layerId ->
+        style.getLayer(layerId)?.let { style.removeLayer(it) }
+        val sourceId = layerId.replace("-layer-", "-source-")
+        style.getSource(sourceId)?.let { style.removeSource(it) }
+    }
+}
+
+private fun drawItinerariesOnMap(
+    map: MapLibreMap,
+    journeys: List<JourneyResult>,
+    selectedJourney: JourneyResult?
+) {
+    map.getStyle { style ->
+        clearItineraryLayers(style)
+        if (journeys.isEmpty()) return@getStyle
+
+        val journeysToDraw = selectedJourney?.let { listOf(it) } ?: journeys
+
+        journeysToDraw.forEachIndexed { journeyIndex, journey ->
+            journey.legs.forEachIndexed { legIndex, leg ->
+                val lineColor = if (leg.isWalking) {
+                    "#6B7280"
+                } else {
+                    val colorInt = LineColorHelper.getColorForLineString(leg.routeName ?: "")
+                    String.format(Locale.ROOT, "#%06X", 0xFFFFFF and colorInt)
+                }
+
+                val coordinatesArray = JsonArray()
+                val fromCoord = JsonArray()
+                fromCoord.add(leg.fromLon)
+                fromCoord.add(leg.fromLat)
+                coordinatesArray.add(fromCoord)
+
+                leg.intermediateStops.forEach { stop ->
+                    val coord = JsonArray()
+                    coord.add(stop.lon)
+                    coord.add(stop.lat)
+                    coordinatesArray.add(coord)
+                }
+
+                val toCoord = JsonArray()
+                toCoord.add(leg.toLon)
+                toCoord.add(leg.toLat)
+                coordinatesArray.add(toCoord)
+
+                val lineGeoJson = JsonObject().apply {
+                    addProperty("type", "Feature")
+                    val geometry = JsonObject().apply {
+                        addProperty("type", "LineString")
+                        add("coordinates", coordinatesArray)
+                    }
+                    add("geometry", geometry)
+                }
+
+                val sourceId = "inline-itinerary-leg-source-$journeyIndex-$legIndex"
+                val layerId = "inline-itinerary-leg-layer-$journeyIndex-$legIndex"
+
+                style.addSource(GeoJsonSource(sourceId, lineGeoJson.toString()))
+                val lineLayer = LineLayer(layerId, sourceId).apply {
+                    setProperties(
+                        PropertyFactory.lineColor(lineColor),
+                        PropertyFactory.lineWidth(if (leg.isWalking) 3f else 5f),
+                        PropertyFactory.lineOpacity(1.0f),
+                        PropertyFactory.lineCap("round"),
+                        PropertyFactory.lineJoin("round")
+                    )
+                    if (leg.isWalking) {
+                        setProperties(PropertyFactory.lineDasharray(arrayOf(2f, 2f)))
+                    }
+                }
+                style.addLayer(lineLayer)
+            }
+        }
+    }
+}
+
+private fun zoomToItineraries(
+    map: MapLibreMap,
+    journeys: List<JourneyResult>
+) {
+    if (journeys.isEmpty()) return
+
+    val boundsBuilder = LatLngBounds.Builder()
+    var hasCoordinates = false
+
+    journeys.forEach { journey ->
+        journey.legs.forEach { leg ->
+            boundsBuilder.include(LatLng(leg.fromLat, leg.fromLon))
+            boundsBuilder.include(LatLng(leg.toLat, leg.toLon))
+            hasCoordinates = true
+
+            leg.intermediateStops.forEach { stop ->
+                boundsBuilder.include(LatLng(stop.lat, stop.lon))
+                hasCoordinates = true
+            }
+        }
+    }
+
+    if (!hasCoordinates) return
+
+    try {
+        val bounds = boundsBuilder.build()
+        map.animateCamera(
+            CameraUpdateFactory.newLatLngBounds(
+                bounds,
+                70,
+                120,
+                70,
+                520
+            ),
+            900
+        )
+    } catch (_: Exception) {
+        // Ignore invalid bounds edge cases.
+    }
+}
+
 private fun showAllMapLines(
     map: MapLibreMap,
     allLines: List<Feature>
 ) {
     map.getStyle { style ->
+        clearItineraryLayers(style)
+
+        (style.getLayer("all-lines-layer") as? LineLayer)?.let { allLinesLayer ->
+            allLinesLayer.setProperties(PropertyFactory.visibility("visible"))
+            allLinesLayer.setFilter(Expression.literal(true))
+        }
+
         allLines.forEach { feature ->
             val ligne = feature.properties.ligne
             val codeTrace = feature.properties.codeTrace
