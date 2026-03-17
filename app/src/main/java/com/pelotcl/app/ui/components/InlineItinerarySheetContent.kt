@@ -254,7 +254,8 @@ fun InlineItinerarySheetContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                useLightColors = true
+                useLightColors = true,
+                scrollAllContent = true
             )
         }
 

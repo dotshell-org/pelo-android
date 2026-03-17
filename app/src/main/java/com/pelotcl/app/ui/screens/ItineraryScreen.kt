@@ -1336,7 +1336,8 @@ fun JourneyDetailsSheetContent(
     journey: JourneyResult,
     isExpanded: Boolean,
     modifier: Modifier = Modifier,
-    useLightColors: Boolean = false
+    useLightColors: Boolean = false,
+    scrollAllContent: Boolean = false
 ) {
     val context = LocalContext.current
     val primaryTextColor = if (useLightColors) Color.Black else Color.White
@@ -1360,7 +1361,19 @@ fun JourneyDetailsSheetContent(
             .fillMaxHeight(1f)
             .padding(horizontal = 16.dp)
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
+        val headerAndLegsModifier = if (scrollAllContent) {
+            Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(
+                    state = rememberScrollState(),
+                    enabled = isExpanded
+                )
+        } else {
+            Modifier.fillMaxWidth()
+        }
+
+        Column(modifier = headerAndLegsModifier) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1461,30 +1474,48 @@ fun JourneyDetailsSheetContent(
                 thickness = 1.dp
             )
             Spacer(modifier = Modifier.height(32.dp))
-        }
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .verticalScroll(
-                    state = rememberScrollState(),
-                    enabled = isExpanded
-                )
-        ) {
-            journey.legs.forEachIndexed { index, leg ->
-                key("${leg.fromStopId}_${leg.departureTime}") {
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        JourneyLegItem(
-                            leg = leg,
-                            isFirst = index == 0,
-                            isLast = index == journey.legs.size - 1,
-                            useLightColors = useLightColors
-                        )
+            if (scrollAllContent) {
+                journey.legs.forEachIndexed { index, leg ->
+                    key("${leg.fromStopId}_${leg.departureTime}") {
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            JourneyLegItem(
+                                leg = leg,
+                                isFirst = index == 0,
+                                isLast = index == journey.legs.size - 1,
+                                useLightColors = useLightColors
+                            )
+                        }
                     }
                 }
+                Spacer(modifier = Modifier.height(80.dp))
             }
-            Spacer(modifier = Modifier.height(80.dp))
+        }
+
+        if (!scrollAllContent) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(
+                        state = rememberScrollState(),
+                        enabled = isExpanded
+                    )
+            ) {
+                journey.legs.forEachIndexed { index, leg ->
+                    key("${leg.fromStopId}_${leg.departureTime}") {
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            JourneyLegItem(
+                                leg = leg,
+                                isFirst = index == 0,
+                                isLast = index == journey.legs.size - 1,
+                                useLightColors = useLightColors
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(80.dp))
+            }
         }
     }
 }
