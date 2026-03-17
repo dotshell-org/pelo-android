@@ -15,7 +15,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -28,7 +27,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +40,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -49,12 +49,13 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetScaffoldState
-import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -276,41 +277,13 @@ private data class MapFilterState(
 )
 
 @Composable
-private fun MapStyleSelector(
-    modifier: Modifier = Modifier,
-    selectedStyle: MapStyle,
-    styles: List<MapStyle>,
-    isExpanded: Boolean,
-    isStyleEnabled: (MapStyle) -> Boolean,
-    onToggleExpanded: () -> Unit,
-    onStyleSelected: (MapStyle) -> Unit
-) {
-    Row(
-        modifier = modifier
-            .animateContentSize(animationSpec = tween(durationMillis = 220))
-            .clip(RoundedCornerShape(12.dp)),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        val visibleStyles = if (isExpanded) {
-            listOf(selectedStyle) + styles.filterNot { it == selectedStyle }
-        } else {
-            listOf(selectedStyle)
-        }
-        visibleStyles.forEach { style ->
-            val enabled = isStyleEnabled(style)
-            MapStylePreviewTile(
-                style = style,
-                isEnabled = enabled,
-                onClick = {
-                    if (isExpanded) {
-                        if (enabled) onStyleSelected(style)
-                    } else {
-                        onToggleExpanded()
-                    }
-                }
-            )
-        }
+private fun mapStyleLabel(style: MapStyle): String {
+    return when (style) {
+        MapStyle.POSITRON -> "Clair"
+        MapStyle.DARK_MATTER -> "Sombre"
+        MapStyle.BRIGHT -> "OSM"
+        MapStyle.LIBERTY -> "3D"
+        MapStyle.SATELLITE -> "Satellite"
     }
 }
 
@@ -332,7 +305,7 @@ private fun MapStylePreviewTile(
         modifier = Modifier
             .size(60.dp)
             .border(
-                width = (0.5).dp,
+                width = 0.5.dp,
                 color = Color.Gray,
                 shape = RoundedCornerShape(12.dp)
             )
@@ -346,6 +319,116 @@ private fun MapStylePreviewTile(
             modifier = Modifier.fillMaxSize().scale(1.1F),
             alpha = alpha
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MapStyleSelectionSheet(
+    isOffline: Boolean,
+    downloadedMapStyles: Set<String>,
+    selectedMapStyle: MapStyle,
+    onDismiss: () -> Unit,
+    onStyleSelected: (MapStyle) -> Unit
+) {
+    val firstRowStyles = remember { MapStyle.entries.take(4) }
+    val secondRowStyles = remember { MapStyle.entries.drop(4) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 12.dp)
+        ) {
+            Text(
+                text = "Fond de carte",
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.size(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                firstRowStyles.forEach { style ->
+                    val enabled = !isOffline || style.key in downloadedMapStyles
+                    val isSelected = style == selectedMapStyle
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(14.dp))
+                                .border(
+                                    2.dp,
+                                    if (isSelected) Color(0xFF3B82F6) else Color.Transparent,
+                                    RoundedCornerShape(14.dp)
+                                )
+                                .padding(2.dp)
+                        ) {
+                            MapStylePreviewTile(
+                                style = style,
+                                isEnabled = enabled,
+                                onClick = { onStyleSelected(style) }
+                            )
+                        }
+
+                        Text(
+                            text = mapStyleLabel(style),
+                            color = if (enabled) Color.Black else Color(0xFF9CA3AF)
+                        )
+                    }
+                }
+            }
+
+            if (secondRowStyles.isNotEmpty()) {
+                Spacer(modifier = Modifier.size(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.Start),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    secondRowStyles.forEach { style ->
+                        val enabled = !isOffline || style.key in downloadedMapStyles
+                        val isSelected = style == selectedMapStyle
+
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .border(
+                                        2.dp,
+                                        if (isSelected) Color(0xFF3B82F6) else Color.Transparent,
+                                        RoundedCornerShape(14.dp)
+                                    )
+                                    .padding(2.dp)
+                            ) {
+                                MapStylePreviewTile(
+                                    style = style,
+                                    isEnabled = enabled,
+                                    onClick = { onStyleSelected(style) }
+                                )
+                            }
+
+                            Text(
+                                text = mapStyleLabel(style),
+                                color = if (enabled) Color.Black else Color(0xFF9CA3AF)
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -966,7 +1049,8 @@ fun PlanScreen(
     }
 
     // Update vehicle markers on the map when vehicle positions change
-    LaunchedEffect(vehiclePositions, mapInstance, selectedLine, mapStyleVersion) {
+    LaunchedEffect(vehiclePositions, mapInstance, selectedLine, mapStyleVersion, isMapStyleMenuExpanded) {
+        if (isMapStyleMenuExpanded) return@LaunchedEffect
         val map = mapInstance ?: return@LaunchedEffect
         val positions = vehiclePositions
         val line = selectedLine
@@ -1038,7 +1122,8 @@ fun PlanScreen(
     }
 
     // Global live map: render ALL vehicles with per-line colored markers
-    LaunchedEffect(globalVehiclePositions, mapInstance, mapStyleVersion) {
+    LaunchedEffect(globalVehiclePositions, mapInstance, mapStyleVersion, isMapStyleMenuExpanded) {
+        if (isMapStyleMenuExpanded) return@LaunchedEffect
         val map = mapInstance ?: return@LaunchedEffect
         val positions = globalVehiclePositions
 
@@ -1142,7 +1227,8 @@ fun PlanScreen(
     // Use snapshotFlow with debounce to avoid overwhelming the map when user changes stations rapidly.
     // collectLatest automatically cancels previous collection when new values arrive.
     @OptIn(FlowPreview::class)
-    LaunchedEffect(mapInstance, mapStyleVersion) {
+    LaunchedEffect(mapInstance, mapStyleVersion, isMapStyleMenuExpanded) {
+        if (isMapStyleMenuExpanded) return@LaunchedEffect
         val map = mapInstance ?: return@LaunchedEffect
 
         snapshotFlow {
@@ -1446,42 +1532,6 @@ fun PlanScreen(
                 centerOnUserLocation = shouldCenterOnUser
             )
 
-            if (isMapStyleMenuExpanded) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() }
-                        ) {
-                            isMapStyleMenuExpanded = false
-                        }
-                )
-            }
-
-            MapStyleSelector(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(start = 16.dp, bottom = 122.dp),
-                selectedStyle = selectedMapStyle,
-                styles = MapStyle.entries,
-                isExpanded = isMapStyleMenuExpanded,
-                isStyleEnabled = { style ->
-                    !isOffline || style.key in offlineDataInfo.downloadedMapStyles
-                },
-                onToggleExpanded = { isMapStyleMenuExpanded = !isMapStyleMenuExpanded },
-                onStyleSelected = { style ->
-                    mapStyleRepository.saveSelectedStyle(style)
-                    val effectiveStyle = mapStyleRepository.getEffectiveStyle(
-                        isOffline,
-                        offlineDataInfo.downloadedMapStyles
-                    )
-                    selectedMapStyle = effectiveStyle
-                    mapStyleUrl = effectiveStyle.styleUrl
-                    isMapStyleMenuExpanded = false
-                }
-            )
-
             if (uiState is TransportLinesUiState.Loading || stopsUiState is TransportStopsUiState.Loading) {
                 // Show skeleton loading instead of spinner for better UX
                 Box(
@@ -1497,7 +1547,7 @@ fun PlanScreen(
 
             // Recenter button
             AnimatedVisibility(
-                visible = userLocation != null && !isCenteredOnUser && !isMapStyleMenuExpanded,
+                visible = userLocation != null && !isCenteredOnUser,
                 enter = fadeIn(),
                 exit = fadeOut(),
                 modifier = Modifier
@@ -1549,100 +1599,146 @@ fun PlanScreen(
 
             // Unified LIVE button (global when no selected bus line, line-specific otherwise)
             val isLineContext = sheetContentState == SheetContentState.LINE_DETAILS || sheetContentState == SheetContentState.ALL_SCHEDULES
+            val controlsTopPadding = if (isLineContext) 36.dp else 146.dp
             val selectedTrackableLineName = selectedLine?.lineName?.takeIf { isLineContext && isLiveTrackableLine(it) }
             val hasSelectedNotTrackableLine = selectedLine?.lineName?.let { isLineContext && !isLiveTrackableLine(it) } == true
-            AnimatedVisibility(
-                visible = !isOffline && !hasSelectedNotTrackableLine,
-                enter = fadeIn(),
-                exit = fadeOut(),
+            val showLiveButton = !isOffline && !hasSelectedNotTrackableLine
+
+            Row(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(
-                        top = if (sheetContentState == SheetContentState.LINE_DETAILS || sheetContentState == SheetContentState.ALL_SCHEDULES) {
-                            36.dp
-                        } else {
-                            160.dp
-                        },
+                        top = controlsTopPadding,
                         end = 12.dp
-                    )
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                val isLiveModeEnabled = isLiveTrackingEnabled || isGlobalLiveEnabled
-                val hasVehicles = when {
-                    isLiveTrackingEnabled -> vehiclePositions.isNotEmpty()
-                    isGlobalLiveEnabled -> globalVehiclePositions.isNotEmpty()
-                    else -> false
-                }
-                val isActiveNoVehicles = isLiveModeEnabled && !hasVehicles
-                
-                // Animation for the bouncing dot (goes up and down)
-                val infiniteTransition = rememberInfiniteTransition(label = "live_dot")
-                val dotOffset by infiniteTransition.animateFloat(
-                    initialValue = if (hasVehicles) -2f else 0f,
-                    targetValue = if (hasVehicles) 2f else 0f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(400),
-                        repeatMode = RepeatMode.Reverse
-                    ),
-                    label = "dot_bounce"
-                )
-                
-                val buttonColor = when {
-                    hasVehicles -> Color(0xFFEF4444) // Red when active with vehicles
-                    isActiveNoVehicles -> Color(0xFF9CA3AF) // Gray when active but no vehicles
-                    else -> Color.Black // Black when inactive
-                }
-                val showLiveBorder = isDarkMatterStyle && buttonColor == Color.Black && !isSearchExpanded
                 Button(
-                    onClick = {
-                        if (isLiveModeEnabled) {
-                            if (isLiveTrackingEnabled) {
-                                viewModel.stopLiveTracking()
-                            }
-                            if (isGlobalLiveEnabled) {
-                                viewModel.stopGlobalLive()
-                            }
-                        } else {
-                            selectedTrackableLineName?.let { lineName ->
-                                viewModel.startLiveTracking(lineName)
-                            } ?: viewModel.toggleGlobalLive()
-                        }
-                    },
-                    border = if (showLiveBorder) BorderStroke(1.dp, Color.Gray) else null,
+                    onClick = { isMapStyleMenuExpanded = true },
+                    border = if (isDarkMatterStyle && !isSearchExpanded) BorderStroke(1.dp, Color.Gray) else null,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = buttonColor
+                        containerColor = Color.Black
                     ),
-                    shape = RoundedCornerShape(20.dp),
+                    shape = CircleShape,
                     elevation = ButtonDefaults.buttonElevation(
                         defaultElevation = 4.dp
                     ),
                     contentPadding = PaddingValues(
-                        start = 15.dp,
-                        end = 16.dp,
-                        top = 8.dp,
-                        bottom = 8.dp
+                        top = 6.dp,
+                        bottom = 6.dp
                     )
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Always show dot, animate when active with vehicles
-                        Canvas(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .graphicsLayer { translationY = dotOffset }
-                        ) {
-                            drawCircle(color = Color.White)
-                        }
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "LIVE",
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
+                    Icon(
+                        imageVector = Icons.Filled.Layers,
+                        contentDescription = "Layers",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                AnimatedVisibility(
+                    visible = showLiveButton,
+                    enter = fadeIn(),
+                    exit = fadeOut()
+                ) {
+                    val isLiveModeEnabled = isLiveTrackingEnabled || isGlobalLiveEnabled
+                    val hasVehicles = when {
+                        isLiveTrackingEnabled -> vehiclePositions.isNotEmpty()
+                        isGlobalLiveEnabled -> globalVehiclePositions.isNotEmpty()
+                        else -> false
+                    }
+                    val isActiveNoVehicles = isLiveModeEnabled && !hasVehicles
+
+                    // Animation for the bouncing dot (goes up and down)
+                    val infiniteTransition = rememberInfiniteTransition(label = "live_dot")
+                    val dotOffset by infiniteTransition.animateFloat(
+                        initialValue = if (hasVehicles) -2f else 0f,
+                        targetValue = if (hasVehicles) 2f else 0f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(400),
+                            repeatMode = RepeatMode.Reverse
+                        ),
+                        label = "dot_bounce"
+                    )
+
+                    val buttonColor = when {
+                        hasVehicles -> Color(0xFFEF4444) // Red when active with vehicles
+                        isActiveNoVehicles -> Color(0xFF9CA3AF) // Gray when active but no vehicles
+                        else -> Color.Black // Black when inactive
+                    }
+                    val showLiveBorder = isDarkMatterStyle && buttonColor == Color.Black && !isSearchExpanded
+                    Button(
+                        onClick = {
+                            if (isLiveModeEnabled) {
+                                if (isLiveTrackingEnabled) {
+                                    viewModel.stopLiveTracking()
+                                }
+                                if (isGlobalLiveEnabled) {
+                                    viewModel.stopGlobalLive()
+                                }
+                            } else {
+                                selectedTrackableLineName?.let { lineName ->
+                                    viewModel.startLiveTracking(lineName)
+                                } ?: viewModel.toggleGlobalLive()
+                            }
+                        },
+                        border = if (showLiveBorder) BorderStroke(1.dp, Color.Gray) else null,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = buttonColor
+                        ),
+                        shape = RoundedCornerShape(20.dp),
+                        elevation = ButtonDefaults.buttonElevation(
+                            defaultElevation = 4.dp
+                        ),
+                        contentPadding = PaddingValues(
+                            start = 15.dp,
+                            end = 16.dp,
+                            top = 8.dp,
+                            bottom = 8.dp
                         )
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Always show dot, animate when active with vehicles
+                            Canvas(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .graphicsLayer { translationY = dotOffset }
+                            ) {
+                                drawCircle(color = Color.White)
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "LIVE",
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
                     }
                 }
             }
+
         }
+    }
+
+    if (isMapStyleMenuExpanded) {
+        MapStyleSelectionSheet(
+            isOffline = isOffline,
+            downloadedMapStyles = offlineDataInfo.downloadedMapStyles,
+            selectedMapStyle = selectedMapStyle,
+            onDismiss = { isMapStyleMenuExpanded = false },
+            onStyleSelected = { style ->
+                mapStyleRepository.saveSelectedStyle(style)
+                val effectiveStyle = mapStyleRepository.getEffectiveStyle(
+                    isOffline,
+                    offlineDataInfo.downloadedMapStyles
+                )
+                selectedMapStyle = effectiveStyle
+                mapStyleUrl = effectiveStyle.styleUrl
+            }
+        )
     }
 
     LaunchedEffect(shouldCenterOnUser) {
@@ -1726,9 +1822,7 @@ private fun StationSheetContent(
     stationInfo: StationInfo,
     onDismiss: () -> Unit,
     onLineClick: (String) -> Unit,
-    onItineraryClick: (String) -> Unit = {},
-    isFavorite: Boolean = false,
-    onToggleFavorite: (String) -> Unit = {}
+    onItineraryClick: (String) -> Unit = {}
 ) {
     StationBottomSheet(
         stationInfo = stationInfo,
@@ -1795,11 +1889,6 @@ private fun filterMapLines(
         allLines.forEach { feature ->
             val ligne = feature.properties.ligne
             val codeTrace = feature.properties.codeTrace
-            
-            // Skip if essential properties are null
-            if (ligne == null || codeTrace == null) {
-                return@forEach
-            }
             
             val individualLayerId = "layer-${ligne}-${codeTrace}"
             style.getLayer(individualLayerId)?.let { layer ->
@@ -2109,12 +2198,7 @@ private fun showAllMapLines(
         allLines.forEach { feature ->
             val ligne = feature.properties.ligne
             val codeTrace = feature.properties.codeTrace
-            
-            // Skip if essential properties are null
-            if (ligne == null || codeTrace == null) {
-                return@forEach
-            }
-            
+
             val layerId = "layer-${ligne}-${codeTrace}"
             val sourceId = "line-${ligne}-${codeTrace}"
 

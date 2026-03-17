@@ -235,7 +235,7 @@ private fun AddFavoriteItem(
         )
         Spacer(modifier = Modifier.width(4.dp))
         Text(
-            text = "Creer un favori",
+            text = "Créer un favori",
             style = textStyle,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
