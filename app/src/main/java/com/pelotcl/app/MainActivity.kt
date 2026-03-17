@@ -554,7 +554,7 @@ fun NavBar(modifier: Modifier = Modifier) {
         
         // Position calculations:
         // Favorites row sits below search bar and contains the create button + favorites chips
-        val favoritesBarTopPosition = searchBarHeight + 34.dp
+        val favoritesBarTopPosition = searchBarHeight + 38.dp
         
         // Search Bar - stays at the very top as requested
         if (selectedDestination == Destination.PLAN.ordinal && !isBottomSheetOpen && !showLinesSheet && itineraryDestinationStop == null) {
@@ -656,6 +656,9 @@ fun NavBar(modifier: Modifier = Modifier) {
                             lines = emptyList() // Will be loaded from stops data
                         )
                         stopOptionsSelectedStop = stopResult
+                    },
+                    onRemoveFavoriteClick = { favorite ->
+                        viewModel.removeUserFavorite(favorite.id)
                     }
                 )
             }
