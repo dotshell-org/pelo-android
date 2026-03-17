@@ -262,7 +262,9 @@ private fun getModeIconForLine(lineName: String): String? {
 data class AllSchedulesInfo(
     val lineName: String,
     val directionName: String,
-    val schedules: List<String>
+    val schedules: List<String>,
+    val availableDirections: List<Int> = emptyList(),
+    val headsigns: Map<Int, String> = emptyMap()
 )
 
 enum class SheetContentState {
@@ -539,13 +541,15 @@ fun PlanScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val stopsUiState by viewModel.stopsUiState.collectAsState()
-    val favoriteLines by viewModel.favoriteLines.collectAsState()
     val favoriteStops by viewModel.favoriteStops.collectAsState()
     val vehiclePositions by viewModel.vehiclePositions.collectAsState()
     val isLiveTrackingEnabled by viewModel.isLiveTrackingEnabled.collectAsState()
     val isOffline by viewModel.isOffline.collectAsState()
     val isGlobalLiveEnabled by viewModel.isGlobalLiveEnabled.collectAsState()
     val globalVehiclePositions by viewModel.globalVehiclePositions.collectAsState()
+    val headsigns by viewModel.headsigns.collectAsState()
+    val availableDirections by viewModel.availableDirections.collectAsState()
+    val allSchedules by viewModel.allSchedules.collectAsState()
     var mapInstance by remember { mutableStateOf<MapLibreMap?>(null) }
     // Incremented each time the map style is reloaded, to force LaunchedEffects to re-run
     var mapStyleVersion by remember { mutableIntStateOf(0) }
@@ -1375,6 +1379,11 @@ fun PlanScreen(
     BackHandler(enabled = sheetContentState != null || selectedLine != null || selectedStation != null) {
         when (sheetContentState) {
             SheetContentState.ALL_SCHEDULES -> {
+                requestedSheetValueForNextContent = if (isSheetExpandedOrExpanding) {
+                    SheetValue.Expanded
+                } else {
+                    SheetValue.PartiallyExpanded
+                }
                 allSchedulesInfo = null
                 sheetContentState = SheetContentState.LINE_DETAILS
             }
@@ -1420,7 +1429,7 @@ fun PlanScreen(
     val stationCollapsedPeekHeight = bottomPadding + 300.dp
     val peekHeight = when(sheetContentState) {
         SheetContentState.LINE_DETAILS -> stationCollapsedPeekHeight
-        SheetContentState.ALL_SCHEDULES -> bottomPadding + 160.dp + extraHeaderPeek
+        SheetContentState.ALL_SCHEDULES -> stationCollapsedPeekHeight
         SheetContentState.STATION -> stationCollapsedPeekHeight
         else -> 0.dp
     }
@@ -1507,7 +1516,18 @@ fun PlanScreen(
                                     }
                                 },
                                 onShowAllSchedules = { lineName, directionName, schedules ->
-                                    allSchedulesInfo = AllSchedulesInfo(lineName, directionName, schedules)
+                                    requestedSheetValueForNextContent = if (isSheetExpandedOrExpanding) {
+                                        SheetValue.Expanded
+                                    } else {
+                                        SheetValue.PartiallyExpanded
+                                    }
+                                    allSchedulesInfo = AllSchedulesInfo(
+                                        lineName = lineName,
+                                        directionName = directionName,
+                                        schedules = schedules,
+                                        availableDirections = availableDirections,
+                                        headsigns = headsigns
+                                    )
                                     sheetContentState = SheetContentState.ALL_SCHEDULES
                                 },
                                 onItineraryClick = { stopName ->
@@ -1575,10 +1595,46 @@ fun PlanScreen(
                     }
                     SheetContentState.ALL_SCHEDULES -> {
                         if (allSchedulesInfo != null) {
+                            val schedulesForCurrentDirection =
+                                if (allSchedules.isNotEmpty()) allSchedules else allSchedulesInfo!!.schedules
+                            val resolvedAllSchedulesInfo = allSchedulesInfo!!.copy(
+                                directionName = headsigns[selectedDirection] ?: allSchedulesInfo!!.directionName,
+                                schedules = schedulesForCurrentDirection
+                            )
+                            val allSchedulesDirections = if (allSchedulesInfo!!.availableDirections.isNotEmpty()) {
+                                allSchedulesInfo!!.availableDirections
+                            } else {
+                                availableDirections
+                            }
+                            val allSchedulesHeadsigns = if (allSchedulesInfo!!.headsigns.isNotEmpty()) {
+                                allSchedulesInfo!!.headsigns
+                            } else {
+                                headsigns
+                            }
                             AllSchedulesSheetContent(
-                                allSchedulesInfo = allSchedulesInfo!!,
+                                allSchedulesInfo = resolvedAllSchedulesInfo,
                                 lineInfo = selectedLine!!,
+                                selectedDirection = selectedDirection,
+                                availableDirections = allSchedulesDirections,
+                                headsigns = allSchedulesHeadsigns,
+                                onDirectionChange = { newDirection ->
+                                    selectedDirection = newDirection
+                                    selectedLine?.currentStationName?.takeIf { it.isNotBlank() }?.let { stopName ->
+                                        scope.launch {
+                                            viewModel.loadSchedulesForDirection(
+                                                lineName = selectedLine!!.lineName,
+                                                stopName = stopName,
+                                                directionId = newDirection
+                                            )
+                                        }
+                                    }
+                                },
                                 onBack = {
+                                    requestedSheetValueForNextContent = if (isSheetExpandedOrExpanding) {
+                                        SheetValue.Expanded
+                                    } else {
+                                        SheetValue.PartiallyExpanded
+                                    }
                                     sheetContentState = SheetContentState.LINE_DETAILS
                                 }
                             )
@@ -1891,7 +1947,6 @@ fun PlanScreen(
                         }
                     }
                 },
-                favoriteLines = favoriteLines,
                 viewModel = viewModel
             )
         }
