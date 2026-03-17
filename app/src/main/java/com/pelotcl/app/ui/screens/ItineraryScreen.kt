@@ -437,10 +437,11 @@ fun ItineraryScreen(
                     }
 
                     // Mark that initial load is complete
+                    isInitialLoad = false
 
                     journeys = results
                     if (results.isEmpty()) {
-                        errorMessage = "Aucun itinéraire trouvé depuis les arrêts proches"
+                        errorMessage = "Aucun itinéraire trouvé"
                     }
                 } catch (e: Exception) {
                     Log.e("ItineraryScreen", "Error calculating journey", e)
@@ -449,6 +450,21 @@ fun ItineraryScreen(
                     isLoading = false
                 }
             }
+        }
+    }
+
+    // Handle automatic fallback to tomorrow at midnight when no results are found
+    LaunchedEffect(journeys, selectedDate, selectedTimeSeconds) {
+        if (journeys.isEmpty() && (selectedDate == null || selectedDate == LocalDate.now())) {
+            // Give a moment for the UI to update with the error message
+            delay(1000)
+
+            // Automatically try with tomorrow at midnight
+            selectedDate = LocalDate.now().plusDays(1) // Demain
+            selectedTimeSeconds = 0 // Minuit (0 secondes depuis minuit)
+
+            // Show informative message
+            errorMessage = "Aucun itinéraire trouvé pour aujourd'hui. Recherche automatique pour demain à minuit..."
         }
     }
 
@@ -851,7 +867,7 @@ fun ItineraryScreen(
                     onTimeSelected = { timeSeconds ->
                         selectedTimeSeconds = timeSeconds
                     },
-                    onDismiss = { }
+                    onDismiss = { showTimePicker = false }
                 )
             }
             
@@ -862,7 +878,7 @@ fun ItineraryScreen(
                     onDateSelected = { date ->
                         selectedDate = date
                     },
-                    onDismiss = { }
+                    onDismiss = { showDatePicker = false }
                 )
             }
         } // End of else block for selectedJourney == null
@@ -1792,7 +1808,8 @@ fun TimePickerDialog(
                                 shape = RoundedCornerShape(8.dp)
                             )
                             .clickable { 
-                                onTimeSelected(selectedHour * 3600 + selectedMinute * 60) 
+                                onTimeSelected(selectedHour * 3600 + selectedMinute * 60)
+                                onDismiss()
                             }
                             .padding(horizontal = 16.dp, vertical = 8.dp)
                     ) {
@@ -2024,7 +2041,10 @@ fun DatePickerDialog(
                                 color = Red500,
                                 shape = RoundedCornerShape(8.dp)
                             )
-                            .clickable { onDateSelected(selectedDate) }
+                            .clickable { 
+                                onDateSelected(selectedDate)
+                                onDismiss()
+                            }
                             .padding(horizontal = 16.dp, vertical = 8.dp)
                     ) {
                         Text(
