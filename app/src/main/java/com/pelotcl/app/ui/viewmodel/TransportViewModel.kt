@@ -106,6 +106,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     val favoriteLines: StateFlow<Set<String>> = _favoriteLines.asStateFlow()
     private val _favoriteStops = MutableStateFlow<Set<String>>(emptySet())
     val favoriteStops: StateFlow<Set<String>> = _favoriteStops.asStateFlow()
+    private val _userFavorites = MutableStateFlow<List<com.pelotcl.app.data.model.Favorite>>(emptyList())
+    val userFavorites: StateFlow<List<com.pelotcl.app.data.model.Favorite>> = _userFavorites.asStateFlow()
     private val _selectedLineName = MutableStateFlow<String?>(null)
     val selectedLineName: StateFlow<String?> = _selectedLineName.asStateFlow()
 
@@ -203,6 +205,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     }
                 }
             }
+
+            // Load user-created favorites
+            _userFavorites.value = favoritesRepository.getUserFavorites()
         }
 
         // Defer traffic alerts - not critical for initial display
@@ -988,6 +993,81 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
             favoritesRepository.toggleFavoriteStop(stopName, desserte)
             _favoriteStops.value = favoritesRepository.getFavoriteStops()
+        }
+    }
+
+    // === User-created favorites methods ===
+
+    /**
+     * Add a new user-created favorite
+     */
+    fun addUserFavorite(name: String, iconName: String, stopName: String): Boolean {
+        return try {
+            val favorite = com.pelotcl.app.data.model.Favorite(
+                id = favoritesRepository.generateFavoriteId(),
+                name = name,
+                iconName = iconName,
+                iconColor = "#000000",
+                stopName = stopName
+            )
+            val success = favoritesRepository.addFavorite(favorite)
+            if (success) {
+                _userFavorites.value = favoritesRepository.getUserFavorites()
+            }
+            success
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Remove a user-created favorite by ID
+     */
+    fun removeUserFavorite(favoriteId: String): Boolean {
+        return try {
+            val success = favoritesRepository.removeFavorite(favoriteId)
+            if (success) {
+                _userFavorites.value = favoritesRepository.getUserFavorites()
+            }
+            success
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Update an existing user-created favorite
+     */
+    fun updateUserFavorite(favoriteId: String, name: String, iconName: String, iconColor: String, stopName: String): Boolean {
+        return try {
+            val currentFavorites = _userFavorites.value
+            val existingFavorite = currentFavorites.find { it.id == favoriteId }
+            if (existingFavorite != null) {
+                val updatedFavorite = existingFavorite.copy(
+                    name = name,
+                    iconName = iconName,
+                    iconColor = iconColor,
+                    stopName = stopName
+                )
+                val success = favoritesRepository.updateFavorite(updatedFavorite)
+                if (success) {
+                    _userFavorites.value = favoritesRepository.getUserFavorites()
+                }
+                success
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Refresh the user favorites list
+     */
+    fun refreshUserFavorites() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _userFavorites.value = favoritesRepository.getUserFavorites()
         }
     }
 

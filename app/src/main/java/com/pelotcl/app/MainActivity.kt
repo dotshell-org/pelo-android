@@ -16,9 +16,13 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Route
@@ -47,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -55,6 +60,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.google.android.gms.location.LocationServices
+import com.pelotcl.app.ui.components.AddFavoriteDialog
+import com.pelotcl.app.ui.components.FavoritesBar
 import com.pelotcl.app.ui.components.LineSearchResult
 import com.pelotcl.app.ui.components.SimpleSearchBar
 import com.pelotcl.app.ui.components.StationSearchResult
@@ -242,6 +249,8 @@ fun NavBar(modifier: Modifier = Modifier) {
     val favoriteStops by viewModel.favoriteStops.collectAsState()
     var favoriteStopItems by remember { mutableStateOf<List<SearchHistoryItem>>(emptyList()) }
     val stopsUiState by viewModel.stopsUiState.collectAsState()
+    val userFavorites by viewModel.userFavorites.collectAsState()
+    var showAddFavoriteDialog by remember { mutableStateOf(false) }
     
     // Load search history on startup
     LaunchedEffect(Unit) {
@@ -535,83 +544,133 @@ fun NavBar(modifier: Modifier = Modifier) {
             }
         }
 
+        // UI Overlays - Search Bar at top, favorites row (with create button) below it
+        // LIVE button remains in PlanScreen for proper integration with map controls
+        
+        // Calculate UI element positions - declared outside if blocks for shared access
+        val searchBarHeight = 56.dp // Standard Material 3 search bar height
+        val addFavoriteButtonHeight = 40.dp // Favorites row height approximation
+        val spacingBetweenElements = 4.dp // Spacing between UI elements
+        
+        // Position calculations:
+        // Favorites row sits below search bar and contains the create button + favorites chips
+        val favoritesBarTopPosition = searchBarHeight + 34.dp
+        
+        // Search Bar - stays at the very top as requested
         if (selectedDestination == Destination.PLAN.ordinal && !isBottomSheetOpen && !showLinesSheet && itineraryDestinationStop == null) {
-            SimpleSearchBar(
-                searchResults = stationSearchResults,
-                lineSearchResults = lineSearchResults,
-                searchHistory = searchHistory,
-                favoriteStops = favoriteStopItems,
-                onQueryChange = { query ->
-                    searchQuery = query
-                },
-                onSearch = { result ->
-                    // Save to search history
-                    searchHistoryRepository.addToHistory(
-                        SearchHistoryItem(
-                            query = result.stopName,
-                            type = SearchType.STOP,
-                            lines = result.lines
-                        )
-                    )
-                    searchHistory = searchHistoryRepository.getSearchHistory()
-                    
-                    // onSearch launches itinerary (main click behavior)
-                    itineraryDestinationStop = result.stopName
-                    searchQuery = ""
-                },
-                onLineSearch = { lineResult ->
-                    // Save to search history
-                    searchHistoryRepository.addToHistory(
-                        SearchHistoryItem(
-                            query = lineResult.lineName,
-                            type = SearchType.LINE
-                        )
-                    )
-                    searchHistory = searchHistoryRepository.getSearchHistory()
-                    
-                    // Select the line to show its details (via PlanScreen's LaunchedEffect)
-                    viewModel.selectLine(lineResult.lineName)
-                    searchQuery = ""
-                },
-                onHistoryItemClick = { historyItem ->
-                    if (historyItem.type == SearchType.LINE) {
-                        // Open line details (via PlanScreen's LaunchedEffect)
-                        viewModel.selectLine(historyItem.query)
-                    } else {
-                        // Main click on history item launches itinerary
-                        itineraryDestinationStop = historyItem.query
-                    }
-                },
-                onHistoryItemRemove = { historyItem ->
-                    searchHistoryRepository.removeFromHistory(historyItem.query, historyItem.type)
-                    searchHistory = searchHistoryRepository.getSearchHistory()
-                },
-                showDarkOutline = currentMapStyle == MapStyle.DARK_MATTER,
-                onExpandedChange = { expanded -> isSearchExpanded = expanded },
-                onStopOptionsClick = { stopResult ->
-                    searchHistoryRepository.addToHistory(
-                        SearchHistoryItem(
-                            query = stopResult.stopName,
-                            type = SearchType.STOP,
-                            lines = stopResult.lines
-                        )
-                    )
-                    searchHistory = searchHistoryRepository.getSearchHistory()
-                    // onStopOptionsClick shows stop details (button click behavior)
-                    stopOptionsSelectedStop = stopResult
-                },
-                onHistoryItemOptionsClick = { historyItem ->
-                    if (historyItem.type == SearchType.STOP) {
-                        // Button click on history item shows stop details
-                        stopOptionsSelectedStop = StationSearchResult(
-                            stopName = historyItem.query,
-                            lines = historyItem.lines
-                        )
-                    }
-                },
+            Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
+            ) {
+                SimpleSearchBar(
+                    searchResults = stationSearchResults,
+                    lineSearchResults = lineSearchResults,
+                    searchHistory = searchHistory,
+                    onQueryChange = { query ->
+                        searchQuery = query
+                    },
+                    onSearch = { result ->
+                        // Save to search history
+                        searchHistoryRepository.addToHistory(
+                            SearchHistoryItem(
+                                query = result.stopName,
+                                type = SearchType.STOP,
+                                lines = result.lines
+                            )
+                        )
+                        searchHistory = searchHistoryRepository.getSearchHistory()
+                        
+                        // onSearch launches itinerary (main click behavior)
+                        itineraryDestinationStop = result.stopName
+                        searchQuery = ""
+                    },
+                    onLineSearch = { lineResult ->
+                        // Save to search history
+                        searchHistoryRepository.addToHistory(
+                            SearchHistoryItem(
+                                query = lineResult.lineName,
+                                type = SearchType.LINE
+                            )
+                        )
+                        searchHistory = searchHistoryRepository.getSearchHistory()
+                        
+                        // Select the line to show its details (via PlanScreen's LaunchedEffect)
+                        viewModel.selectLine(lineResult.lineName)
+                        searchQuery = ""
+                    },
+                    onHistoryItemClick = { historyItem ->
+                        if (historyItem.type == SearchType.LINE) {
+                            // Open line details (via PlanScreen's LaunchedEffect)
+                            viewModel.selectLine(historyItem.query)
+                        } else {
+                            // Main click on history item launches itinerary
+                            itineraryDestinationStop = historyItem.query
+                        }
+                    },
+                    onHistoryItemRemove = { historyItem ->
+                        searchHistoryRepository.removeFromHistory(historyItem.query, historyItem.type)
+                        searchHistory = searchHistoryRepository.getSearchHistory()
+                    },
+                    showDarkOutline = currentMapStyle == MapStyle.DARK_MATTER,
+                    onExpandedChange = { expanded -> isSearchExpanded = expanded },
+                    onStopOptionsClick = { stopResult ->
+                        searchHistoryRepository.addToHistory(
+                            SearchHistoryItem(
+                                query = stopResult.stopName,
+                                type = SearchType.STOP,
+                                lines = stopResult.lines
+                            )
+                        )
+                        searchHistory = searchHistoryRepository.getSearchHistory()
+                        // onStopOptionsClick shows stop details (button click behavior)
+                        stopOptionsSelectedStop = stopResult
+                    },
+                    onHistoryItemOptionsClick = { historyItem ->
+                        if (historyItem.type == SearchType.STOP) {
+                            // Button click on history item shows stop details
+                            stopOptionsSelectedStop = StationSearchResult(
+                                stopName = historyItem.query,
+                                lines = historyItem.lines
+                            )
+                        }
+                    }
+                )
+            }
+        }
+
+        // Favorites row - includes add button and all favorites in one horizontal scrollable list
+        if (selectedDestination == Destination.PLAN.ordinal && !isBottomSheetOpen && !showLinesSheet && itineraryDestinationStop == null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = favoritesBarTopPosition)
+            ) {
+                FavoritesBar(
+                    favorites = userFavorites,
+                    onAddFavoriteClick = { showAddFavoriteDialog = true },
+                    onFavoriteClick = { favorite ->
+                        // Navigate to the favorite's stop
+                        val stopResult = StationSearchResult(
+                            stopName = favorite.stopName,
+                            lines = emptyList() // Will be loaded from stops data
+                        )
+                        stopOptionsSelectedStop = stopResult
+                    }
+                )
+            }
+        }
+
+        // Add Favorite Dialog - displayed on top of everything
+        if (showAddFavoriteDialog) {
+            val availableStops = (stopsUiState as? TransportStopsUiState.Success)?.stops?.map { it.properties.nom } ?: emptyList()
+            AddFavoriteDialog(
+                onDismiss = { showAddFavoriteDialog = false },
+                onFavoriteCreated = { name, iconName, stopName ->
+                    viewModel.addUserFavorite(name, iconName, stopName)
+                    showAddFavoriteDialog = false
+                },
+                availableStops = availableStops
             )
         }
     }

@@ -38,8 +38,6 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.PriorityHigh
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -373,52 +371,26 @@ fun LineDetailsBottomSheet(
                     }
                     
                     val isLineFavorite = favoriteLines.contains(lineInfo.lineName.uppercase())
-                    val hasSelectedStop = lineInfo.currentStationName.isNotBlank()
 
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(0.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    // Keep only the line favorite button (heart)
+                    // The star system for stop favorites has been removed
+                    IconButton(
+                        onClick = {
+                            viewModel.toggleFavorite(lineInfo.lineName)
+                            Toast.makeText(
+                                context,
+                                if (isLineFavorite) "Ligne supprimée des favoris" else "Ligne ajoutée aux favoris",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        },
+                        modifier = Modifier.size(36.dp)
                     ) {
-                        if (hasSelectedStop) {
-                            val isStopFavorite = favoriteStops.contains(lineInfo.currentStationName)
-                            IconButton(
-                                onClick = {
-                                    onToggleFavoriteStop(lineInfo.currentStationName)
-                                    Toast.makeText(
-                                        context,
-                                        if (isStopFavorite) "Arrêt supprimé des favoris" else "Arrêt ajouté aux favoris",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (isStopFavorite) Icons.Filled.Star else Icons.Filled.StarBorder,
-                                    contentDescription = if (isStopFavorite) "Retirer l'arrêt des favoris" else "Ajouter l'arrêt aux favoris",
-                                    tint = if (isStopFavorite) Color(0xFFFFC107) else Color.Gray,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                            }
-                        }
-
-                        IconButton(
-                            onClick = {
-                                viewModel.toggleFavorite(lineInfo.lineName)
-                                Toast.makeText(
-                                    context,
-                                    if (isLineFavorite) "Ligne supprimée des favoris" else "Ligne ajoutée aux favoris",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            val heartIcon = if (isLineFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder
-                            Icon(
-                                imageVector = heartIcon,
-                                contentDescription = if (isLineFavorite) "Retirer la ligne des favoris" else "Ajouter la ligne aux favoris",
-                                tint = if (isLineFavorite) Red500 else Color.Gray
-                            )
-                        }
+                        val heartIcon = if (isLineFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder
+                        Icon(
+                            imageVector = heartIcon,
+                            contentDescription = if (isLineFavorite) "Retirer la ligne des favoris" else "Ajouter la ligne aux favoris",
+                            tint = if (isLineFavorite) Red500 else Color.Gray
+                        )
                     }
                 }
 
@@ -1040,14 +1012,7 @@ private fun StopItemWithLine(
                 modifier = Modifier.weight(1f, fill = false)
             )
 
-            if (isFavorite) {
-                Icon(
-                    imageVector = Icons.Filled.Star,
-                    contentDescription = "Arrêt favori",
-                    tint = Color(0xFFFFC107),
-                    modifier = Modifier.padding(end = 8.dp).size(18.dp)
-                )
-            }
+            // Removed star icon for stop favorites - using new favorites system instead
 
             if (filteredConnections.isNotEmpty()) {
                 Spacer(modifier = Modifier.width(8.dp))

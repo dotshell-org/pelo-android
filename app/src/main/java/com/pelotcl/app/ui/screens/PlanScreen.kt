@@ -1402,9 +1402,7 @@ fun PlanScreen(
                                         sheetContentState = SheetContentState.LINE_DETAILS
                                     }
                                 },
-                                onItineraryClick = onItineraryClick,
-                                isFavorite = favoriteStops.contains(selectedStation!!.nom),
-                                onToggleFavorite = { viewModel.toggleFavoriteStop(it) }
+                                onItineraryClick = onItineraryClick
                             )
                         }
                     }
@@ -1563,7 +1561,7 @@ fun PlanScreen(
                         top = if (sheetContentState == SheetContentState.LINE_DETAILS || sheetContentState == SheetContentState.ALL_SCHEDULES) {
                             36.dp
                         } else {
-                            100.dp
+                            160.dp
                         },
                         end = 12.dp
                     )
@@ -1737,9 +1735,7 @@ private fun StationSheetContent(
         sheetState = null,
         onDismiss = onDismiss,
         onLineClick = onLineClick,
-        onItineraryClick = { onItineraryClick(stationInfo.nom) },
-        isFavorite = isFavorite,
-        onToggleFavorite = onToggleFavorite
+        onItineraryClick = { onItineraryClick(stationInfo.nom) }
     )
 }
 

@@ -119,7 +119,6 @@ fun SimpleSearchBar(
     searchResults: List<StationSearchResult>,
     lineSearchResults: List<LineSearchResult> = emptyList(),
     searchHistory: List<SearchHistoryItem> = emptyList(),
-    favoriteStops: List<SearchHistoryItem> = emptyList(),
     onSearch: (StationSearchResult) -> Unit,
     onLineSearch: (LineSearchResult) -> Unit = {},
     onHistoryItemClick: (SearchHistoryItem) -> Unit = {},
@@ -266,22 +265,8 @@ fun SimpleSearchBar(
                     ) {}
             ) {
                 if (query.isEmpty()) {
-                    if (favoriteStops.isNotEmpty()) {
-                        SectionHeader(icon = Icons.Default.Star, text = "Arrêts favoris")
-                        favoriteStops.forEach { historyItem ->
-                            HistoryListItem(
-                                historyItem = historyItem,
-                                showRemove = false,
-                                onClick = {
-                                    onHistoryItemClick(historyItem)
-                                    query = ""
-                                    setExpandedState(false)
-                                },
-                                onOptionsClick = { onHistoryItemOptionsClick(historyItem) },
-                                onRemoveClick = {}
-                            )
-                        }
-                    }
+                    // Removed favorite stops section - using new favorites system instead
+                    // The favorites bar handles favorite stops now
 
                     if (searchHistory.isNotEmpty()) {
                         SectionHeader(icon = Icons.Default.History, text = "Recherches récentes")
