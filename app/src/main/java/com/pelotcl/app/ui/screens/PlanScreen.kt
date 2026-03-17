@@ -33,30 +33,42 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.BottomSheetScaffold
+import androidx.compose.material3.SearchBar
+import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberStandardBottomSheetState
@@ -80,8 +92,16 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.pelotcl.app.R
@@ -97,6 +117,7 @@ import com.google.android.gms.location.Priority
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.pelotcl.app.ui.components.AllSchedulesSheetContent
+import com.pelotcl.app.ui.components.InlineItinerarySheetContent
 import com.pelotcl.app.ui.components.LineDetailsBottomSheet
 import com.pelotcl.app.ui.components.LineInfo
 import com.pelotcl.app.ui.components.LinesBottomSheet
@@ -104,6 +125,7 @@ import com.pelotcl.app.ui.components.MapLibreView
 import com.pelotcl.app.ui.components.StationBottomSheet
 import com.pelotcl.app.ui.components.StationInfo
 import com.pelotcl.app.ui.components.StationSearchResult
+import com.pelotcl.app.ui.screens.SelectedStop
 import com.pelotcl.app.data.repository.MapStyle
 import com.pelotcl.app.data.repository.MapStyleRepository
 import com.pelotcl.app.ui.viewmodel.TransportLinesUiState
@@ -111,6 +133,7 @@ import com.pelotcl.app.ui.viewmodel.TransportStopsUiState
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LineColorHelper
+import com.pelotcl.app.ui.theme.Red500
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -121,6 +144,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
@@ -141,6 +165,8 @@ import com.pelotcl.app.data.model.Feature
 import com.pelotcl.app.data.model.StopFeature
 import com.pelotcl.app.data.model.StopGeometry
 import com.pelotcl.app.data.model.StopProperties
+import com.pelotcl.app.utils.LocationHelper.startLocationUpdates
+import com.pelotcl.app.utils.LocationHelper.stopLocationUpdates
 import kotlinx.coroutines.delay
 import org.maplibre.android.maps.Style
 
@@ -270,7 +296,13 @@ data class AllSchedulesInfo(
 enum class SheetContentState {
     STATION,
     LINE_DETAILS,
-    ALL_SCHEDULES
+    ALL_SCHEDULES,
+    ITINERARY
+}
+
+private enum class ItineraryFieldTarget {
+    DEPARTURE,
+    ARRIVAL
 }
 
 /**
@@ -531,13 +563,16 @@ fun PlanScreen(
     onLinesSheetDismiss: () -> Unit = {},
     searchSelectedStop: StationSearchResult? = null,
     onSearchSelectionHandled: () -> Unit = {},
+    itinerarySelectedStopName: String? = null,
+    onItinerarySelectionHandled: () -> Unit = {},
     optionsSelectedStop: StationSearchResult? = null,
     onOptionsSelectionHandled: () -> Unit = {},
     onItineraryClick: (stopName: String) -> Unit = {},
     initialUserLocation: LatLng? = null,
     isVisible: Boolean = true,
     onMapStyleChanged: (MapStyle) -> Unit = {},
-    isSearchExpanded: Boolean = false
+    isSearchExpanded: Boolean = false,
+    onItineraryModeChanged: (Boolean) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val stopsUiState by viewModel.stopsUiState.collectAsState()
@@ -608,6 +643,14 @@ fun PlanScreen(
     var selectedStation by remember { mutableStateOf<StationInfo?>(null) }
     var selectedLine by remember { mutableStateOf<LineInfo?>(null) }
     var requestedSheetValueForNextContent by remember { mutableStateOf<SheetValue?>(null) }
+    var itineraryInitialStopName by remember { mutableStateOf<String?>(null) }
+    var itineraryDepartureStop by remember { mutableStateOf<SelectedStop?>(null) }
+    var itineraryArrivalStop by remember { mutableStateOf<SelectedStop?>(null) }
+    var itineraryDepartureQuery by remember { mutableStateOf("") }
+    var itineraryArrivalQuery by remember { mutableStateOf("") }
+    var itineraryDepartureResults by remember { mutableStateOf<List<StationSearchResult>>(emptyList()) }
+    var itineraryArrivalResults by remember { mutableStateOf<List<StationSearchResult>>(emptyList()) }
+    var itineraryNearbyDepartureStops by remember { mutableStateOf<List<String>>(emptyList()) }
 
     var allSchedulesInfo by remember { mutableStateOf<AllSchedulesInfo?>(null) }
 
@@ -631,6 +674,7 @@ fun PlanScreen(
 
     LaunchedEffect(sheetContentState, selectedStation) {
         onSheetStateChanged(sheetContentState != null)
+        onItineraryModeChanged(sheetContentState == SheetContentState.ITINERARY)
 
         val requestedValue = requestedSheetValueForNextContent
         if (requestedValue != null &&
@@ -688,8 +732,87 @@ fun PlanScreen(
             }
         }
 
+        if (sheetContentState == SheetContentState.ITINERARY &&
+            previousSheetContentState != SheetContentState.ITINERARY) {
+            scope.launch {
+                if (isSheetExpandedOrExpanding) {
+                    scaffoldSheetState.bottomSheetState.expand()
+                } else {
+                    scaffoldSheetState.bottomSheetState.partialExpand()
+                }
+            }
+        }
+
         // Keep transition history in sync for the next state change.
         previousSheetContentState = sheetContentState
+    }
+
+    var itinerarySearchTarget by remember { mutableStateOf<ItineraryFieldTarget?>(null) }
+    var itinerarySearchFocusNonce by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(itinerarySearchTarget, itineraryDepartureQuery, itineraryArrivalQuery) {
+        val target = itinerarySearchTarget ?: return@LaunchedEffect
+        val query = if (target == ItineraryFieldTarget.DEPARTURE) {
+            itineraryDepartureQuery
+        } else {
+            itineraryArrivalQuery
+        }
+
+        if (query.length < 2) {
+            if (target == ItineraryFieldTarget.DEPARTURE) {
+                itineraryDepartureResults = emptyList()
+            } else {
+                itineraryArrivalResults = emptyList()
+            }
+            return@LaunchedEffect
+        }
+
+        delay(250)
+        val results = viewModel.searchStops(query)
+        if (target == ItineraryFieldTarget.DEPARTURE) {
+            itineraryDepartureResults = results
+        } else {
+            itineraryArrivalResults = results
+        }
+    }
+
+    // Initialize itinerary defaults when opening inline itinerary mode:
+    // - arrival = selected stop used to launch itinerary
+    // - departure = nearest stop to current user location
+    LaunchedEffect(sheetContentState, itineraryInitialStopName, userLocation, stopsUiState) {
+        if (sheetContentState != SheetContentState.ITINERARY) return@LaunchedEffect
+
+        if (itineraryArrivalStop == null) {
+            val arrivalName = itineraryInitialStopName?.takeIf { it.isNotBlank() }
+            if (arrivalName != null) {
+                val ids = viewModel.raptorRepository.searchStopsByName(arrivalName).map { it.id }
+                if (ids.isNotEmpty()) {
+                    itineraryArrivalStop = SelectedStop(name = arrivalName, stopIds = ids)
+                }
+            }
+        }
+
+        if (itineraryDepartureStop == null) {
+            val location = userLocation
+            val stops = (stopsUiState as? TransportStopsUiState.Success)?.stops
+            if (location != null && !stops.isNullOrEmpty()) {
+                val nearestStops = viewModel.raptorRepository.findNearestStops(
+                    latitude = location.latitude,
+                    longitude = location.longitude,
+                    limit = 5
+                )
+                val nearestStopNames = nearestStops.map { it.name }.distinct()
+                itineraryNearbyDepartureStops = nearestStopNames
+
+                val nearestStopName = nearestStopNames.firstOrNull() ?: findNearestStopName(location, stops)
+                if (!nearestStopName.isNullOrBlank()) {
+                    val ids = viewModel.raptorRepository.searchStopsByName(nearestStopName).map { it.id }
+                    if (ids.isNotEmpty()) {
+                        itineraryDepartureStop = SelectedStop(name = nearestStopName, stopIds = ids)
+                    }
+                }
+            }
+        }
     }
 
     // Auto-hide the bottom sheet when content state is null but sheet is still visible
@@ -919,6 +1042,24 @@ fun PlanScreen(
 
                 onSearchSelectionHandled()
             }
+        }
+    }
+
+    // Handle itinerary selection from top search bar to keep continuity in PlanScreen
+    LaunchedEffect(itinerarySelectedStopName) {
+        val stopName = itinerarySelectedStopName
+        if (!stopName.isNullOrBlank()) {
+            requestedSheetValueForNextContent = if (isSheetExpandedOrExpanding) {
+                SheetValue.Expanded
+            } else {
+                SheetValue.PartiallyExpanded
+            }
+            itineraryInitialStopName = stopName
+            itineraryArrivalQuery = stopName
+            val raptorStops = viewModel.raptorRepository.searchStopsByName(stopName)
+            itineraryArrivalStop = SelectedStop(name = stopName, stopIds = raptorStops.map { it.id })
+            sheetContentState = SheetContentState.ITINERARY
+            onItinerarySelectionHandled()
         }
     }
 
@@ -1374,6 +1515,12 @@ fun PlanScreen(
     }
 
     val bottomPadding = contentPadding.calculateBottomPadding()
+    val configuration = LocalConfiguration.current
+    val itinerarySearchOverlayHeight = 174.dp
+    val itinerarySheetSafetyOffset = 90.dp
+    val itinerarySheetMaxHeight =
+        (configuration.screenHeightDp.dp - itinerarySearchOverlayHeight - bottomPadding - itinerarySheetSafetyOffset)
+            .coerceAtLeast(280.dp)
 
     // Handle back button press - close sheets/selections before exiting app
     BackHandler(enabled = sheetContentState != null || selectedLine != null || selectedStation != null) {
@@ -1386,6 +1533,16 @@ fun PlanScreen(
                 }
                 allSchedulesInfo = null
                 sheetContentState = SheetContentState.LINE_DETAILS
+            }
+            SheetContentState.ITINERARY -> {
+                sheetContentState = null
+                itineraryInitialStopName = null
+                itineraryDepartureStop = null
+                itineraryArrivalStop = null
+                itineraryDepartureQuery = ""
+                itineraryArrivalQuery = ""
+                itineraryDepartureResults = emptyList()
+                itineraryArrivalResults = emptyList()
             }
             // If viewing line details, go back to station (if came from station) or close
             SheetContentState.LINE_DETAILS -> {
@@ -1431,6 +1588,7 @@ fun PlanScreen(
         SheetContentState.LINE_DETAILS -> stationCollapsedPeekHeight
         SheetContentState.ALL_SCHEDULES -> stationCollapsedPeekHeight
         SheetContentState.STATION -> stationCollapsedPeekHeight
+        SheetContentState.ITINERARY -> stationCollapsedPeekHeight
         else -> 0.dp
     }
     val unifiedSheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
@@ -1531,7 +1689,13 @@ fun PlanScreen(
                                     sheetContentState = SheetContentState.ALL_SCHEDULES
                                 },
                                 onItineraryClick = { stopName ->
-                                    onItineraryClick(stopName)
+                                    requestedSheetValueForNextContent = if (isSheetExpandedOrExpanding) {
+                                        SheetValue.Expanded
+                                    } else {
+                                        SheetValue.PartiallyExpanded
+                                    }
+                                    itineraryInitialStopName = stopName
+                                    sheetContentState = SheetContentState.ITINERARY
                                 },
                                 onHeaderClick = {
                                     scope.launch {
@@ -1589,7 +1753,15 @@ fun PlanScreen(
                                 },
                                 isFavoriteStop = favoriteStops.any { it.equals(selectedStation!!.nom, ignoreCase = true) },
                                 onToggleFavoriteStop = { viewModel.toggleFavoriteStop(selectedStation!!.nom) },
-                                onItineraryClick = onItineraryClick
+                                onItineraryClick = { stopName ->
+                                    requestedSheetValueForNextContent = if (isSheetExpandedOrExpanding) {
+                                        SheetValue.Expanded
+                                    } else {
+                                        SheetValue.PartiallyExpanded
+                                    }
+                                    itineraryInitialStopName = stopName
+                                    sheetContentState = SheetContentState.ITINERARY
+                                }
                             )
                         }
                     }
@@ -1639,6 +1811,25 @@ fun PlanScreen(
                                 }
                             )
                         }
+                    }
+                    SheetContentState.ITINERARY -> {
+                        InlineItinerarySheetContent(
+                            viewModel = viewModel,
+                            departureStop = itineraryDepartureStop,
+                            arrivalStop = itineraryArrivalStop,
+                            maxHeight = itinerarySheetMaxHeight,
+                            nearbyDepartureStops = itineraryNearbyDepartureStops,
+                            onDepartureFallbackSelected = { fallbackDeparture ->
+                                itineraryDepartureStop = fallbackDeparture
+                            },
+                            onClose = {
+                                scope.launch {
+                                    scaffoldSheetState.bottomSheetState.hide()
+                                }
+                                itineraryInitialStopName = null
+                                sheetContentState = null
+                            }
+                        )
                     }
                     null -> {}
                 }
@@ -1742,16 +1933,17 @@ fun PlanScreen(
             val hasSelectedNotTrackableLine = selectedLine?.lineName?.let { isLineContext && !isLiveTrackableLine(it) } == true
             val showLiveButton = !isOffline && !hasSelectedNotTrackableLine
 
-            Row(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(
-                        top = controlsTopPadding,
-                        end = 12.dp
-                    ),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            if (sheetContentState != SheetContentState.ITINERARY) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(
+                            top = controlsTopPadding,
+                            end = 12.dp
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                 Button(
                     onClick = { isMapStyleMenuExpanded = true },
                     border = if (isDarkMatterStyle && !isSearchExpanded) BorderStroke(1.dp, Color.Gray) else null,
@@ -1856,9 +2048,109 @@ fun PlanScreen(
                         }
                     }
                 }
+                }
+            }
+
+            if (sheetContentState == SheetContentState.ITINERARY) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .padding(top = 8.dp, start = 10.dp, end = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(0.dp)
+                ) {
+                    ItinerarySearchBarField(
+                        selectedStop = itineraryDepartureStop,
+                        onClick = {
+                            itinerarySearchTarget = ItineraryFieldTarget.DEPARTURE
+                            itineraryDepartureQuery = itineraryDepartureQuery.ifBlank {
+                                itineraryDepartureStop?.name ?: ""
+                            }
+                            itineraryDepartureResults = emptyList()
+                            itinerarySearchFocusNonce++
+                        },
+                        icon = Icons.Default.MyLocation,
+                        placeholder = "Arret de depart"
+                    )
+
+                    Row(
+                        modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 10.dp),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SwapVert,
+                            contentDescription = "Inverser",
+                            tint = Color.Black,
+                            modifier = Modifier
+                                .size(26.dp)
+                                .clickable {
+                                    val previousDeparture = itineraryDepartureStop
+                                    itineraryDepartureStop = itineraryArrivalStop
+                                    itineraryArrivalStop = previousDeparture
+                                }
+                        )
+                    }
+
+                    ItinerarySearchBarField(
+                        modifier = Modifier.offset(y = (-30).dp),
+                        selectedStop = itineraryArrivalStop,
+                        onClick = {
+                            itinerarySearchTarget = ItineraryFieldTarget.ARRIVAL
+                            itineraryArrivalQuery = itineraryArrivalQuery.ifBlank {
+                                itineraryArrivalStop?.name ?: ""
+                            }
+                            itineraryArrivalResults = emptyList()
+                            itinerarySearchFocusNonce++
+                        },
+                        icon = Icons.Default.Search,
+                        placeholder = "Arret d'arrivee"
+                    )
+                }
             }
 
         }
+    }
+
+    if (sheetContentState == SheetContentState.ITINERARY && itinerarySearchTarget != null) {
+        val isDepartureSearch = itinerarySearchTarget == ItineraryFieldTarget.DEPARTURE
+        val query = if (isDepartureSearch) itineraryDepartureQuery else itineraryArrivalQuery
+        val searchResults = if (isDepartureSearch) itineraryDepartureResults else itineraryArrivalResults
+
+        ItineraryFullscreenSearchOverlay(
+            query = query,
+            searchResults = searchResults,
+            placeholder = if (isDepartureSearch) "Rechercher un depart" else "Rechercher une arrivee",
+            autofocusNonce = itinerarySearchFocusNonce,
+            onQueryChange = { newValue ->
+                if (isDepartureSearch) {
+                    itineraryDepartureQuery = newValue
+                } else {
+                    itineraryArrivalQuery = newValue
+                }
+            },
+            onDismiss = { itinerarySearchTarget = null },
+            onResultSelected = { result ->
+                scope.launch {
+                    val raptorStops = viewModel.raptorRepository.searchStopsByName(result.stopName)
+                    val selectedStop = SelectedStop(
+                        name = result.stopName,
+                        stopIds = raptorStops.map { it.id }
+                    )
+                    if (isDepartureSearch) {
+                        itineraryDepartureStop = selectedStop
+                        itineraryDepartureQuery = ""
+                        itineraryDepartureResults = emptyList()
+                    } else {
+                        itineraryArrivalStop = selectedStop
+                        itineraryArrivalQuery = ""
+                        itineraryArrivalResults = emptyList()
+                    }
+                    itinerarySearchTarget = null
+                }
+            }
+        )
     }
 
     if (isMapStyleMenuExpanded) {
@@ -1951,6 +2243,250 @@ fun PlanScreen(
             )
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ItinerarySearchBarField(
+    modifier: Modifier = Modifier,
+    selectedStop: SelectedStop?,
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    placeholder: String
+) {
+    val displayedValue = selectedStop?.name ?: ""
+
+    SearchBar(
+        modifier = modifier
+            .fillMaxWidth(),
+        inputField = {
+            SearchBarDefaults.InputField(
+                query = displayedValue,
+                onQueryChange = { onClick() },
+                onSearch = { onClick() },
+                expanded = false,
+                onExpandedChange = { if (it) onClick() },
+                placeholder = {
+                    Text(
+                        text = placeholder,
+                        color = Color.White
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = Red500
+                    )
+                },
+                colors = TextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    cursorColor = Color.White,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent,
+                    focusedContainerColor = Color.Black,
+                    unfocusedContainerColor = Color.Black,
+                    focusedPlaceholderColor = Color.White.copy(alpha = 0.6f),
+                    unfocusedPlaceholderColor = Color.White.copy(alpha = 0.6f)
+                )
+            )
+        },
+        expanded = false,
+        onExpandedChange = { if (it) onClick() },
+        colors = SearchBarDefaults.colors(
+            containerColor = Color.Black,
+            dividerColor = Color.Transparent
+        )
+    ) {}
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ItineraryFullscreenSearchOverlay(
+    query: String,
+    searchResults: List<StationSearchResult>,
+    placeholder: String,
+    autofocusNonce: Int,
+    onQueryChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onResultSelected: (StationSearchResult) -> Unit
+) {
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    var queryField by remember {
+        mutableStateOf(
+            TextFieldValue(
+                text = query,
+                selection = TextRange(query.length)
+            )
+        )
+    }
+
+    LaunchedEffect(autofocusNonce, query) {
+        queryField = TextFieldValue(
+            text = query,
+            selection = TextRange(query.length)
+        )
+        focusRequester.requestFocus()
+        keyboardController?.show()
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .clickable(onClick = onDismiss)
+    ) {
+        SearchBar(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth(),
+            inputField = {
+                TextField(
+                    value = queryField,
+                    onValueChange = { updated ->
+                        queryField = updated
+                        onQueryChange(updated.text)
+                    },
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        imeAction = ImeAction.Search
+                    ),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                        onSearch = {
+                            keyboardController?.hide()
+                            if (queryField.text.length >= 2) {
+                                searchResults.firstOrNull()?.let(onResultSelected)
+                            }
+                        }
+                    ),
+                    placeholder = { Text(placeholder, color = Color.White) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Search",
+                            tint = Red500,
+                            modifier = Modifier.padding(start = 32.dp, end = 12.dp)
+                        )
+                    },
+                    modifier = Modifier
+                        .focusRequester(focusRequester)
+                        .fillMaxWidth(),
+                    colors = TextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        cursorColor = Color.White,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent,
+                        focusedContainerColor = Color.Black,
+                        unfocusedContainerColor = Color.Black,
+                        focusedPlaceholderColor = Color.White.copy(alpha = 0.6f),
+                        unfocusedPlaceholderColor = Color.White.copy(alpha = 0.6f)
+                    )
+                )
+            },
+            expanded = true,
+            onExpandedChange = { shouldExpand ->
+                if (!shouldExpand) onDismiss()
+            },
+            colors = SearchBarDefaults.colors(
+                containerColor = Color.Black,
+                dividerColor = Color.Transparent
+            )
+        ) {
+            if (query.length >= 2 && searchResults.isEmpty()) {
+                Text(
+                    text = "Aucun resultat",
+                    color = Color.White.copy(alpha = 0.65f),
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
+                )
+            } else if (query.length >= 2) {
+                searchResults.forEach { result ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onResultSelected(result) }
+                            .padding(horizontal = 24.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.7f),
+                            modifier = Modifier.padding(end = 10.dp)
+                        )
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                text = result.stopName,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+
+                            if (result.lines.isNotEmpty()) {
+                                Spacer(modifier = Modifier.size(4.dp))
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    result.lines.take(8).forEach { lineName ->
+                                        val resourceId = BusIconHelper.getResourceIdForLine(LocalContext.current, lineName)
+                                        if (resourceId != 0) {
+                                            Image(
+                                                painter = painterResource(id = resourceId),
+                                                contentDescription = stringResource(R.string.line_icon, lineName),
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        } else {
+                                            Text(
+                                                text = lineName,
+                                                color = Color.White.copy(alpha = 0.85f),
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun findNearestStopName(userLocation: LatLng, stops: List<StopFeature>): String? {
+    var nearestName: String? = null
+    var nearestDistance = Double.MAX_VALUE
+
+    stops.forEach { stop ->
+        val coordinates = stop.geometry.coordinates
+        if (coordinates.size >= 2) {
+            val lon = coordinates[0]
+            val lat = coordinates[1]
+            val distance = squaredDistance(
+                lat1 = userLocation.latitude,
+                lon1 = userLocation.longitude,
+                lat2 = lat,
+                lon2 = lon
+            )
+            if (distance < nearestDistance) {
+                nearestDistance = distance
+                nearestName = stop.properties.nom
+            }
+        }
+    }
+
+    return nearestName
+}
+
+private fun squaredDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+    val dLat = lat1 - lat2
+    val dLon = lon1 - lon2
+    return dLat * dLat + dLon * dLon
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

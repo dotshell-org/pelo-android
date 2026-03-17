@@ -11,11 +11,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,7 +69,6 @@ import com.pelotcl.app.data.repository.MapStyle
 import com.pelotcl.app.ui.screens.AboutScreen
 import com.pelotcl.app.ui.screens.ContactScreen
 import com.pelotcl.app.ui.screens.CreditsScreen
-import com.pelotcl.app.ui.screens.ItineraryScreen
 import com.pelotcl.app.ui.screens.LegalScreen
 import com.pelotcl.app.ui.screens.PlanScreen
 import com.pelotcl.app.ui.screens.ItinerarySettingsScreen
@@ -278,11 +274,8 @@ fun NavBar(modifier: Modifier = Modifier) {
 
     // Itinerary destination stop
     var itineraryDestinationStop by remember { mutableStateOf<String?>(null) }
+    var isItineraryModeActive by remember { mutableStateOf(false) }
     
-    // Track if itinerary map view is open (for navbar back behavior)
-    var isItineraryMapViewOpen by remember { mutableStateOf(false) }
-    var backFromMapTrigger by remember { mutableIntStateOf(0) }
-
     val scope = rememberCoroutineScope()
     
     val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -420,7 +413,6 @@ fun NavBar(modifier: Modifier = Modifier) {
                                 if (destination == Destination.LIGNES) {
                                     // Close itinerary when going to Lines
                                     itineraryDestinationStop = null
-                                    isItineraryMapViewOpen = false
                                     // Si on n'est pas sur Plan, naviguer vers Plan d'abord
                                     if (selectedDestination != Destination.PLAN.ordinal) {
                                         selectedDestination = Destination.PLAN.ordinal
@@ -449,16 +441,9 @@ fun NavBar(modifier: Modifier = Modifier) {
                                     selectedDestination = index
                                     showLinesSheet = false
                                 } else if (destination == Destination.PLAN) {
-                                    // Already on Plan tab - handle itinerary back navigation
+                                    // Already on Plan tab - close inline itinerary entry point if set
                                     if (itineraryDestinationStop != null) {
-                                        if (isItineraryMapViewOpen) {
-                                            // Go back from map view to itinerary list
-                                            backFromMapTrigger++
-                                        } else {
-                                            // Close itinerary entirely
-                                            itineraryDestinationStop = null
-                                            isItineraryMapViewOpen = false
-                                        }
+                                        itineraryDestinationStop = null
                                     }
                                 }
                             },
@@ -493,6 +478,8 @@ fun NavBar(modifier: Modifier = Modifier) {
                     onLinesSheetDismiss = {
                         showLinesSheet = false
                     },
+                    itinerarySelectedStopName = itineraryDestinationStop,
+                    onItinerarySelectionHandled = { itineraryDestinationStop = null },
                     searchSelectedStop = selectedStationFromSearch,
                     onSearchSelectionHandled = { selectedStationFromSearch = null },
                     optionsSelectedStop = stopOptionsSelectedStop,
@@ -506,7 +493,10 @@ fun NavBar(modifier: Modifier = Modifier) {
                     onMapStyleChanged = { style ->
                         currentMapStyle = style
                     },
-                    isSearchExpanded = isSearchExpanded
+                    isSearchExpanded = isSearchExpanded,
+                    onItineraryModeChanged = { active ->
+                        isItineraryModeActive = active
+                    }
                 )
                 
                 // Settings screens - displayed on top when on settings tab
@@ -522,26 +512,6 @@ fun NavBar(modifier: Modifier = Modifier) {
                 }
             }
             
-            // Itinerary overlay - displayed on top of PlanScreen but hidden when on Settings
-            AnimatedVisibility(
-                visible = itineraryDestinationStop != null && selectedDestination != Destination.PARAMETRES.ordinal,
-                enter = slideInVertically(initialOffsetY = { it }),
-                exit = slideOutVertically(targetOffsetY = { it })
-            ) {
-                ItineraryScreen(
-                    destinationStopName = itineraryDestinationStop ?: "",
-                    userLocation = userLocation,
-                    viewModel = viewModel,
-                    onBack = {
-                        itineraryDestinationStop = null
-                        isItineraryMapViewOpen = false
-                    },
-                    onMapViewChanged = { isMapOpen ->
-                        isItineraryMapViewOpen = isMapOpen
-                    },
-                    backFromMapTrigger = backFromMapTrigger
-                )
-            }
         }
 
         // UI Overlays - Search Bar at top, favorites row (with create button) below it
@@ -557,7 +527,7 @@ fun NavBar(modifier: Modifier = Modifier) {
         val favoritesBarTopPosition = searchBarHeight + 38.dp
         
         // Search Bar - keep visible on Plan, including when station/line detail sheets are open.
-        if (selectedDestination == Destination.PLAN.ordinal && !showLinesSheet && itineraryDestinationStop == null) {
+        if (selectedDestination == Destination.PLAN.ordinal && !showLinesSheet && itineraryDestinationStop == null && !isItineraryModeActive) {
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)

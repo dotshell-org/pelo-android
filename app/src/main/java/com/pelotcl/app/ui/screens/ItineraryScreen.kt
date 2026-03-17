@@ -870,7 +870,7 @@ fun ItineraryScreen(
 }
 
 @Composable
-private fun StopSelectionField(
+fun StopSelectionField(
     selectedStop: SelectedStop?,
     query: String,
     onQueryChange: (String) -> Unit,
@@ -1026,21 +1026,28 @@ private fun SmallLineBadge(lineName: String) {
  * Similar to the bottom sheet header in map view
  */
 @Composable
-private fun CompactJourneyCard(
+fun CompactJourneyCard(
     journey: JourneyResult,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    useLightColors: Boolean = false
 ) {
     val context = LocalContext.current
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val baseBackgroundColor = Color.White.copy(alpha = 0.1f)
+    val primaryTextColor = if (useLightColors) Color.Black else Color.White
+    val secondaryTextColor = if (useLightColors) Color(0xFF4B5563) else Color.White.copy(alpha = 0.7f)
+    val chipBackgroundColor = if (useLightColors) Color(0xFFF3F4F6) else Color.White.copy(alpha = 0.15f)
+    val baseBackgroundColor = if (useLightColors) Color(0xFFF9FAFB) else Color.White.copy(alpha = 0.1f)
     val backgroundColor by animateColorAsState(
-        targetValue = if (isPressed) Color.White.copy(alpha = 0.16f) else baseBackgroundColor,
+        targetValue = if (isPressed) {
+            if (useLightColors) Color(0xFFF3F4F6) else Color.White.copy(alpha = 0.16f)
+        } else {
+            baseBackgroundColor
+        },
         label = "compact_journey_press"
     )
-    
-    // Memoize formatted duration
+
     val formattedDuration = remember(journey.durationMinutes) {
         if (journey.durationMinutes < 60) {
             "${journey.durationMinutes} min"
@@ -1048,7 +1055,7 @@ private fun CompactJourneyCard(
             "${journey.durationMinutes / 60}h${(journey.durationMinutes % 60).toString().padStart(2, '0')}"
         }
     }
-    
+
     Card(
         modifier = modifier
             .clickable(
@@ -1056,9 +1063,7 @@ private fun CompactJourneyCard(
                 indication = null,
                 onClick = onClick
             ),
-        colors = CardDefaults.cardColors(
-            containerColor = backgroundColor
-        ),
+        colors = CardDefaults.cardColors(containerColor = backgroundColor),
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(
@@ -1066,7 +1071,6 @@ private fun CompactJourneyCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // Header with times and duration
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1077,43 +1081,40 @@ private fun CompactJourneyCard(
                         text = journey.formatDepartureTime(),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = primaryTextColor
                     )
                     Text(
-                        text = " → ",
+                        text = " -> ",
                         style = MaterialTheme.typography.titleMedium,
-                        color = Color.White.copy(alpha = 0.7f)
+                        color = secondaryTextColor
                     )
                     Text(
                         text = journey.formatArrivalTime(),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = primaryTextColor
                     )
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .background(
-                                color = Color.White.copy(alpha = 0.15f),
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                    ) {
-                        Text(
-                            text = formattedDuration,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp
+                Box(
+                    modifier = Modifier
+                        .background(
+                            color = chipBackgroundColor,
+                            shape = RoundedCornerShape(8.dp)
                         )
-                    }
+                ) {
+                    Text(
+                        text = formattedDuration,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        color = primaryTextColor,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
                 }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Horizontal journey summary with line icons and chevrons
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -1122,7 +1123,6 @@ private fun CompactJourneyCard(
                 val nonWalkingLegs = journey.legs.filterNot { it.isWalking }
 
                 nonWalkingLegs.forEachIndexed { index, leg ->
-                    // Transport line icon
                     val resourceId = BusIconHelper.getResourceIdForLine(context, leg.routeName ?: "")
 
                     if (resourceId != 0) {
@@ -1148,12 +1148,11 @@ private fun CompactJourneyCard(
                         }
                     }
 
-                    // Chevron between legs
                     if (index < nonWalkingLegs.size - 1) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                             contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.5f),
+                            tint = if (useLightColors) Color(0xFF6B7280) else Color.White.copy(alpha = 0.5f),
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -1167,11 +1166,15 @@ private fun CompactJourneyCard(
 private fun JourneyLegItem(
     leg: JourneyLeg,
     isFirst: Boolean,
-    isLast: Boolean
+    isLast: Boolean,
+    useLightColors: Boolean
 ) {
 
     val context = LocalContext.current
     val lineColor = if (leg.isWalking) Gray700 else Color(LineColorHelper.getColorForLineString(leg.routeName ?: ""))
+    val primaryTextColor = if (useLightColors) Color.Black else Color.White
+    val secondaryTextColor = if (useLightColors) Color(0xFF4B5563) else Color.White.copy(alpha = 0.7f)
+    val tertiaryTextColor = if (useLightColors) Color(0xFF6B7280) else Color.White.copy(alpha = 0.6f)
 
     // State for expanding intermediate stops
     var isExpanded by remember { mutableStateOf(false) }
@@ -1236,7 +1239,7 @@ private fun JourneyLegItem(
                         modifier = Modifier
                             .size(12.dp)
                             .border(3.dp, lineColor, CircleShape)
-                            .background(Color.Black)
+                            .background(if (useLightColors) Color.White else Color.Black)
                     )
                 }
             }
@@ -1247,14 +1250,14 @@ private fun JourneyLegItem(
                 .weight(1f)
                 .padding(start = 8.dp)
         ) {
-            Text(text = leg.fromStopName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, color = Color.White)
-            Text(text = leg.formatDepartureTime(), color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+            Text(text = leg.fromStopName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, color = primaryTextColor)
+            Text(text = leg.formatDepartureTime(), color = secondaryTextColor, style = MaterialTheme.typography.bodySmall)
 
             Spacer(modifier = Modifier.height(4.dp))
 
             Text(
                 text = if (leg.isWalking) "Marche ${leg.durationMinutes} min" else "Direction ${leg.direction ?: leg.toStopName}",
-                color = Color.White.copy(alpha = 0.7f),
+                color = secondaryTextColor,
                 style = MaterialTheme.typography.bodySmall
             )
 
@@ -1271,12 +1274,12 @@ private fun JourneyLegItem(
                     Icon(
                         imageVector = if (isExpanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
                         contentDescription = if (isExpanded) "Réduire" else "Développer",
-                        tint = Color.White.copy(alpha = 0.7f),
+                        tint = secondaryTextColor,
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
                         text = "${leg.intermediateStops.size} arrêt${if (leg.intermediateStops.size > 1) "s" else ""}",
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = secondaryTextColor,
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(start = 4.dp)
                     )
@@ -1296,13 +1299,13 @@ private fun JourneyLegItem(
                             ) {
                                 Text(
                                     text = stop.stopName,
-                                    color = Color.White.copy(alpha = 0.6f),
+                                    color = tertiaryTextColor,
                                     style = MaterialTheme.typography.bodySmall,
                                     modifier = Modifier.weight(1f)
                                 )
                                 Text(
                                     text = stop.formatArrivalTime(),
-                                    color = Color.White.copy(alpha = 0.5f),
+                                    color = if (useLightColors) Color(0xFF9CA3AF) else Color.White.copy(alpha = 0.5f),
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
@@ -1314,8 +1317,8 @@ private fun JourneyLegItem(
             if (isLast) {
                 Spacer(modifier = Modifier.weight(1f))
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(text = leg.toStopName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, color = Color.White)
-                Text(text = leg.formatArrivalTime(), color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+                Text(text = leg.toStopName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, color = primaryTextColor)
+                Text(text = leg.formatArrivalTime(), color = secondaryTextColor, style = MaterialTheme.typography.bodySmall)
             } else {
                 Spacer(modifier = Modifier.height(16.dp))
             }
@@ -1329,12 +1332,16 @@ private fun JourneyLegItem(
  * Expands to show full itinerary details when sheet is expanded
  */
 @Composable
-private fun JourneyDetailsSheetContent(
+fun JourneyDetailsSheetContent(
     journey: JourneyResult,
     isExpanded: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    useLightColors: Boolean = false
 ) {
     val context = LocalContext.current
+    val primaryTextColor = if (useLightColors) Color.Black else Color.White
+    val secondaryTextColor = if (useLightColors) Color(0xFF4B5563) else Color.White.copy(alpha = 0.7f)
+    val chipBackgroundColor = if (useLightColors) Color(0xFFF3F4F6) else Color.White.copy(alpha = 0.15f)
 
     // Memoize formatted duration to avoid recalculation on recomposition
     val formattedDuration by remember(journey.durationMinutes) {
@@ -1353,9 +1360,7 @@ private fun JourneyDetailsSheetContent(
             .fillMaxHeight(1f)
             .padding(horizontal = 16.dp)
     ) {
-        // --- Header Section (Always Visible) ---
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Header with times
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1366,32 +1371,32 @@ private fun JourneyDetailsSheetContent(
                         text = journey.formatDepartureTime(),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = primaryTextColor
                     )
                     Text(
-                        text = " → ",
+                        text = " -> ",
                         style = MaterialTheme.typography.titleMedium,
-                        color = Color.White.copy(alpha = 0.7f)
+                        color = secondaryTextColor
                     )
                     Text(
                         text = journey.formatArrivalTime(),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = primaryTextColor
                     )
                 }
 
                 Box(
                     modifier = Modifier
                         .background(
-                            color = Color.White.copy(alpha = 0.15f),
+                            color = chipBackgroundColor,
                             shape = RoundedCornerShape(8.dp)
                         )
                 ) {
                     Text(
                         text = formattedDuration,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        color = Color.White,
+                        color = primaryTextColor,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp
                     )
@@ -1400,7 +1405,6 @@ private fun JourneyDetailsSheetContent(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Horizontal journey summary with line icons
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1414,7 +1418,6 @@ private fun JourneyDetailsSheetContent(
                     val nonWalkingLegs = journey.legs.filterNot { it.isWalking }
 
                     nonWalkingLegs.forEachIndexed { index, leg ->
-                        // Transport line icon
                         val resourceId = BusIconHelper.getResourceIdForLine(context, leg.routeName ?: "")
 
                         if (resourceId != 0) {
@@ -1440,12 +1443,11 @@ private fun JourneyDetailsSheetContent(
                             }
                         }
 
-                        // Arrow between legs
                         if (index < nonWalkingLegs.size - 1) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                                 contentDescription = null,
-                                tint = Color.White.copy(alpha = 0.5f),
+                                tint = if (useLightColors) Color(0xFF6B7280) else Color.White.copy(alpha = 0.5f),
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -1455,23 +1457,19 @@ private fun JourneyDetailsSheetContent(
 
             Spacer(modifier = Modifier.height(32.dp))
             HorizontalDivider(
-                color = Color.White.copy(alpha = 0.2f),
+                color = if (useLightColors) Color(0xFFE5E7EB) else Color.White.copy(alpha = 0.2f),
                 thickness = 1.dp
             )
             Spacer(modifier = Modifier.height(32.dp))
         }
 
-        // --- Expanded Details Section ---
-        // This content is always part of the layout but pushed down.
-        // The weight(1f) ensures it fills the rest of the available height.
-        // Scroll is only enabled when the sheet is expanded.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
                 .verticalScroll(
                     state = rememberScrollState(),
-                    enabled = isExpanded // Scroll only works when expanded
+                    enabled = isExpanded
                 )
         ) {
             journey.legs.forEachIndexed { index, leg ->
@@ -1480,12 +1478,12 @@ private fun JourneyDetailsSheetContent(
                         JourneyLegItem(
                             leg = leg,
                             isFirst = index == 0,
-                            isLast = index == journey.legs.size - 1
+                            isLast = index == journey.legs.size - 1,
+                            useLightColors = useLightColors
                         )
                     }
                 }
             }
-            // Bottom spacer to prevent content from being cut off by navigation bar
             Spacer(modifier = Modifier.height(80.dp))
         }
     }
@@ -1495,20 +1493,27 @@ private fun JourneyDetailsSheetContent(
  * Row for selecting departure/arrival time mode and picking a date/time
  */
 @Composable
-private fun TimeSelectionRow(
+fun TimeSelectionRow(
     timeMode: TimeMode,
     selectedTimeSeconds: Int?,
     selectedDate: LocalDate?,
     onTimeModeChange: (TimeMode) -> Unit,
     onTimeClick: () -> Unit,
     onDateClick: () -> Unit,
-    onClearDateTime: () -> Unit
+    onClearDateTime: () -> Unit,
+    useLightColors: Boolean = false
 ) {
+    val containerColor = if (useLightColors) Color(0xFFF9FAFB) else Color.White.copy(alpha = 0.1f)
+    val selectedModeBackground = if (useLightColors) Color(0xFFE5E7EB) else Color.White.copy(alpha = 0.2f)
+    val pickerBackground = if (useLightColors) Color(0xFFF3F4F6) else Color.White.copy(alpha = 0.15f)
+    val primaryTextColor = if (useLightColors) Color.Black else Color.White
+    val secondaryTextColor = if (useLightColors) Color(0xFF4B5563) else Color.White.copy(alpha = 0.6f)
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                color = Color.White.copy(alpha = 0.1f),
+                color = containerColor,
                 shape = RoundedCornerShape(12.dp)
             )
             .padding(12.dp)
@@ -1527,7 +1532,7 @@ private fun TimeSelectionRow(
                 Box(
                     modifier = Modifier
                         .background(
-                            color = if (timeMode == TimeMode.DEPARTURE) Color.White.copy(alpha = 0.2f) else Color.Transparent,
+                            color = if (timeMode == TimeMode.DEPARTURE) selectedModeBackground else Color.Transparent,
                             shape = RoundedCornerShape(8.dp)
                         )
                         .clickable { onTimeModeChange(TimeMode.DEPARTURE) }
@@ -1535,7 +1540,7 @@ private fun TimeSelectionRow(
                 ) {
                     Text(
                         text = "Départ",
-                        color = if (timeMode == TimeMode.DEPARTURE) Color.White else Color.White.copy(alpha = 0.6f),
+                        color = if (timeMode == TimeMode.DEPARTURE) primaryTextColor else secondaryTextColor,
                         fontWeight = if (timeMode == TimeMode.DEPARTURE) FontWeight.Bold else FontWeight.Normal,
                         fontSize = 14.sp
                     )
@@ -1547,7 +1552,7 @@ private fun TimeSelectionRow(
                 Box(
                     modifier = Modifier
                         .background(
-                            color = if (timeMode == TimeMode.ARRIVAL) Color.White.copy(alpha = 0.2f) else Color.Transparent,
+                            color = if (timeMode == TimeMode.ARRIVAL) selectedModeBackground else Color.Transparent,
                             shape = RoundedCornerShape(8.dp)
                         )
                         .clickable { onTimeModeChange(TimeMode.ARRIVAL) }
@@ -1555,7 +1560,7 @@ private fun TimeSelectionRow(
                 ) {
                     Text(
                         text = "Arrivée",
-                        color = if (timeMode == TimeMode.ARRIVAL) Color.White else Color.White.copy(alpha = 0.6f),
+                        color = if (timeMode == TimeMode.ARRIVAL) primaryTextColor else secondaryTextColor,
                         fontWeight = if (timeMode == TimeMode.ARRIVAL) FontWeight.Bold else FontWeight.Normal,
                         fontSize = 14.sp
                     )
@@ -1567,7 +1572,7 @@ private fun TimeSelectionRow(
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = "Réinitialiser",
-                    tint = Color.White.copy(alpha = 0.6f),
+                    tint = secondaryTextColor,
                     modifier = Modifier
                         .size(20.dp)
                         .clickable { onClearDateTime() }
@@ -1588,7 +1593,7 @@ private fun TimeSelectionRow(
                 modifier = Modifier
                     .weight(1f)
                     .background(
-                        color = Color.White.copy(alpha = 0.15f),
+                        color = pickerBackground,
                         shape = RoundedCornerShape(8.dp)
                     )
                     .clickable { onDateClick() }
@@ -1597,13 +1602,13 @@ private fun TimeSelectionRow(
                 Icon(
                     imageVector = Icons.Default.CalendarToday,
                     contentDescription = null,
-                    tint = Color.White,
+                    tint = primaryTextColor,
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = formatDateDisplay(selectedDate),
-                    color = Color.White,
+                    color = primaryTextColor,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -1615,7 +1620,7 @@ private fun TimeSelectionRow(
                 modifier = Modifier
                     .weight(1f)
                     .background(
-                        color = Color.White.copy(alpha = 0.15f),
+                        color = pickerBackground,
                         shape = RoundedCornerShape(8.dp)
                     )
                     .clickable { onTimeClick() }
@@ -1624,7 +1629,7 @@ private fun TimeSelectionRow(
                 Icon(
                     imageVector = Icons.Default.Schedule,
                     contentDescription = null,
-                    tint = Color.White,
+                    tint = primaryTextColor,
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
@@ -1634,7 +1639,7 @@ private fun TimeSelectionRow(
                     } else {
                         "Maintenant"
                     },
-                    color = Color.White,
+                    color = primaryTextColor,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -1648,7 +1653,7 @@ private fun TimeSelectionRow(
  * Minutes are rounded to 5-minute intervals
  */
 @Composable
-private fun TimePickerDialog(
+fun TimePickerDialog(
     initialTimeSeconds: Int,
     onTimeSelected: (Int) -> Unit,
     onDismiss: () -> Unit
@@ -1805,7 +1810,7 @@ private fun formatDateDisplay(date: LocalDate?): String {
  * Allows selecting dates with month navigation
  */
 @Composable
-private fun DatePickerDialog(
+fun DatePickerDialog(
     initialDate: LocalDate,
     onDateSelected: (LocalDate) -> Unit,
     onDismiss: () -> Unit
