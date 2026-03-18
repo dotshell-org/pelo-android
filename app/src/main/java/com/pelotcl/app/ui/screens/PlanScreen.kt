@@ -1679,9 +1679,30 @@ fun PlanScreen(
                                     // Clear schedule state to prevent stale "Aucun horaire" message
                                     viewModel.clearScheduleState()
 
+                                    // Keep station state aligned with the last stop selected from line details,
+                                    // so Back returns to this stop instead of the initial one.
+                                    val matchingStop = (stopsUiState as? TransportStopsUiState.Success)
+                                        ?.stops
+                                        ?.find { it.properties.nom.equals(stopName, ignoreCase = true) }
+                                    selectedStation = if (matchingStop != null) {
+                                        StationInfo(
+                                            nom = matchingStop.properties.nom,
+                                            lignes = BusIconHelper.getAllLinesForStop(matchingStop),
+                                            isPmr = matchingStop.properties.pmr,
+                                            desserte = matchingStop.properties.desserte
+                                        )
+                                    } else {
+                                        StationInfo(
+                                            nom = stopName,
+                                            lignes = selectedStation?.lignes ?: emptyList(),
+                                            isPmr = selectedStation?.isPmr ?: false,
+                                            desserte = selectedStation?.desserte ?: ""
+                                        )
+                                    }
+
                                     selectedLine = LineInfo(
                                         lineName = selectedLine!!.lineName,
-                                        currentStationName = stopName
+                                        currentStationName = selectedStation?.nom ?: stopName
                                     )
                                     scope.launch {
                                         scaffoldSheetState.bottomSheetState.partialExpand()
