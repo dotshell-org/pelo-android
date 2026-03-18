@@ -528,15 +528,95 @@ class SchedulesRepository(context: Context) {
             val isWeekday = actualDayColumn in setOf("monday", "tuesday", "wednesday", "thursday", "friday")
             var appliedAmAvFilter = false
             var serviceIdFilter = ""
+            val isStrongLine = lineType == LineType.METRO || lineType == LineType.FUNICULAR || lineType == LineType.TRAM
+
+            fun hasMatchingServicePattern(patternSuffix: String, withDateValidation: Boolean): Boolean {
+                val dateClause = if (withDateValidation) {
+                    "AND c.start_date <= ? AND c.end_date >= ?"
+                } else {
+                    ""
+                }
+                val args = if (withDateValidation) {
+                    arrayOf(lineName, directionId.toString(), todayFormatted, todayFormatted, stopName, "%$patternSuffix%")
+                } else {
+                    arrayOf(lineName, directionId.toString(), stopName, "%$patternSuffix%")
+                }
+
+                val cursor = db.rawQuery(
+                    """
+                    SELECT COUNT(*)
+                    FROM schedules s
+                    JOIN calendar c ON s.service_id = c.service_id
+                    WHERE s.route_name = ?
+                    AND s.direction_id = ?
+                    AND c.$dayColumn = 1
+                    $dateClause
+                    AND s.station_name = ? COLLATE NOCASE
+                    AND s.service_id LIKE ?
+                    """.trimIndent(),
+                    args
+                )
+                val count = if (cursor.moveToFirst()) cursor.getInt(0) else 0
+                cursor.close()
+                return count > 0
+            }
+
+            fun runSchedulesQuery(
+                withDateValidation: Boolean,
+                localServiceIdFilter: String,
+                localStrongLineServiceFilter: String
+            ): List<String> {
+                val dateClause = if (withDateValidation) {
+                    "AND c.start_date <= ? AND c.end_date >= ?"
+                } else {
+                    ""
+                }
+
+                val args = if (withDateValidation) {
+                    arrayOf(lineName, directionId.toString(), todayFormatted, todayFormatted, stopName)
+                } else {
+                    arrayOf(lineName, directionId.toString(), stopName)
+                }
+
+                val values = mutableListOf<String>()
+                val cursor = db.rawQuery(
+                    """
+                    SELECT DISTINCT substr(s.arrival_time, 1, 5) AS arrival_time
+                    FROM schedules s
+                    JOIN calendar c ON s.service_id = c.service_id
+                    WHERE s.route_name = ?
+                    AND s.direction_id = ?
+                    AND c.$dayColumn = 1
+                    $dateClause
+                    $localServiceIdFilter
+                    $localStrongLineServiceFilter
+                    AND s.station_name = ? COLLATE NOCASE
+                    ORDER BY s.arrival_time
+                    """.trimIndent(),
+                    args
+                )
+                while (cursor.moveToNext()) {
+                    values.add(cursor.getString(0))
+                }
+                cursor.close()
+                return values
+            }
 
             // For bus lines on weekdays: use AM (normal) or AV (school holiday) schedules
             // Note: This is separate from public holidays which override the dayColumn to Sunday
             if (lineType != LineType.METRO && lineType != LineType.FUNICULAR && lineType != LineType.NAVIGONE && lineType != LineType.TRAM && isWeekday && !isPublicHoliday) {
-                appliedAmAvFilter = true
-                serviceIdFilter = if (effectiveIsSchoolHoliday) {
-                    "AND s.service_id LIKE '%AV%'"
+                val desiredPattern = if (effectiveIsSchoolHoliday) "AV" else "AM"
+                val hasPatternWithDate = hasMatchingServicePattern(desiredPattern, withDateValidation = true)
+                val hasPatternWithoutDate = hasMatchingServicePattern(desiredPattern, withDateValidation = false)
+
+                if (hasPatternWithDate || hasPatternWithoutDate) {
+                    appliedAmAvFilter = true
+                    serviceIdFilter = "AND s.service_id LIKE '%$desiredPattern%'"
                 } else {
-                    "AND s.service_id LIKE '%AM%'"
+                    Log.w(
+                        "SchedulesDebug",
+                        "AM/AV pattern '$desiredPattern' not found for line='$lineName', using generic weekday service selection"
+                    )
                 }
             }
 
@@ -558,7 +638,7 @@ class SchedulesRepository(context: Context) {
             // mixing schedules from overlapping service periods (e.g., school vs vacation)
             // We select the service with the MOST schedules (main service for the day)
             var strongLineServiceFilter = ""
-            if (lineType == LineType.METRO || lineType == LineType.FUNICULAR || lineType == LineType.TRAM) {
+            if (isStrongLine) {
                 val serviceIdCursor = db.rawQuery(
                     """
                     SELECT s.service_id, COUNT(*) as cnt
@@ -584,33 +664,19 @@ class SchedulesRepository(context: Context) {
             }
 
             // First attempt: with date validation (strict GTFS compliance)
-            var cursor = db.rawQuery(
-                """
-                SELECT DISTINCT substr(s.arrival_time, 1, 5) AS arrival_time 
-                FROM schedules s
-                JOIN calendar c ON s.service_id = c.service_id
-                WHERE s.route_name = ? 
-                AND s.direction_id = ?
-                AND c.$dayColumn = 1
-                AND c.start_date <= ?
-                AND c.end_date >= ?
-                $serviceIdFilter
-                $strongLineServiceFilter
-                AND s.station_name = ? COLLATE NOCASE
-                ORDER BY s.arrival_time
-                """,
-                arrayOf(lineName, directionId.toString(), todayFormatted, todayFormatted, stopName)
+            result.addAll(
+                runSchedulesQuery(
+                    withDateValidation = true,
+                    localServiceIdFilter = serviceIdFilter,
+                    localStrongLineServiceFilter = strongLineServiceFilter
+                )
             )
-            while (cursor.moveToNext()) {
-                result.add(cursor.getString(0))
-            }
-            cursor.close()
 
             // Fallback 1: If no results with date validation, try without date filter
             // This handles expired GTFS data gracefully
             if (result.isEmpty()) {
                 // For strong lines, also try to get a single service_id without date filter
-                if (strongLineServiceFilter.isEmpty() && (lineType == LineType.METRO || lineType == LineType.FUNICULAR || lineType == LineType.TRAM)) {
+                if (strongLineServiceFilter.isEmpty() && isStrongLine) {
                     val serviceIdCursor = db.rawQuery(
                         """
                         SELECT s.service_id, COUNT(*) as cnt
@@ -633,33 +699,35 @@ class SchedulesRepository(context: Context) {
                     serviceIdCursor.close()
                 }
 
-                cursor = db.rawQuery(
-                    """
-                    SELECT DISTINCT substr(s.arrival_time, 1, 5) AS arrival_time 
-                    FROM schedules s
-                    JOIN calendar c ON s.service_id = c.service_id
-                    WHERE s.route_name = ? 
-                    AND s.direction_id = ?
-                    AND c.$dayColumn = 1
-                    $serviceIdFilter
-                    $strongLineServiceFilter
-                    AND s.station_name = ? COLLATE NOCASE
-                    ORDER BY s.arrival_time
-                    """,
-                    arrayOf(lineName, directionId.toString(), stopName)
+                result.addAll(
+                    runSchedulesQuery(
+                        withDateValidation = false,
+                        localServiceIdFilter = serviceIdFilter,
+                        localStrongLineServiceFilter = strongLineServiceFilter
+                    )
                 )
-                while (cursor.moveToNext()) {
-                    result.add(cursor.getString(0))
-                }
-                cursor.close()
             }
 
-            // Do not fall back by dropping AM/AV filters to avoid mixing vacation/non-vacation schedules.
+            // Fallback 2 (resilience): if AM/AV filtering produced no result,
+            // retry without AM/AV to avoid empty schedules when GTFS service naming changes.
             if (result.isEmpty() && appliedAmAvFilter) {
-                Log.w(
-                    "SchedulesDebug",
-                    "No schedules for current school holiday status; skipping AM/AV fallback to avoid mixing."
+                Log.w("SchedulesDebug", "Retrying without AM/AV service_id filter for line='$lineName' stop='$stopName'")
+                result.addAll(
+                    runSchedulesQuery(
+                        withDateValidation = true,
+                        localServiceIdFilter = "",
+                        localStrongLineServiceFilter = strongLineServiceFilter
+                    )
                 )
+                if (result.isEmpty()) {
+                    result.addAll(
+                        runSchedulesQuery(
+                            withDateValidation = false,
+                            localServiceIdFilter = "",
+                            localStrongLineServiceFilter = strongLineServiceFilter
+                        )
+                    )
+                }
             }
 
         } catch (e: Exception) {

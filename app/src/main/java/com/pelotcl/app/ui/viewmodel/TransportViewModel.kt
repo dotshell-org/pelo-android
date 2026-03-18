@@ -176,6 +176,10 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
     init {
         ProcessLifecycleOwner.get().lifecycle.addObserver(appLifecycleObserver)
+
+        // Prioritize favorites so they can be displayed as early as possible on first render.
+        loadFavoritesForInitialRender()
+
         // Observe connectivity changes
         viewModelScope.launch {
             connectivityObserver.isOnline.collect { online ->
@@ -187,36 +191,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         // Start non-blocking preload on creation to have lines, stops, and connection index ready
         preloadAllData()
 
-        // Load favorites asynchronously (SharedPreferences read can be slow on some devices)
-        viewModelScope.launch(Dispatchers.IO) {
-            val favorites = favoritesRepository.getFavorites().map { it.uppercase() }.toSet()
-            _favoriteLines.value = favorites
-            _favoriteStops.value = favoritesRepository.getFavoriteStops()
-
-            // Backfill/update desserte for favorite stops (merge all pôle entries)
-            val favoriteStopNames = favoritesRepository.getFavoriteStops()
-            if (favoriteStopNames.isNotEmpty()) {
-                // Wait a bit for WFS stops to be loaded
-                delay(3000)
-                val allStops = getCachedStopsSync()
-                if (allStops.isNotEmpty()) {
-                    for (stopName in favoriteStopNames) {
-                        val matchingDessertes = allStops
-                            .filter { it.properties.nom.equals(stopName, ignoreCase = true) }
-                            .map { it.properties.desserte }
-                            .filter { it.isNotEmpty() }
-                        if (matchingDessertes.isNotEmpty()) {
-                            val merged = com.pelotcl.app.data.gtfs.SchedulesRepository.mergeDessertes(matchingDessertes)
-                            favoritesRepository.saveDesserteForStop(stopName, merged)
-                        }
-                    }
-                }
-            }
-
-            // Load user-created favorites
-            _userFavorites.value = favoritesRepository.getUserFavorites()
-        }
-
         // Defer traffic alerts - not critical for initial display
         viewModelScope.launch {
             delay(1000) // Wait for UI to stabilize
@@ -225,6 +199,49 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
         // Load offline data info
         offlineDataManager.refreshInfo()
+    }
+
+    private fun loadFavoritesForInitialRender() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val favoriteLines = favoritesRepository.getFavorites().map { it.uppercase() }.toSet()
+            val favoriteStopNames = favoritesRepository.getFavoriteStops()
+            val userFavorites = favoritesRepository.getUserFavorites()
+
+            _favoriteLines.value = favoriteLines
+            _favoriteStops.value = favoriteStopNames
+            _userFavorites.value = userFavorites
+
+            // Backfill stop desserte metadata in background without delaying initial display.
+            backfillFavoriteStopsDesserte(favoriteStopNames)
+        }
+    }
+
+    private fun backfillFavoriteStopsDesserte(favoriteStopNames: Set<String>) {
+        if (favoriteStopNames.isEmpty()) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val timeoutAt = System.currentTimeMillis() + 15_000
+            var allStops = getCachedStopsSync()
+
+            // Wait briefly for stops preload if needed, but skip silently on timeout.
+            while (allStops.isEmpty() && System.currentTimeMillis() < timeoutAt) {
+                delay(500)
+                allStops = getCachedStopsSync()
+            }
+
+            if (allStops.isEmpty()) return@launch
+
+            for (stopName in favoriteStopNames) {
+                val matchingDessertes = allStops
+                    .filter { it.properties.nom.equals(stopName, ignoreCase = true) }
+                    .map { it.properties.desserte }
+                    .filter { it.isNotEmpty() }
+                if (matchingDessertes.isNotEmpty()) {
+                    val merged = com.pelotcl.app.data.gtfs.SchedulesRepository.mergeDessertes(matchingDessertes)
+                    favoritesRepository.saveDesserteForStop(stopName, merged)
+                }
+            }
+        }
     }
 
     /**

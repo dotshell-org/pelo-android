@@ -248,7 +248,7 @@ fun AddFavoriteDialog(
                     .clip(RoundedCornerShape(28.dp))
                     .background(Color.Black)
                     .clickable { showStopSearchFullscreen = true }
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                    .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
@@ -261,7 +261,7 @@ fun AddFavoriteDialog(
                 Text(
                     text = selectedStop?.stopName ?: "Rechercher un arrêt",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (selectedStop == null) Color.White.copy(alpha = 0.6f) else Color.White
+                    color = Color.White
                 )
             }
 
