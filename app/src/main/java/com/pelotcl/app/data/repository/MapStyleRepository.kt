@@ -16,25 +16,25 @@ enum class MapStyle(
     // Standard styles
     POSITRON(
         key = "positron",
-        displayName = "Positron (Clair)",
+        displayName = "Clair",
         styleUrl = "https://tiles.openfreemap.org/styles/positron",
         category = MapStyleCategory.STANDARD
     ),
     DARK_MATTER(
         key = "dark_matter",
-        displayName = "Dark Matter (Sombre)",
+        displayName = "Sombre",
         styleUrl = "https://tiles.openfreemap.org/styles/dark",
         category = MapStyleCategory.STANDARD
     ),
     BRIGHT(
         key = "bright",
-        displayName = "OSM Bright (Détaillé)",
+        displayName = "OSM",
         styleUrl = "https://tiles.openfreemap.org/styles/bright",
         category = MapStyleCategory.STANDARD
     ),
     LIBERTY(
         key = "liberty",
-        displayName = "Liberty (3D)",
+        displayName = "3D",
         styleUrl = "https://tiles.openfreemap.org/styles/liberty",
         category = MapStyleCategory.STANDARD
     ),
