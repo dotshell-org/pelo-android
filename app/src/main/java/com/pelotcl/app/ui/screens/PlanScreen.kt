@@ -121,6 +121,7 @@ import com.pelotcl.app.data.repository.JourneyResult
 import com.pelotcl.app.data.repository.MapStyle
 import com.pelotcl.app.data.repository.MapStyleRepository
 import com.pelotcl.app.ui.components.AllSchedulesSheetContent
+import com.pelotcl.app.ui.components.AddFavoriteDialog
 import com.pelotcl.app.ui.components.InlineItinerarySheetContent
 import com.pelotcl.app.ui.components.LineDetailsBottomSheet
 import com.pelotcl.app.ui.components.LineInfo
@@ -654,6 +655,8 @@ fun PlanScreen(
     var preserveSelectedDirectionOnce by remember { mutableStateOf(false) }
 
     var temporaryLoadedBusLines by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showAddFavoriteDialog by remember { mutableStateOf(false) }
+    var addFavoriteInitialStopName by remember { mutableStateOf<String?>(null) }
 
     // Save zoom level before live tracking to restore it when disabled
     var zoomBeforeLiveTracking by remember { mutableStateOf<Double?>(null) }
@@ -1804,6 +1807,17 @@ fun PlanScreen(
                                 },
                                 isFavoriteStop = favoriteStops.any { it.equals(selectedStation!!.nom, ignoreCase = true) },
                                 onToggleFavoriteStop = { viewModel.toggleFavoriteStop(selectedStation!!.nom) },
+                                onAddFavoriteClick = { stopName ->
+                                    addFavoriteInitialStopName = stopName
+                                    showAddFavoriteDialog = true
+                                    requestedSheetValueForNextContent = null
+                                    selectedLine = null
+                                    selectedStation = null
+                                    sheetContentState = null
+                                    scope.launch {
+                                        scaffoldSheetState.bottomSheetState.hide()
+                                    }
+                                },
                                 onItineraryClick = { stopName ->
                                     requestedSheetValueForNextContent = SheetValue.Expanded
                                     itineraryDepartureStop = null
@@ -2319,6 +2333,22 @@ fun PlanScreen(
             )
         }
     }
+
+    if (showAddFavoriteDialog) {
+        AddFavoriteDialog(
+            onDismiss = {
+                showAddFavoriteDialog = false
+                addFavoriteInitialStopName = null
+            },
+            onFavoriteCreated = { name, iconName, stopName ->
+                viewModel.addUserFavorite(name, iconName, stopName)
+                showAddFavoriteDialog = false
+                addFavoriteInitialStopName = null
+            },
+            viewModel = viewModel,
+            initialStopName = addFavoriteInitialStopName
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -2574,6 +2604,7 @@ private fun StationSheetContent(
     onDepartureClick: (lineName: String, directionId: Int, departureTime: String) -> Unit,
     isFavoriteStop: Boolean = false,
     onToggleFavoriteStop: () -> Unit = {},
+    onAddFavoriteClick: (String) -> Unit = {},
     onItineraryClick: (String) -> Unit = {}
 ) {
     StationBottomSheet(
@@ -2584,6 +2615,7 @@ private fun StationSheetContent(
         onDepartureClick = onDepartureClick,
         isFavoriteStop = isFavoriteStop,
         onToggleFavoriteStop = onToggleFavoriteStop,
+        onAddFavoriteClick = onAddFavoriteClick,
         onItineraryClick = { onItineraryClick(stationInfo.nom) }
     )
 }

@@ -96,10 +96,10 @@ import kotlinx.coroutines.delay
 fun AddFavoriteDialog(
     onDismiss: () -> Unit,
     onFavoriteCreated: (String, String, String) -> Unit,
-    viewModel: TransportViewModel
+    viewModel: TransportViewModel,
+    initialStopName: String? = null
 ) {
-    val sheetState = rememberModalBottomSheetState()
-    val context = LocalContext.current
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val presets = remember {
         listOf(
@@ -115,7 +115,9 @@ fun AddFavoriteDialog(
 
     var selectedPreset by remember { mutableStateOf<FavoritePreset?>(presets.firstOrNull()) }
     var customOtherTitle by remember { mutableStateOf("") }
-    var selectedStop by remember { mutableStateOf<StationSearchResult?>(null) }
+    var selectedStop by remember(initialStopName) {
+        mutableStateOf(initialStopName?.let { StationSearchResult(stopName = it, lines = emptyList()) })
+    }
     var stopQuery by remember { mutableStateOf("") }
     var stopResults by remember { mutableStateOf<List<StationSearchResult>>(emptyList()) }
     var showStopSearchFullscreen by remember { mutableStateOf(false) }
@@ -132,6 +134,10 @@ fun AddFavoriteDialog(
 
         delay(250)
         stopResults = viewModel.searchStops(query)
+    }
+
+    LaunchedEffect(Unit) {
+        sheetState.expand()
     }
 
     ModalBottomSheet(

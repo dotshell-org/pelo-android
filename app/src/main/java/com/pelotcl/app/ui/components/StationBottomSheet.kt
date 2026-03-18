@@ -212,6 +212,7 @@ fun StationBottomSheet(
     },
     isFavoriteStop: Boolean = false,
     onToggleFavoriteStop: () -> Unit = {},
+    onAddFavoriteClick: (String) -> Unit = {},
     onItineraryClick: () -> Unit = {}
 ) {
     val titleInset = 20.dp
@@ -318,7 +319,7 @@ fun StationBottomSheet(
                     }
 
                     Button(
-                        onClick = onToggleFavoriteStop,
+                        onClick = { onAddFavoriteClick(stationInfo.nom) },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (isFavoriteStop) Color(0xFFD1D5DB) else Color(0xFFE5E7EB),
                             contentColor = Color(0xFF374151)
