@@ -650,6 +650,8 @@ fun PlanScreen(
 
     // Preserve selected direction when navigating to/from schedule details
     var selectedDirection by remember { mutableIntStateOf(0) }
+    // One-shot flag to keep an explicit direction chosen from station departures.
+    var preserveSelectedDirectionOnce by remember { mutableStateOf(false) }
 
     var temporaryLoadedBusLines by remember { mutableStateOf<Set<String>>(emptySet()) }
 
@@ -1162,7 +1164,11 @@ fun PlanScreen(
 
     // Reset direction when line or stop changes (not when navigating to/from schedule details)
     LaunchedEffect(selectedLine?.lineName, selectedLine?.currentStationName) {
-        selectedDirection = 0
+        if (preserveSelectedDirectionOnce) {
+            preserveSelectedDirectionOnce = false
+        } else {
+            selectedDirection = 0
+        }
     }
 
     LaunchedEffect(sheetContentState) {
@@ -1679,6 +1685,10 @@ fun PlanScreen(
                                     // Clear schedule state to prevent stale "Aucun horaire" message
                                     viewModel.clearScheduleState()
 
+                                    // Preserve current direction when navigating to another stop
+                                    // from the line details stops list.
+                                    preserveSelectedDirectionOnce = true
+
                                     // Keep station state aligned with the last stop selected from line details,
                                     // so Back returns to this stop instead of the initial one.
                                     val matchingStop = (stopsUiState as? TransportStopsUiState.Success)
@@ -1771,6 +1781,7 @@ fun PlanScreen(
                                         SheetValue.PartiallyExpanded
                                     }
 
+                                    preserveSelectedDirectionOnce = true
                                     selectedDirection = directionId
 
                                     selectedLine = LineInfo(
