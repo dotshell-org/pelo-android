@@ -119,7 +119,6 @@ fun SimpleSearchBar(
     searchResults: List<StationSearchResult>,
     lineSearchResults: List<LineSearchResult> = emptyList(),
     searchHistory: List<SearchHistoryItem> = emptyList(),
-    favoriteStops: List<SearchHistoryItem> = emptyList(),
     onSearch: (StationSearchResult) -> Unit,
     onLineSearch: (LineSearchResult) -> Unit = {},
     onHistoryItemClick: (SearchHistoryItem) -> Unit = {},
@@ -266,22 +265,8 @@ fun SimpleSearchBar(
                     ) {}
             ) {
                 if (query.isEmpty()) {
-                    if (favoriteStops.isNotEmpty()) {
-                        SectionHeader(icon = Icons.Default.Star, text = "Arrêts favoris")
-                        favoriteStops.forEach { historyItem ->
-                            HistoryListItem(
-                                historyItem = historyItem,
-                                showRemove = false,
-                                onClick = {
-                                    onHistoryItemClick(historyItem)
-                                    query = ""
-                                    setExpandedState(false)
-                                },
-                                onOptionsClick = { onHistoryItemOptionsClick(historyItem) },
-                                onRemoveClick = {}
-                            )
-                        }
-                    }
+                    // Removed favorite stops section - using new favorites system instead
+                    // The favorites bar handles favorite stops now
 
                     if (searchHistory.isNotEmpty()) {
                         SectionHeader(icon = Icons.Default.History, text = "Recherches récentes")
@@ -294,7 +279,13 @@ fun SimpleSearchBar(
                                     query = ""
                                     setExpandedState(false)
                                 },
-                                onOptionsClick = { onHistoryItemOptionsClick(historyItem) },
+                                onOptionsClick = {
+                                    query = ""
+                                    onQueryChange("")
+                                    setExpandedState(false)
+                                    keyboardController?.hide()
+                                    onHistoryItemOptionsClick(historyItem)
+                                },
                                 onRemoveClick = { onHistoryItemRemove(historyItem) }
                             )
                         }
@@ -502,11 +493,8 @@ private fun HistoryListItem(
                         fontWeight = FontWeight.Medium
                     )
                     if (historyItem.type == SearchType.LINE) {
-                        Text(
-                            "Ligne",
-                            color = Color.White.copy(alpha = 0.5f),
-                            fontSize = 12.sp
-                        )
+                        // Show line icon for LINE type history items
+                        SearchConnectionBadge(lineName = historyItem.query)
                     } else if (historyItem.lines.isNotEmpty()) {
                         Spacer(modifier = Modifier.size(10.dp))
                         Row(
@@ -563,7 +551,7 @@ private fun HistoryListItem(
         },
         colors = ListItemDefaults.colors(containerColor = Color.Black),
         modifier = Modifier
-            .clickable(onClick = onOptionsClick)
+            .clickable(onClick = if (historyItem.type == SearchType.LINE) onClick else onOptionsClick)
             .fillMaxWidth()
     )
 }

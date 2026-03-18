@@ -65,7 +65,6 @@ fun LinesBottomSheet(
     allLines: List<String>,
     onLineClick: (String) -> Unit,
     modifier: Modifier = Modifier,
-    favoriteLines: Set<String> = emptySet(),
     viewModel: TransportViewModel? = null
 ) {
     val context = LocalContext.current
@@ -146,29 +145,8 @@ fun LinesBottomSheet(
     }
 
     // Organize lines by category
-    val categorizedLines = remember(allLines, favoriteLines) {
-        // Map<String, List<String>> but we will iterate deterministically by turning to list
-        val base = categorizeLines(allLines, context).toMutableMap()
-
-        // Insert favorites first if present
-        val favoritesInAll = allLines
-            .map { it.uppercase() }
-            .distinct()
-            .filter { favoriteLines.contains(it) }
-            .sortedWith(java.util.Comparator { a, b -> naturalComparatorString(a, b) })
-
-        if (favoritesInAll.isNotEmpty()) {
-            // We want to preserve the original tile formats (case) - pick the case from `allLines`
-            val favoritesWithCase = allLines.filter { favoritesInAll.contains(it.uppercase()) }
-            val orderedFavorites = favoritesWithCase.sortedWith(java.util.Comparator { a, b -> naturalComparatorString(a, b) })
-            // Prepend as the 'Favoris' category
-            val result = linkedMapOf<String, List<String>>()
-            result["Favoris"] = orderedFavorites
-            base.forEach { (k, v) -> result[k] = v }
-            result.toList()
-        } else {
-            base.toList()
-        }
+    val categorizedLines = remember(allLines) {
+        categorizeLines(allLines, context).toList()
     }
 
     // Filtrer les lignes selon la recherche

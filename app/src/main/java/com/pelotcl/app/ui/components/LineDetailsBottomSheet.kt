@@ -2,7 +2,6 @@ package com.pelotcl.app.ui.components
 
 import android.os.Build
 import android.util.Log
-import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -21,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -35,11 +35,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Directions
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.PriorityHigh
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -94,8 +90,7 @@ import java.time.temporal.ChronoUnit
 @Immutable
 data class LineInfo(
     val lineName: String,
-    val currentStationName: String,
-    val showFavoriteIcon: Boolean = true
+    val currentStationName: String
 )
 
 private fun getLineColor(lineName: String): Color {
@@ -281,7 +276,6 @@ fun LineDetailsBottomSheet(
 
     val isOffline by viewModel.isOffline.collectAsState()
     val alertsTimestampMillis by viewModel.alertsTimestampMillis.collectAsState()
-    val favoriteLines by viewModel.favoriteLines.collectAsState()
 
     val validLineAlerts = remember(lineAlerts) { filterValidAlerts(lineAlerts) }
     val alertSeverity = remember(validLineAlerts) {
@@ -302,10 +296,14 @@ fun LineDetailsBottomSheet(
 
     if (lineInfo != null) {
         val content = @Composable {
-            Column(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 480.dp)
+            ) {
                 // Fixed Header
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
                     horizontalArrangement = Arrangement.Start,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -314,12 +312,11 @@ fun LineDetailsBottomSheet(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     
-                    // Clickable central part (line icon + station name)
+                    // Central header (line icon + station name)
                     Row(
                         modifier = Modifier
                             .weight(1f)
-                            .clickable { onHeaderClick() }
-                            .padding(vertical = 8.dp),
+                            .padding(vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         val resourceId = BusIconHelper.getResourceIdForLine(context, lineInfo.lineName)
@@ -371,58 +368,9 @@ fun LineDetailsBottomSheet(
                             }
                         )
                     }
-                    
-                    val isLineFavorite = favoriteLines.contains(lineInfo.lineName.uppercase())
-                    val hasSelectedStop = lineInfo.currentStationName.isNotBlank()
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(0.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (hasSelectedStop) {
-                            val isStopFavorite = favoriteStops.contains(lineInfo.currentStationName)
-                            IconButton(
-                                onClick = {
-                                    onToggleFavoriteStop(lineInfo.currentStationName)
-                                    Toast.makeText(
-                                        context,
-                                        if (isStopFavorite) "Arrêt supprimé des favoris" else "Arrêt ajouté aux favoris",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (isStopFavorite) Icons.Filled.Star else Icons.Filled.StarBorder,
-                                    contentDescription = if (isStopFavorite) "Retirer l'arrêt des favoris" else "Ajouter l'arrêt aux favoris",
-                                    tint = if (isStopFavorite) Color(0xFFFFC107) else Color.Gray,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                            }
-                        }
-
-                        IconButton(
-                            onClick = {
-                                viewModel.toggleFavorite(lineInfo.lineName)
-                                Toast.makeText(
-                                    context,
-                                    if (isLineFavorite) "Ligne supprimée des favoris" else "Ligne ajoutée aux favoris",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            val heartIcon = if (isLineFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder
-                            Icon(
-                                imageVector = heartIcon,
-                                contentDescription = if (isLineFavorite) "Retirer la ligne des favoris" else "Ajouter la ligne aux favoris",
-                                tint = if (isLineFavorite) Red500 else Color.Gray
-                            )
-                        }
-                    }
                 }
 
-                Spacer(modifier = Modifier.height(36.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
                 // Scrollable Content (Schedules + Stops) using LazyColumn for virtualization
                 LazyColumn(
@@ -458,17 +406,7 @@ fun LineDetailsBottomSheet(
                         }
                     }
 
-                    // Part 2: Connections
-                    if (connections.isNotEmpty()) {
-                        item(key = "connections") {
-                            ConnectionsSection(
-                                connections = connections,
-                                onLineClick = onLineClick
-                            )
-                        }
-                    }
-
-                    // Part 3: Stops or Loader
+                    // Part 2: Stops or Loader
                     if (isLoading) {
                         item(key = "loading") {
                             Box(
@@ -779,37 +717,6 @@ private fun NextSchedulesSection(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Itinéraire button
-        Button(
-            onClick = onItineraryClick,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Black,
-                contentColor = Color.White
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Directions,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Itinéraire",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(40.dp))
-
         if (availableDirections.isNotEmpty()) {
             Text(
                 text = "Direction",
@@ -918,78 +825,6 @@ private fun NextSchedulesSection(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ConnectionsSection(
-    connections: List<Connection>,
-    onLineClick: (String) -> Unit
-) {
-    if (connections.isEmpty()) return
-
-    val strongLines = connections.filter {
-        val isStrongType = it.transportType in listOf(
-            TransportType.METRO,
-            TransportType.TRAM,
-            TransportType.FUNICULAR,
-            TransportType.NAVIGONE,
-        )
-
-        isStrongType || it.lineName == "RX"
-    }
-    val weakLines = connections.filter { it !in strongLines }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp)
-            .padding(bottom = 16.dp)
-    ) {
-        Text(
-            text = "Correspondances",
-            textAlign = TextAlign.Left,
-            fontSize = 22.sp,
-            color = Color.Black,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 12.dp, top = 30.dp, bottom = 12.dp)
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-
-        if (strongLines.isNotEmpty()) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.padding(horizontal = 12.dp)
-            ) {
-                strongLines.forEach { connection ->
-                    ConnectionBadge(
-                        lineName = connection.lineName,
-                        size = 48.dp,
-                        onClick = { onLineClick(connection.lineName) }
-                    )
-                }
-            }
-        }
-
-        if (weakLines.isNotEmpty()) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy((-20).dp),
-                modifier = Modifier.padding(horizontal = 12.dp)
-            ) {
-                weakLines.forEach { connection ->
-                    ConnectionBadge(
-                        lineName = connection.lineName,
-                        size = 48.dp,
-                        onClick = { onLineClick(connection.lineName) }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
 private fun StopItemWithLine(
     stop: LineStopInfo,
     lineColor: Color,
@@ -1040,14 +875,7 @@ private fun StopItemWithLine(
                 modifier = Modifier.weight(1f, fill = false)
             )
 
-            if (isFavorite) {
-                Icon(
-                    imageVector = Icons.Filled.Star,
-                    contentDescription = "Arrêt favori",
-                    tint = Color(0xFFFFC107),
-                    modifier = Modifier.padding(end = 8.dp).size(18.dp)
-                )
-            }
+            // Removed star icon for stop favorites - using new favorites system instead
 
             if (filteredConnections.isNotEmpty()) {
                 Spacer(modifier = Modifier.width(8.dp))

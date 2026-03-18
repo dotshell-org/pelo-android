@@ -11,14 +11,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Route
@@ -47,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -55,6 +54,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.google.android.gms.location.LocationServices
+import com.pelotcl.app.ui.components.AddFavoriteDialog
+import com.pelotcl.app.ui.components.FavoritesBar
 import com.pelotcl.app.ui.components.LineSearchResult
 import com.pelotcl.app.ui.components.SimpleSearchBar
 import com.pelotcl.app.ui.components.StationSearchResult
@@ -65,7 +66,6 @@ import com.pelotcl.app.data.repository.MapStyle
 import com.pelotcl.app.ui.screens.AboutScreen
 import com.pelotcl.app.ui.screens.ContactScreen
 import com.pelotcl.app.ui.screens.CreditsScreen
-import com.pelotcl.app.ui.screens.ItineraryScreen
 import com.pelotcl.app.ui.screens.LegalScreen
 import com.pelotcl.app.ui.screens.PlanScreen
 import com.pelotcl.app.ui.screens.ItinerarySettingsScreen
@@ -242,6 +242,8 @@ fun NavBar(modifier: Modifier = Modifier) {
     val favoriteStops by viewModel.favoriteStops.collectAsState()
     var favoriteStopItems by remember { mutableStateOf<List<SearchHistoryItem>>(emptyList()) }
     val stopsUiState by viewModel.stopsUiState.collectAsState()
+    val userFavorites by viewModel.userFavorites.collectAsState()
+    var showAddFavoriteDialog by remember { mutableStateOf(false) }
     
     // Load search history on startup
     LaunchedEffect(Unit) {
@@ -269,11 +271,8 @@ fun NavBar(modifier: Modifier = Modifier) {
 
     // Itinerary destination stop
     var itineraryDestinationStop by remember { mutableStateOf<String?>(null) }
+    var isItineraryModeActive by remember { mutableStateOf(false) }
     
-    // Track if itinerary map view is open (for navbar back behavior)
-    var isItineraryMapViewOpen by remember { mutableStateOf(false) }
-    var backFromMapTrigger by remember { mutableIntStateOf(0) }
-
     val scope = rememberCoroutineScope()
     
     val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -411,7 +410,6 @@ fun NavBar(modifier: Modifier = Modifier) {
                                 if (destination == Destination.LIGNES) {
                                     // Close itinerary when going to Lines
                                     itineraryDestinationStop = null
-                                    isItineraryMapViewOpen = false
                                     // Si on n'est pas sur Plan, naviguer vers Plan d'abord
                                     if (selectedDestination != Destination.PLAN.ordinal) {
                                         selectedDestination = Destination.PLAN.ordinal
@@ -440,16 +438,9 @@ fun NavBar(modifier: Modifier = Modifier) {
                                     selectedDestination = index
                                     showLinesSheet = false
                                 } else if (destination == Destination.PLAN) {
-                                    // Already on Plan tab - handle itinerary back navigation
+                                    // Already on Plan tab - close inline itinerary entry point if set
                                     if (itineraryDestinationStop != null) {
-                                        if (isItineraryMapViewOpen) {
-                                            // Go back from map view to itinerary list
-                                            backFromMapTrigger++
-                                        } else {
-                                            // Close itinerary entirely
-                                            itineraryDestinationStop = null
-                                            isItineraryMapViewOpen = false
-                                        }
+                                        itineraryDestinationStop = null
                                     }
                                 }
                             },
@@ -484,20 +475,22 @@ fun NavBar(modifier: Modifier = Modifier) {
                     onLinesSheetDismiss = {
                         showLinesSheet = false
                     },
+                    itinerarySelectedStopName = itineraryDestinationStop,
+                    onItinerarySelectionHandled = { itineraryDestinationStop = null },
                     searchSelectedStop = selectedStationFromSearch,
                     onSearchSelectionHandled = { selectedStationFromSearch = null },
                     optionsSelectedStop = stopOptionsSelectedStop,
                     onOptionsSelectionHandled = { stopOptionsSelectedStop = null },
                     viewModel = viewModel,
-                    onItineraryClick = { stopName ->
-                        itineraryDestinationStop = stopName
-                    },
                     initialUserLocation = userLocation,
                     isVisible = selectedDestination == Destination.PLAN.ordinal,
                     onMapStyleChanged = { style ->
                         currentMapStyle = style
                     },
-                    isSearchExpanded = isSearchExpanded
+                    isSearchExpanded = isSearchExpanded,
+                    onItineraryModeChanged = { active ->
+                        isItineraryModeActive = active
+                    }
                 )
                 
                 // Settings screens - displayed on top when on settings tab
@@ -513,105 +506,137 @@ fun NavBar(modifier: Modifier = Modifier) {
                 }
             }
             
-            // Itinerary overlay - displayed on top of PlanScreen but hidden when on Settings
-            AnimatedVisibility(
-                visible = itineraryDestinationStop != null && selectedDestination != Destination.PARAMETRES.ordinal,
-                enter = slideInVertically(initialOffsetY = { it }),
-                exit = slideOutVertically(targetOffsetY = { it })
+        }
+
+        // UI Overlays - Search Bar at top, favorites row (with create button) below it
+        // LIVE button remains in PlanScreen for proper integration with map controls
+        
+        // Calculate UI element positions - declared outside if blocks for shared access
+        val searchBarHeight = 56.dp // Standard Material 3 search bar height
+        val addFavoriteButtonHeight = 40.dp // Favorites row height approximation
+        val spacingBetweenElements = 4.dp // Spacing between UI elements
+        
+        // Position calculations:
+        // Favorites row sits below search bar and contains the create button + favorites chips
+        val favoritesBarTopPosition = searchBarHeight + 38.dp
+        
+        // Search Bar - keep visible on Plan, including when station/line detail sheets are open.
+        if (selectedDestination == Destination.PLAN.ordinal && !showLinesSheet && itineraryDestinationStop == null && !isItineraryModeActive) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
             ) {
-                ItineraryScreen(
-                    destinationStopName = itineraryDestinationStop ?: "",
-                    userLocation = userLocation,
-                    viewModel = viewModel,
-                    onBack = {
-                        itineraryDestinationStop = null
-                        isItineraryMapViewOpen = false
+                SimpleSearchBar(
+                    searchResults = stationSearchResults,
+                    lineSearchResults = lineSearchResults,
+                    searchHistory = searchHistory,
+                    onQueryChange = { query ->
+                        searchQuery = query
                     },
-                    onMapViewChanged = { isMapOpen ->
-                        isItineraryMapViewOpen = isMapOpen
+                    onSearch = { result ->
+                        // Save to search history
+                        searchHistoryRepository.addToHistory(
+                            SearchHistoryItem(
+                                query = result.stopName,
+                                type = SearchType.STOP,
+                                lines = result.lines
+                            )
+                        )
+                        searchHistory = searchHistoryRepository.getSearchHistory()
+                        
+                        // onSearch launches itinerary (main click behavior)
+                        itineraryDestinationStop = result.stopName
+                        searchQuery = ""
                     },
-                    backFromMapTrigger = backFromMapTrigger
+                    onLineSearch = { lineResult ->
+                        // Save to search history
+                        searchHistoryRepository.addToHistory(
+                            SearchHistoryItem(
+                                query = lineResult.lineName,
+                                type = SearchType.LINE
+                            )
+                        )
+                        searchHistory = searchHistoryRepository.getSearchHistory()
+                        
+                        // Select the line to show its details (via PlanScreen's LaunchedEffect)
+                        viewModel.selectLine(lineResult.lineName)
+                        searchQuery = ""
+                    },
+                    onHistoryItemClick = { historyItem ->
+                        if (historyItem.type == SearchType.LINE) {
+                            // Open line details (via PlanScreen's LaunchedEffect)
+                            viewModel.selectLine(historyItem.query)
+                        } else {
+                            // Main click on history item launches itinerary
+                            itineraryDestinationStop = historyItem.query
+                        }
+                    },
+                    onHistoryItemRemove = { historyItem ->
+                        searchHistoryRepository.removeFromHistory(historyItem.query, historyItem.type)
+                        searchHistory = searchHistoryRepository.getSearchHistory()
+                    },
+                    showDarkOutline = currentMapStyle == MapStyle.DARK_MATTER,
+                    onExpandedChange = { expanded -> isSearchExpanded = expanded },
+                    onStopOptionsClick = { stopResult ->
+                        searchHistoryRepository.addToHistory(
+                            SearchHistoryItem(
+                                query = stopResult.stopName,
+                                type = SearchType.STOP,
+                                lines = stopResult.lines
+                            )
+                        )
+                        searchHistory = searchHistoryRepository.getSearchHistory()
+                        // onStopOptionsClick shows stop details (button click behavior)
+                        stopOptionsSelectedStop = stopResult
+                    },
+                    onHistoryItemOptionsClick = { historyItem ->
+                        if (historyItem.type == SearchType.STOP) {
+                            // Button click on history item shows stop details
+                            stopOptionsSelectedStop = StationSearchResult(
+                                stopName = historyItem.query,
+                                lines = historyItem.lines
+                            )
+                        }
+                    }
                 )
             }
         }
 
-        if (selectedDestination == Destination.PLAN.ordinal && !isBottomSheetOpen && !showLinesSheet && itineraryDestinationStop == null) {
-            SimpleSearchBar(
-                searchResults = stationSearchResults,
-                lineSearchResults = lineSearchResults,
-                searchHistory = searchHistory,
-                favoriteStops = favoriteStopItems,
-                onQueryChange = { query ->
-                    searchQuery = query
-                },
-                onSearch = { result ->
-                    // Save to search history
-                    searchHistoryRepository.addToHistory(
-                        SearchHistoryItem(
-                            query = result.stopName,
-                            type = SearchType.STOP,
-                            lines = result.lines
-                        )
-                    )
-                    searchHistory = searchHistoryRepository.getSearchHistory()
-                    
-                    // onSearch launches itinerary (main click behavior)
-                    itineraryDestinationStop = result.stopName
-                    searchQuery = ""
-                },
-                onLineSearch = { lineResult ->
-                    // Save to search history
-                    searchHistoryRepository.addToHistory(
-                        SearchHistoryItem(
-                            query = lineResult.lineName,
-                            type = SearchType.LINE
-                        )
-                    )
-                    searchHistory = searchHistoryRepository.getSearchHistory()
-                    
-                    // Select the line to show its details (via PlanScreen's LaunchedEffect)
-                    viewModel.selectLine(lineResult.lineName)
-                    searchQuery = ""
-                },
-                onHistoryItemClick = { historyItem ->
-                    if (historyItem.type == SearchType.LINE) {
-                        // Open line details (via PlanScreen's LaunchedEffect)
-                        viewModel.selectLine(historyItem.query)
-                    } else {
-                        // Main click on history item launches itinerary
-                        itineraryDestinationStop = historyItem.query
-                    }
-                },
-                onHistoryItemRemove = { historyItem ->
-                    searchHistoryRepository.removeFromHistory(historyItem.query, historyItem.type)
-                    searchHistory = searchHistoryRepository.getSearchHistory()
-                },
-                showDarkOutline = currentMapStyle == MapStyle.DARK_MATTER,
-                onExpandedChange = { expanded -> isSearchExpanded = expanded },
-                onStopOptionsClick = { stopResult ->
-                    searchHistoryRepository.addToHistory(
-                        SearchHistoryItem(
-                            query = stopResult.stopName,
-                            type = SearchType.STOP,
-                            lines = stopResult.lines
-                        )
-                    )
-                    searchHistory = searchHistoryRepository.getSearchHistory()
-                    // onStopOptionsClick shows stop details (button click behavior)
-                    stopOptionsSelectedStop = stopResult
-                },
-                onHistoryItemOptionsClick = { historyItem ->
-                    if (historyItem.type == SearchType.STOP) {
-                        // Button click on history item shows stop details
-                        stopOptionsSelectedStop = StationSearchResult(
-                            stopName = historyItem.query,
-                            lines = historyItem.lines
-                        )
-                    }
-                },
+        // Favorites row - hidden while a sheet is open to free space for map controls.
+        if (selectedDestination == Destination.PLAN.ordinal && !isBottomSheetOpen && !showLinesSheet && itineraryDestinationStop == null && !isSearchExpanded) {
+            Box(
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
                     .fillMaxWidth()
+                    .padding(top = favoritesBarTopPosition)
+            ) {
+                FavoritesBar(
+                    favorites = userFavorites,
+                    onAddFavoriteClick = { showAddFavoriteDialog = true },
+                    onFavoriteClick = { favorite ->
+                        // Navigate to the favorite's stop
+                        val stopResult = StationSearchResult(
+                            stopName = favorite.stopName,
+                            lines = emptyList() // Will be loaded from stops data
+                        )
+                        stopOptionsSelectedStop = stopResult
+                    },
+                    onRemoveFavoriteClick = { favorite ->
+                        viewModel.removeUserFavorite(favorite.id)
+                    }
+                )
+            }
+        }
+
+        // Add Favorite Dialog - displayed on top of everything
+        if (showAddFavoriteDialog) {
+            AddFavoriteDialog(
+                onDismiss = { showAddFavoriteDialog = false },
+                onFavoriteCreated = { name, iconName, stopName ->
+                    viewModel.addUserFavorite(name, iconName, stopName)
+                    showAddFavoriteDialog = false
+                },
+                viewModel = viewModel
             )
         }
     }

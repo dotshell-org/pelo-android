@@ -3,7 +3,9 @@ package com.pelotcl.app.ui.components
 import android.annotation.SuppressLint
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,21 +19,23 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Accessible
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Directions
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,7 +46,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.pelotcl.app.ui.theme.Gray200
 import com.pelotcl.app.ui.theme.Gray700
+import com.pelotcl.app.ui.theme.Green500
+import com.pelotcl.app.ui.theme.Orange500
+import com.pelotcl.app.ui.theme.Red500
+import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.utils.BusIconHelper
+import java.util.Calendar
 
 /**
  * Station data for display in the bottom sheet
@@ -138,28 +147,123 @@ private fun sortLines(lines: List<String>): List<String> {
  * Bottom sheet affichant les informations d'une station
  * (nom de la station et toutes les lignes qui la desservent)
  */
+private fun parseDepartureToMinutes(rawTime: String): Int? {
+    val clean = if (rawTime.count { it == ':' } >= 2) rawTime.substringBeforeLast(":") else rawTime
+    val parts = clean.split(":")
+    if (parts.size < 2) return null
+    val hour = parts[0].toIntOrNull() ?: return null
+    val minute = parts[1].toIntOrNull() ?: return null
+    if (minute !in 0..59) return null
+    return (hour * 60) + minute
+}
+
+private fun getDepartureColor(departureTime: String): Color {
+    val now = Calendar.getInstance()
+    val nowMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
+    val departureMinutes = parseDepartureToMinutes(departureTime) ?: return Green500
+    val diff = departureMinutes - nowMinutes
+
+    if (diff < 0) return Green500
+
+    return when (diff) {
+        in 0..1 -> Red500
+        in 2..14 -> Orange500
+        else -> Green500
+    }
+}
+
+private fun formatRelativeDeparture(departureTime: String): String? {
+    val now = Calendar.getInstance()
+    val nowMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
+    val departureMinutes = parseDepartureToMinutes(departureTime) ?: return null
+    val diff = departureMinutes - nowMinutes
+
+    if (diff < 0) return null
+    if (diff == 0) return "< 1 min"
+    if (diff < 60) return "dans ${diff}min"
+
+    val hours = diff / 60
+    val minutes = diff % 60
+    return "dans ${hours}h${minutes.toString().padStart(2, '0')}min"
+}
+
+private fun minutesUntilDeparture(rawTime: String): Int {
+    val now = Calendar.getInstance()
+    val nowMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
+    val departureMinutes = parseDepartureToMinutes(rawTime) ?: return Int.MAX_VALUE
+    return if (departureMinutes >= nowMinutes) {
+        departureMinutes - nowMinutes
+    } else {
+        // Treat past times as next-day departures to keep ordering stable.
+        (24 * 60 - nowMinutes) + departureMinutes
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StationBottomSheet(
     stationInfo: StationInfo?,
     sheetState: SheetState?,
     onDismiss: () -> Unit,
+    viewModel: TransportViewModel? = null,
     onLineClick: (String) -> Unit = {},
-    onItineraryClick: () -> Unit = {},
-    isFavorite: Boolean = false,
-    onToggleFavorite: (String) -> Unit = {}
+    onDepartureClick: (lineName: String, directionId: Int, departureTime: String) -> Unit = { lineName, _, _ ->
+        onLineClick(lineName)
+    },
+    isFavoriteStop: Boolean = false,
+    onToggleFavoriteStop: () -> Unit = {},
+    onAddFavoriteClick: (String) -> Unit = {},
+    onItineraryClick: () -> Unit = {}
 ) {
+    val titleInset = 20.dp
+    val departuresInset = 20.dp
+    val actionsInset = 8.dp
+
     if (stationInfo != null) {
+        val allStopLines = remember(stationInfo.nom, stationInfo.lignes, viewModel) {
+            if (viewModel == null) {
+                stationInfo.lignes
+            } else {
+                val linesFromConnections = viewModel
+                    .getConnectionsForStop(stationInfo.nom, "")
+                    .map { it.lineName }
+
+                (linesFromConnections + stationInfo.lignes)
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .distinctBy { it.uppercase() }
+            }
+        }
+
+        val departuresState = produceState<List<TransportViewModel.StopDeparturePreview>?>(
+            initialValue = null,
+            key1 = stationInfo.nom,
+            key2 = allStopLines,
+            key3 = viewModel
+        ) {
+            value = if (viewModel == null) {
+                emptyList()
+            } else {
+                viewModel.getNextDeparturesForStop(
+                    stopName = stationInfo.nom,
+                    lines = allStopLines
+                )
+            }
+        }
+
+        val departures = departuresState.value
+
         val content = @Composable {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
-                    .padding(bottom = 32.dp)
+                    .heightIn(max = 480.dp)
             ) {
                 // Nom de la station
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = titleInset),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -184,63 +288,122 @@ fun StationBottomSheet(
                                 modifier = Modifier.size(24.dp)
                             )
                         }
-
-                        // Favorite star button
-                        IconButton(
-                            onClick = { onToggleFavorite(stationInfo.nom) },
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder,
-                                contentDescription = if (isFavorite) "Retirer des favoris" else "Ajouter aux favoris",
-                                tint = if (isFavorite) Color(0xFFFFC107) else Gray700,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-
-                        // Itinerary circular button
-                        FilledIconButton(
-                            onClick = onItineraryClick,
-                            modifier = Modifier.size(40.dp),
-                            shape = CircleShape,
-                            colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = Color.Black,
-                                contentColor = Color.White
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Directions,
-                                contentDescription = "Itinéraire",
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(bottom = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Spacer(modifier = Modifier.size(actionsInset))
+
+                    Button(
+                        onClick = onItineraryClick,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.Black,
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Directions,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.size(8.dp))
+                        Text(text = "Itinéraire", fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = { onAddFavoriteClick(stationInfo.nom) },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isFavoriteStop) Color(0xFFD1D5DB) else Color(0xFFE5E7EB),
+                            contentColor = Color(0xFF374151)
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.size(8.dp))
+                        Text(
+                            text = "Ajouter aux favoris",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.size(actionsInset))
+                }
                 
                 // Scrollable list of lines (sorted)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .padding(horizontal = departuresInset)
                         .verticalScroll(rememberScrollState())
                 ) {
-                    val sortedLines = sortLines(stationInfo.lignes)
-                    sortedLines.forEachIndexed { index, ligne ->
-                        key(ligne) {
-                            LineListItem(
-                                lineName = ligne,
-                                onClick = { onLineClick(ligne) }
-                            )
+                    if (departures == null) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 24.dp),
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator(color = Color.Black)
+                        }
+                    } else if (departures.isEmpty()) {
+                        Text(
+                            text = "Aucun horaire disponible pour cet arrêt",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Gray700,
+                            modifier = Modifier.padding(vertical = 12.dp)
+                        )
+                    } else {
+                        val lineOrder = remember(allStopLines) {
+                            sortLines(allStopLines)
+                                .mapIndexed { index, line -> line.uppercase() to index }
+                                .toMap()
+                        }
 
-                            // Divider between lines, except after last
-                            if (index < sortedLines.size - 1) {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(vertical = 4.dp),
-                                    color = Gray200
+                        val sortedDepartures = remember(departures, lineOrder) {
+                            departures.sortedWith(
+                                compareBy<TransportViewModel.StopDeparturePreview> { minutesUntilDeparture(it.nextDeparture) }
+                                    .thenBy { lineOrder[it.lineName.uppercase()] ?: Int.MAX_VALUE }
+                                    .thenBy { it.directionId }
+                                    .thenBy { parseDepartureToMinutes(it.nextDeparture) ?: Int.MAX_VALUE }
+                            )
+                        }
+
+                        sortedDepartures.forEachIndexed { index, departure ->
+                            key("${departure.lineName}-${departure.directionId}-${departure.nextDeparture}") {
+                                DepartureListItem(
+                                    lineName = departure.lineName,
+                                    directionName = departure.directionName,
+                                    departureTime = departure.nextDeparture,
+                                    onClick = {
+                                        onDepartureClick(
+                                            departure.lineName,
+                                            departure.directionId,
+                                            departure.nextDeparture
+                                        )
+                                    }
                                 )
+
+                                if (index < sortedDepartures.size - 1) {
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(vertical = 4.dp),
+                                        color = Gray200
+                                    )
+                                }
                             }
                         }
+
+                        Spacer(modifier = Modifier.height(20.dp))
                     }
                 }
             }
@@ -262,17 +425,18 @@ fun StationBottomSheet(
 }
 
 /**
- * List item for a transport line with next departure times
+ * List item for a line departure in all-lines station mode.
  */
-@SuppressLint("ComposeBackingChainViolation") // Required for dynamic resource loading
-// Suppress warnings for dynamic resource loading and Compose local access in lambda
+@SuppressLint("ComposeBackingChainViolation")
 @Suppress("DiscouragedApi", "ComposeLocalCurrentInLambda")
 @Composable
-private fun LineListItem(
+private fun DepartureListItem(
     lineName: String,
+    directionName: String,
+    departureTime: String,
     onClick: () -> Unit
 ) {
-    @Suppress("ComposeLocalContext") // Context access needed for dynamic resource loading
+    @Suppress("ComposeLocalContext")
     val context = LocalContext.current
     val resourceId = remember(lineName) {
         BusIconHelper.getResourceIdForLine(context, lineName)
@@ -286,27 +450,53 @@ private fun LineListItem(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Line icon on the left
-        if (resourceId != 0) {
-            Image(
-                painter = painterResource(id = resourceId),
-                contentDescription = "Ligne $lineName",
-                modifier = Modifier.size(60.dp)
-            )
-        } else {
-            // Fallback if icon doesn't exist
-            Text(
-                text = lineName,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = Gray700
-            )
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (resourceId != 0) {
+                Image(
+                    painter = painterResource(id = resourceId),
+                    contentDescription = "Ligne $lineName",
+                    modifier = Modifier.size(52.dp)
+                )
+            } else {
+                Text(
+                    text = lineName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Gray700
+                )
+            }
+
+            Spacer(modifier = Modifier.size(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = directionName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.Black,
+                    maxLines = 1
+                )
+                Text(
+                    text = departureTime,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = getDepartureColor(departureTime)
+                )
+                formatRelativeDeparture(departureTime)?.let { relativeText ->
+                    Text(
+                        text = relativeText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = getDepartureColor(departureTime)
+                    )
+                }
+            }
         }
-        
-        // Chevron on the right
+
         Icon(
             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = "Voir la ligne $lineName",
+            contentDescription = "Voir le détail de la ligne $lineName",
             tint = Gray700,
             modifier = Modifier.size(24.dp)
         )

@@ -193,7 +193,9 @@ class RaptorRepository private constructor(private val context: Context) {
     private fun loadSchoolHolidays() {
         try {
             val json = context.assets.open("holidays.json").bufferedReader().use { it.readText() }
-            val holidaysData = Json.decodeFromString<HolidaysData>(json)
+            // Configure Json to ignore unknown keys as fallback
+            val jsonConfig = Json { ignoreUnknownKeys = true }
+            val holidaysData = jsonConfig.decodeFromString<HolidaysData>(json)
             schoolHolidays = holidaysData.holidays.mapNotNull { holiday ->
                 val startDate = try {
                     LocalDate.parse(holiday.startDateInclusive, DateTimeFormatter.ISO_DATE)
@@ -410,6 +412,13 @@ class RaptorRepository private constructor(private val context: Context) {
     ): List<JourneyResult> = withContext(Dispatchers.Default) {
         ensureInitialized()
         ensureCorrectPeriod(date) // Auto-select period based on selected date
+        
+        // Early return for empty inputs to avoid unnecessary computation
+        if (originStopIds.isEmpty() || destinationStopIds.isEmpty()) {
+            Log.w(TAG, "getOptimizedPaths: origin or destination stop IDs are empty, skipping calculation")
+            return@withContext emptyList()
+        }
+        
         try {
             val depTime = departureTimeSeconds ?: getCurrentTimeInSeconds()
             
@@ -439,14 +448,8 @@ class RaptorRepository private constructor(private val context: Context) {
                 return@withContext diskCached
             }
 
-            if (originStopIds.isEmpty()) {
-                Log.w(TAG, "getOptimizedPaths: originStopIds is empty!")
-                return@withContext emptyList()
-            }
-            if (destinationStopIds.isEmpty()) {
-                Log.w(TAG, "getOptimizedPaths: destinationStopIds is empty!")
-                return@withContext emptyList()
-            }
+            // Note: Empty checks already handled above, no need to check again
+            Log.d(TAG, "getOptimizedPaths: Cache miss, calculating with Raptor for ${originStopIds.size} origin(s) -> ${destinationStopIds.size} destination(s)")
 
             // Level 3: Calculate with Raptor
             val journeys = raptorLibrary?.getOptimizedPaths(
@@ -833,6 +836,7 @@ data class JourneyLeg(
  */
 @Serializable
 private data class HolidaysData(
+    @kotlinx.serialization.SerialName("school_year")
     val schoolYear: String,
     val location: HolidayLocation,
     val holidays: List<HolidayEntry>
