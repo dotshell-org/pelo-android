@@ -32,7 +32,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -41,7 +40,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.pelotcl.app.R
 import com.pelotcl.app.data.model.Favorite
 
 /**
@@ -171,19 +169,7 @@ private fun FavoriteItem(
     onLongClick: () -> Unit,
     textStyle: TextStyle
 ) {
-    val iconResId = when (favorite.iconName.lowercase()) {
-        "home" -> R.drawable.ic_home
-        "work" -> R.drawable.ic_work
-        "school" -> R.drawable.ic_school
-        "shopping" -> R.drawable.ic_shopping
-        "star" -> R.drawable.ic_star
-        "heart" -> R.drawable.ic_heart
-        "bus" -> R.drawable.ic_bus
-        "train" -> R.drawable.ic_train
-        "location" -> R.drawable.ic_location
-        "flag" -> R.drawable.ic_flag
-        else -> R.drawable.ic_star // Default icon
-    }
+    val icon = favoriteIcon(favorite.iconName)
 
     Row(
         modifier = Modifier
@@ -198,7 +184,7 @@ private fun FavoriteItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
-            painter = painterResource(id = iconResId),
+            imageVector = icon,
             contentDescription = favorite.name,
             tint = Color.White,
             modifier = Modifier.size(16.dp)

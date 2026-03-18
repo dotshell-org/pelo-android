@@ -3,20 +3,25 @@ package com.pelotcl.app.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,53 +32,107 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DirectionsBus
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SearchBar
+import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.pelotcl.app.R
-import com.pelotcl.app.data.model.Favorite
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.pelotcl.app.ui.theme.Gray700
 import com.pelotcl.app.ui.theme.Red500
+import com.pelotcl.app.ui.viewmodel.TransportViewModel
+import com.pelotcl.app.utils.BusIconHelper
+import kotlinx.coroutines.delay
 
 /**
- * Dialog for creating a new favorite
+ * Dialog for creating a new favorite from predefined presets.
  * @param onDismiss Callback when dialog is dismissed
  * @param onFavoriteCreated Callback when a new favorite is created
- * @param availableStops List of available stops to choose from
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AddFavoriteDialog(
     onDismiss: () -> Unit,
     onFavoriteCreated: (String, String, String) -> Unit,
-    availableStops: List<String>
+    viewModel: TransportViewModel
 ) {
     val sheetState = rememberModalBottomSheetState()
-    var favoriteName by remember { mutableStateOf("") }
-    var selectedIcon by remember { mutableStateOf("home") }
-    var selectedStop by remember { mutableStateOf<String?>(null) }
-    var showStopSelection by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    val presets = remember {
+        listOf(
+            FavoritePreset("Maison", "home"),
+            FavoritePreset("Travail", "work"),
+            FavoritePreset("Ecole", "school"),
+            FavoritePreset("Courses", "shopping"),
+            FavoritePreset("Gare routière", "bus"),
+            FavoritePreset("Gare ferroviaire", "train"),
+            FavoritePreset("Autre", "star")
+        )
+    }
+
+    var selectedPreset by remember { mutableStateOf<FavoritePreset?>(presets.firstOrNull()) }
+    var customOtherTitle by remember { mutableStateOf("") }
+    var selectedStop by remember { mutableStateOf<StationSearchResult?>(null) }
+    var stopQuery by remember { mutableStateOf("") }
+    var stopResults by remember { mutableStateOf<List<StationSearchResult>>(emptyList()) }
+    var showStopSearchFullscreen by remember { mutableStateOf(false) }
+
+    val isOtherSelected = selectedPreset?.name == "Autre"
+    val finalFavoriteTitle = if (isOtherSelected) customOtherTitle.trim() else (selectedPreset?.name ?: "")
+
+    LaunchedEffect(stopQuery) {
+        val query = stopQuery.trim()
+        if (query.length < 2) {
+            stopResults = emptyList()
+            return@LaunchedEffect
+        }
+
+        delay(250)
+        stopResults = viewModel.searchStops(query)
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -84,7 +143,6 @@ fun AddFavoriteDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 24.dp)
-                .verticalScroll(rememberScrollState())
         ) {
             // Header
             Row(
@@ -109,58 +167,9 @@ fun AddFavoriteDialog(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Name field
+            // Preset selection
             Text(
-                text = "Nom du favori",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                color = Color.Black
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            BasicTextField(
-                value = favoriteName,
-                onValueChange = { favoriteName = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Min)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFFF5F5F5))
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color.Black),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Text,
-                    imeAction = ImeAction.Done
-                ),
-                keyboardActions = KeyboardActions(
-                    onDone = {
-                        if (favoriteName.isNotBlank() && selectedStop != null) {
-                            onFavoriteCreated(
-                                favoriteName,
-                                selectedIcon,
-                                selectedStop!!
-                            )
-                            onDismiss()
-                        }
-                    }
-                ),
-                decorationBox = { innerTextField ->
-                    if (favoriteName.isEmpty()) {
-                        Text(
-                            text = "Ex: Maison, Travail, École",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Gray
-                        )
-                    }
-                    innerTextField()
-                }
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Icon selection
-            Text(
-                text = "Icône",
+                text = "Type de favori",
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
                 color = Color.Black
@@ -171,13 +180,55 @@ fun AddFavoriteDialog(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Favorite.DEFAULT_ICONS.forEach { iconName ->
+                presets.forEach { preset ->
                     IconSelectionButton(
-                        iconName = iconName,
-                        isSelected = iconName == selectedIcon,
-                        onClick = { selectedIcon = iconName }
+                        iconName = preset.iconName,
+                        label = preset.name,
+                        isSelected = preset == selectedPreset,
+                        onClick = {
+                            selectedPreset = preset
+                            if (preset.name != "Autre") {
+                                customOtherTitle = ""
+                            }
+                        }
                     )
                 }
+            }
+
+            if (isOtherSelected) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Titre du favori",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.Black
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                BasicTextField(
+                    value = customOtherTitle,
+                    onValueChange = { customOtherTitle = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(28.dp))
+                        .background(Color(0xFFF5F5F5))
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color.Black),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Next
+                    ),
+                    decorationBox = { innerTextField ->
+                        if (customOtherTitle.isBlank()) {
+                            Text(
+                                text = "Ex: Salle de sport",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.Gray
+                            )
+                        }
+                        innerTextField()
+                    }
+                )
             }
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -190,27 +241,28 @@ fun AddFavoriteDialog(
                 color = Color.Black
             )
             Spacer(modifier = Modifier.height(8.dp))
-            Box(
+
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { showStopSelection = true }
-                    .background(Color(0xFFF5F5F5))
-                    .padding(16.dp)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(Color.Black)
+                    .clickable { showStopSearchFullscreen = true }
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                if (selectedStop != null) {
-                    Text(
-                        text = selectedStop!!,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Black
-                    )
-                } else {
-                    Text(
-                        text = "Sélectionner un arrêt",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Gray
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = selectedStop?.stopName ?: "Rechercher un arrêt",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (selectedStop == null) Color.White.copy(alpha = 0.6f) else Color.White
+                )
             }
 
             Spacer(modifier = Modifier.height(32.dp))
@@ -218,12 +270,10 @@ fun AddFavoriteDialog(
             // Create button
             Button(
                 onClick = {
-                    if (favoriteName.isNotBlank() && selectedStop != null) {
-                        onFavoriteCreated(
-                            favoriteName,
-                            selectedIcon,
-                            selectedStop!!
-                        )
+                    val preset = selectedPreset
+                    val stop = selectedStop
+                    if (preset != null && stop != null && finalFavoriteTitle.isNotBlank()) {
+                        onFavoriteCreated(finalFavoriteTitle, preset.iconName, stop.stopName)
                         onDismiss()
                     }
                 },
@@ -236,7 +286,8 @@ fun AddFavoriteDialog(
                     disabledContainerColor = Color.Gray,
                     disabledContentColor = Color.White
                 ),
-                enabled = favoriteName.isNotBlank() && selectedStop != null
+                shape = RoundedCornerShape(28.dp),
+                enabled = selectedPreset != null && selectedStop != null && finalFavoriteTitle.isNotBlank()
             ) {
                 Text(
                     text = "Créer le favori",
@@ -249,15 +300,23 @@ fun AddFavoriteDialog(
         }
     }
 
-    // Stop selection dialog
-    if (showStopSelection) {
-        StopSelectionDialog(
-            availableStops = availableStops,
-            onStopSelected = { stop ->
-                selectedStop = stop
-                showStopSelection = false
+    if (showStopSearchFullscreen) {
+        StopSearchFullscreenOverlay(
+            query = stopQuery,
+            searchResults = stopResults,
+            onQueryChange = { newQuery ->
+                stopQuery = newQuery
+                if (selectedStop?.stopName != newQuery) {
+                    selectedStop = null
+                }
             },
-            onDismiss = { showStopSelection = false }
+            onDismiss = { showStopSearchFullscreen = false },
+            onResultSelected = { result ->
+                selectedStop = result
+                stopQuery = ""
+                stopResults = emptyList()
+                showStopSearchFullscreen = false
+            }
         )
     }
 }
@@ -268,193 +327,295 @@ fun AddFavoriteDialog(
 @Composable
 private fun IconSelectionButton(
     iconName: String,
+    label: String,
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
-    val iconResId = when (iconName.lowercase()) {
-        "home" -> R.drawable.ic_home
-        "work" -> R.drawable.ic_work
-        "school" -> R.drawable.ic_school
-        "shopping" -> R.drawable.ic_shopping
-        "star" -> R.drawable.ic_star
-        "heart" -> R.drawable.ic_heart
-        "bus" -> R.drawable.ic_bus
-        "train" -> R.drawable.ic_train
-        "location" -> R.drawable.ic_location
-        "flag" -> R.drawable.ic_flag
-        else -> R.drawable.ic_star
-    }
+    val icon = favoriteIcon(iconName)
 
     Box(
         modifier = Modifier
-            .size(48.dp)
-            .clip(CircleShape)
+            .clip(RoundedCornerShape(24.dp))
             .clickable(onClick = onClick)
             .background(if (isSelected) Color(0x1A000000) else Color.Transparent)
-            .border(1.dp, if (isSelected) Color.Black else Color.Gray, CircleShape),
-        contentAlignment = Alignment.Center
+            .border(1.dp, if (isSelected) Color.Black else Color.Gray, RoundedCornerShape(24.dp))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        contentAlignment = Alignment.CenterStart
     ) {
-        Box(
-            modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape)
-                .background(Color.Black),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                painter = painterResource(id = iconResId),
-                contentDescription = iconName,
-                tint = Color.White,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-        if (isSelected) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .size(16.dp)
+                modifier = Modifier.size(24.dp)
                     .clip(CircleShape)
-                    .background(Red500),
+                    .background(Color.Black),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = "Selected",
+                    imageVector = icon,
+                    contentDescription = iconName,
                     tint = Color.White,
-                    modifier = Modifier.size(12.dp)
+                    modifier = Modifier.size(14.dp)
                 )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.Black,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+            )
+            if (isSelected) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(Red500),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = "Selected",
+                        tint = Color.White,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
             }
         }
     }
 }
 
-/**
- * Dialog for selecting a stop
- */
+
+private data class FavoritePreset(
+    val name: String,
+    val iconName: String
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun StopSelectionDialog(
-    availableStops: List<String>,
-    onStopSelected: (String) -> Unit,
-    onDismiss: () -> Unit
+private fun StopSearchFullscreenOverlay(
+    query: String,
+    searchResults: List<StationSearchResult>,
+    onQueryChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onResultSelected: (StationSearchResult) -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState()
-    var searchQuery by remember { mutableStateOf("") }
-
-    val filteredStops = if (searchQuery.isBlank()) {
-        availableStops
-    } else {
-        availableStops.filter { stop ->
-            stop.contains(searchQuery, ignoreCase = true)
-        }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusRequester = remember { FocusRequester() }
+    var expanded by rememberSaveable { mutableStateOf(true) }
+    var queryField by remember {
+        mutableStateOf(
+            TextFieldValue(
+                text = query,
+                selection = TextRange(query.length)
+            )
+        )
     }
 
-    ModalBottomSheet(
+    LaunchedEffect(query) {
+        queryField = TextFieldValue(
+            text = query,
+            selection = TextRange(query.length)
+        )
+    }
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+        keyboardController?.show()
+    }
+
+    Dialog(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = Color.White
+        properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Column(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 24.dp)
-        ) {
-            // Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Sélectionner un arrêt",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Black
-                )
-                IconButton(onClick = onDismiss) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Fermer",
-                        tint = Gray700
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Search field
-            BasicTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Min)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFFF5F5F5))
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color.Black),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Text,
-                    imeAction = ImeAction.Search
-                ),
-                keyboardActions = KeyboardActions(
-                    onSearch = {}
-                ),
-                decorationBox = { innerTextField ->
-                    if (searchQuery.isEmpty()) {
-                        Text(
-                            text = "Rechercher un arrêt",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Gray
-                        )
+                .fillMaxSize()
+                .background(Color.Black)
+                .semantics { isTraversalGroup = true }
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() }
+                ) {
+                    if (expanded) {
+                        expanded = false
+                        keyboardController?.hide()
+                        onDismiss()
                     }
-                    innerTextField()
                 }
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Stop list
-            if (filteredStops.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Aucun arrêt trouvé",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Gray
+        ) {
+            SearchBar(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .semantics { traversalIndex = 0f }
+                    .padding(horizontal = if (expanded) 0.dp else 10.dp),
+                inputField = {
+                    SearchBarDefaults.InputField(
+                        query = queryField.text,
+                        onQueryChange = { updated ->
+                            queryField = TextFieldValue(updated, TextRange(updated.length))
+                            onQueryChange(updated)
+                        },
+                        onSearch = {
+                            searchResults.firstOrNull()?.let(onResultSelected)
+                        },
+                        expanded = expanded,
+                        onExpandedChange = { shouldExpand ->
+                            expanded = shouldExpand
+                            if (!shouldExpand) onDismiss()
+                        },
+                        placeholder = { Text("Rechercher", color = Color.White) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Search",
+                                tint = Color.White,
+                                modifier = Modifier.padding(
+                                    start = if (expanded) 32.dp else 0.dp,
+                                    end = if (expanded) 12.dp else 0.dp
+                                )
+                            )
+                        },
+                        modifier = Modifier
+                            .focusRequester(focusRequester)
+                            .fillMaxWidth(),
+                        colors = TextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            cursorColor = Color.White,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            disabledIndicatorColor = Color.Transparent,
+                            focusedContainerColor = Color.Black,
+                            unfocusedContainerColor = Color.Black,
+                            focusedPlaceholderColor = Color.White.copy(alpha = 0.6f),
+                            unfocusedPlaceholderColor = Color.White.copy(alpha = 0.6f)
+                        )
                     )
+                },
+                expanded = expanded,
+                onExpandedChange = { shouldExpand ->
+                    expanded = shouldExpand
+                    if (!shouldExpand) onDismiss()
+                },
+                colors = SearchBarDefaults.colors(
+                    containerColor = Color.Black,
+                    dividerColor = Color.Transparent
+                )
+            ) {
+                val scrollState = rememberScrollState()
+
+                LaunchedEffect(scrollState) {
+                    snapshotFlow { scrollState.isScrollInProgress }
+                        .collect { isScrolling ->
+                            if (isScrolling) {
+                                keyboardController?.hide()
+                            }
+                        }
                 }
-            } else {
+
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(300.dp)
-                        .verticalScroll(rememberScrollState())
+                    Modifier
+                        .padding(top = 12.dp, bottom = 28.dp)
+                        .pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    awaitFirstDown(requireUnconsumed = false)
+                                }
+                            }
+                        }
+                        .verticalScroll(scrollState)
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) {}
                 ) {
-                    filteredStops.forEach { stop ->
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onStopSelected(stop) }
-                                .padding(vertical = 8.dp)
-                        ) {
-                            Text(
-                                text = stop,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.Black,
-                                modifier = Modifier.padding(vertical = 12.dp)
+                    if (queryField.text.length >= 2) {
+                        searchResults.forEach { result ->
+                            FavoriteStopSearchResultItem(
+                                result = result,
+                                onClick = { onResultSelected(result) }
                             )
                         }
                     }
+
+                    Spacer(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(60.dp)
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() }
+                            ) {
+                                expanded = false
+                                keyboardController?.hide()
+                                onDismiss()
+                            }
+                    )
+
+                    if (searchResults.isEmpty() && queryField.text.isNotEmpty()) {
+                        Text(
+                            text = "Aucun résultat",
+                            color = Color.White.copy(alpha = 0.6f),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp, vertical = 12.dp)
+                        )
+                    }
                 }
             }
-
-            Spacer(modifier = Modifier.height(24.dp))
         }
     }
+}
+
+@Composable
+private fun FavoriteSearchConnectionBadge(lineName: String) {
+    val context = LocalContext.current
+    val resourceId = BusIconHelper.getResourceIdForLine(context, lineName)
+
+    if (resourceId != 0) {
+        Image(
+            painter = painterResource(id = resourceId),
+            contentDescription = lineName,
+            modifier = Modifier.size(30.dp)
+        )
+    }
+}
+
+@Composable
+private fun FavoriteStopSearchResultItem(
+    result: StationSearchResult,
+    onClick: () -> Unit
+) {
+    ListItem(
+        headlineContent = {
+            Column(modifier = Modifier.padding(horizontal = 24.dp)) {
+                Spacer(modifier = Modifier.size(6.dp))
+                Text(
+                    result.stopName,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontWeight = FontWeight.Bold
+                )
+                if (result.lines.isNotEmpty()) {
+                    Spacer(modifier = Modifier.size(4.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        result.lines.take(4).forEach { lineName ->
+                            FavoriteSearchConnectionBadge(lineName = lineName)
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.size(4.dp))
+            }
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Black),
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .fillMaxWidth()
+    )
 }

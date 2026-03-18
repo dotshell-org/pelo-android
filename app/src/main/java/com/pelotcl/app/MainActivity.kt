@@ -630,14 +630,13 @@ fun NavBar(modifier: Modifier = Modifier) {
 
         // Add Favorite Dialog - displayed on top of everything
         if (showAddFavoriteDialog) {
-            val availableStops = (stopsUiState as? TransportStopsUiState.Success)?.stops?.map { it.properties.nom } ?: emptyList()
             AddFavoriteDialog(
                 onDismiss = { showAddFavoriteDialog = false },
                 onFavoriteCreated = { name, iconName, stopName ->
                     viewModel.addUserFavorite(name, iconName, stopName)
                     showAddFavoriteDialog = false
                 },
-                availableStops = availableStops
+                viewModel = viewModel
             )
         }
     }
