@@ -143,7 +143,11 @@ class WidgetConfigActivity : ComponentActivity() {
             }
 
             PeloWidget().update(context, glanceId)
-            WidgetRefreshScheduler.schedule(context, appWidgetId, widgetStyle.refreshIntervalMinutes)
+            WidgetRefreshScheduler.schedule(
+                context,
+                appWidgetId,
+                widgetStyle.refreshIntervalMinutes
+            )
 
             val resultValue = Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
             setResult(RESULT_OK, resultValue)

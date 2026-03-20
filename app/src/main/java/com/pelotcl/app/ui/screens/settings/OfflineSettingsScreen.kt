@@ -1,4 +1,4 @@
-package com.pelotcl.app.ui.screens
+package com.pelotcl.app.ui.screens.settings
 
 import android.content.Context
 import android.text.format.Formatter
@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -38,6 +39,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pelotcl.app.R
@@ -62,7 +64,10 @@ fun OfflineSettingsScreen(
     val downloadState by viewModel.offlineDataManager.downloadState.collectAsState()
     val isOffline by viewModel.isOffline.collectAsState()
     val offlineRepository = remember { OfflineRepository(context) }
-    var selectedMapStyles by remember { mutableStateOf(offlineRepository.getSelectedMapStyles().ifEmpty { setOf(MapStyle.POSITRON.key) }) }
+    var selectedMapStyles by remember {
+        mutableStateOf(
+            offlineRepository.getSelectedMapStyles().ifEmpty { setOf(MapStyle.POSITRON.key) })
+    }
 
     Box(
         modifier = modifier
@@ -81,7 +86,9 @@ fun OfflineSettingsScreen(
             Spacer(modifier = Modifier.height(60.dp))
             Icon(
                 imageVector = if (offlineDataInfo.isAvailable) Icons.Filled.CheckCircle else Icons.Filled.CloudOff,
-                contentDescription = if (offlineDataInfo.isAvailable) stringResource(R.string.offline_available) else stringResource(R.string.offline_unavailable),
+                contentDescription = if (offlineDataInfo.isAvailable) stringResource(R.string.offline_available) else stringResource(
+                    R.string.offline_unavailable
+                ),
                 tint = if (offlineDataInfo.isAvailable) Color(0xFF4CAF50) else Color.Gray,
                 modifier = Modifier.size(48.dp)
             )
@@ -150,18 +157,26 @@ fun OfflineSettingsScreen(
                         Text("Annuler", color = Color.Gray, fontSize = 14.sp)
                     }
                 }
+
                 else -> {
                     Button(
                         enabled = !isOffline,
                         onClick = { viewModel.startOfflineDownload() },
-                        modifier = Modifier.fillMaxWidth().alpha(if (isOffline) 0.5f else 1f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .alpha(if (isOffline) 0.5f else 1f),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFFE60000),
                             disabledContainerColor = Color(0xFF3A3A3C)
                         ),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(Icons.Filled.CloudDownload, stringResource(R.string.download_data), modifier = Modifier.size(20.dp), tint = Color.White)
+                        Icon(
+                            Icons.Filled.CloudDownload,
+                            stringResource(R.string.download_data),
+                            modifier = Modifier.size(20.dp),
+                            tint = Color.White
+                        )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = if (offlineDataInfo.isAvailable) "Mettre à jour" else "Télécharger les données",
@@ -172,7 +187,12 @@ fun OfflineSettingsScreen(
                     }
 
                     if (state is OfflineDownloadState.Error) {
-                        Text(state.message, color = Color(0xFFEF4444), fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp))
+                        Text(
+                            state.message,
+                            color = Color(0xFFEF4444),
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(top = 12.dp)
+                        )
                     }
                 }
             }
@@ -187,7 +207,10 @@ fun OfflineSettingsScreen(
 
         IconButton(
             onClick = onBackClick,
-            modifier = Modifier.statusBarsPadding().padding(start = 4.dp, top = 8.dp).align(Alignment.TopStart)
+            modifier = Modifier
+                .statusBarsPadding()
+                .padding(start = 4.dp, top = 8.dp)
+                .align(Alignment.TopStart)
         ) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour", tint = Color.White)
         }
@@ -198,9 +221,16 @@ fun OfflineSettingsScreen(
 private fun CategoryHeader(icon: ImageVector, title: String) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp, horizontal = 4.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp, horizontal = 4.dp)
     ) {
-        Icon(icon, stringResource(R.string.category_header), tint = Color.White, modifier = Modifier.size(20.dp))
+        Icon(
+            icon,
+            stringResource(R.string.category_header),
+            tint = Color.White,
+            modifier = Modifier.size(20.dp)
+        )
         Spacer(Modifier.width(8.dp))
         Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
     }
@@ -225,7 +255,8 @@ private fun DownloadProgressCard(state: OfflineDownloadState.Downloading) {
         Column(modifier = Modifier.padding(16.dp)) {
             Spacer(modifier = Modifier.height(7.dp))
 
-            Text(state.stepDescription,
+            Text(
+                state.stepDescription,
                 color = Color.White,
                 fontSize = 14.sp,
                 textAlign = TextAlign.Center,
@@ -269,7 +300,12 @@ private fun MapStyleSelectionCard(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(enabled = isInteractive) { onStyleToggled(style.key, !isSelected) }
+                        .clickable(enabled = isInteractive) {
+                            onStyleToggled(
+                                style.key,
+                                !isSelected
+                            )
+                        }
                         .padding(vertical = 16.dp, horizontal = 12.dp)
                         .alpha(if (isInteractive) 1f else 0.5f),
                     verticalAlignment = Alignment.CenterVertically
@@ -279,22 +315,47 @@ private fun MapStyleSelectionCard(
                         modifier = Modifier
                             .size(24.dp)
                             .clip(RoundedCornerShape(6.dp))
-                            .border(2.dp, if (isSelected) Color.Transparent else Color(0xFF8E8E93), RoundedCornerShape(6.dp))
+                            .border(
+                                2.dp,
+                                if (isSelected) Color.Transparent else Color(0xFF8E8E93),
+                                RoundedCornerShape(6.dp)
+                            )
                             .background(if (isSelected) Color(0xFFE60000) else Color.Transparent),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (isSelected) Icon(Icons.Default.Check, stringResource(R.string.selected), tint = Color.White, modifier = Modifier.size(16.dp))
+                        if (isSelected) Icon(
+                            Icons.Default.Check,
+                            stringResource(R.string.selected),
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
 
                     Spacer(modifier = Modifier.width(16.dp))
-                    Text(style.displayName, color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                    Text(
+                        style.displayName,
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        modifier = Modifier.weight(1f)
+                    )
 
                     if (isDownloaded && isSelected) {
-                        Icon(Icons.Filled.CheckCircle, stringResource(R.string.downloaded), tint = Color(0xFF4CAF50), modifier = Modifier.size(18.dp))
+                        Icon(
+                            Icons.Filled.CheckCircle,
+                            stringResource(R.string.downloaded),
+                            tint = Color(0xFF4CAF50),
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
                 if (index < styles.size - 1) {
-                    Box(modifier = Modifier.fillMaxWidth().padding(start = 56.dp).height(0.5.dp).background(Color(0xFF3A3A3C)))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 56.dp)
+                            .height(0.5.dp)
+                            .background(Color(0xFF3A3A3C))
+                    )
                 }
             }
         }
@@ -313,7 +374,10 @@ private fun OfflineStatusCard(info: OfflineDataInfo, context: Context) {
             Spacer(modifier = Modifier.height(8.dp))
             StatusRow("Espace utilisé", Formatter.formatFileSize(context, info.totalSizeBytes))
             Spacer(modifier = Modifier.height(8.dp))
-            StatusRow("Lignes de bus", if (info.busLinesCount > 0) "${info.busLinesCount} lignes" else "Aucune")
+            StatusRow(
+                "Lignes de bus",
+                if (info.busLinesCount > 0) "${info.busLinesCount} lignes" else "Aucune"
+            )
 
             if (info.isStale) {
                 Spacer(modifier = Modifier.height(12.dp))
@@ -355,7 +419,13 @@ private fun OfflineInfoCard() {
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            listOf("Carte", "Lignes et arrêts", "Horaires", "Recherche", "Calcul d'itinéraire").forEach {
+            listOf(
+                "Carte",
+                "Lignes et arrêts",
+                "Horaires",
+                "Recherche",
+                "Calcul d'itinéraire"
+            ).forEach {
                 FeatureRow(it, true)
             }
             FeatureRow("Suivi temps réel", false)
@@ -365,7 +435,12 @@ private fun OfflineInfoCard() {
 
 @Composable
 private fun FeatureRow(feature: String, available: Boolean) {
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Text(
             text = if (available) "✓" else "✕",
             color = if (available) Color(0xFF4CAF50) else Color(0xFFEF4444),
@@ -387,11 +462,11 @@ private fun WavyLinearProgressIndicator(
     modifier: Modifier = Modifier,
     indicatorColor: Color,
     trackColor: Color,
-    barHeight: androidx.compose.ui.unit.Dp = 7.dp,
-    waveAmplitude: androidx.compose.ui.unit.Dp = 3.dp,
-    wavelength: androidx.compose.ui.unit.Dp = 40.dp,
+    barHeight: Dp = 7.dp,
+    waveAmplitude: Dp = 3.dp,
+    wavelength: Dp = 40.dp,
     waveSpeedMillis: Int = 1000,
-    gapWidth: androidx.compose.ui.unit.Dp = 5.dp
+    gapWidth: Dp = 5.dp
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "wave")
     val phase by infiniteTransition.animateFloat(
@@ -419,7 +494,7 @@ private fun WavyLinearProgressIndicator(
                 color = trackColor,
                 topLeft = Offset(rigidStart, centerY - halfHeight),
                 size = Size(width - rigidStart, barHeight.toPx()),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(halfHeight, halfHeight)
+                cornerRadius = CornerRadius(halfHeight, halfHeight)
             )
         }
 
@@ -431,7 +506,10 @@ private fun WavyLinearProgressIndicator(
             val path = Path()
 
             var x = 0f
-            path.moveTo(0f, centerY - halfHeight + sin((phasePx) / lenPx * 2 * PI).toFloat() * ampPx)
+            path.moveTo(
+                0f,
+                centerY - halfHeight + sin((phasePx) / lenPx * 2 * PI).toFloat() * ampPx
+            )
 
             val step = 5f
             while (x <= progressWidth) {
@@ -440,7 +518,10 @@ private fun WavyLinearProgressIndicator(
                 x += step
             }
 
-            path.lineTo(progressWidth, centerY + halfHeight + sin((progressWidth + phasePx) / lenPx * 2 * PI).toFloat() * ampPx)
+            path.lineTo(
+                progressWidth,
+                centerY + halfHeight + sin((progressWidth + phasePx) / lenPx * 2 * PI).toFloat() * ampPx
+            )
 
             x = progressWidth
             while (x >= 0f) {

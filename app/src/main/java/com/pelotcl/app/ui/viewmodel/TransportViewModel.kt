@@ -14,7 +14,7 @@ import androidx.lifecycle.viewModelScope
 import com.pelotcl.app.data.model.Feature
 import com.pelotcl.app.data.model.SimpleVehiclePosition
 import com.pelotcl.app.data.model.StopFeature
-import com.pelotcl.app.data.repository.RaptorRepository
+import com.pelotcl.app.data.repository.raptor.RaptorRepository
 import com.pelotcl.app.data.repository.TransportRepository
 import com.pelotcl.app.data.repository.TrafficAlertsRepository
 import com.pelotcl.app.data.repository.VehiclePositionsRepository
@@ -89,10 +89,12 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     private val _uiState = MutableStateFlow<TransportLinesUiState>(TransportLinesUiState.Loading)
     val uiState: StateFlow<TransportLinesUiState> = _uiState.asStateFlow()
 
-    private val _stopsUiState = MutableStateFlow<TransportStopsUiState>(TransportStopsUiState.Loading)
+    private val _stopsUiState =
+        MutableStateFlow<TransportStopsUiState>(TransportStopsUiState.Loading)
     val stopsUiState: StateFlow<TransportStopsUiState> = _stopsUiState.asStateFlow()
 
-    private val schedulesRepository = com.pelotcl.app.data.gtfs.SchedulesRepository.getInstance(application.applicationContext)
+    private val schedulesRepository =
+        com.pelotcl.app.data.gtfs.SchedulesRepository.getInstance(application.applicationContext)
     private val holidayDetector by lazy { HolidayDetector(application.applicationContext) }
     private val favoritesRepository = FavoritesRepository(application.applicationContext)
 
@@ -113,17 +115,22 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     val favoriteLines: StateFlow<Set<String>> = _favoriteLines.asStateFlow()
     private val _favoriteStops = MutableStateFlow<Set<String>>(emptySet())
     val favoriteStops: StateFlow<Set<String>> = _favoriteStops.asStateFlow()
-    private val _userFavorites = MutableStateFlow<List<com.pelotcl.app.data.model.Favorite>>(emptyList())
-    val userFavorites: StateFlow<List<com.pelotcl.app.data.model.Favorite>> = _userFavorites.asStateFlow()
+    private val _userFavorites =
+        MutableStateFlow<List<com.pelotcl.app.data.model.Favorite>>(emptyList())
+    val userFavorites: StateFlow<List<com.pelotcl.app.data.model.Favorite>> =
+        _userFavorites.asStateFlow()
     private val _selectedLineName = MutableStateFlow<String?>(null)
     val selectedLineName: StateFlow<String?> = _selectedLineName.asStateFlow()
 
     // Traffic alerts state
-    private val _trafficAlerts = MutableStateFlow<Map<String, List<com.pelotcl.app.data.model.TrafficAlert>>>(emptyMap())
-    val trafficAlerts: StateFlow<Map<String, List<com.pelotcl.app.data.model.TrafficAlert>>> = _trafficAlerts.asStateFlow()
+    private val _trafficAlerts =
+        MutableStateFlow<Map<String, List<com.pelotcl.app.data.model.TrafficAlert>>>(emptyMap())
+    val trafficAlerts: StateFlow<Map<String, List<com.pelotcl.app.data.model.TrafficAlert>>> =
+        _trafficAlerts.asStateFlow()
 
     // Connectivity and offline state
-    private val connectivityObserver = ConnectivityObserver.getInstance(application.applicationContext)
+    private val connectivityObserver =
+        ConnectivityObserver.getInstance(application.applicationContext)
     val offlineDataManager = OfflineDataManager(application.applicationContext)
 
     private val _isOffline = MutableStateFlow(false)
@@ -157,7 +164,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     private val _isGlobalLiveEnabled = MutableStateFlow(false)
     val isGlobalLiveEnabled: StateFlow<Boolean> = _isGlobalLiveEnabled.asStateFlow()
     private val _globalVehiclePositions = MutableStateFlow<List<SimpleVehiclePosition>>(emptyList())
-    val globalVehiclePositions: StateFlow<List<SimpleVehiclePosition>> = _globalVehiclePositions.asStateFlow()
+    val globalVehiclePositions: StateFlow<List<SimpleVehiclePosition>> =
+        _globalVehiclePositions.asStateFlow()
     private var globalLiveJob: Job? = null
 
     // Offline download job reference for cancellation support
@@ -237,7 +245,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     .map { it.properties.desserte }
                     .filter { it.isNotEmpty() }
                 if (matchingDessertes.isNotEmpty()) {
-                    val merged = com.pelotcl.app.data.gtfs.SchedulesRepository.mergeDessertes(matchingDessertes)
+                    val merged = com.pelotcl.app.data.gtfs.SchedulesRepository.mergeDessertes(
+                        matchingDessertes
+                    )
                     favoritesRepository.saveDesserteForStop(stopName, merged)
                 }
             }
@@ -290,7 +300,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     fun loadHeadsign(routeName: String) {
         lineDetailScope.launch {
             // GTFS uses "NAVI1" for Navigone while the app displays "NAV1"
-            val gtfsRouteName = if (routeName.equals("NAV1", ignoreCase = true)) "NAVI1" else routeName
+            val gtfsRouteName =
+                if (routeName.equals("NAV1", ignoreCase = true)) "NAVI1" else routeName
             val headsigns = schedulesRepository.getHeadsigns(gtfsRouteName)
             _headsigns.value = headsigns
         }
@@ -310,17 +321,27 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
 
             // Candidate directions list: those exposed by _headsigns otherwise 0 and 1 by default
-            val candidateDirections = _headsigns.value.keys.ifEmpty { setOf(0, 1) }.toList().sorted()
+            val candidateDirections =
+                _headsigns.value.keys.ifEmpty { setOf(0, 1) }.toList().sorted()
 
             val available = mutableListOf<Int>()
             for (dir in candidateDirections) {
                 try {
-                    val schedules = schedulesRepository.getSchedules(gtfsLineName, stopName, dir, isSchoolHoliday, isPublicHoliday)
+                    val schedules = schedulesRepository.getSchedules(
+                        gtfsLineName,
+                        stopName,
+                        dir,
+                        isSchoolHoliday,
+                        isPublicHoliday
+                    )
                     if (schedules.isNotEmpty()) {
                         available.add(dir)
                     }
                 } catch (t: Throwable) {
-                    Log.e("SchedulesDebug", "computeAvailableDirections: exception for dir $dir: ${t.message}")
+                    Log.e(
+                        "SchedulesDebug",
+                        "computeAvailableDirections: exception for dir $dir: ${t.message}"
+                    )
                 }
             }
             _availableDirections.value = available
@@ -446,7 +467,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         val today = LocalDate.now()
         val isSchoolHoliday = holidayDetector.isSchoolHoliday(today)
         val isPublicHoliday = holidayDetector.isFrenchPublicHoliday(today)
-        val currentMinutes = java.util.Calendar.getInstance().let { it.get(java.util.Calendar.HOUR_OF_DAY) * 60 + it.get(java.util.Calendar.MINUTE) }
+        val currentMinutes = java.util.Calendar.getInstance()
+            .let { it.get(java.util.Calendar.HOUR_OF_DAY) * 60 + it.get(java.util.Calendar.MINUTE) }
 
         val normalizedLines = lines
             .map { it.trim() }
@@ -460,7 +482,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         val previews = mutableListOf<StopDeparturePreview>()
 
         normalizedLines.forEach { displayLineName ->
-            val gtfsLineName = if (displayLineName.equals("NAV1", ignoreCase = true)) "NAVI1" else displayLineName
+            val gtfsLineName =
+                if (displayLineName.equals("NAV1", ignoreCase = true)) "NAVI1" else displayLineName
             val headsigns = schedulesRepository.getHeadsigns(gtfsLineName)
             val candidateDirections = headsigns.keys.ifEmpty { setOf(0, 1) }.toList().sorted()
 
@@ -667,20 +690,24 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     // === OPTIMIZATION: Pre-computed GeoJSON cache for stops ===
     // Cached GeoJSON string for all stops (avoids re-computation on each map display)
     private var cachedStopsGeoJson: String? = null
+
     // Set of required icon names for the cached GeoJSON
     private var cachedRequiredIcons: Set<String>? = null
+
     // Cached set of used slot indices for the GeoJSON (avoids recalculation)
     private var cachedUsedSlots: Set<Int>? = null
+
     // Cheap hash of stops list to detect changes and invalidate cache (O(1) instead of O(n))
     private var cachedStopsHash: Long = 0L
 
     // === OPTIMIZATION: Pre-loaded icon bitmaps cache with memory management ===
     // LruCache with 10MB max size for bitmap icons, responds to memory pressure
-    private val iconBitmapCache = object : LruCache<String, android.graphics.Bitmap>(10 * 1024 * 1024) {
-        override fun sizeOf(key: String, value: android.graphics.Bitmap): Int {
-            return value.allocationByteCount
+    private val iconBitmapCache =
+        object : LruCache<String, android.graphics.Bitmap>(10 * 1024 * 1024) {
+            override fun sizeOf(key: String, value: android.graphics.Bitmap): Int {
+                return value.allocationByteCount
+            }
         }
-    }
 
     /**
      * Cheap O(1) hash for stop list identity check.
@@ -690,8 +717,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     private fun cheapListHash(stops: List<StopFeature>): Long {
         if (stops.isEmpty()) return 0L
         return stops.size.toLong() * 31 +
-               stops.first().hashCode().toLong() * 17 +
-               stops.last().hashCode().toLong()
+                stops.first().hashCode().toLong() * 17 +
+                stops.last().hashCode().toLong()
     }
 
     /**
@@ -711,7 +738,12 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     /**
      * Caches the GeoJSON data for stops including used slots.
      */
-    fun cacheStopsGeoJson(stops: List<StopFeature>, geoJson: String, requiredIcons: Set<String>, usedSlots: Set<Int>) {
+    fun cacheStopsGeoJson(
+        stops: List<StopFeature>,
+        geoJson: String,
+        requiredIcons: Set<String>,
+        usedSlots: Set<Int>
+    ) {
         cachedStopsHash = cheapListHash(stops)
         cachedStopsGeoJson = geoJson
         cachedRequiredIcons = requiredIcons
@@ -761,8 +793,12 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     val staleResult = repository.getAllLinesStale()
                     staleResult?.onSuccess { featureCollection ->
                         if (featureCollection.features.isNotEmpty()) {
-                            _uiState.value = TransportLinesUiState.Success(featureCollection.features)
-                            Log.d("TransportViewModel", "Phase 0: Displayed ${featureCollection.features.size} lines from stale cache in ${System.currentTimeMillis() - startTime}ms")
+                            _uiState.value =
+                                TransportLinesUiState.Success(featureCollection.features)
+                            Log.d(
+                                "TransportViewModel",
+                                "Phase 0: Displayed ${featureCollection.features.size} lines from stale cache in ${System.currentTimeMillis() - startTime}ms"
+                            )
                         }
                     }
                 }
@@ -793,7 +829,10 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     result.onSuccess { featureCollection ->
                         // Update with fresh data (may be same as stale cache if not expired)
                         _uiState.value = TransportLinesUiState.Success(featureCollection.features)
-                        Log.d("TransportViewModel", "Phase 1: Refreshed with ${featureCollection.features.size} lines in ${System.currentTimeMillis() - startTime}ms")
+                        Log.d(
+                            "TransportViewModel",
+                            "Phase 1: Refreshed with ${featureCollection.features.size} lines in ${System.currentTimeMillis() - startTime}ms"
+                        )
                     }.onFailure { e ->
                         Log.w("TransportViewModel", "Preload: failed loading lines: ${e.message}")
                         // Keep stale cache if refresh failed and we had cached data
@@ -813,10 +852,14 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                         stopsForIndexing = stopCollection.features
                         // Build spatial grid index for fast viewport queries
                         spatialGrid.build(stopCollection.features)
-                        Log.d("TransportViewModel", "Spatial grid built with ${spatialGrid.size} stops")
+                        Log.d(
+                            "TransportViewModel",
+                            "Spatial grid built with ${spatialGrid.size} stops"
+                        )
                         // Publish stops state only if not already success
                         if (_stopsUiState.value !is TransportStopsUiState.Success) {
-                            _stopsUiState.value = TransportStopsUiState.Success(stopCollection.features)
+                            _stopsUiState.value =
+                                TransportStopsUiState.Success(stopCollection.features)
                         }
                     }.onFailure { e ->
                         Log.w("TransportViewModel", "Preload: failed loading stops: ${e.message}")
@@ -957,74 +1000,81 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      * Allows O(1) access instead of scanning all stops each time
      * Uses prefix-based indexing for O(n * avg_bucket_size) instead of O(n * total_groups)
      */
-    private suspend fun buildConnectionsIndex(allStops: List<StopFeature>) = withContext(Dispatchers.Default) {
-        // Step 1: Group stops by approximate name to find a "canonical" name
-        // Uses a prefix index (first 4 chars) to avoid scanning all groups for each stop
-        val stopGroups = mutableMapOf<String, MutableList<StopFeature>>()
-        val prefixIndex = mutableMapOf<String, MutableList<String>>()
+    private suspend fun buildConnectionsIndex(allStops: List<StopFeature>) =
+        withContext(Dispatchers.Default) {
+            // Step 1: Group stops by approximate name to find a "canonical" name
+            // Uses a prefix index (first 4 chars) to avoid scanning all groups for each stop
+            val stopGroups = mutableMapOf<String, MutableList<StopFeature>>()
+            val prefixIndex = mutableMapOf<String, MutableList<String>>()
 
-        for (stop in allStops) {
-            val normalizedName = normalizeStopName(stop.properties.nom)
-            val prefix = if (normalizedName.length >= 4) normalizedName.take(4) else normalizedName
+            for (stop in allStops) {
+                val normalizedName = normalizeStopName(stop.properties.nom)
+                val prefix =
+                    if (normalizedName.length >= 4) normalizedName.take(4) else normalizedName
 
-            // Only search candidates sharing the same prefix
-            var foundGroup: String? = null
-            val candidates = prefixIndex[prefix]
-            if (candidates != null) {
-                for (candidate in candidates) {
-                    if (candidate.startsWith(normalizedName) || normalizedName.startsWith(candidate)) {
-                        foundGroup = candidate
-                        break
+                // Only search candidates sharing the same prefix
+                var foundGroup: String? = null
+                val candidates = prefixIndex[prefix]
+                if (candidates != null) {
+                    for (candidate in candidates) {
+                        if (candidate.startsWith(normalizedName) || normalizedName.startsWith(
+                                candidate
+                            )
+                        ) {
+                            foundGroup = candidate
+                            break
+                        }
                     }
+                }
+
+                if (foundGroup != null) {
+                    stopGroups[foundGroup]?.add(stop)
+                } else {
+                    stopGroups[normalizedName] = mutableListOf(stop)
+                    prefixIndex.getOrPut(prefix) { mutableListOf() }.add(normalizedName)
                 }
             }
 
-            if (foundGroup != null) {
-                stopGroups[foundGroup]?.add(stop)
-            } else {
-                stopGroups[normalizedName] = mutableListOf(stop)
-                prefixIndex.getOrPut(prefix) { mutableListOf() }.add(normalizedName)
+            // Step 2: Build index using groups
+            val index = mutableMapOf<String, List<Connection>>()
+            for ((_, stopsInGroup) in stopGroups) {
+                val allConnectionsForGroup = stopsInGroup
+                    .flatMap { stop -> ConnectionsHelper.parseAllConnections(stop.properties.desserte) }
+                    .distinctBy { it.lineName }
+
+                // Associate this transfer group to all normalized names in the group
+                val allNormalizedNamesInGroup =
+                    stopsInGroup.map { normalizeStopName(it.properties.nom) }.distinct()
+                for (name in allNormalizedNamesInGroup) {
+                    index[name] = allConnectionsForGroup
+                }
             }
+            connectionsIndex = index
+
+            // Also build the stops-by-line index for fast filtering in map operations
+            buildStopsByLineIndex(allStops)
         }
-
-        // Step 2: Build index using groups
-        val index = mutableMapOf<String, List<Connection>>()
-        for ((_, stopsInGroup) in stopGroups) {
-            val allConnectionsForGroup = stopsInGroup
-                .flatMap { stop -> ConnectionsHelper.parseAllConnections(stop.properties.desserte) }
-                .distinctBy { it.lineName }
-
-            // Associate this transfer group to all normalized names in the group
-            val allNormalizedNamesInGroup = stopsInGroup.map { normalizeStopName(it.properties.nom) }.distinct()
-            for (name in allNormalizedNamesInGroup) {
-                index[name] = allConnectionsForGroup
-            }
-        }
-        connectionsIndex = index
-
-        // Also build the stops-by-line index for fast filtering in map operations
-        buildStopsByLineIndex(allStops)
-    }
 
     /**
      * Builds an index mapping line names to their stops for O(1) lookups.
      * Called after stops are loaded and when connections index is built.
      */
-    private suspend fun buildStopsByLineIndex(allStops: List<StopFeature>) = withContext(Dispatchers.Default) {
-        val index = mutableMapOf<String, MutableList<StopFeature>>()
+    private suspend fun buildStopsByLineIndex(allStops: List<StopFeature>) =
+        withContext(Dispatchers.Default) {
+            val index = mutableMapOf<String, MutableList<StopFeature>>()
 
-        for (stop in allStops) {
-            val lines = BusIconHelper.getAllLinesForStop(stop)
-            for (line in lines) {
-                val key = line.uppercase()
-                index.getOrPut(key) { mutableListOf() }.add(stop)
+            for (stop in allStops) {
+                val lines = BusIconHelper.getAllLinesForStop(stop)
+                for (line in lines) {
+                    val key = line.uppercase()
+                    index.getOrPut(key) { mutableListOf() }.add(stop)
+                }
+            }
+
+            stopsByLineIndexMutex.withLock {
+                stopsByLineIndex = index
             }
         }
-
-        stopsByLineIndexMutex.withLock {
-            stopsByLineIndex = index
-        }
-    }
 
     /**
      * Gets all stops serving a specific line in O(1) time.
@@ -1070,10 +1120,16 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 repository.getAllLinesFlow().collect { progress ->
                     if (progress.isComplete) {
                         _uiState.value = TransportLinesUiState.Success(progress.lines)
-                        Log.d("TransportViewModel", "Lines loading complete: ${progress.lines.size} lines")
+                        Log.d(
+                            "TransportViewModel",
+                            "Lines loading complete: ${progress.lines.size} lines"
+                        )
                     } else {
                         _uiState.value = TransportLinesUiState.PartialSuccess(progress.lines)
-                        Log.d("TransportViewModel", "Lines partial load (${progress.source}): ${progress.lines.size} lines")
+                        Log.d(
+                            "TransportViewModel",
+                            "Lines partial load (${progress.source}): ${progress.lines.size} lines"
+                        )
                     }
                 }
             } catch (e: Exception) {
@@ -1083,7 +1139,10 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 if (currentState is TransportLinesUiState.PartialSuccess && currentState.lines.isNotEmpty()) {
                     // Convert partial to success with what we have
                     _uiState.value = TransportLinesUiState.Success(currentState.lines)
-                    Log.w("TransportViewModel", "Keeping partial data due to error: ${currentState.lines.size} lines")
+                    Log.w(
+                        "TransportViewModel",
+                        "Keeping partial data due to error: ${currentState.lines.size} lines"
+                    )
                 } else {
                     _uiState.value = TransportLinesUiState.Error
                 }
@@ -1167,7 +1226,13 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     /**
      * Update an existing user-created favorite
      */
-    fun updateUserFavorite(favoriteId: String, name: String, iconName: String, iconColor: String, stopName: String): Boolean {
+    fun updateUserFavorite(
+        favoriteId: String,
+        name: String,
+        iconName: String,
+        iconColor: String,
+        stopName: String
+    ): Boolean {
         return try {
             val currentFavorites = _userFavorites.value
             val existingFavorite = currentFavorites.find { it.id == favoriteId }
@@ -1219,7 +1284,10 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 is TransportLinesUiState.Success -> currentState.lines
                 is TransportLinesUiState.PartialSuccess -> currentState.lines
                 else -> {
-                    Log.w("TransportViewModel", "Current state is not Success/PartialSuccess, cannot add line")
+                    Log.w(
+                        "TransportViewModel",
+                        "Current state is not Success/PartialSuccess, cannot add line"
+                    )
                     return@launch
                 }
             }
@@ -1234,11 +1302,17 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             }
 
             // Load the line from the API (or offline storage if offline)
-            Log.d("TransportViewModel", "addLineToLoaded: loading $lineName (offline=${_isOffline.value})")
+            Log.d(
+                "TransportViewModel",
+                "addLineToLoaded: loading $lineName (offline=${_isOffline.value})"
+            )
             repository.getLineByName(lineName, isOffline = _isOffline.value)
                 .onSuccess { feature ->
                     if (feature != null) {
-                        Log.d("TransportViewModel", "addLineToLoaded: got $lineName with ${feature.geometry.coordinates.size} segments, ${feature.geometry.coordinates.sumOf { it.size }} points")
+                        Log.d(
+                            "TransportViewModel",
+                            "addLineToLoaded: got $lineName with ${feature.geometry.coordinates.size} segments, ${feature.geometry.coordinates.sumOf { it.size }} points"
+                        )
                         // Add the new line to existing lines
                         val updatedLines = currentLines + feature
                         _uiState.value = TransportLinesUiState.Success(updatedLines)
@@ -1248,7 +1322,10 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 }
                 .onFailure { exception ->
                     // In case of error, don't change state (keep current lines)
-                    Log.e("TransportViewModel", "Error loading line $lineName: ${exception.message}")
+                    Log.e(
+                        "TransportViewModel",
+                        "Error loading line $lineName: ${exception.message}"
+                    )
                 }
         }
     }
@@ -1262,7 +1339,10 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             is TransportLinesUiState.Success -> currentState.lines
             is TransportLinesUiState.PartialSuccess -> currentState.lines
             else -> {
-                Log.w("TransportViewModel", "Current state is not Success/PartialSuccess, cannot remove line")
+                Log.w(
+                    "TransportViewModel",
+                    "Current state is not Success/PartialSuccess, cannot remove line"
+                )
                 return
             }
         }
@@ -1284,7 +1364,11 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      * @param directionId Direction ID (0 or 1) for GTFS ordering, defaults to 0
      * @return List of stops with their transfers, ordered according to the line's route
      */
-    fun getStopsForLine(lineName: String, currentStopName: String? = null, directionId: Int = 0): List<com.pelotcl.app.data.gtfs.LineStopInfo> {
+    fun getStopsForLine(
+        lineName: String,
+        currentStopName: String? = null,
+        directionId: Int = 0
+    ): List<com.pelotcl.app.data.gtfs.LineStopInfo> {
         // Check LruCache first for ultra-fast repeated lookups
         val cacheKey = "$lineName|${currentStopName ?: ""}|$directionId"
         lineStopsCache.get(cacheKey)?.let { return it }
@@ -1308,7 +1392,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 val connections = getConnectionsForStop(officialName, lineName)
 
                 com.pelotcl.app.data.gtfs.LineStopInfo(
-                    stopId = matchingStop?.properties?.id?.toString() ?: "gtfs_${lineName}_${sequence}",
+                    stopId = matchingStop?.properties?.id?.toString()
+                        ?: "gtfs_${lineName}_${sequence}",
                     stopName = officialName,
                     stopSequence = sequence,
                     isCurrentStop = currentStopName?.let {
@@ -1325,7 +1410,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         }
 
         // Second, try to retrieve from static cache (for metros and trams)
-        val cachedStops = com.pelotcl.app.data.gtfs.LineStopsCache.getLineStops(lineName, currentStopName)
+        val cachedStops =
+            com.pelotcl.app.data.gtfs.LineStopsCache.getLineStops(lineName, currentStopName)
         if (cachedStops != null) {
             // Align cache labels with official GTFS labels (strict comparison required DB side)
             val allStops = getCachedStopsSync()
@@ -1335,7 +1421,10 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 desserte.split(',').any { part ->
                     val lineCode = part.split(':').first().trim()
                     lineCode.equals(lineName, ignoreCase = true) ||
-                            (lineName.equals("NAV1", ignoreCase = true) && lineCode.equals("NAVI1", ignoreCase = true))
+                            (lineName.equals("NAV1", ignoreCase = true) && lineCode.equals(
+                                "NAVI1",
+                                ignoreCase = true
+                            ))
                 }
             }.map { it.properties.nom }.toSet()
 
@@ -1345,7 +1434,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             // Replace cached name with official label if found
             // Then deduplicate by name (double platforms, writing variants), preserving order
             val mapped = cachedStops.map { stop ->
-                val officialName = normalizedToOfficial[normalizeStopName(stop.stopName)] ?: stop.stopName
+                val officialName =
+                    normalizedToOfficial[normalizeStopName(stop.stopName)] ?: stop.stopName
                 val connections = getConnectionsForStop(officialName, lineName)
                 stop.copy(
                     stopName = officialName,
@@ -1449,12 +1539,13 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                         val stopCoords = stop.geometry.coordinates
 
                         // Find the closest point on the segment and its index
-                        val closestPointIndex = longestSegment.withIndex().minByOrNull { (_, coord) ->
-                            sqrt(
-                                (coord[0] - stopCoords[0]).pow(2.0) +
-                                        (coord[1] - stopCoords[1]).pow(2.0)
-                            )
-                        }?.index ?: 0
+                        val closestPointIndex =
+                            longestSegment.withIndex().minByOrNull { (_, coord) ->
+                                sqrt(
+                                    (coord[0] - stopCoords[0]).pow(2.0) +
+                                            (coord[1] - stopCoords[1]).pow(2.0)
+                                )
+                            }?.index ?: 0
 
                         Pair(stop, closestPointIndex)
                     }
@@ -1465,7 +1556,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                         .map { (stop, _) -> stop }
 
                     // Deduplicate by normalized name (some lines have double platforms)
-                    val dedupOrdered = orderedStops.distinctBy { normalizeStopName(it.properties.nom) }
+                    val dedupOrdered =
+                        orderedStops.distinctBy { normalizeStopName(it.properties.nom) }
 
                     // Convert to LineStopInfo
                     val result = dedupOrdered.mapIndexed { index, stop ->
@@ -1521,11 +1613,13 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     .map { it.properties.ligne.split(':').first().trim() }
                     .distinct()
             }
+
             is TransportLinesUiState.PartialSuccess -> {
                 currentState.lines
                     .map { it.properties.ligne.split(':').first().trim() }
                     .distinct()
             }
+
             else -> emptyList()
         }
 
@@ -1543,14 +1637,16 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             .groupBy { normalizeLineName(it) }
             .map { (_, variants) -> variants.first() }
             .filter { it.isNotEmpty() && !it.equals("TS", ignoreCase = true) }
-            .sortedWith(compareBy(
+            .sortedWith(
+                compareBy(
                 // Sort by type first (Metro, Funicular, Navigone, Tram, then the rest)
                 { line ->
                     when {
                         line.uppercase() in setOf("A", "B", "C", "D") -> 0 // Metros first
                         line.uppercase().startsWith("F") -> 1 // Funiculars
                         line.uppercase().startsWith("NAV") -> 2 // Navigone
-                        line.uppercase().startsWith("T") && !line.uppercase().startsWith("TB") -> 3 // Trams
+                        line.uppercase().startsWith("T") && !line.uppercase()
+                            .startsWith("TB") -> 3 // Trams
                         else -> 4 // The rest (buses)
                     }
                 },
@@ -1570,7 +1666,12 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         val alerts = _trafficAlerts.value[normalizedLineCode] ?: emptyList()
         if (alerts.isEmpty() && _trafficAlerts.value.isNotEmpty()) {
             // Log known keys to help debug mapping
-            Log.d("AlertCheck", "No alerts for $normalizedLineCode. Available keys: ${_trafficAlerts.value.keys.take(5)}...")
+            Log.d(
+                "AlertCheck",
+                "No alerts for $normalizedLineCode. Available keys: ${
+                    _trafficAlerts.value.keys.take(5)
+                }..."
+            )
         }
         return alerts
     }
@@ -1594,9 +1695,15 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     fun getAlertSeverityForLine(lineCode: String): com.pelotcl.app.data.model.AlertSeverity? {
         val alert = getMostSevereAlertForLine(lineCode)
         val severity = alert?.let {
-            com.pelotcl.app.data.model.AlertSeverity.fromSeverityType(it.severityType, it.severityLevel)
+            com.pelotcl.app.data.model.AlertSeverity.fromSeverityType(
+                it.severityType,
+                it.severityLevel
+            )
         }
-        Log.d("AlertCheck", "getAlertSeverityForLine($lineCode) -> normalized: ${normalizeLineForAlerts(lineCode)}, hasAlert: ${alert != null}, severity: ${severity?.name}")
+        Log.d(
+            "AlertCheck",
+            "getAlertSeverityForLine($lineCode) -> normalized: ${normalizeLineForAlerts(lineCode)}, hasAlert: ${alert != null}, severity: ${severity?.name}"
+        )
         return severity
     }
 
@@ -1610,14 +1717,18 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 val alerts = result.getOrDefault(emptyList())
                 Log.d("AlertCheck", "Fetched ${alerts.size} alerts from repository")
                 // Group alerts by line code (normalized for robust matching)
-                val alertsByLine = alerts.groupBy { alert: com.pelotcl.app.data.model.TrafficAlert ->
-                    val normalized = normalizeLineForAlerts(alert.lineCode)
-                    Log.d("AlertCheck", "Mapping alert for ${alert.lineCode} to $normalized")
-                    normalized
-                }
+                val alertsByLine =
+                    alerts.groupBy { alert: com.pelotcl.app.data.model.TrafficAlert ->
+                        val normalized = normalizeLineForAlerts(alert.lineCode)
+                        Log.d("AlertCheck", "Mapping alert for ${alert.lineCode} to $normalized")
+                        normalized
+                    }
                 _trafficAlerts.value = alertsByLine
                 _alertsTimestampMillis.value = trafficAlertsRepository.getAlertsTimestampMillis()
-                Log.d("AlertCheck", "Updated _trafficAlerts with ${alertsByLine.size} unique normalized lines")
+                Log.d(
+                    "AlertCheck",
+                    "Updated _trafficAlerts with ${alertsByLine.size} unique normalized lines"
+                )
             } else {
                 Log.e("AlertCheck", "Failed to fetch alerts: ${result.exceptionOrNull()?.message}")
             }

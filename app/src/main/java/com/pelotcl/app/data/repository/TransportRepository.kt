@@ -24,7 +24,7 @@ class TransportRepository(context: Context? = null) {
     private val api = RetrofitInstance.api
     private val cache = context?.let { TransportCache(it) }
     private val offlineRepo = context?.let { OfflineRepository(it) }
-    
+
     /**
      * Fetches all transport lines (metro, funicular, tram, and navigone ONLY)
      * Bus lines are NOT loaded by default to avoid overloading the phone
@@ -37,7 +37,7 @@ class TransportRepository(context: Context? = null) {
                 // Quick check: if cache has fresh data, use it immediately
                 val cacheHasData = cache?.hasAnyCachedData() ?: false
                 val cacheNeedsRefresh = cache?.needsCacheRefresh() ?: true
-                
+
                 // Try to load all line types from cache first
                 val cachedMetro = cache?.getMetroLines()
                 val cachedTram = cache?.getTramLines()
@@ -87,7 +87,10 @@ class TransportRepository(context: Context? = null) {
                         cache?.saveNavigoneLines(navigone.features)
                         navigone.features
                     } catch (e: Exception) {
-                        android.util.Log.w("TransportRepository", "Failed to load navigone lines: ${e.message}")
+                        android.util.Log.w(
+                            "TransportRepository",
+                            "Failed to load navigone lines: ${e.message}"
+                        )
                         emptyList()
                     }
                 }
@@ -101,7 +104,10 @@ class TransportRepository(context: Context? = null) {
                         cache?.saveTrambusLines(trambus.features)
                         trambus.features
                     } catch (e: Exception) {
-                        android.util.Log.w("TransportRepository", "Failed to load trambus lines: ${e.message}")
+                        android.util.Log.w(
+                            "TransportRepository",
+                            "Failed to load trambus lines: ${e.message}"
+                        )
                         emptyList()
                     }
                 }
@@ -111,12 +117,16 @@ class TransportRepository(context: Context? = null) {
                 val rxFeatures: List<Feature> = try {
                     fetchRhonexpressFromWfs()
                 } catch (e: Exception) {
-                    android.util.Log.w("TransportRepository", "Failed to load Rhônexpress from WFS: ${e.message}")
+                    android.util.Log.w(
+                        "TransportRepository",
+                        "Failed to load Rhônexpress from WFS: ${e.message}"
+                    )
                     emptyList()
                 }
 
                 // Merge metro/funicular, trams, navigone, trambus and RX (NOT buses)
-                val allFeatures = (metroFuniculaire.features + trams.features + navigoneFeatures + trambusFeatures + rxFeatures)
+                val allFeatures =
+                    (metroFuniculaire.features + trams.features + navigoneFeatures + trambusFeatures + rxFeatures)
 
                 // Group by code_trace and keep only the first of each group (outbound direction)
                 val uniqueLines = allFeatures
@@ -126,8 +136,10 @@ class TransportRepository(context: Context? = null) {
                 val filteredCollection = metroFuniculaire.copy(
                     features = uniqueLines,
                     numberReturned = uniqueLines.size,
-                    totalFeatures = (metroFuniculaire.totalFeatures ?: 0) + (trams.totalFeatures ?: 0) + navigoneFeatures.size + trambusFeatures.size,
-                    numberMatched = (metroFuniculaire.numberMatched ?: 0) + (trams.numberMatched ?: 0) + navigoneFeatures.size + trambusFeatures.size
+                    totalFeatures = (metroFuniculaire.totalFeatures ?: 0) + (trams.totalFeatures
+                        ?: 0) + navigoneFeatures.size + trambusFeatures.size,
+                    numberMatched = (metroFuniculaire.numberMatched ?: 0) + (trams.numberMatched
+                        ?: 0) + navigoneFeatures.size + trambusFeatures.size
                 )
 
                 Result.success(filteredCollection)
@@ -138,14 +150,19 @@ class TransportRepository(context: Context? = null) {
                     val uniqueLines = offlineLines
                         .groupBy { it.properties.codeTrace }
                         .map { (_, features) -> features.first() }
-                    android.util.Log.d("TransportRepository", "Using offline data: ${uniqueLines.size} lines")
-                    Result.success(FeatureCollection(
-                        type = "FeatureCollection",
-                        features = uniqueLines,
-                        totalFeatures = uniqueLines.size,
-                        numberMatched = uniqueLines.size,
-                        numberReturned = uniqueLines.size
-                    ))
+                    android.util.Log.d(
+                        "TransportRepository",
+                        "Using offline data: ${uniqueLines.size} lines"
+                    )
+                    Result.success(
+                        FeatureCollection(
+                            type = "FeatureCollection",
+                            features = uniqueLines,
+                            totalFeatures = uniqueLines.size,
+                            numberMatched = uniqueLines.size,
+                            numberReturned = uniqueLines.size
+                        )
+                    )
                 } else {
                     Result.failure(e)
                 }
@@ -222,7 +239,10 @@ class TransportRepository(context: Context? = null) {
                 cache?.saveNavigoneLines(navigone.features)
                 navigone.features
             } catch (e: Exception) {
-                android.util.Log.w("TransportRepository", "Failed to load navigone lines: ${e.message}")
+                android.util.Log.w(
+                    "TransportRepository",
+                    "Failed to load navigone lines: ${e.message}"
+                )
                 emptyList()
             }
         if (navigoneFeatures.isNotEmpty()) {
@@ -240,7 +260,10 @@ class TransportRepository(context: Context? = null) {
                 cache?.saveTrambusLines(trambus.features)
                 trambus.features
             } catch (e: Exception) {
-                android.util.Log.w("TransportRepository", "Failed to load trambus lines: ${e.message}")
+                android.util.Log.w(
+                    "TransportRepository",
+                    "Failed to load trambus lines: ${e.message}"
+                )
                 emptyList()
             }
         if (trambusFeatures.isNotEmpty()) {
@@ -307,6 +330,7 @@ class TransportRepository(context: Context? = null) {
                             }
                         }
                     }
+
                     "LineString" -> {
                         val line = coordinatesElement.asJsonArray.map { coord ->
                             val pair = coord.asJsonArray
@@ -322,6 +346,7 @@ class TransportRepository(context: Context? = null) {
                         }
                         listOf(line)
                     }
+
                     else -> continue
                 }
 
@@ -338,9 +363,12 @@ class TransportRepository(context: Context? = null) {
                     nomTrace = properties.get("nom_trace")?.asString ?: "Rhônexpress",
                     sens = properties.get("sens")?.asString ?: "ALLER",
                     origine = properties.get("origine")?.asString ?: "Gare Part-Dieu Villette",
-                    destination = properties.get("destination")?.asString ?: "Aéroport St Exupéry -RX",
-                    nomOrigine = properties.get("nom_origine")?.asString ?: "Gare Part-Dieu Villette",
-                    nomDestination = properties.get("nom_destination")?.asString ?: "Aéroport St Exupéry -RX",
+                    destination = properties.get("destination")?.asString
+                        ?: "Aéroport St Exupéry -RX",
+                    nomOrigine = properties.get("nom_origine")?.asString
+                        ?: "Gare Part-Dieu Villette",
+                    nomDestination = properties.get("nom_destination")?.asString
+                        ?: "Aéroport St Exupéry -RX",
                     familleTransport = "TRAM",
                     dateDebut = properties.get("date_debut")?.asString ?: "",
                     dateFin = properties.get("date_fin")?.asString,
@@ -372,7 +400,10 @@ class TransportRepository(context: Context? = null) {
         val primary = try {
             mapJsonToFeatures(RetrofitInstance.api.getRhonexpressRaw())
         } catch (t: Throwable) {
-            android.util.Log.w("TransportRepository", "Rhônexpress primary fetch failed: ${t.message}")
+            android.util.Log.w(
+                "TransportRepository",
+                "Rhônexpress primary fetch failed: ${t.message}"
+            )
             emptyList()
         }
 
@@ -387,7 +418,10 @@ class TransportRepository(context: Context? = null) {
                 RetrofitInstance.api.getRhonexpressRaw(srsName = "EPSG:4171")
             )
         } catch (t: Throwable) {
-            android.util.Log.w("TransportRepository", "Rhônexpress secondary fetch failed: ${t.message}")
+            android.util.Log.w(
+                "TransportRepository",
+                "Rhônexpress secondary fetch failed: ${t.message}"
+            )
             emptyList()
         }
 
@@ -409,7 +443,12 @@ class TransportRepository(context: Context? = null) {
             )
 
             val found = wanted.mapNotNull { wantedName ->
-                stops.features.firstOrNull { it.properties.nom.equals(wantedName, ignoreCase = true) }?.geometry?.coordinates
+                stops.features.firstOrNull {
+                    it.properties.nom.equals(
+                        wantedName,
+                        ignoreCase = true
+                    )
+                }?.geometry?.coordinates
             }
 
             if (found.size >= 2) {
@@ -470,7 +509,7 @@ class TransportRepository(context: Context? = null) {
             emptyList()
         }
     }
-    
+
     /**
      * Fetches a specific line by name (outbound direction only)
      * Searches first in metro/funicular/tram/navigone, then in buses if not found
@@ -509,7 +548,10 @@ class TransportRepository(context: Context? = null) {
                 val navigone = api.getNavigoneLines()
                 navigone.features
             } catch (e: Exception) {
-                android.util.Log.w("TransportRepository", "Failed to load navigone lines: ${e.message}")
+                android.util.Log.w(
+                    "TransportRepository",
+                    "Failed to load navigone lines: ${e.message}"
+                )
                 emptyList()
             }
 
@@ -544,7 +586,10 @@ class TransportRepository(context: Context? = null) {
                         it.properties.ligne.equals(lineName, ignoreCase = true)
                     }
                 } catch (e: Exception) {
-                    android.util.Log.w("TransportRepository", "CQL filter search failed for $lineName: ${e.message}")
+                    android.util.Log.w(
+                        "TransportRepository",
+                        "CQL filter search failed for $lineName: ${e.message}"
+                    )
                     // Fallback to offline per-line file (avoids OOM from loading all 10k bus features)
                     offlineRepo?.loadBusLineByName(lineName)?.firstOrNull {
                         it.properties.ligne.equals(lineName, ignoreCase = true)
@@ -580,12 +625,18 @@ class TransportRepository(context: Context? = null) {
 
             // Try bus from offline per-line file
             val offlineBus = offlineRepo?.loadBusLineByName(lineName)
-            android.util.Log.d("TransportRepository", "Offline bus for $lineName: ${offlineBus?.size ?: "null"} features")
+            android.util.Log.d(
+                "TransportRepository",
+                "Offline bus for $lineName: ${offlineBus?.size ?: "null"} features"
+            )
             val offlineBusLine = offlineBus?.firstOrNull {
                 it.properties.ligne.equals(lineName, ignoreCase = true)
             }
             if (offlineBusLine != null) {
-                android.util.Log.d("TransportRepository", "Offline bus $lineName: geom type=${offlineBusLine.geometry.type}, coords=${offlineBusLine.geometry.coordinates.size} segments")
+                android.util.Log.d(
+                    "TransportRepository",
+                    "Offline bus $lineName: geom type=${offlineBusLine.geometry.type}, coords=${offlineBusLine.geometry.coordinates.size} segments"
+                )
                 return Result.success(offlineBusLine)
             }
 
@@ -594,14 +645,21 @@ class TransportRepository(context: Context? = null) {
             val offlineAny = allOffline?.firstOrNull {
                 it.properties.ligne.equals(lineName, ignoreCase = true)
             }
-            android.util.Log.d("TransportRepository", "Offline allLines for $lineName: ${if (offlineAny != null) "found" else "NOT found"}")
+            android.util.Log.d(
+                "TransportRepository",
+                "Offline allLines for $lineName: ${if (offlineAny != null) "found" else "NOT found"}"
+            )
             Result.success(offlineAny)
         } catch (e: Exception) {
-            android.util.Log.e("TransportRepository", "Offline getLineByName failed for $lineName", e)
+            android.util.Log.e(
+                "TransportRepository",
+                "Offline getLineByName failed for $lineName",
+                e
+            )
             Result.failure(e)
         }
     }
-    
+
     /**
      * Fetches all transport stops
      * Filters duplicates for metros and funiculars (keeps only one stop per station)
@@ -687,7 +745,8 @@ class TransportRepository(context: Context? = null) {
                         stops.first()
                     } else {
                         // Multiple stops (transfer): merge services
-                        val baseStop = stops.firstOrNull { it.properties.desserte.contains(":A") } ?: stops.first()
+                        val baseStop = stops.firstOrNull { it.properties.desserte.contains(":A") }
+                            ?: stops.first()
 
                         // Collect all unique lines from all stops at this station
                         val allDessertes = stops.map { it.properties.desserte }.toSet()
@@ -715,7 +774,11 @@ class TransportRepository(context: Context? = null) {
                     try {
                         cache?.saveStops(filteredCollection.features)
                     } catch (e: OutOfMemoryError) {
-                        android.util.Log.e("TransportRepository", "OutOfMemoryError saving stops to cache, continuing without cache", e)
+                        android.util.Log.e(
+                            "TransportRepository",
+                            "OutOfMemoryError saving stops to cache, continuing without cache",
+                            e
+                        )
                         // Continue without cache in case of memory error
                     }
                 }
@@ -725,14 +788,19 @@ class TransportRepository(context: Context? = null) {
                 // Fallback to offline repository if available
                 val offlineStops = offlineRepo?.loadStops()
                 if (!offlineStops.isNullOrEmpty()) {
-                    android.util.Log.d("TransportRepository", "Using offline stops: ${offlineStops.size}")
-                    Result.success(StopCollection(
-                        type = "FeatureCollection",
-                        features = offlineStops,
-                        totalFeatures = offlineStops.size,
-                        numberMatched = offlineStops.size,
-                        numberReturned = offlineStops.size
-                    ))
+                    android.util.Log.d(
+                        "TransportRepository",
+                        "Using offline stops: ${offlineStops.size}"
+                    )
+                    Result.success(
+                        StopCollection(
+                            type = "FeatureCollection",
+                            features = offlineStops,
+                            totalFeatures = offlineStops.size,
+                            numberMatched = offlineStops.size,
+                            numberReturned = offlineStops.size
+                        )
+                    )
                 } else {
                     Result.failure(e)
                 }
@@ -759,13 +827,15 @@ class TransportRepository(context: Context? = null) {
                         val uniqueLines = offlineLines
                             .groupBy { it.properties.codeTrace }
                             .map { (_, features) -> features.first() }
-                        return@withContext Result.success(FeatureCollection(
-                            type = "FeatureCollection",
-                            features = uniqueLines,
-                            totalFeatures = uniqueLines.size,
-                            numberMatched = uniqueLines.size,
-                            numberReturned = uniqueLines.size
-                        ))
+                        return@withContext Result.success(
+                            FeatureCollection(
+                                type = "FeatureCollection",
+                                features = uniqueLines,
+                                totalFeatures = uniqueLines.size,
+                                numberMatched = uniqueLines.size,
+                                numberReturned = uniqueLines.size
+                            )
+                        )
                     }
                     return@withContext null
                 }

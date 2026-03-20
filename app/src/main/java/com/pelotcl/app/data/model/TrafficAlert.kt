@@ -78,13 +78,13 @@ data class TrafficAlert(
 data class TrafficAlertsResponse(
     @SerializedName("success")
     val success: Boolean,
-    
+
     @SerializedName("data")
     val alerts: List<TrafficAlert>,
-    
+
     @SerializedName("timestamp")
     val timestamp: String,
-    
+
     @SerializedName("lastUpdated")
     val lastUpdated: String
 )

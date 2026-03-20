@@ -3,9 +3,9 @@ package com.pelotcl.app.data.cache
 import android.content.Context
 import android.util.Log
 import android.util.LruCache
-import com.pelotcl.app.data.repository.IntermediateStop
-import com.pelotcl.app.data.repository.JourneyLeg
-import com.pelotcl.app.data.repository.JourneyResult
+import com.pelotcl.app.data.repository.raptor.IntermediateStop
+import com.pelotcl.app.data.repository.raptor.JourneyLeg
+import com.pelotcl.app.data.repository.raptor.JourneyResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -101,10 +101,12 @@ class JourneyCache private constructor(context: Context) {
             val diskResult = readFromDisk(cacheKey)
             if (diskResult != null) {
                 // Promote to memory cache
-                memoryCache.put(cacheKey, CachedJourney(
-                    journeys = diskResult.map { SerializableJourneyResult.fromJourneyResult(it) },
-                    timestamp = System.currentTimeMillis()
-                ))
+                memoryCache.put(
+                    cacheKey, CachedJourney(
+                        journeys = diskResult.map { SerializableJourneyResult.fromJourneyResult(it) },
+                        timestamp = System.currentTimeMillis()
+                    )
+                )
                 diskResult
             } else {
                 null
@@ -160,10 +162,16 @@ class JourneyCache private constructor(context: Context) {
 
                     val journeys = readFromDiskFile(file)
                     if (journeys != null) {
-                        memoryCache.put(cacheKey, CachedJourney(
-                            journeys = journeys.map { SerializableJourneyResult.fromJourneyResult(it) },
-                            timestamp = System.currentTimeMillis()
-                        ))
+                        memoryCache.put(
+                            cacheKey, CachedJourney(
+                                journeys = journeys.map {
+                                    SerializableJourneyResult.fromJourneyResult(
+                                        it
+                                    )
+                                },
+                                timestamp = System.currentTimeMillis()
+                            )
+                        )
                         loadedCount++
                     }
                 } catch (e: Exception) {
@@ -261,7 +269,8 @@ class JourneyCache private constructor(context: Context) {
             val jsonString = GZIPInputStream(FileInputStream(file).buffered()).use { gzip ->
                 gzip.bufferedReader(Charsets.UTF_8).readText()
             }
-            val serializableJourneys = json.decodeFromString<List<SerializableJourneyResult>>(jsonString)
+            val serializableJourneys =
+                json.decodeFromString<List<SerializableJourneyResult>>(jsonString)
             serializableJourneys.map { it.toJourneyResult() }
         } catch (_: Exception) {
             // Delete corrupted file
@@ -308,6 +317,7 @@ class JourneyCache private constructor(context: Context) {
             level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> {
                 memoryCache.evictAll()
             }
+
             level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> {
                 memoryCache.trimToSize(memoryCache.maxSize() / 2)
             }
@@ -400,7 +410,11 @@ private data class SerializableJourneyLeg(
             routeColor = leg.routeColor,
             isWalking = leg.isWalking,
             direction = leg.direction,
-            intermediateStops = leg.intermediateStops.map { SerializableIntermediateStop.fromIntermediateStop(it) }
+            intermediateStops = leg.intermediateStops.map {
+                SerializableIntermediateStop.fromIntermediateStop(
+                    it
+                )
+            }
         )
     }
 }

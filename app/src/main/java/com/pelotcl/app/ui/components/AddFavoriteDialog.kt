@@ -89,7 +89,12 @@ fun AddFavoriteDialog(
     var selectedPreset by remember { mutableStateOf<FavoritePreset?>(presets.firstOrNull()) }
     var customOtherTitle by remember { mutableStateOf("") }
     var selectedStop by remember(initialStopName) {
-        mutableStateOf(initialStopName?.let { StationSearchResult(stopName = it, lines = emptyList()) })
+        mutableStateOf(initialStopName?.let {
+            StationSearchResult(
+                stopName = it,
+                lines = emptyList()
+            )
+        })
     }
     var stopSearchOverlayQuery by remember { mutableStateOf("") }
     var showStopSearchFullscreen by remember { mutableStateOf(false) }
@@ -101,7 +106,8 @@ fun AddFavoriteDialog(
     }
 
     val isOtherSelected = selectedPreset?.name == "Autre"
-    val finalFavoriteTitle = if (isOtherSelected) customOtherTitle.trim() else (selectedPreset?.name ?: "")
+    val finalFavoriteTitle =
+        if (isOtherSelected) customOtherTitle.trim() else (selectedPreset?.name ?: "")
 
     LaunchedEffect(Unit) {
         sheetState.expand()
@@ -335,7 +341,8 @@ private fun IconSelectionButton(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier
+                    .size(24.dp)
                     .clip(CircleShape)
                     .background(Color.Black),
                 contentAlignment = Alignment.Center

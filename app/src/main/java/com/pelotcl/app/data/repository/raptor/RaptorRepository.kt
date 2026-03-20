@@ -1,4 +1,4 @@
-package com.pelotcl.app.data.repository
+package com.pelotcl.app.data.repository.raptor
 
 import android.content.Context
 import android.util.Log
@@ -172,7 +172,7 @@ class RaptorRepository private constructor(private val context: Context) {
 
                 // Set initial period based on current day
                 updatePeriodForDate(LocalDate.now())
-                
+
                 // Cache all stops for lookup (from current period)
                 stopsCache = raptorLibrary?.searchStopsByName("") ?: emptyList()
 
@@ -181,7 +181,10 @@ class RaptorRepository private constructor(private val context: Context) {
 
                 isInitialized = true
 
-                Log.d(TAG, "Raptor initialized in ${System.currentTimeMillis() - startTime}ms with ${periods.size} periods, current: ${raptorLibrary?.getCurrentPeriod()}")
+                Log.d(
+                    TAG,
+                    "Raptor initialized in ${System.currentTimeMillis() - startTime}ms with ${periods.size} periods, current: ${raptorLibrary?.getCurrentPeriod()}"
+                )
 
                 Result.success(Unit)
             } catch (e: Exception) {
@@ -205,12 +208,21 @@ class RaptorRepository private constructor(private val context: Context) {
             schoolHolidays = holidaysData.holidays.mapNotNull { holiday ->
                 val startDate = try {
                     LocalDate.parse(holiday.startDateInclusive, DateTimeFormatter.ISO_DATE)
-                } catch (e: Exception) { null }
-                
+                } catch (e: Exception) {
+                    null
+                }
+
                 val endDate = try {
-                    holiday.endDateInclusive?.let { LocalDate.parse(it, DateTimeFormatter.ISO_DATE) }
-                } catch (e: Exception) { null }
-                
+                    holiday.endDateInclusive?.let {
+                        LocalDate.parse(
+                            it,
+                            DateTimeFormatter.ISO_DATE
+                        )
+                    }
+                } catch (e: Exception) {
+                    null
+                }
+
                 if (startDate != null) {
                     HolidayPeriod(
                         name = holiday.name,
@@ -262,11 +274,11 @@ class RaptorRepository private constructor(private val context: Context) {
     private fun updatePeriodForDate(date: LocalDate) {
         val targetPeriod = getPeriodForDate(date)
         val currentPeriod = raptorLibrary?.getCurrentPeriod()
-        
+
         if (currentPeriod != targetPeriod) {
             raptorLibrary?.setPeriod(targetPeriod)
             Log.d(TAG, "Switched period from $currentPeriod to $targetPeriod for date $date")
-            
+
             // Rebuild stop cache and indexes for new period
             stopsCache = raptorLibrary?.searchStopsByName("") ?: emptyList()
             buildStopIndexes()
@@ -373,47 +385,51 @@ class RaptorRepository private constructor(private val context: Context) {
      * Uses pre-computed normalized name index for fast lookups.
      * Uses Dispatchers.Default as this is CPU-bound string matching work.
      */
-    suspend fun searchStopsByName(query: String): List<RaptorStop> = withContext(Dispatchers.Default) {
-        ensureInitialized()
-        try {
-            // Pré-calcul unique de la query normalisée
-            val normalizedQuery = SearchUtils.normalizeForSearch(query)
-            val firstWord = normalizedQuery.split(" ").firstOrNull() ?: ""
+    suspend fun searchStopsByName(query: String): List<RaptorStop> =
+        withContext(Dispatchers.Default) {
+            ensureInitialized()
+            try {
+                // Pré-calcul unique de la query normalisée
+                val normalizedQuery = SearchUtils.normalizeForSearch(query)
+                val firstWord = normalizedQuery.split(" ").firstOrNull() ?: ""
 
-            // Étape 1: pré-filtrage rapide sur le premier mot (utilise le cache)
-            val candidates = if (firstWord.isNotEmpty()) {
-                stopsCache.filter { stop ->
-                    (normalizedStopNames[stop] ?: SearchUtils.normalizeForSearch(stop.name)).contains(firstWord)
+                // Étape 1: pré-filtrage rapide sur le premier mot (utilise le cache)
+                val candidates = if (firstWord.isNotEmpty()) {
+                    stopsCache.filter { stop ->
+                        (normalizedStopNames[stop]
+                            ?: SearchUtils.normalizeForSearch(stop.name)).contains(firstWord)
+                    }
+                } else {
+                    stopsCache
                 }
-            } else {
-                stopsCache
-            }
-            
-            // Étape 2: fuzzy matching précis avec valeurs pré-normalisées (évite les recalculs)
-            val results = candidates.filter { stop ->
-                val normalizedName = normalizedStopNames[stop] ?: SearchUtils.normalizeForSearch(stop.name)
-                SearchUtils.fuzzyContainsNormalized(normalizedName, normalizedQuery)
-            }.map { stop ->
-                val normalizedName = normalizedStopNames[stop] ?: SearchUtils.normalizeForSearch(stop.name)
-                RaptorStop(
-                    id = stop.id,
-                    name = stop.name,
-                    lat = stop.lat,
-                    lon = stop.lon
-                ) to normalizedName
-            }.sortedWith(
-                compareBy(
-                    { !SearchUtils.fuzzyStartsWithNormalized(it.second, normalizedQuery) },
-                    { it.first.name }
-                )
-            ).map { it.first }
 
-            results
-        } catch (e: Exception) {
-            Log.e("RaptorRepository", "Error searching stops: ${e.message}", e)
-            emptyList()
+                // Étape 2: fuzzy matching précis avec valeurs pré-normalisées (évite les recalculs)
+                val results = candidates.filter { stop ->
+                    val normalizedName =
+                        normalizedStopNames[stop] ?: SearchUtils.normalizeForSearch(stop.name)
+                    SearchUtils.fuzzyContainsNormalized(normalizedName, normalizedQuery)
+                }.map { stop ->
+                    val normalizedName =
+                        normalizedStopNames[stop] ?: SearchUtils.normalizeForSearch(stop.name)
+                    RaptorStop(
+                        id = stop.id,
+                        name = stop.name,
+                        lat = stop.lat,
+                        lon = stop.lon
+                    ) to normalizedName
+                }.sortedWith(
+                    compareBy(
+                        { !SearchUtils.fuzzyStartsWithNormalized(it.second, normalizedQuery) },
+                        { it.first.name }
+                    )
+                ).map { it.first }
+
+                results
+            } catch (e: Exception) {
+                Log.e("RaptorRepository", "Error searching stops: ${e.message}", e)
+                emptyList()
+            }
         }
-    }
 
     /**
      * Find the N nearest stops to the given GPS coordinates, sorted by distance.
@@ -424,7 +440,11 @@ class RaptorRepository private constructor(private val context: Context) {
      * @param limit Maximum number of stops to return (default 5)
      * @return List of RaptorStop sorted by distance (closest first), with unique names
      */
-    suspend fun findNearestStops(latitude: Double, longitude: Double, limit: Int = 5): List<RaptorStop> = withContext(Dispatchers.Default) {
+    suspend fun findNearestStops(
+        latitude: Double,
+        longitude: Double,
+        limit: Int = 5
+    ): List<RaptorStop> = withContext(Dispatchers.Default) {
         ensureInitialized()
         try {
             // Calculate distance for each stop and sort by distance
@@ -476,21 +496,30 @@ class RaptorRepository private constructor(private val context: Context) {
     ): List<JourneyResult> = withContext(Dispatchers.Default) {
         ensureInitialized()
         ensureCorrectPeriod(date) // Auto-select period based on selected date
-        
+
         // Early return for empty inputs to avoid unnecessary computation
         if (originStopIds.isEmpty() || destinationStopIds.isEmpty()) {
-            Log.w(TAG, "getOptimizedPaths: origin or destination stop IDs are empty, skipping calculation")
+            Log.w(
+                TAG,
+                "getOptimizedPaths: origin or destination stop IDs are empty, skipping calculation"
+            )
             return@withContext emptyList()
         }
-        
+
         try {
             val depTime = departureTimeSeconds ?: getCurrentTimeInSeconds()
-            
+
             // Smart time rounding: 15 min in off-peak, 5 min in peak hours
             val roundedDepTime = getRoundedDepartureTime(depTime)
 
             // Build cache key (includes date to ensure different periods are cached separately)
-            val cacheKey = buildCacheKey(originStopIds, destinationStopIds, roundedDepTime, date, blockedRouteNames)
+            val cacheKey = buildCacheKey(
+                originStopIds,
+                destinationStopIds,
+                roundedDepTime,
+                date,
+                blockedRouteNames
+            )
 
             // Level 1: Check in-memory LRU cache
             val memoryCached = journeyCache.get(cacheKey)
@@ -513,7 +542,10 @@ class RaptorRepository private constructor(private val context: Context) {
             }
 
             // Note: Empty checks already handled above, no need to check again
-            Log.d(TAG, "getOptimizedPaths: Cache miss, calculating with Raptor for ${originStopIds.size} origin(s) -> ${destinationStopIds.size} destination(s)")
+            Log.d(
+                TAG,
+                "getOptimizedPaths: Cache miss, calculating with Raptor for ${originStopIds.size} origin(s) -> ${destinationStopIds.size} destination(s)"
+            )
 
             // Level 3: Calculate with Raptor
             val journeys = raptorLibrary?.getOptimizedPaths(
@@ -541,7 +573,10 @@ class RaptorRepository private constructor(private val context: Context) {
 
                     if (fromStop == null || toStop == null) {
                         if (DEBUG_LOGGING) {
-                            Log.w("RaptorRepository", "getOptimizedPaths: Stop not found - fromIdx=${leg.fromStopIndex}, toIdx=${leg.toStopIndex}")
+                            Log.w(
+                                "RaptorRepository",
+                                "getOptimizedPaths: Stop not found - fromIdx=${leg.fromStopIndex}, toIdx=${leg.toStopIndex}"
+                            )
                         }
                         hasInvalidLeg = true
                         break
@@ -554,44 +589,51 @@ class RaptorRepository private constructor(private val context: Context) {
 
                     for (idx in intermediateIndices.indices) {
                         val stop = stopsByIndex[intermediateIndices[idx]]
-                        val arrivalTime = if (idx < intermediateTimes.size) intermediateTimes[idx] else null
+                        val arrivalTime =
+                            if (idx < intermediateTimes.size) intermediateTimes[idx] else null
                         if (stop != null && arrivalTime != null) {
-                            intermediateStops.add(IntermediateStop(
-                                stopName = stop.name,
-                                arrivalTime = arrivalTime,
-                                lat = stop.lat,
-                                lon = stop.lon
-                            ))
+                            intermediateStops.add(
+                                IntermediateStop(
+                                    stopName = stop.name,
+                                    arrivalTime = arrivalTime,
+                                    lat = stop.lat,
+                                    lon = stop.lon
+                                )
+                            )
                         }
                     }
-                    
-                    journeyLegs.add(JourneyLeg(
-                        fromStopId = fromStop.id.toString(),
-                        fromStopName = fromStop.name,
-                        fromLat = fromStop.lat,
-                        fromLon = fromStop.lon,
-                        toStopId = toStop.id.toString(),
-                        toStopName = toStop.name,
-                        toLat = toStop.lat,
-                        toLon = toStop.lon,
-                        departureTime = leg.departureTime,
-                        arrivalTime = leg.arrivalTime,
-                        routeName = leg.routeName,
-                        routeColor = null, // Library doesn't provide color
-                        isWalking = leg.isTransfer,
-                        direction = leg.direction,
-                        intermediateStops = intermediateStops
-                    ))
+
+                    journeyLegs.add(
+                        JourneyLeg(
+                            fromStopId = fromStop.id.toString(),
+                            fromStopName = fromStop.name,
+                            fromLat = fromStop.lat,
+                            fromLon = fromStop.lon,
+                            toStopId = toStop.id.toString(),
+                            toStopName = toStop.name,
+                            toLat = toStop.lat,
+                            toLon = toStop.lon,
+                            departureTime = leg.departureTime,
+                            arrivalTime = leg.arrivalTime,
+                            routeName = leg.routeName,
+                            routeColor = null, // Library doesn't provide color
+                            isWalking = leg.isTransfer,
+                            direction = leg.direction,
+                            intermediateStops = intermediateStops
+                        )
+                    )
                 }
-                
+
                 // Skip this journey if any leg was invalid
                 if (hasInvalidLeg || journeyLegs.isEmpty()) continue
 
-                results.add(JourneyResult(
-                    departureTime = legs.first().departureTime,
-                    arrivalTime = legs.last().arrivalTime,
-                    legs = journeyLegs
-                ))
+                results.add(
+                    JourneyResult(
+                        departureTime = legs.first().departureTime,
+                        arrivalTime = legs.last().arrivalTime,
+                        legs = journeyLegs
+                    )
+                )
             }
 
             // Store results in both memory and disk cache
@@ -616,7 +658,7 @@ class RaptorRepository private constructor(private val context: Context) {
      * Useful for "I need to be there by X" scenarios.
      *
      * @param originStopIds List of origin stop IDs
-     * @param destinationStopIds List of destination stop IDs  
+     * @param destinationStopIds List of destination stop IDs
      * @param arrivalTimeSeconds Desired arrival time in seconds from midnight
      * @param searchWindowMinutes How far back to search for departures (default: 120 minutes)
      * @param date The date to search for (default: today). Used to select the correct schedule period.
@@ -667,7 +709,10 @@ class RaptorRepository private constructor(private val context: Context) {
 
                     if (fromStop == null || toStop == null) {
                         if (DEBUG_LOGGING) {
-                            Log.w(TAG, "getOptimizedPathsArriveBy: Stop not found - fromIdx=${leg.fromStopIndex}, toIdx=${leg.toStopIndex}")
+                            Log.w(
+                                TAG,
+                                "getOptimizedPathsArriveBy: Stop not found - fromIdx=${leg.fromStopIndex}, toIdx=${leg.toStopIndex}"
+                            )
                         }
                         hasInvalidLeg = true
                         break
@@ -679,43 +724,50 @@ class RaptorRepository private constructor(private val context: Context) {
 
                     for (idx in intermediateIndices.indices) {
                         val stop = stopsByIndex[intermediateIndices[idx]]
-                        val arrivalTime = if (idx < intermediateTimes.size) intermediateTimes[idx] else null
+                        val arrivalTime =
+                            if (idx < intermediateTimes.size) intermediateTimes[idx] else null
                         if (stop != null && arrivalTime != null) {
-                            intermediateStops.add(IntermediateStop(
-                                stopName = stop.name,
-                                arrivalTime = arrivalTime,
-                                lat = stop.lat,
-                                lon = stop.lon
-                            ))
+                            intermediateStops.add(
+                                IntermediateStop(
+                                    stopName = stop.name,
+                                    arrivalTime = arrivalTime,
+                                    lat = stop.lat,
+                                    lon = stop.lon
+                                )
+                            )
                         }
                     }
-                    
-                    journeyLegs.add(JourneyLeg(
-                        fromStopId = fromStop.id.toString(),
-                        fromStopName = fromStop.name,
-                        fromLat = fromStop.lat,
-                        fromLon = fromStop.lon,
-                        toStopId = toStop.id.toString(),
-                        toStopName = toStop.name,
-                        toLat = toStop.lat,
-                        toLon = toStop.lon,
-                        departureTime = leg.departureTime,
-                        arrivalTime = leg.arrivalTime,
-                        routeName = leg.routeName,
-                        routeColor = null,
-                        isWalking = leg.isTransfer,
-                        direction = leg.direction,
-                        intermediateStops = intermediateStops
-                    ))
+
+                    journeyLegs.add(
+                        JourneyLeg(
+                            fromStopId = fromStop.id.toString(),
+                            fromStopName = fromStop.name,
+                            fromLat = fromStop.lat,
+                            fromLon = fromStop.lon,
+                            toStopId = toStop.id.toString(),
+                            toStopName = toStop.name,
+                            toLat = toStop.lat,
+                            toLon = toStop.lon,
+                            departureTime = leg.departureTime,
+                            arrivalTime = leg.arrivalTime,
+                            routeName = leg.routeName,
+                            routeColor = null,
+                            isWalking = leg.isTransfer,
+                            direction = leg.direction,
+                            intermediateStops = intermediateStops
+                        )
+                    )
                 }
-                
+
                 if (hasInvalidLeg || journeyLegs.isEmpty()) continue
 
-                results.add(JourneyResult(
-                    departureTime = legs.first().departureTime,
-                    arrivalTime = legs.last().arrivalTime,
-                    legs = journeyLegs
-                ))
+                results.add(
+                    JourneyResult(
+                        departureTime = legs.first().departureTime,
+                        arrivalTime = legs.last().arrivalTime,
+                        legs = journeyLegs
+                    )
+                )
             }
 
             results
@@ -829,8 +881,13 @@ class RaptorRepository private constructor(private val context: Context) {
             .filter {
                 it.uppercase().contains(normalizedQuery) || normalizedQuery.contains(it.uppercase())
             }
-            .sortedWith(compareBy<String>(
-                { if (it.equals(normalizedQuery, ignoreCase = true)) 0 else if (it.uppercase().startsWith(normalizedQuery)) 1 else 2 },
+            .sortedWith(
+                compareBy<String>(
+                {
+                    if (it.equals(normalizedQuery, ignoreCase = true)) 0 else if (it.uppercase()
+                            .startsWith(normalizedQuery)
+                    ) 1 else 2
+                },
                 { it }
             ))
             .take(20)

@@ -40,32 +40,44 @@ class TransportCache(context: Context) {
     private val cacheDir = File(context.cacheDir, "transport_data").also { it.mkdirs() }
 
     // In-memory cache for ultra-fast access
-    @Volatile private var metroLinesCache: List<Feature>? = null
-    @Volatile private var tramLinesCache: List<Feature>? = null
-    @Volatile private var busLinesCache: List<Feature>? = null
-    @Volatile private var navigoneLinesCache: List<Feature>? = null
-    @Volatile private var trambusLinesCache: List<Feature>? = null
-    @Volatile private var stopsCache: List<StopFeature>? = null
+    @Volatile
+    private var metroLinesCache: List<Feature>? = null
+    @Volatile
+    private var tramLinesCache: List<Feature>? = null
+    @Volatile
+    private var busLinesCache: List<Feature>? = null
+    @Volatile
+    private var navigoneLinesCache: List<Feature>? = null
+    @Volatile
+    private var trambusLinesCache: List<Feature>? = null
+    @Volatile
+    private var stopsCache: List<StopFeature>? = null
 
     // Timestamps for expiration management
-    @Volatile private var metroLinesTimestamp: Long = 0
-    @Volatile private var tramLinesTimestamp: Long = 0
-    @Volatile private var busLinesTimestamp: Long = 0
-    @Volatile private var navigoneLinesTimestamp: Long = 0
-    @Volatile private var trambusLinesTimestamp: Long = 0
-    @Volatile private var stopsTimestamp: Long = 0
+    @Volatile
+    private var metroLinesTimestamp: Long = 0
+    @Volatile
+    private var tramLinesTimestamp: Long = 0
+    @Volatile
+    private var busLinesTimestamp: Long = 0
+    @Volatile
+    private var navigoneLinesTimestamp: Long = 0
+    @Volatile
+    private var trambusLinesTimestamp: Long = 0
+    @Volatile
+    private var stopsTimestamp: Long = 0
 
     companion object {
         // Cache validity duration: 24 hours
         private val CACHE_VALIDITY_DURATION = TimeUnit.HOURS.toMillis(24)
-        
+
         // Keys for SharedPreferences (metadata only)
         private const val KEY_METRO_LINES_TIMESTAMP = "metro_lines_timestamp"
         private const val KEY_TRAM_LINES_TIMESTAMP = "tram_lines_timestamp"
         private const val KEY_NAVIGONE_LINES_TIMESTAMP = "navigone_lines_timestamp"
         private const val KEY_TRAMBUS_LINES_TIMESTAMP = "trambus_lines_timestamp"
         private const val KEY_STOPS_TIMESTAMP = "stops_timestamp"
-        
+
         // Compressed cache file names
         private const val FILE_METRO_LINES = "metro_lines.json.gz"
         private const val FILE_TRAM_LINES = "tram_lines.json.gz"
@@ -84,12 +96,12 @@ class TransportCache(context: Context) {
         if (metroLinesCache != null || tramLinesCache != null || stopsCache != null) {
             return true
         }
-        
+
         // Check disk cache timestamps - no lock needed for SharedPreferences read
         val hasDiskCache = prefs.getLong(KEY_METRO_LINES_TIMESTAMP, 0) > 0 ||
-                          prefs.getLong(KEY_TRAM_LINES_TIMESTAMP, 0) > 0 ||
-                          prefs.getLong(KEY_STOPS_TIMESTAMP, 0) > 0
-        
+                prefs.getLong(KEY_TRAM_LINES_TIMESTAMP, 0) > 0 ||
+                prefs.getLong(KEY_STOPS_TIMESTAMP, 0) > 0
+
         return hasDiskCache
     }
 
@@ -100,19 +112,19 @@ class TransportCache(context: Context) {
     suspend fun needsCacheRefresh(): Boolean {
         // If no cache at all, we need to load
         if (!hasAnyCachedData()) return true
-        
+
         // Check if any of the main caches are expired
         val now = System.currentTimeMillis()
-        
+
         val metroExpired = prefs.getLong(KEY_METRO_LINES_TIMESTAMP, 0) > 0 &&
-                          (now - prefs.getLong(KEY_METRO_LINES_TIMESTAMP, 0)) >= CACHE_VALIDITY_DURATION
-        
+                (now - prefs.getLong(KEY_METRO_LINES_TIMESTAMP, 0)) >= CACHE_VALIDITY_DURATION
+
         val tramExpired = prefs.getLong(KEY_TRAM_LINES_TIMESTAMP, 0) > 0 &&
-                         (now - prefs.getLong(KEY_TRAM_LINES_TIMESTAMP, 0)) >= CACHE_VALIDITY_DURATION
-        
+                (now - prefs.getLong(KEY_TRAM_LINES_TIMESTAMP, 0)) >= CACHE_VALIDITY_DURATION
+
         val stopsExpired = prefs.getLong(KEY_STOPS_TIMESTAMP, 0) > 0 &&
-                          (now - prefs.getLong(KEY_STOPS_TIMESTAMP, 0)) >= CACHE_VALIDITY_DURATION
-        
+                (now - prefs.getLong(KEY_STOPS_TIMESTAMP, 0)) >= CACHE_VALIDITY_DURATION
+
         // If any main cache is expired, we should refresh
         return metroExpired || tramExpired || stopsExpired
     }
@@ -123,41 +135,43 @@ class TransportCache(context: Context) {
     private fun isTimestampValid(timestamp: Long): Boolean {
         return (System.currentTimeMillis() - timestamp) < CACHE_VALIDITY_DURATION
     }
-    
+
     /**
      * Write data to compressed Gzip file (runs on IO dispatcher)
      * Uses kotlinx.serialization for fast encoding
      */
-    private suspend inline fun <reified T> writeToCompressedFile(fileName: String, data: T) = withContext(Dispatchers.IO) {
-        try {
-            val file = File(cacheDir, fileName)
-            val jsonString = json.encodeToString(data)
-            GZIPOutputStream(FileOutputStream(file).buffered()).use { gzip ->
-                gzip.write(jsonString.toByteArray(Charsets.UTF_8))
+    private suspend inline fun <reified T> writeToCompressedFile(fileName: String, data: T) =
+        withContext(Dispatchers.IO) {
+            try {
+                val file = File(cacheDir, fileName)
+                val jsonString = json.encodeToString(data)
+                GZIPOutputStream(FileOutputStream(file).buffered()).use { gzip ->
+                    gzip.write(jsonString.toByteArray(Charsets.UTF_8))
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("TransportCache", "Error writing to $fileName", e)
             }
-        } catch (e: Exception) {
-            android.util.Log.e("TransportCache", "Error writing to $fileName", e)
         }
-    }
 
     /**
      * Read data from compressed Gzip file (runs on IO dispatcher)
      * Uses kotlinx.serialization for fast decoding
      */
-    private suspend inline fun <reified T> readFromCompressedFile(fileName: String): T? = withContext(Dispatchers.IO) {
-        try {
-            val file = File(cacheDir, fileName)
-            if (file.exists()) {
-                val jsonString = GZIPInputStream(FileInputStream(file).buffered()).use { gzip ->
-                    gzip.bufferedReader(Charsets.UTF_8).readText()
-                }
-                json.decodeFromString<T>(jsonString)
-            } else null
-        } catch (e: Exception) {
-            android.util.Log.e("TransportCache", "Error reading from $fileName", e)
-            null
+    private suspend inline fun <reified T> readFromCompressedFile(fileName: String): T? =
+        withContext(Dispatchers.IO) {
+            try {
+                val file = File(cacheDir, fileName)
+                if (file.exists()) {
+                    val jsonString = GZIPInputStream(FileInputStream(file).buffered()).use { gzip ->
+                        gzip.bufferedReader(Charsets.UTF_8).readText()
+                    }
+                    json.decodeFromString<T>(jsonString)
+                } else null
+            } catch (e: Exception) {
+                android.util.Log.e("TransportCache", "Error reading from $fileName", e)
+                null
+            }
         }
-    }
 
     /**
      * Saves metro/funicular lines to cache
@@ -167,10 +181,10 @@ class TransportCache(context: Context) {
         metroLinesTimestamp = System.currentTimeMillis()
 
         // Save timestamp to prefs and data to file asynchronously
-        prefs.edit { putLong(KEY_METRO_LINES_TIMESTAMP, metroLinesTimestamp)}
+        prefs.edit { putLong(KEY_METRO_LINES_TIMESTAMP, metroLinesTimestamp) }
         writeToCompressedFile(FILE_METRO_LINES, lines.sanitizeForSerialization())
     }
-    
+
     /**
      * Retrieves metro/funicular lines from cache
      */
@@ -179,7 +193,7 @@ class TransportCache(context: Context) {
         if (metroLinesCache != null && isTimestampValid(metroLinesTimestamp)) {
             return@withLock metroLinesCache
         }
-        
+
         // Otherwise, load from disk
         val timestamp = prefs.getLong(KEY_METRO_LINES_TIMESTAMP, 0)
         if (isTimestampValid(timestamp)) {
@@ -190,10 +204,10 @@ class TransportCache(context: Context) {
                 return@withLock lines
             }
         }
-        
+
         null
     }
-    
+
     /**
      * Saves tram lines to cache
      */
@@ -202,10 +216,10 @@ class TransportCache(context: Context) {
         tramLinesTimestamp = System.currentTimeMillis()
 
         // Save timestamp to prefs and data to file asynchronously
-        prefs.edit { putLong(KEY_TRAM_LINES_TIMESTAMP, tramLinesTimestamp)}
+        prefs.edit { putLong(KEY_TRAM_LINES_TIMESTAMP, tramLinesTimestamp) }
         writeToCompressedFile(FILE_TRAM_LINES, lines.sanitizeForSerialization())
     }
-    
+
     /**
      * Retrieves tram lines from cache
      */
@@ -214,7 +228,7 @@ class TransportCache(context: Context) {
         if (tramLinesCache != null && isTimestampValid(tramLinesTimestamp)) {
             return@withLock tramLinesCache
         }
-        
+
         // Otherwise, load from disk
         val timestamp = prefs.getLong(KEY_TRAM_LINES_TIMESTAMP, 0)
         if (isTimestampValid(timestamp)) {
@@ -236,7 +250,7 @@ class TransportCache(context: Context) {
         navigoneLinesCache = lines
         navigoneLinesTimestamp = System.currentTimeMillis()
 
-        prefs.edit { putLong(KEY_NAVIGONE_LINES_TIMESTAMP, navigoneLinesTimestamp)}
+        prefs.edit { putLong(KEY_NAVIGONE_LINES_TIMESTAMP, navigoneLinesTimestamp) }
         writeToCompressedFile(FILE_NAVIGONE_LINES, lines.sanitizeForSerialization())
     }
 
@@ -270,7 +284,7 @@ class TransportCache(context: Context) {
         trambusLinesCache = lines
         trambusLinesTimestamp = System.currentTimeMillis()
 
-        prefs.edit { putLong(KEY_TRAMBUS_LINES_TIMESTAMP, trambusLinesTimestamp)}
+        prefs.edit { putLong(KEY_TRAMBUS_LINES_TIMESTAMP, trambusLinesTimestamp) }
         writeToCompressedFile(FILE_TRAMBUS_LINES, lines.sanitizeForSerialization())
     }
 
@@ -306,11 +320,11 @@ class TransportCache(context: Context) {
         if (busLinesCache != null && isTimestampValid(busLinesTimestamp)) {
             return@withLock busLinesCache
         }
-        
+
         // Buses are not cached on disk
         null
     }
-    
+
     /**
      * Saves stops to cache using compressed file storage
      * WARNING: Stops are large, we keep all stops (including buses) on disk with Gzip compression
@@ -318,12 +332,12 @@ class TransportCache(context: Context) {
     suspend fun saveStops(stops: List<StopFeature>) = mutex.withLock {
         stopsCache = stops
         stopsTimestamp = System.currentTimeMillis()
-        
+
         // Save timestamp to prefs and data to compressed file
         prefs.edit { putLong(KEY_STOPS_TIMESTAMP, stopsTimestamp) }
         writeToCompressedFile(FILE_STOPS, stops)
     }
-    
+
     /**
      * Retrieves stops from cache
      */
@@ -332,7 +346,7 @@ class TransportCache(context: Context) {
         if (stopsCache != null && isTimestampValid(stopsTimestamp)) {
             return@withLock stopsCache
         }
-        
+
         // Otherwise, load from disk
         val timestamp = prefs.getLong(KEY_STOPS_TIMESTAMP, 0)
         if (isTimestampValid(timestamp)) {
@@ -343,7 +357,7 @@ class TransportCache(context: Context) {
                 return@withLock stops
             }
         }
-        
+
         null
     }
 

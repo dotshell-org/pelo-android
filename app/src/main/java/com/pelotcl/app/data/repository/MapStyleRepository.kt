@@ -38,7 +38,7 @@ enum class MapStyle(
         styleUrl = "https://tiles.openfreemap.org/styles/liberty",
         category = MapStyleCategory.STANDARD
     ),
-    
+
     // Satellite style - Using ESRI World Imagery with local style file
     SATELLITE(
         key = "satellite",
@@ -51,7 +51,7 @@ enum class MapStyle(
         fun fromKey(key: String): MapStyle {
             return entries.find { it.key == key } ?: POSITRON
         }
-        
+
         fun getByCategory(category: MapStyleCategory): List<MapStyle> {
             return entries.filter { it.category == category }
         }
@@ -70,10 +70,10 @@ enum class MapStyleCategory() {
  * Repository for managing map style preferences using SharedPreferences.
  */
 class MapStyleRepository(private val context: Context) {
-    private val prefs by lazy { 
-        context.getSharedPreferences("pelo_map_prefs", Context.MODE_PRIVATE) 
+    private val prefs by lazy {
+        context.getSharedPreferences("pelo_map_prefs", Context.MODE_PRIVATE)
     }
-    
+
     private val keyMapStyle = "selected_map_style"
 
     /**

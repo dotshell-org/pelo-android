@@ -196,11 +196,11 @@ fun SimpleSearchBar(
     val pickOnlyStopRows = content == TransportSearchContent.STOPS_ONLY && !showHistory
     val trimmedQuery = queryText.trim()
     val showNoResults = trimmedQuery.length >= minQueryLengthForResults &&
-        when (content) {
-            TransportSearchContent.STOPS_ONLY -> searchResults.isEmpty()
-            TransportSearchContent.LINES_ONLY -> lineSearchResults.isEmpty()
-            TransportSearchContent.STOPS_AND_LINES -> searchResults.isEmpty() && lineSearchResults.isEmpty()
-        }
+            when (content) {
+                TransportSearchContent.STOPS_ONLY -> searchResults.isEmpty()
+                TransportSearchContent.LINES_ONLY -> lineSearchResults.isEmpty()
+                TransportSearchContent.STOPS_AND_LINES -> searchResults.isEmpty() && lineSearchResults.isEmpty()
+            }
 
     LaunchedEffect(focusNonce) {
         if (focusNonce > 0 || startExpanded) {
@@ -210,7 +210,9 @@ fun SimpleSearchBar(
     }
 
     Box(
-        modifier = (if (expanded) Modifier.fillMaxSize().background(Color.Black) else modifier)
+        modifier = (if (expanded) Modifier
+            .fillMaxSize()
+            .background(Color.Black) else modifier)
             .semantics { isTraversalGroup = true }
             .padding(0.dp)
             .clickable(
@@ -247,11 +249,13 @@ fun SimpleSearchBar(
                                 setQueryText("")
                                 onSearch(first.result)
                             }
+
                             is UnifiedSearchResult.Line -> {
                                 setExpandedState(false)
                                 setQueryText("")
                                 onLineSearch(first.result)
                             }
+
                             null -> {}
                         }
                     },
@@ -363,6 +367,7 @@ fun SimpleSearchBar(
                                 }
                             )
                         }
+
                         is UnifiedSearchResult.Stop -> {
                             if (pickOnlyStopRows) {
                                 StopSearchPickerListItem(
@@ -487,7 +492,7 @@ private fun SectionHeader(icon: ImageVector, text: String) {
 private fun SearchConnectionBadge(lineName: String) {
     val context = LocalContext.current
     val resourceId = BusIconHelper.getResourceIdForLine(context, lineName)
-    
+
     if (resourceId != 0) {
         Image(
             painter = painterResource(id = resourceId),
@@ -676,7 +681,10 @@ private fun LineSearchResultItem(
                 if (resourceId != 0) {
                     Image(
                         painter = painterResource(id = resourceId),
-                        contentDescription = stringResource(R.string.line_icon, lineResult.lineName),
+                        contentDescription = stringResource(
+                            R.string.line_icon,
+                            lineResult.lineName
+                        ),
                         modifier = Modifier.size(40.dp)
                     )
                 } else if (modeBusId != 0) {

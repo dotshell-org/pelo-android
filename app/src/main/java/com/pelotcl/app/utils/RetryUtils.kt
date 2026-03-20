@@ -5,7 +5,7 @@ import java.io.IOException
 
 /**
  * Retry a suspend function with exponential backoff
- * 
+ *
  * @param maxRetries Maximum number of retry attempts
  * @param initialDelayMs Initial delay in milliseconds before first retry
  * @param maxDelayMs Maximum delay in milliseconds between retries
@@ -23,29 +23,29 @@ suspend fun <T> withRetry(
 ): T {
     var currentDelay = initialDelayMs
     var lastException: Exception? = null
-    
+
     repeat(maxRetries) { attempt ->
         try {
             return block()
         } catch (e: Exception) {
             lastException = e
-            
+
             // Only retry on transient network errors
             val shouldRetry = when (e) {
                 is IOException -> true
                 else -> false
             }
-            
+
             if (!shouldRetry || attempt == maxRetries - 1) {
                 throw e
             }
-            
+
             // Exponential backoff with jitter
             delay(currentDelay)
             currentDelay = (currentDelay * factor).toLong().coerceAtMost(maxDelayMs)
         }
     }
-    
+
     // This should never be reached, but throw the last exception if it happens
     throw lastException ?: Exception("Retry failed with unknown error")
 }

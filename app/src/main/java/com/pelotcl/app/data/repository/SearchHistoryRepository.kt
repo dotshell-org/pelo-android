@@ -27,12 +27,12 @@ enum class SearchType {
 class SearchHistoryRepository(context: Context) {
     private val prefs = context.getSharedPreferences("pelo_search_history", Context.MODE_PRIVATE)
     private val gson = Gson()
-    
+
     companion object {
         private const val KEY_SEARCH_HISTORY = "search_history"
         private const val MAX_HISTORY_SIZE = 10
     }
-    
+
     /**
      * Get the search history ordered by most recent first
      */
@@ -46,40 +46,40 @@ class SearchHistoryRepository(context: Context) {
             emptyList()
         }
     }
-    
+
     /**
      * Add a search item to history. If the item already exists, it updates its timestamp.
      * Keeps only the most recent MAX_HISTORY_SIZE items.
      */
     fun addToHistory(item: SearchHistoryItem) {
         val history = getSearchHistory().toMutableList()
-        
+
         // Remove existing entry with same query and type (case-insensitive)
-        history.removeAll { 
-            it.query.equals(item.query, ignoreCase = true) && it.type == item.type 
+        history.removeAll {
+            it.query.equals(item.query, ignoreCase = true) && it.type == item.type
         }
-        
+
         // Add new item at the beginning
         history.add(0, item.copy(timestamp = System.currentTimeMillis()))
-        
+
         // Keep only MAX_HISTORY_SIZE items
         val trimmedHistory = history.take(MAX_HISTORY_SIZE)
-        
+
         // Save to preferences
         val json = gson.toJson(trimmedHistory)
-        prefs.edit { putString(KEY_SEARCH_HISTORY, json)}
+        prefs.edit { putString(KEY_SEARCH_HISTORY, json) }
     }
-    
+
     /**
      * Remove a specific item from history
      */
     fun removeFromHistory(query: String, type: SearchType) {
         val history = getSearchHistory().toMutableList()
-        history.removeAll { 
-            it.query.equals(query, ignoreCase = true) && it.type == type 
+        history.removeAll {
+            it.query.equals(query, ignoreCase = true) && it.type == type
         }
         val json = gson.toJson(history)
-        prefs.edit { putString(KEY_SEARCH_HISTORY, json)}
+        prefs.edit { putString(KEY_SEARCH_HISTORY, json) }
     }
 
 }

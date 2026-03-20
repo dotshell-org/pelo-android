@@ -80,7 +80,8 @@ fun FavoritesBar(
             return buttonBaseContentWidth + textWidthDp
         }
 
-        val createButtonWidth = remember(density, textMeasurer) { estimateButtonWidth("Creer un favori") }
+        val createButtonWidth =
+            remember(density, textMeasurer) { estimateButtonWidth("Creer un favori") }
         val favoritesTotalWidth = favorites.fold(0.dp) { acc, favorite ->
             acc + estimateButtonWidth(favorite.name)
         }
@@ -114,7 +115,12 @@ fun FavoritesBar(
             LazyRow(
                 modifier = Modifier
                     .fillMaxWidth(),
-                contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 12.dp, bottom = 8.dp),
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    top = 8.dp,
+                    end = 12.dp,
+                    bottom = 8.dp
+                ),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(favorites, key = { it.id }) { favorite ->

@@ -11,7 +11,7 @@ class SpatialGrid(
     private val cellSize: Double = 0.01 // ~1km at equator
 ) {
     private val grid = mutableMapOf<Pair<Int, Int>, MutableList<StopFeature>>()
-    
+
     /**
      * Add a stop to the spatial grid
      */
@@ -24,7 +24,7 @@ class SpatialGrid(
             grid.getOrPut(cell) { mutableListOf() }.add(stop)
         }
     }
-    
+
     /**
      * Build the grid from a list of stops
      */
@@ -38,7 +38,7 @@ class SpatialGrid(
      */
     val size: Int
         get() = grid.values.sumOf { it.size }
-    
+
     private fun getCellKey(lon: Double, lat: Double): Pair<Int, Int> {
         val x = floor(lon / cellSize).toInt()
         val y = floor(lat / cellSize).toInt()

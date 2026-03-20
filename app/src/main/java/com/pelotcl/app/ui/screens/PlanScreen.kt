@@ -110,14 +110,14 @@ import com.pelotcl.app.data.model.Feature
 import com.pelotcl.app.data.model.StopFeature
 import com.pelotcl.app.data.model.StopGeometry
 import com.pelotcl.app.data.model.StopProperties
-import com.pelotcl.app.data.repository.JourneyResult
+import com.pelotcl.app.data.repository.raptor.JourneyResult
 import com.pelotcl.app.data.repository.MapStyle
 import com.pelotcl.app.data.repository.MapStyleRepository
 import com.pelotcl.app.ui.components.AllSchedulesSheetContent
 import com.pelotcl.app.ui.components.AddFavoriteDialog
 import com.pelotcl.app.ui.components.InlineItinerarySheetContent
-import com.pelotcl.app.ui.components.LineDetailsBottomSheet
-import com.pelotcl.app.ui.components.LineInfo
+import com.pelotcl.app.ui.components.linedetails.LineDetailsBottomSheet
+import com.pelotcl.app.ui.components.linedetails.LineInfo
 import com.pelotcl.app.ui.components.LinesBottomSheet
 import com.pelotcl.app.ui.components.MapLibreView
 import com.pelotcl.app.ui.components.StationBottomSheet
@@ -160,7 +160,8 @@ private const val PRIORITY_STOPS_MIN_ZOOM = 12.5f
 private const val TRAM_STOPS_MIN_ZOOM = 14.0f
 private const val SECONDARY_STOPS_MIN_ZOOM = 17.0f
 private const val SELECTED_STOP_MIN_ZOOM = 9.0f
-private const val LIVE_MODE_ZOOM_LEVEL = 12.0f // Zoom level for live tracking mode (below PRIORITY_STOPS_MIN_ZOOM to hide stop icons)
+private const val LIVE_MODE_ZOOM_LEVEL =
+    12.0f // Zoom level for live tracking mode (below PRIORITY_STOPS_MIN_ZOOM to hide stop icons)
 
 private fun isMetroTramOrFunicular(lineName: String): Boolean {
     val upperName = lineName.uppercase()
@@ -225,7 +226,8 @@ private fun ensureVehicleMarkerImage(
 
     fun drawCenteredDrawable(drawable: Drawable, maxSize: Int) {
         val intrinsicWidth = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else maxSize
-        val intrinsicHeight = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else maxSize
+        val intrinsicHeight =
+            if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else maxSize
         val scale = minOf(maxSize.toFloat() / intrinsicWidth, maxSize.toFloat() / intrinsicHeight)
         val drawWidth = (intrinsicWidth * scale).toInt()
         val drawHeight = (intrinsicHeight * scale).toInt()
@@ -598,7 +600,12 @@ fun PlanScreen(
     val offlineDataInfo by viewModel.offlineDataInfo.collectAsState()
     var mapStyleUrl by remember { mutableStateOf(mapStyleRepository.getSelectedStyle().styleUrl) }
     var selectedMapStyle by remember {
-        mutableStateOf(mapStyleRepository.getEffectiveStyle(isOffline, offlineDataInfo.downloadedMapStyles))
+        mutableStateOf(
+            mapStyleRepository.getEffectiveStyle(
+                isOffline,
+                offlineDataInfo.downloadedMapStyles
+            )
+        )
     }
     var isMapStyleMenuExpanded by rememberSaveable { mutableStateOf(false) }
     val isDarkMatterStyle = selectedMapStyle == MapStyle.DARK_MATTER
@@ -660,7 +667,7 @@ fun PlanScreen(
     var previousSheetContentState by remember { mutableStateOf<SheetContentState?>(null) }
     val isSheetExpandedOrExpanding =
         scaffoldSheetState.bottomSheetState.currentValue == SheetValue.Expanded ||
-            scaffoldSheetState.bottomSheetState.targetValue == SheetValue.Expanded
+                scaffoldSheetState.bottomSheetState.targetValue == SheetValue.Expanded
 
     LaunchedEffect(sheetContentState, selectedStation) {
         onSheetStateChanged(sheetContentState != null)
@@ -669,7 +676,8 @@ fun PlanScreen(
         val requestedValue = requestedSheetValueForNextContent
         if (requestedValue != null &&
             sheetContentState != null &&
-            sheetContentState != previousSheetContentState) {
+            sheetContentState != previousSheetContentState
+        ) {
             scope.launch {
                 when (requestedValue) {
                     SheetValue.Expanded -> scaffoldSheetState.bottomSheetState.expand()
@@ -682,10 +690,12 @@ fun PlanScreen(
 
         if (sheetContentState == SheetContentState.STATION &&
             selectedStation != null &&
-            previousSheetContentState != SheetContentState.STATION) {
+            previousSheetContentState != SheetContentState.STATION
+        ) {
             scope.launch {
                 if (previousSheetContentState == SheetContentState.LINE_DETAILS &&
-                    isSheetExpandedOrExpanding) {
+                    isSheetExpandedOrExpanding
+                ) {
                     scaffoldSheetState.bottomSheetState.expand()
                 } else {
                     scaffoldSheetState.bottomSheetState.partialExpand()
@@ -700,10 +710,12 @@ fun PlanScreen(
         if (sheetContentState == SheetContentState.LINE_DETAILS &&
             previousSheetContentState != SheetContentState.LINE_DETAILS &&
             (previousSheetContentState == SheetContentState.STATION ||
-                    selectedLine?.currentStationName?.isNotBlank() == true)) {
+                    selectedLine?.currentStationName?.isNotBlank() == true)
+        ) {
             scope.launch {
                 if (previousSheetContentState == SheetContentState.STATION &&
-                    isSheetExpandedOrExpanding) {
+                    isSheetExpandedOrExpanding
+                ) {
                     scaffoldSheetState.bottomSheetState.expand()
                 } else {
                     scaffoldSheetState.bottomSheetState.partialExpand()
@@ -714,14 +726,16 @@ fun PlanScreen(
         // (coming from null state with no station selected)
         if (sheetContentState == SheetContentState.LINE_DETAILS &&
             previousSheetContentState == null &&
-            selectedLine?.currentStationName?.isBlank() == true) {
+            selectedLine?.currentStationName?.isBlank() == true
+        ) {
             scope.launch {
                 scaffoldSheetState.bottomSheetState.partialExpand()
             }
         }
 
         if (sheetContentState == SheetContentState.ITINERARY &&
-            previousSheetContentState != SheetContentState.ITINERARY) {
+            previousSheetContentState != SheetContentState.ITINERARY
+        ) {
             scope.launch {
                 // Itinerary opens expanded by default.
                 scaffoldSheetState.bottomSheetState.expand()
@@ -766,7 +780,8 @@ fun PlanScreen(
                 val nearestStopName = nearestStopNames.firstOrNull()
                     ?: stops?.let { findNearestStopName(location, it) }
                 if (!nearestStopName.isNullOrBlank()) {
-                    val ids = viewModel.raptorRepository.searchStopsByName(nearestStopName).map { it.id }
+                    val ids =
+                        viewModel.raptorRepository.searchStopsByName(nearestStopName).map { it.id }
                     if (ids.isNotEmpty()) {
                         itineraryDepartureStop = SelectedStop(name = nearestStopName, stopIds = ids)
                     }
@@ -781,7 +796,8 @@ fun PlanScreen(
     // resets to null, leaving an empty expanded sheet.
     LaunchedEffect(sheetContentState, scaffoldSheetState.bottomSheetState.currentValue) {
         if (sheetContentState == null &&
-            scaffoldSheetState.bottomSheetState.currentValue != SheetValue.Hidden) {
+            scaffoldSheetState.bottomSheetState.currentValue != SheetValue.Hidden
+        ) {
             scaffoldSheetState.bottomSheetState.hide()
         }
     }
@@ -854,7 +870,6 @@ fun PlanScreen(
     }
 
 
-
     // Track the number of lines currently displayed to avoid unnecessary map updates
     var lastDisplayedLinesCount by remember { mutableIntStateOf(0) }
 
@@ -906,7 +921,10 @@ fun PlanScreen(
                     val upperName = lineFeature.properties.ligne.uppercase()
                     val width = when {
                         lineFeature.properties.familleTransport == "BAT" || upperName.startsWith("NAV") -> 2f
-                        lineFeature.properties.familleTransport == "TRA" || lineFeature.properties.familleTransport == "TRAM" || upperName.startsWith("TB") -> 2f
+                        lineFeature.properties.familleTransport == "TRA" || lineFeature.properties.familleTransport == "TRAM" || upperName.startsWith(
+                            "TB"
+                        ) -> 2f
+
                         else -> 4f
                     }
                     propsObj.addProperty("line_width", width)
@@ -1009,8 +1027,10 @@ fun PlanScreen(
             itineraryNearbyDepartureStops = emptyList()
             itineraryInitialStopName = itinerarySelectedStopName
             itineraryArrivalQuery = itinerarySelectedStopName
-            val raptorStops = viewModel.raptorRepository.searchStopsByName(itinerarySelectedStopName)
-            itineraryArrivalStop = SelectedStop(name = itinerarySelectedStopName, stopIds = raptorStops.map { it.id })
+            val raptorStops =
+                viewModel.raptorRepository.searchStopsByName(itinerarySelectedStopName)
+            itineraryArrivalStop =
+                SelectedStop(name = itinerarySelectedStopName, stopIds = raptorStops.map { it.id })
             sheetContentState = SheetContentState.ITINERARY
             onItinerarySelectionHandled()
         }
@@ -1112,6 +1132,7 @@ fun PlanScreen(
                     }
                 }, scope = scope, viewModel = viewModel)
             }
+
             else -> {}
         }
     }
@@ -1150,7 +1171,14 @@ fun PlanScreen(
         }
     }
 
-    LaunchedEffect(mapInstance, mapStyleVersion, sheetContentState, itineraryJourneys, selectedItineraryJourney, isMapStyleMenuExpanded) {
+    LaunchedEffect(
+        mapInstance,
+        mapStyleVersion,
+        sheetContentState,
+        itineraryJourneys,
+        selectedItineraryJourney,
+        isMapStyleMenuExpanded
+    ) {
         if (isMapStyleMenuExpanded) return@LaunchedEffect
         val map = mapInstance ?: return@LaunchedEffect
 
@@ -1169,7 +1197,12 @@ fun PlanScreen(
         )
     }
 
-    LaunchedEffect(mapInstance, sheetContentState, itineraryResultsVersion, isMapStyleMenuExpanded) {
+    LaunchedEffect(
+        mapInstance,
+        sheetContentState,
+        itineraryResultsVersion,
+        isMapStyleMenuExpanded
+    ) {
         if (isMapStyleMenuExpanded) return@LaunchedEffect
         if (sheetContentState != SheetContentState.ITINERARY) return@LaunchedEffect
         val map = mapInstance ?: return@LaunchedEffect
@@ -1179,15 +1212,24 @@ fun PlanScreen(
     }
 
     // Keep LIVE mode active while switching between global and per-line context.
-    LaunchedEffect(selectedLine?.lineName, sheetContentState, isLiveTrackingEnabled, isGlobalLiveEnabled, isOffline) {
+    LaunchedEffect(
+        selectedLine?.lineName,
+        sheetContentState,
+        isLiveTrackingEnabled,
+        isGlobalLiveEnabled,
+        isOffline
+    ) {
         if (isOffline) return@LaunchedEffect
 
         val isLiveModeEnabled = isLiveTrackingEnabled || isGlobalLiveEnabled
         if (!isLiveModeEnabled) return@LaunchedEffect
 
-        val isLineContext = sheetContentState == SheetContentState.LINE_DETAILS || sheetContentState == SheetContentState.ALL_SCHEDULES
-        val selectedTrackableLine = selectedLine?.lineName?.takeIf { isLineContext && isLiveTrackableLine(it) }
-        val selectedNotTrackableLine = selectedLine?.lineName?.takeIf { isLineContext && !isLiveTrackableLine(it) }
+        val isLineContext =
+            sheetContentState == SheetContentState.LINE_DETAILS || sheetContentState == SheetContentState.ALL_SCHEDULES
+        val selectedTrackableLine =
+            selectedLine?.lineName?.takeIf { isLineContext && isLiveTrackableLine(it) }
+        val selectedNotTrackableLine =
+            selectedLine?.lineName?.takeIf { isLineContext && !isLiveTrackableLine(it) }
 
         if (selectedTrackableLine != null) {
             if (isGlobalLiveEnabled) {
@@ -1235,7 +1277,13 @@ fun PlanScreen(
     }
 
     // Update vehicle markers on the map when vehicle positions change
-    LaunchedEffect(vehiclePositions, mapInstance, selectedLine, mapStyleVersion, isMapStyleMenuExpanded) {
+    LaunchedEffect(
+        vehiclePositions,
+        mapInstance,
+        selectedLine,
+        mapStyleVersion,
+        isMapStyleMenuExpanded
+    ) {
         if (isMapStyleMenuExpanded) return@LaunchedEffect
         val map = mapInstance ?: return@LaunchedEffect
         val positions = vehiclePositions
@@ -1284,7 +1332,9 @@ fun PlanScreen(
 
             val markerColor = LineColorHelper.getColorForLineString(line.lineName)
             val markerType = getVehicleMarkerType(line.lineName)
-            val iconName = "vehicle-marker-line-${markerType.name.lowercase()}-${Integer.toHexString(markerColor)}"
+            val iconName = "vehicle-marker-line-${markerType.name.lowercase()}-${
+                Integer.toHexString(markerColor)
+            }"
             ensureVehicleMarkerImage(
                 mapStyle = style,
                 context = context,
@@ -1295,14 +1345,15 @@ fun PlanScreen(
             )
 
             // Add symbol layer with bus marker
-            val symbolLayer = SymbolLayer("vehicle-positions-layer", "vehicle-positions-source").apply {
-                setProperties(
-                    PropertyFactory.iconImage(iconName),
-                    PropertyFactory.iconSize(1.0f),
-                    PropertyFactory.iconAllowOverlap(true),
-                    PropertyFactory.iconIgnorePlacement(true)
-                )
-            }
+            val symbolLayer =
+                SymbolLayer("vehicle-positions-layer", "vehicle-positions-source").apply {
+                    setProperties(
+                        PropertyFactory.iconImage(iconName),
+                        PropertyFactory.iconSize(1.0f),
+                        PropertyFactory.iconAllowOverlap(true),
+                        PropertyFactory.iconIgnorePlacement(true)
+                    )
+                }
             style.addLayer(symbolLayer)
         }
     }
@@ -1335,7 +1386,9 @@ fun PlanScreen(
                     val markerType = getVehicleMarkerType(vehicle.lineName)
                     val cacheKey = "${markerType.name}-${lineColor}"
                     val iconName = iconCache.getOrPut(cacheKey) {
-                        val name = "global-vehicle-marker-${markerType.name.lowercase()}-${Integer.toHexString(lineColor)}"
+                        val name = "global-vehicle-marker-${markerType.name.lowercase()}-${
+                            Integer.toHexString(lineColor)
+                        }"
                         ensureVehicleMarkerImage(
                             mapStyle = style,
                             context = context,
@@ -1373,7 +1426,10 @@ fun PlanScreen(
             val source = GeoJsonSource("global-vehicle-positions-source", vehiclesGeoJson)
             style.addSource(source)
 
-            val symbolLayer = SymbolLayer("global-vehicle-positions-layer", "global-vehicle-positions-source").apply {
+            val symbolLayer = SymbolLayer(
+                "global-vehicle-positions-layer",
+                "global-vehicle-positions-source"
+            ).apply {
                 setProperties(
                     PropertyFactory.iconImage(Expression.get("icon")),
                     PropertyFactory.iconSize(0.85f),
@@ -1444,7 +1500,8 @@ fun PlanScreen(
 
                 if ((currentSheetState == SheetContentState.LINE_DETAILS || currentSheetState == SheetContentState.ALL_SCHEDULES) && currentSelectedLine != null) {
                     val selectedName = currentSelectedLine.lineName
-                    val hasSelectedInState = lines.any { it.properties.ligne.equals(selectedName, ignoreCase = true) }
+                    val hasSelectedInState =
+                        lines.any { it.properties.ligne.equals(selectedName, ignoreCase = true) }
 
                     if (!hasSelectedInState && isMetroTramOrFunicular(selectedName)) {
                         viewModel.reloadStrongLines()
@@ -1452,7 +1509,8 @@ fun PlanScreen(
 
                     filterMapLines(map, lines, currentSelectedLine.lineName)
 
-                    val selectedStopName = currentSelectedLine.currentStationName.takeIf { it.isNotBlank() }
+                    val selectedStopName =
+                        currentSelectedLine.currentStationName.takeIf { it.isNotBlank() }
                     when (val stopsState = filterState.stopsUiState) {
                         is TransportStopsUiState.Success -> {
                             filterMapStopsWithSelectedStop(
@@ -1470,6 +1528,7 @@ fun PlanScreen(
                                 zoomToLine(map, lines, currentSelectedLine.lineName)
                             }
                         }
+
                         else -> {}
                     }
                 } else if (currentSheetState == SheetContentState.ITINERARY) {
@@ -1523,6 +1582,7 @@ fun PlanScreen(
                 allSchedulesInfo = null
                 sheetContentState = SheetContentState.LINE_DETAILS
             }
+
             SheetContentState.ITINERARY -> {
                 sheetContentState = null
                 itineraryInitialStopName = null
@@ -1567,7 +1627,7 @@ fun PlanScreen(
 
     val stationCollapsedPeekHeight = bottomPadding + 300.dp
     val itineraryCollapsedPeekHeight = bottomPadding + 100.dp
-    val peekHeight = when(sheetContentState) {
+    val peekHeight = when (sheetContentState) {
         SheetContentState.LINE_DETAILS -> stationCollapsedPeekHeight
         SheetContentState.ALL_SCHEDULES -> stationCollapsedPeekHeight
         SheetContentState.STATION -> stationCollapsedPeekHeight
@@ -1589,14 +1649,16 @@ fun PlanScreen(
                     .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                when(sheetContentState) {
+                when (sheetContentState) {
                     SheetContentState.LINE_DETAILS -> {
                         if (selectedLine != null) {
                             LineDetailsSheetContent(
                                 lineInfo = selectedLine!!,
                                 viewModel = viewModel,
                                 selectedDirection = selectedDirection,
-                                onDirectionChange = { newDirection -> selectedDirection = newDirection },
+                                onDirectionChange = { newDirection ->
+                                    selectedDirection = newDirection
+                                },
                                 onBackToStation = {
                                     selectedLine?.let { lineInfo ->
                                         val lineName = lineInfo.lineName
@@ -1606,11 +1668,12 @@ fun PlanScreen(
                                     }
 
                                     if (selectedStation != null) {
-                                        requestedSheetValueForNextContent = if (isSheetExpandedOrExpanding) {
-                                            SheetValue.Expanded
-                                        } else {
-                                            SheetValue.PartiallyExpanded
-                                        }
+                                        requestedSheetValueForNextContent =
+                                            if (isSheetExpandedOrExpanding) {
+                                                SheetValue.Expanded
+                                            } else {
+                                                SheetValue.PartiallyExpanded
+                                            }
                                         selectedLine = null
                                         sheetContentState = SheetContentState.STATION
                                     } else {
@@ -1635,7 +1698,8 @@ fun PlanScreen(
                                         scope.launch {
                                             viewModel.addLineToLoaded(lineName)
                                             if (isTemporaryBus(lineName)) {
-                                                temporaryLoadedBusLines = temporaryLoadedBusLines + lineName
+                                                temporaryLoadedBusLines =
+                                                    temporaryLoadedBusLines + lineName
                                             }
                                             delay(100)
                                             sheetContentState = SheetContentState.LINE_DETAILS
@@ -1654,9 +1718,15 @@ fun PlanScreen(
 
                                     // Keep station state aligned with the last stop selected from line details,
                                     // so Back returns to this stop instead of the initial one.
-                                    val matchingStop = (stopsUiState as? TransportStopsUiState.Success)
-                                        ?.stops
-                                        ?.find { it.properties.nom.equals(stopName, ignoreCase = true) }
+                                    val matchingStop =
+                                        (stopsUiState as? TransportStopsUiState.Success)
+                                            ?.stops
+                                            ?.find {
+                                                it.properties.nom.equals(
+                                                    stopName,
+                                                    ignoreCase = true
+                                                )
+                                            }
                                     selectedStation = if (matchingStop != null) {
                                         StationInfo(
                                             nom = matchingStop.properties.nom,
@@ -1680,11 +1750,12 @@ fun PlanScreen(
                                     }
                                 },
                                 onShowAllSchedules = { lineName, directionName, schedules ->
-                                    requestedSheetValueForNextContent = if (isSheetExpandedOrExpanding) {
-                                        SheetValue.Expanded
-                                    } else {
-                                        SheetValue.PartiallyExpanded
-                                    }
+                                    requestedSheetValueForNextContent =
+                                        if (isSheetExpandedOrExpanding) {
+                                            SheetValue.Expanded
+                                        } else {
+                                            SheetValue.PartiallyExpanded
+                                        }
                                     allSchedulesInfo = AllSchedulesInfo(
                                         lineName = lineName,
                                         directionName = directionName,
@@ -1701,8 +1772,11 @@ fun PlanScreen(
                                     itineraryNearbyDepartureStops = emptyList()
                                     itineraryInitialStopName = stopName
                                     scope.launch {
-                                        val raptorStops = viewModel.raptorRepository.searchStopsByName(stopName)
-                                        itineraryArrivalStop = SelectedStop(name = stopName, stopIds = raptorStops.map { it.id })
+                                        val raptorStops =
+                                            viewModel.raptorRepository.searchStopsByName(stopName)
+                                        itineraryArrivalStop = SelectedStop(
+                                            name = stopName,
+                                            stopIds = raptorStops.map { it.id })
                                         itineraryArrivalQuery = stopName
                                         sheetContentState = SheetContentState.ITINERARY
                                     }
@@ -1718,6 +1792,7 @@ fun PlanScreen(
                             )
                         }
                     }
+
                     SheetContentState.STATION -> {
                         if (selectedStation != null) {
                             StationSheetContent(
@@ -1734,7 +1809,7 @@ fun PlanScreen(
                                     viewModel.resetLineDetailState()
                                     val shouldKeepExpanded =
                                         scaffoldSheetState.bottomSheetState.currentValue == SheetValue.Expanded ||
-                                            scaffoldSheetState.bottomSheetState.targetValue == SheetValue.Expanded
+                                                scaffoldSheetState.bottomSheetState.targetValue == SheetValue.Expanded
                                     requestedSheetValueForNextContent = if (shouldKeepExpanded) {
                                         SheetValue.Expanded
                                     } else {
@@ -1753,7 +1828,8 @@ fun PlanScreen(
                                         scope.launch {
                                             viewModel.addLineToLoaded(lineName)
                                             if (isTemporaryBus(lineName)) {
-                                                temporaryLoadedBusLines = temporaryLoadedBusLines + lineName
+                                                temporaryLoadedBusLines =
+                                                    temporaryLoadedBusLines + lineName
                                             }
                                             delay(100)
                                             sheetContentState = SheetContentState.LINE_DETAILS
@@ -1762,8 +1838,17 @@ fun PlanScreen(
                                         sheetContentState = SheetContentState.LINE_DETAILS
                                     }
                                 },
-                                isFavoriteStop = favoriteStops.any { it.equals(selectedStation!!.nom, ignoreCase = true) },
-                                onToggleFavoriteStop = { viewModel.toggleFavoriteStop(selectedStation!!.nom) },
+                                isFavoriteStop = favoriteStops.any {
+                                    it.equals(
+                                        selectedStation!!.nom,
+                                        ignoreCase = true
+                                    )
+                                },
+                                onToggleFavoriteStop = {
+                                    viewModel.toggleFavoriteStop(
+                                        selectedStation!!.nom
+                                    )
+                                },
                                 onAddFavoriteClick = { stopName ->
                                     addFavoriteInitialStopName = stopName
                                     showAddFavoriteDialog = true
@@ -1782,8 +1867,11 @@ fun PlanScreen(
                                     itineraryNearbyDepartureStops = emptyList()
                                     itineraryInitialStopName = stopName
                                     scope.launch {
-                                        val raptorStops = viewModel.raptorRepository.searchStopsByName(stopName)
-                                        itineraryArrivalStop = SelectedStop(name = stopName, stopIds = raptorStops.map { it.id })
+                                        val raptorStops =
+                                            viewModel.raptorRepository.searchStopsByName(stopName)
+                                        itineraryArrivalStop = SelectedStop(
+                                            name = stopName,
+                                            stopIds = raptorStops.map { it.id })
                                         itineraryArrivalQuery = stopName
                                         sheetContentState = SheetContentState.ITINERARY
                                     }
@@ -1791,12 +1879,14 @@ fun PlanScreen(
                             )
                         }
                     }
+
                     SheetContentState.ALL_SCHEDULES -> {
                         if (allSchedulesInfo != null) {
                             val schedulesForCurrentDirection =
                                 allSchedules.ifEmpty { allSchedulesInfo!!.schedules }
                             val resolvedAllSchedulesInfo = allSchedulesInfo!!.copy(
-                                directionName = headsigns[selectedDirection] ?: allSchedulesInfo!!.directionName,
+                                directionName = headsigns[selectedDirection]
+                                    ?: allSchedulesInfo!!.directionName,
                                 schedules = schedulesForCurrentDirection
                             )
                             val allSchedulesDirections =
@@ -1814,27 +1904,30 @@ fun PlanScreen(
                                 headsigns = allSchedulesHeadsigns,
                                 onDirectionChange = { newDirection ->
                                     selectedDirection = newDirection
-                                    selectedLine?.currentStationName?.takeIf { it.isNotBlank() }?.let { stopName ->
-                                        scope.launch {
-                                            viewModel.loadSchedulesForDirection(
-                                                lineName = selectedLine!!.lineName,
-                                                stopName = stopName,
-                                                directionId = newDirection
-                                            )
+                                    selectedLine?.currentStationName?.takeIf { it.isNotBlank() }
+                                        ?.let { stopName ->
+                                            scope.launch {
+                                                viewModel.loadSchedulesForDirection(
+                                                    lineName = selectedLine!!.lineName,
+                                                    stopName = stopName,
+                                                    directionId = newDirection
+                                                )
+                                            }
                                         }
-                                    }
                                 },
                                 onBack = {
-                                    requestedSheetValueForNextContent = if (isSheetExpandedOrExpanding) {
-                                        SheetValue.Expanded
-                                    } else {
-                                        SheetValue.PartiallyExpanded
-                                    }
+                                    requestedSheetValueForNextContent =
+                                        if (isSheetExpandedOrExpanding) {
+                                            SheetValue.Expanded
+                                        } else {
+                                            SheetValue.PartiallyExpanded
+                                        }
                                     sheetContentState = SheetContentState.LINE_DETAILS
                                 }
                             )
                         }
                     }
+
                     SheetContentState.ITINERARY -> {
                         InlineItinerarySheetContent(
                             viewModel = viewModel,
@@ -1866,6 +1959,7 @@ fun PlanScreen(
                             }
                         )
                     }
+
                     null -> {}
                 }
             }
@@ -1961,11 +2055,14 @@ fun PlanScreen(
             }
 
             // Unified LIVE button (global when no selected bus line, line-specific otherwise)
-            val isLineContext = sheetContentState == SheetContentState.LINE_DETAILS || sheetContentState == SheetContentState.ALL_SCHEDULES
+            val isLineContext =
+                sheetContentState == SheetContentState.LINE_DETAILS || sheetContentState == SheetContentState.ALL_SCHEDULES
             // When a sheet is open, place controls where favorites row usually sits.
             val controlsTopPadding = if (sheetContentState != null) 100.dp else 146.dp
-            val selectedTrackableLineName = selectedLine?.lineName?.takeIf { isLineContext && isLiveTrackableLine(it) }
-            val hasSelectedNotTrackableLine = selectedLine?.lineName?.let { isLineContext && !isLiveTrackableLine(it) } == true
+            val selectedTrackableLineName =
+                selectedLine?.lineName?.takeIf { isLineContext && isLiveTrackableLine(it) }
+            val hasSelectedNotTrackableLine =
+                selectedLine?.lineName?.let { isLineContext && !isLiveTrackableLine(it) } == true
             val showLiveButton = !isOffline && !hasSelectedNotTrackableLine
 
             if (sheetContentState != SheetContentState.ITINERARY) {
@@ -1979,110 +2076,114 @@ fun PlanScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                Button(
-                    onClick = { isMapStyleMenuExpanded = true },
-                    border = if (isDarkMatterStyle && !isSearchExpanded) BorderStroke(1.dp, Color.Gray) else null,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Black
-                    ),
-                    shape = CircleShape,
-                    elevation = ButtonDefaults.buttonElevation(
-                        defaultElevation = 4.dp
-                    ),
-                    contentPadding = PaddingValues(
-                        top = 6.dp,
-                        bottom = 6.dp
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Layers,
-                        contentDescription = "Layers",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                AnimatedVisibility(
-                    visible = showLiveButton,
-                    enter = fadeIn(),
-                    exit = fadeOut()
-                ) {
-                    val isLiveModeEnabled = isLiveTrackingEnabled || isGlobalLiveEnabled
-                    val hasVehicles = when {
-                        isLiveTrackingEnabled -> vehiclePositions.isNotEmpty()
-                        isGlobalLiveEnabled -> globalVehiclePositions.isNotEmpty()
-                        else -> false
-                    }
-                    val isActiveNoVehicles = isLiveModeEnabled && !hasVehicles
-
-                    // Animation for the bouncing dot (goes up and down)
-                    val infiniteTransition = rememberInfiniteTransition(label = "live_dot")
-                    val dotOffset by infiniteTransition.animateFloat(
-                        initialValue = if (hasVehicles) -2f else 0f,
-                        targetValue = if (hasVehicles) 2f else 0f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(400),
-                            repeatMode = RepeatMode.Reverse
-                        ),
-                        label = "dot_bounce"
-                    )
-
-                    val buttonColor = when {
-                        hasVehicles -> Color(0xFFEF4444) // Red when active with vehicles
-                        isActiveNoVehicles -> Color(0xFF9CA3AF) // Gray when active but no vehicles
-                        else -> Color.Black // Black when inactive
-                    }
-                    val showLiveBorder = isDarkMatterStyle && buttonColor == Color.Black && !isSearchExpanded
                     Button(
-                        onClick = {
-                            if (isLiveModeEnabled) {
-                                if (isLiveTrackingEnabled) {
-                                    viewModel.stopLiveTracking()
-                                }
-                                if (isGlobalLiveEnabled) {
-                                    viewModel.stopGlobalLive()
-                                }
-                            } else {
-                                selectedTrackableLineName?.let { lineName ->
-                                    viewModel.startLiveTracking(lineName)
-                                } ?: viewModel.toggleGlobalLive()
-                            }
-                        },
-                        border = if (showLiveBorder) BorderStroke(1.dp, Color.Gray) else null,
+                        onClick = { isMapStyleMenuExpanded = true },
+                        border = if (isDarkMatterStyle && !isSearchExpanded) BorderStroke(
+                            1.dp,
+                            Color.Gray
+                        ) else null,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = buttonColor
+                            containerColor = Color.Black
                         ),
-                        shape = RoundedCornerShape(20.dp),
+                        shape = CircleShape,
                         elevation = ButtonDefaults.buttonElevation(
                             defaultElevation = 4.dp
                         ),
                         contentPadding = PaddingValues(
-                            start = 15.dp,
-                            end = 16.dp,
-                            top = 8.dp,
-                            bottom = 8.dp
+                            top = 6.dp,
+                            bottom = 6.dp
                         )
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Always show dot, animate when active with vehicles
-                            Canvas(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .graphicsLayer { translationY = dotOffset }
-                            ) {
-                                drawCircle(color = Color.White)
-                            }
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "LIVE",
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
+                        Icon(
+                            imageVector = Icons.Filled.Layers,
+                            contentDescription = "Layers",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    AnimatedVisibility(
+                        visible = showLiveButton,
+                        enter = fadeIn(),
+                        exit = fadeOut()
+                    ) {
+                        val isLiveModeEnabled = isLiveTrackingEnabled || isGlobalLiveEnabled
+                        val hasVehicles = when {
+                            isLiveTrackingEnabled -> vehiclePositions.isNotEmpty()
+                            isGlobalLiveEnabled -> globalVehiclePositions.isNotEmpty()
+                            else -> false
+                        }
+                        val isActiveNoVehicles = isLiveModeEnabled && !hasVehicles
+
+                        // Animation for the bouncing dot (goes up and down)
+                        val infiniteTransition = rememberInfiniteTransition(label = "live_dot")
+                        val dotOffset by infiniteTransition.animateFloat(
+                            initialValue = if (hasVehicles) -2f else 0f,
+                            targetValue = if (hasVehicles) 2f else 0f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(400),
+                                repeatMode = RepeatMode.Reverse
+                            ),
+                            label = "dot_bounce"
+                        )
+
+                        val buttonColor = when {
+                            hasVehicles -> Color(0xFFEF4444) // Red when active with vehicles
+                            isActiveNoVehicles -> Color(0xFF9CA3AF) // Gray when active but no vehicles
+                            else -> Color.Black // Black when inactive
+                        }
+                        val showLiveBorder =
+                            isDarkMatterStyle && buttonColor == Color.Black && !isSearchExpanded
+                        Button(
+                            onClick = {
+                                if (isLiveModeEnabled) {
+                                    if (isLiveTrackingEnabled) {
+                                        viewModel.stopLiveTracking()
+                                    }
+                                    if (isGlobalLiveEnabled) {
+                                        viewModel.stopGlobalLive()
+                                    }
+                                } else {
+                                    selectedTrackableLineName?.let { lineName ->
+                                        viewModel.startLiveTracking(lineName)
+                                    } ?: viewModel.toggleGlobalLive()
+                                }
+                            },
+                            border = if (showLiveBorder) BorderStroke(1.dp, Color.Gray) else null,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = buttonColor
+                            ),
+                            shape = RoundedCornerShape(20.dp),
+                            elevation = ButtonDefaults.buttonElevation(
+                                defaultElevation = 4.dp
+                            ),
+                            contentPadding = PaddingValues(
+                                start = 15.dp,
+                                end = 16.dp,
+                                top = 8.dp,
+                                bottom = 8.dp
                             )
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Always show dot, animate when active with vehicles
+                                Canvas(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .graphicsLayer { translationY = dotOffset }
+                                ) {
+                                    drawCircle(color = Color.White)
+                                }
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "LIVE",
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
                         }
                     }
-                }
                 }
             }
 
@@ -2274,7 +2375,12 @@ fun PlanScreen(
                                 is TransportLinesUiState.PartialSuccess -> currentState.lines
                                 else -> emptyList()
                             }
-                            val isLoaded = currentLines.any { it.properties.ligne.equals(lineName, ignoreCase = true) }
+                            val isLoaded = currentLines.any {
+                                it.properties.ligne.equals(
+                                    lineName,
+                                    ignoreCase = true
+                                )
+                            }
 
                             if (!isLoaded) {
                                 viewModel.addLineToLoaded(lineName)
@@ -2479,7 +2585,7 @@ private fun filterMapLines(
         allLines.forEach { feature ->
             val ligne = feature.properties.ligne
             val codeTrace = feature.properties.codeTrace
-            
+
             val individualLayerId = "layer-${ligne}-${codeTrace}"
             style.getLayer(individualLayerId)?.let { layer ->
                 val shouldBeVisible = ligne.equals(selectedLineName, ignoreCase = true)
@@ -2489,7 +2595,8 @@ private fun filterMapLines(
             }
         }
     }
-    val visibleCandidates = allLines.count { it.properties.ligne.equals(selectedLineName, ignoreCase = true) }
+    val visibleCandidates =
+        allLines.count { it.properties.ligne.equals(selectedLineName, ignoreCase = true) }
     return visibleCandidates
 }
 
@@ -2526,7 +2633,13 @@ private fun zoomToLine(
     val paddingBottom = 600
 
     map.animateCamera(
-        CameraUpdateFactory.newLatLngBounds(bounds, paddingLeft, paddingTop, paddingRight, paddingBottom),
+        CameraUpdateFactory.newLatLngBounds(
+            bounds,
+            paddingLeft,
+            paddingTop,
+            paddingRight,
+            paddingBottom
+        ),
         1000
     )
 }
@@ -2790,7 +2903,7 @@ private fun hideMapLines(
             .filter { it.startsWith("layer-") }
             .forEach { layerId ->
                 style.getLayer(layerId)?.setProperties(PropertyFactory.visibility("none"))
-        }
+            }
 
         style.getLayer("line-stops-circles")?.let { style.removeLayer(it) }
         style.getSource("line-stops-circles-source")?.let { style.removeSource(it) }
@@ -3044,7 +3157,6 @@ private fun addLineToMap(
 }
 
 
-
 // Holder for the current map click listener to allow removal before adding a new one
 private var currentMapClickListener: MapLibreMap.OnMapClickListener? = null
 
@@ -3155,7 +3267,8 @@ private suspend fun addStopsToMap(
                     viewModel?.getIconBitmap(iconName)?.let { return@mapNotNull iconName to it }
 
                     try {
-                        val resourceId = BusIconHelper.getResourceIdForDrawableName(context, iconName)
+                        val resourceId =
+                            BusIconHelper.getResourceIdForDrawableName(context, iconName)
                         if (resourceId != 0) {
                             val drawable = ContextCompat.getDrawable(context, resourceId)
                             drawable?.let { d ->
@@ -3313,19 +3426,22 @@ private suspend fun addStopsToMap(
                     // Check clusters first
                     val clusterFeatures = map.queryRenderedFeatures(screenPoint, "clusters")
                     if (clusterFeatures.isNotEmpty()) {
-                        val cameraUpdate = CameraUpdateFactory.newLatLngZoom(point, map.cameraPosition.zoom + 2)
+                        val cameraUpdate =
+                            CameraUpdateFactory.newLatLngZoom(point, map.cameraPosition.zoom + 2)
                         map.animateCamera(cameraUpdate)
                         return@OnMapClickListener true
                     }
 
                     // In global LIVE mode, clicking a vehicle opens its line details.
-                    val globalVehicleFeatures = map.queryRenderedFeatures(screenPoint, "global-vehicle-positions-layer")
+                    val globalVehicleFeatures =
+                        map.queryRenderedFeatures(screenPoint, "global-vehicle-positions-layer")
                     if (globalVehicleFeatures.isNotEmpty()) {
                         val feature = globalVehicleFeatures.first()
                         val props = feature.properties()
                         if (props != null) {
                             try {
-                                val lineName = if (props.has("lineName")) props.get("lineName").asString else ""
+                                val lineName =
+                                    if (props.has("lineName")) props.get("lineName").asString else ""
                                 if (lineName.isNotEmpty()) {
                                     onLineClick(lineName)
                                     return@OnMapClickListener true
@@ -3338,7 +3454,11 @@ private suspend fun addStopsToMap(
 
                     // Check individual stops first (higher priority than lines)
                     val interactableLayers = usedSlots.flatMap { idx ->
-                        listOf("$priorityLayerPrefix-$idx", "$tramLayerPrefix-$idx", "$secondaryLayerPrefix-$idx")
+                        listOf(
+                            "$priorityLayerPrefix-$idx",
+                            "$tramLayerPrefix-$idx",
+                            "$secondaryLayerPrefix-$idx"
+                        )
                     }.toTypedArray()
 
                     val stopFeatures = map.queryRenderedFeatures(screenPoint, *interactableLayers)
@@ -3347,8 +3467,10 @@ private suspend fun addStopsToMap(
                         val props = feature.properties()
                         if (props != null) {
                             try {
-                                val stopName = if (props.has("nom")) props.get("nom").asString else ""
-                                val lignesJson = if (props.has("lignes")) props.get("lignes").asString else "[]"
+                                val stopName =
+                                    if (props.has("nom")) props.get("nom").asString else ""
+                                val lignesJson =
+                                    if (props.has("lignes")) props.get("lignes").asString else "[]"
 
                                 val lignes = try {
                                     val jsonArray = JsonParser.parseString(lignesJson).asJsonArray
@@ -3378,7 +3500,7 @@ private suspend fun addStopsToMap(
                         screenPoint.x + hitboxPadding,
                         screenPoint.y + hitboxPadding
                     )
-                    
+
                     // Query all-lines-layer and individual line layers
                     // Get all layer IDs that could contain line features
                     val currentStyle = map.style
@@ -3388,15 +3510,17 @@ private suspend fun addStopsToMap(
                             allLineLayerIds.add(layer.id)
                         }
                     }
-                    
-                    val lineFeatures = map.queryRenderedFeatures(lineHitbox, *allLineLayerIds.toTypedArray())
-                    
+
+                    val lineFeatures =
+                        map.queryRenderedFeatures(lineHitbox, *allLineLayerIds.toTypedArray())
+
                     if (lineFeatures.isNotEmpty()) {
                         val feature = lineFeatures.first()
                         val props = feature.properties()
                         if (props != null) {
                             try {
-                                val lineName = if (props.has("ligne")) props.get("ligne").asString else ""
+                                val lineName =
+                                    if (props.has("ligne")) props.get("ligne").asString else ""
                                 if (lineName.isNotEmpty()) {
                                     onLineClick(lineName)
                                     return@OnMapClickListener true
@@ -3408,7 +3532,7 @@ private suspend fun addStopsToMap(
                     }
                     false
                 }
-                
+
                 currentMapClickListener = clickListener
                 map.addOnMapClickListener(clickListener)
             }

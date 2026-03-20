@@ -76,7 +76,8 @@ private fun WidgetContent(context: Context) {
     val lineName = prefs[PeloWidget.PREF_LINE_NAME]
     val directionId = prefs[PeloWidget.PREF_DIRECTION_ID] ?: 0
     val desserte = prefs[PeloWidget.PREF_DESSERTE] ?: ""
-    val widgetStyle = WidgetStyle.fromId(prefs[PeloWidget.PREF_WIDGET_STYLE]) ?: WidgetStyle.ALL_LINES_MINUTES
+    val widgetStyle =
+        WidgetStyle.fromId(prefs[PeloWidget.PREF_WIDGET_STYLE]) ?: WidgetStyle.ALL_LINES_MINUTES
 
     // Request enough departures to fill tall widgets; RemoteViews will clip overflow.
     val size = LocalSize.current
@@ -177,7 +178,7 @@ private fun WidgetContent(context: Context) {
             if (departures.isEmpty()) {
                 item {
                     Box(
-                        modifier = GlanceModifier.fillMaxWidth().padding(bottom=6.dp),
+                        modifier = GlanceModifier.fillMaxWidth().padding(bottom = 6.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -256,7 +257,10 @@ private fun DepartureRow(
             text = when {
                 timeDisplayMode == TimeDisplayMode.CLOCK -> formatDepartureTime(departure.time)
                 departure.minutesUntil == 0L -> "< 1 min"
-                departure.minutesUntil >= 60 -> "${departure.minutesUntil / 60}h${(departure.minutesUntil % 60).toString().padStart(2, '0')}min"
+                departure.minutesUntil >= 60 -> "${departure.minutesUntil / 60}h${
+                    (departure.minutesUntil % 60).toString().padStart(2, '0')
+                }min"
+
                 else -> "${departure.minutesUntil} min"
             },
             style = TextStyle(

@@ -2,7 +2,7 @@ package com.pelotcl.app.data.gtfs
 
 import android.content.Context
 import android.util.LruCache
-import com.pelotcl.app.data.repository.RaptorRepository
+import com.pelotcl.app.data.repository.raptor.RaptorRepository
 import com.pelotcl.app.ui.components.LineSearchResult
 import com.pelotcl.app.ui.components.StationSearchResult
 

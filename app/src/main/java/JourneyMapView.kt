@@ -22,7 +22,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
-import com.pelotcl.app.data.repository.JourneyResult
+import com.pelotcl.app.data.repository.raptor.JourneyResult
 import com.pelotcl.app.data.repository.MapStyleRepository
 import com.pelotcl.app.utils.LineColorHelper
 import org.maplibre.android.MapLibre

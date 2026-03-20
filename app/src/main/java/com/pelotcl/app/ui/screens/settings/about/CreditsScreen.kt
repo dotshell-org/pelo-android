@@ -1,4 +1,4 @@
-package com.pelotcl.app.ui.screens
+package com.pelotcl.app.ui.screens.settings.about
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -62,7 +63,7 @@ fun CreditsScreen(
         containerColor = Color.Black
     ) { paddingValues ->
         val uriHandler = LocalUriHandler.current
-        
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -112,7 +113,7 @@ fun CreditsScreen(
                 lineHeight = 20.sp,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
-            
+
             Column(modifier = Modifier.padding(bottom = 16.dp)) {
                 ClickableLink(
                     label = "data.grandlyon.com",
@@ -126,7 +127,7 @@ fun CreditsScreen(
                     uriHandler = uriHandler
                 )
             }
-            
+
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
@@ -149,7 +150,7 @@ fun CreditsScreen(
                 lineHeight = 20.sp,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
-            
+
             Column(modifier = Modifier.padding(bottom = 16.dp)) {
                 ClickableLink(
                     label = "maplibre.org",
@@ -229,7 +230,7 @@ fun CreditsScreen(
 private fun ClickableLink(
     label: String,
     url: String,
-    uriHandler: androidx.compose.ui.platform.UriHandler,
+    uriHandler: UriHandler,
     modifier: Modifier = Modifier
 ) {
     Row(

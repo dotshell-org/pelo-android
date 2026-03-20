@@ -62,14 +62,14 @@ import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.data.repository.SearchHistoryItem
 import com.pelotcl.app.data.repository.SearchType
 import com.pelotcl.app.data.repository.MapStyle
-import com.pelotcl.app.ui.screens.AboutScreen
-import com.pelotcl.app.ui.screens.ContactScreen
-import com.pelotcl.app.ui.screens.CreditsScreen
-import com.pelotcl.app.ui.screens.LegalScreen
+import com.pelotcl.app.ui.screens.settings.about.AboutScreen
+import com.pelotcl.app.ui.screens.settings.about.ContactScreen
+import com.pelotcl.app.ui.screens.settings.about.CreditsScreen
+import com.pelotcl.app.ui.screens.settings.about.LegalScreen
 import com.pelotcl.app.ui.screens.PlanScreen
-import com.pelotcl.app.ui.screens.ItinerarySettingsScreen
-import com.pelotcl.app.ui.screens.OfflineSettingsScreen
-import com.pelotcl.app.ui.screens.SettingsScreen
+import com.pelotcl.app.ui.screens.settings.ItinerarySettingsScreen
+import com.pelotcl.app.ui.screens.settings.OfflineSettingsScreen
+import com.pelotcl.app.ui.screens.settings.SettingsScreen
 import com.pelotcl.app.ui.theme.PeloTheme
 import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
@@ -104,7 +104,8 @@ class MainActivity : ComponentActivity() {
                     cache.preloadFromDisk()
                 }
                 val schedulesJob = launch {
-                    val schedulesRepo = com.pelotcl.app.data.gtfs.SchedulesRepository.getInstance(applicationContext)
+                    val schedulesRepo =
+                        com.pelotcl.app.data.gtfs.SchedulesRepository.getInstance(applicationContext)
                     schedulesRepo.warmupDatabase()
                 }
                 // Wait for cache and schedule data warmup (critical for UI)
@@ -145,7 +146,10 @@ class MainActivity : ComponentActivity() {
             // yield() gives the UI thread priority without an arbitrary delay
             kotlinx.coroutines.yield()
             try {
-                val raptorRepo = com.pelotcl.app.data.repository.RaptorRepository.getInstance(applicationContext)
+                val raptorRepo =
+                    com.pelotcl.app.data.repository.raptor.RaptorRepository.getInstance(
+                        applicationContext
+                    )
                 raptorRepo.initialize()
                 raptorRepo.preloadJourneyCache()
             } catch (e: Exception) {
@@ -226,7 +230,7 @@ fun NavBar(modifier: Modifier = Modifier) {
         }
     }
     val viewModel: TransportViewModel = viewModel(factory = viewModelFactory)
-    
+
     var currentMapStyle by remember { mutableStateOf(MapStyle.POSITRON) }
     var isSearchExpanded by remember { mutableStateOf(false) }
     var stopOptionsSelectedStop by remember { mutableStateOf<StationSearchResult?>(null) }
@@ -235,7 +239,7 @@ fun NavBar(modifier: Modifier = Modifier) {
     val stopsUiState by viewModel.stopsUiState.collectAsState()
     val userFavorites by viewModel.userFavorites.collectAsState()
     var showAddFavoriteDialog by remember { mutableStateOf(false) }
-    
+
     LaunchedEffect(favoriteStops, stopsUiState) {
         val stops = (stopsUiState as? TransportStopsUiState.Success)?.stops
         favoriteStopItems = favoriteStops.map { stopName ->
@@ -248,19 +252,19 @@ fun NavBar(modifier: Modifier = Modifier) {
             )
         }
     }
-    
+
     // User location for itinerary (continuously updated)
     var userLocation by remember { mutableStateOf<LatLng?>(null) }
-    
+
     // Fused location client for continuous updates
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
     // Itinerary destination stop
     var itineraryDestinationStop by remember { mutableStateOf<String?>(null) }
     var isItineraryModeActive by remember { mutableStateOf(false) }
-    
+
     val scope = rememberCoroutineScope()
-    
+
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -394,7 +398,10 @@ fun NavBar(modifier: Modifier = Modifier) {
                                     )
                                     if (currentRoute in settingsSubRoutes) {
                                         // Pop back to Settings root
-                                        navController.popBackStack(Destination.PARAMETRES.route, false)
+                                        navController.popBackStack(
+                                            Destination.PARAMETRES.route,
+                                            false
+                                        )
                                     } else if (selectedDestination != index) {
                                         selectedDestination = index
                                         showLinesSheet = false
@@ -456,7 +463,7 @@ fun NavBar(modifier: Modifier = Modifier) {
                         isItineraryModeActive = active
                     }
                 )
-                
+
                 // Settings screens - displayed on top when on settings tab
                 if (selectedDestination == Destination.PARAMETRES.ordinal) {
                     AppNavHost(
@@ -469,21 +476,21 @@ fun NavBar(modifier: Modifier = Modifier) {
                     )
                 }
             }
-            
+
         }
 
         // UI Overlays - Search Bar at top, favorites row (with create button) below it
         // LIVE button remains in PlanScreen for proper integration with map controls
-        
+
         // Calculate UI element positions - declared outside if blocks for shared access
         val searchBarHeight = 56.dp // Standard Material 3 search bar height
         val addFavoriteButtonHeight = 40.dp // Favorites row height approximation
         val spacingBetweenElements = 4.dp // Spacing between UI elements
-        
+
         // Position calculations:
         // Favorites row sits below search bar and contains the create button + favorites chips
         val favoritesBarTopPosition = searchBarHeight + 38.dp
-        
+
         // Search Bar - keep visible on Plan, including when station/line detail sheets are open.
         if (selectedDestination == Destination.PLAN.ordinal && !showLinesSheet && itineraryDestinationStop == null && !isItineraryModeActive) {
             Box(

@@ -15,9 +15,10 @@ import java.util.concurrent.TimeUnit
  * Singleton object to create and provide the Retrofit instance with HTTP caching
  */
 object RetrofitInstance {
-    
+
     private const val BASE_URL = "https://data.grandlyon.com/"
-    private const val CACHE_SIZE = 50L * 1024 * 1024 // 50 MB for better caching of large WFS GeoJSON payloads
+    private const val CACHE_SIZE =
+        50L * 1024 * 1024 // 50 MB for better caching of large WFS GeoJSON payloads
     private const val CACHE_MAX_AGE_MINUTES = 30 // Cache validity for online requests
     private const val CACHE_MAX_STALE_DAYS = 7 // Use stale cache for up to 7 days when offline
 

@@ -1,5 +1,6 @@
-package com.pelotcl.app.ui.screens
+package com.pelotcl.app.ui.screens.settings
 
+import android.content.pm.PackageManager
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -50,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.activity.compose.BackHandler
 import android.os.Build
+import com.pelotcl.app.R
 import kotlinx.coroutines.delay
 
 @Composable
@@ -74,7 +76,7 @@ fun SettingsScreen(
             val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 packageManager.getPackageInfo(
                     context.packageName,
-                    android.content.pm.PackageManager.PackageInfoFlags.of(0)
+                    PackageManager.PackageInfoFlags.of(0)
                 )
             } else {
                 @Suppress("DEPRECATION")
@@ -85,7 +87,7 @@ fun SettingsScreen(
             "0.0.0"
         }
     }
-    
+
     // Reset click count after 2 seconds
     LaunchedEffect(clickCount) {
         if (clickCount > 0) {
@@ -93,7 +95,7 @@ fun SettingsScreen(
             if (clickCount < 3) clickCount = 0
         }
     }
-    
+
     // Auto-disable easter egg after 10 seconds
     LaunchedEffect(isEasterEggActive) {
         if (isEasterEggActive) {
@@ -131,7 +133,7 @@ fun SettingsScreen(
             )
 
             Image(
-                painter = painterResource(id = com.pelotcl.app.R.drawable.ic_launcher_foreground),
+                painter = painterResource(id = R.drawable.ic_launcher_foreground),
                 contentDescription = "Logo Pelo",
                 modifier = Modifier
                     .size(200.dp)

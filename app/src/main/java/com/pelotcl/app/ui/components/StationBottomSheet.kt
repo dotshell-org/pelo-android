@@ -130,16 +130,16 @@ private fun sortLines(lines: List<String>): List<String> {
     return lines
         .filter { !it.equals("T36", ignoreCase = true) }
         .sortedWith(Comparator { a, b ->
-        val ka = keyFor(a)
-        val kb = keyFor(b)
-        // Compare by family, then prefix/subFamily, then numeric part, finally raw label
-        when {
-            ka.family != kb.family -> ka.family - kb.family
-            ka.subFamily != kb.subFamily -> ka.subFamily.compareTo(kb.subFamily)
-            ka.number != kb.number -> ka.number - kb.number
-            else -> ka.raw.compareTo(kb.raw)
-        }
-    })
+            val ka = keyFor(a)
+            val kb = keyFor(b)
+            // Compare by family, then prefix/subFamily, then numeric part, finally raw label
+            when {
+                ka.family != kb.family -> ka.family - kb.family
+                ka.subFamily != kb.subFamily -> ka.subFamily.compareTo(kb.subFamily)
+                ka.number != kb.number -> ka.number - kb.number
+                else -> ka.raw.compareTo(kb.raw)
+            }
+        })
 }
 
 /**
@@ -305,7 +305,9 @@ fun StationBottomSheet(
                     Button(
                         onClick = { onAddFavoriteClick(stationInfo.nom) },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isFavoriteStop) Color(0xFFD1D5DB) else Color(0xFFE5E7EB),
+                            containerColor = if (isFavoriteStop) Color(0xFFD1D5DB) else Color(
+                                0xFFE5E7EB
+                            ),
                             contentColor = Color(0xFF374151)
                         )
                     ) {
@@ -323,7 +325,7 @@ fun StationBottomSheet(
 
                     Spacer(modifier = Modifier.size(actionsInset))
                 }
-                
+
                 // Scrollable list of lines (sorted)
                 Column(
                     modifier = Modifier
@@ -356,10 +358,16 @@ fun StationBottomSheet(
 
                         val sortedDepartures = remember(departures, lineOrder) {
                             departures.sortedWith(
-                                compareBy<TransportViewModel.StopDeparturePreview> { minutesUntilDeparture(it.nextDeparture) }
+                                compareBy<TransportViewModel.StopDeparturePreview> {
+                                    minutesUntilDeparture(
+                                        it.nextDeparture
+                                    )
+                                }
                                     .thenBy { lineOrder[it.lineName.uppercase()] ?: Int.MAX_VALUE }
                                     .thenBy { it.directionId }
-                                    .thenBy { parseDepartureToMinutes(it.nextDeparture) ?: Int.MAX_VALUE }
+                                    .thenBy {
+                                        parseDepartureToMinutes(it.nextDeparture) ?: Int.MAX_VALUE
+                                    }
                             )
                         }
 
@@ -392,7 +400,7 @@ fun StationBottomSheet(
                 }
             }
         }
-        
+
         // If sheetState is provided, wrap in ModalBottomSheet, otherwise show content directly
         if (sheetState != null) {
             ModalBottomSheet(

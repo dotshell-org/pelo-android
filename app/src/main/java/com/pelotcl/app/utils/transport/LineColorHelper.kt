@@ -7,7 +7,7 @@ import androidx.core.graphics.toColorInt
  * Utilitaire pour déterminer la couleur d'une ligne de transport selon son type
  */
 object LineColorHelper {
-    
+
     // Defined colors
     private const val METRO_A_COLOR = "#EC4899"
     private const val METRO_B_COLOR = "#3B82F6"
@@ -19,10 +19,10 @@ object LineColorHelper {
     private const val BUS_COLOR = "#EF4444"
     private const val TRAMBUS_COLOR = "#eab308"
     private const val TRAMBUS_TB12_COLOR = "#92400e"
-    
+
     /**
      * Retourne la couleur hexadécimale appropriée pour une ligne de transport
-     * 
+     *
      * @param feature La feature contenant les informations de la ligne
      * @return La couleur en format hexadécimal (#RRGGBB)
      */
@@ -30,12 +30,12 @@ object LineColorHelper {
         val ligne = feature.properties.ligne
         val familleTransport = feature.properties.familleTransport
         val nomTypeLigne = feature.properties.nomTypeLigne?.lowercase()
-        
+
         // Safe null checks for all conditions - return default bus color if any property is null
         if (ligne == null || familleTransport == null) {
             return BUS_COLOR
         }
-        
+
         return when {
             // Rhône Express
             ligne.equals("RX", ignoreCase = true) -> "#E30613"
@@ -48,24 +48,25 @@ object LineColorHelper {
             ligne == "B" && familleTransport == "MET" -> METRO_B_COLOR
             ligne == "C" && familleTransport == "MET" -> METRO_C_COLOR
             ligne == "D" && familleTransport == "MET" -> METRO_D_COLOR
-            
+
             // Funicular (detection by line name or type)
             ligne == "F1" || ligne == "F2" || nomTypeLigne?.contains("funiculaire") == true -> FUNICULAR_COLOR
-            
+
             // Navigone (water shuttle) - famille_transport = "BAT" (bateau)
-            familleTransport == "BAT" || ligne.uppercase().startsWith("NAV") || nomTypeLigne?.contains("fluvial") == true -> NAVIGONE_COLOR
-            
+            familleTransport == "BAT" || ligne.uppercase()
+                .startsWith("NAV") || nomTypeLigne?.contains("fluvial") == true -> NAVIGONE_COLOR
+
             // Trams (famille TRA ou TRAM)
             familleTransport == "TRA" || familleTransport == "TRAM" -> TRAM_COLOR
-            
+
             // Bus (tout le reste, famille BUS)
             else -> BUS_COLOR
         }
     }
-    
+
     /**
      * Retourne la couleur appropriée pour une ligne à partir de son nom
-     * 
+     *
      * @param lineName Le nom de la ligne (ex: "A", "B", "T1", "C3", etc.)
      * @return La couleur en format android.graphics.Color
      */

@@ -117,11 +117,18 @@ fun LinesBottomSheet(
     }
 
     // Observe traffic alerts from ViewModel
-    val trafficAlerts by viewModel?.trafficAlerts?.collectAsState() ?: remember { mutableStateOf(emptyMap()) }
+    val trafficAlerts by viewModel?.trafficAlerts?.collectAsState() ?: remember {
+        mutableStateOf(
+            emptyMap()
+        )
+    }
 
     // Compute a map of alerts for all lines to be used by Chips
     val lineAlerts = remember(trafficAlerts, allLines) {
-        Log.d("AlertCheck", "Recomputing lineAlerts map. trafficAlerts size: ${trafficAlerts.size}, allLines size: ${allLines.size}")
+        Log.d(
+            "AlertCheck",
+            "Recomputing lineAlerts map. trafficAlerts size: ${trafficAlerts.size}, allLines size: ${allLines.size}"
+        )
         if (viewModel != null && allLines.isNotEmpty()) {
             val alertsMap = mutableMapOf<String, TrafficAlertSeverity>()
             allLines.forEach { lineName ->
@@ -228,6 +235,7 @@ fun LinesBottomSheet(
                             )
                         }
                     }
+
                     is LineRowItem -> {
                         // Row of line chips
                         Row(
@@ -429,7 +437,10 @@ private fun hasLineIcon(lineName: String, context: android.content.Context): Boo
 /**
  * Organises lines by category and filters those which haven't icon.
  */
-private fun categorizeLines(lines: List<String>, context: android.content.Context): Map<String, List<String>> {
+private fun categorizeLines(
+    lines: List<String>,
+    context: android.content.Context
+): Map<String, List<String>> {
     // First filter lines that don't have icons
     val linesWithIcon = lines.filter { hasLineIcon(it, context) }
 
@@ -451,8 +462,14 @@ private fun categorizeLines(lines: List<String>, context: android.content.Contex
         val upperLine = line.uppercase()
         when {
             upperLine in setOf("A", "B", "C", "D") -> metros.add(line)
-            upperLine.startsWith("F") && (upperLine == "F1" || upperLine == "F2") -> funiculaires.add(line)
-            upperLine.startsWith("TB") || upperLine == "RX" || upperLine.contains("RHON") -> trams.add(line)
+            upperLine.startsWith("F") && (upperLine == "F1" || upperLine == "F2") -> funiculaires.add(
+                line
+            )
+
+            upperLine.startsWith("TB") || upperLine == "RX" || upperLine.contains("RHON") -> trams.add(
+                line
+            )
+
             upperLine.startsWith("T") && upperLine.length == 2 -> trams.add(line)
             upperLine.startsWith("C") && upperLine.length >= 2 -> chrono.add(line)
             upperLine.startsWith("PL") -> pleineLune.add(line)
@@ -462,7 +479,10 @@ private fun categorizeLines(lines: List<String>, context: android.content.Contex
             upperLine.startsWith("S") -> soyeuses.add(line)
             upperLine.startsWith("ZI") -> zi.add(line)
             upperLine.startsWith("N") -> navettes.add(line)
-            upperLine.length >= 3 && upperLine != "128" && upperLine.isDigitsOnly() -> carsDuRhone.add(line)
+            upperLine.length >= 3 && upperLine != "128" && upperLine.isDigitsOnly() -> carsDuRhone.add(
+                line
+            )
+
             else -> bus.add(line)
         }
     }

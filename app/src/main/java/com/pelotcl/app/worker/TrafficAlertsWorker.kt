@@ -13,12 +13,12 @@ class TrafficAlertsWorker(
     context: Context,
     params: WorkerParameters
 ) : CoroutineWorker(context, params) {
-    
+
     companion object {
         private const val TAG = "TrafficAlertsWorker"
 
     }
-    
+
     private val trafficAlertsRepository = TrafficAlertsRepository(applicationContext)
 
     override suspend fun doWork(): Result {
@@ -40,11 +40,11 @@ class TrafficAlertsWorker(
             Result.retry()
         }
     }
-    
+
     private fun filterValidAlerts(alerts: List<TrafficAlert>): List<TrafficAlert> {
         val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
         val now = LocalDateTime.now()
-        
+
         return alerts.filter { alert ->
             try {
                 val endDate = LocalDateTime.parse(alert.endDate, dateFormatter)

@@ -98,7 +98,10 @@ class OfflineRepository(private val context: Context) {
      */
     suspend fun saveBusLinesPage(lines: List<Feature>) = withContext(Dispatchers.IO) {
         val safeLines = lines.sanitizeForSerialization()
-        Log.d(TAG, "saveBusLinesPage: ${lines.size} features, busDir=${busDir.absolutePath}, exists=${busDir.exists()}")
+        Log.d(
+            TAG,
+            "saveBusLinesPage: ${lines.size} features, busDir=${busDir.absolutePath}, exists=${busDir.exists()}"
+        )
         val grouped = safeLines.groupBy { it.properties.ligne.uppercase() }
         var savedCount = 0
         for ((lineName, features) in grouped) {
@@ -108,13 +111,17 @@ class OfflineRepository(private val context: Context) {
                 if (file.exists()) {
                     // Append: read existing, merge, rewrite
                     try {
-                        val existingJson = GZIPInputStream(FileInputStream(file).buffered()).use { gzip ->
-                            gzip.bufferedReader(Charsets.UTF_8).readText()
-                        }
+                        val existingJson =
+                            GZIPInputStream(FileInputStream(file).buffered()).use { gzip ->
+                                gzip.bufferedReader(Charsets.UTF_8).readText()
+                            }
                         val existing = json.decodeFromString<List<Feature>>(existingJson)
                         writeCompressedTo(file, existing + features)
                     } catch (e: Exception) {
-                        Log.w(TAG, "Failed to read existing $safeFileName, overwriting: ${e.message}")
+                        Log.w(
+                            TAG,
+                            "Failed to read existing $safeFileName, overwriting: ${e.message}"
+                        )
                         writeCompressedTo(file, features)
                     }
                 } else {
@@ -126,7 +133,10 @@ class OfflineRepository(private val context: Context) {
             }
         }
         val filesOnDisk = busDir.listFiles()?.size ?: 0
-        Log.d(TAG, "Saved page: ${grouped.size} lines, ${lines.size} features, saved=$savedCount, filesOnDisk=$filesOnDisk")
+        Log.d(
+            TAG,
+            "Saved page: ${grouped.size} lines, ${lines.size} features, saved=$savedCount, filesOnDisk=$filesOnDisk"
+        )
     }
 
     suspend fun saveNavigoneLines(lines: List<Feature>) =
@@ -160,7 +170,8 @@ class OfflineRepository(private val context: Context) {
     suspend fun loadBusLineByName(lineName: String): List<Feature>? = withContext(Dispatchers.IO) {
         try {
             // Try per-line file first (new format)
-            val safeFileName = lineName.uppercase().replace(Regex("[^A-Za-z0-9_-]"), "_") + ".json.gz"
+            val safeFileName =
+                lineName.uppercase().replace(Regex("[^A-Za-z0-9_-]"), "_") + ".json.gz"
             val file = File(busDir, safeFileName)
             if (file.exists()) {
                 val jsonString = GZIPInputStream(FileInputStream(file).buffered()).use { gzip ->
@@ -174,9 +185,10 @@ class OfflineRepository(private val context: Context) {
             if (legacyFile.exists()) {
                 Log.d(TAG, "Migrating legacy bus_lines.json.gz to per-line format...")
                 try {
-                    val allBusJson = GZIPInputStream(FileInputStream(legacyFile).buffered()).use { gzip ->
-                        gzip.bufferedReader(Charsets.UTF_8).readText()
-                    }
+                    val allBusJson =
+                        GZIPInputStream(FileInputStream(legacyFile).buffered()).use { gzip ->
+                            gzip.bufferedReader(Charsets.UTF_8).readText()
+                        }
                     val allBus = json.decodeFromString<List<Feature>>(allBusJson)
                     // Save as per-line files
                     val grouped = allBus.groupBy { it.properties.ligne.uppercase() }
@@ -245,9 +257,15 @@ class OfflineRepository(private val context: Context) {
         val navigone = loadNavigoneLines() ?: emptyList()
         val trambus = loadTrambusLines() ?: emptyList()
         val rx = loadRxLines() ?: emptyList()
-        Log.d(TAG, "loadAllLines: metro=${metro.size}, tram=${tram.size}, navigone=${navigone.size}, trambus=${trambus.size}, rx=${rx.size}")
+        Log.d(
+            TAG,
+            "loadAllLines: metro=${metro.size}, tram=${tram.size}, navigone=${navigone.size}, trambus=${trambus.size}, rx=${rx.size}"
+        )
         if (trambus.isEmpty()) {
-            Log.w(TAG, "loadAllLines: trambus_lines.json.gz missing! You need to re-download offline data with the latest version.")
+            Log.w(
+                TAG,
+                "loadAllLines: trambus_lines.json.gz missing! You need to re-download offline data with the latest version."
+            )
         }
         return metro + tram + navigone + trambus + rx
     }
@@ -258,7 +276,7 @@ class OfflineRepository(private val context: Context) {
         prefs.edit {
             putLong(KEY_LAST_DOWNLOAD, System.currentTimeMillis())
                 .putInt(KEY_DATA_VERSION, DATA_VERSION)
-            }
+        }
     }
 
     fun getDownloadedMapStyles(): Set<String> {
@@ -267,7 +285,7 @@ class OfflineRepository(private val context: Context) {
         // Migration: if old boolean was true, assume positron was downloaded
         if (prefs.getBoolean(KEY_MAP_TILES_DOWNLOADED, false)) {
             val migrated = setOf("positron")
-            prefs.edit { putStringSet(KEY_DOWNLOADED_MAP_STYLES, migrated)}
+            prefs.edit { putStringSet(KEY_DOWNLOADED_MAP_STYLES, migrated) }
             return migrated
         }
         return emptySet()
@@ -277,7 +295,7 @@ class OfflineRepository(private val context: Context) {
         prefs.edit {
             putStringSet(KEY_DOWNLOADED_MAP_STYLES, styles)
                 .putBoolean(KEY_MAP_TILES_DOWNLOADED, styles.isNotEmpty())
-            }
+        }
     }
 
     fun getSelectedMapStyles(): Set<String> {
@@ -285,7 +303,7 @@ class OfflineRepository(private val context: Context) {
     }
 
     fun setSelectedMapStyles(styles: Set<String>) {
-        prefs.edit { putStringSet(KEY_SELECTED_MAP_STYLES, styles)}
+        prefs.edit { putStringSet(KEY_SELECTED_MAP_STYLES, styles) }
     }
 
     fun getOfflineDataInfo(): OfflineDataInfo {
@@ -295,9 +313,17 @@ class OfflineRepository(private val context: Context) {
 
         val busFiles = busDir.listFiles()
         val busCount = busFiles?.count { it.name.endsWith(".json.gz") } ?: 0
-        Log.d(TAG, "getOfflineDataInfo: busDir=${busDir.absolutePath}, exists=${busDir.exists()}, busFiles=${busFiles?.size ?: "null"}, busCount=$busCount, lastDownload=$lastDownload")
+        Log.d(
+            TAG,
+            "getOfflineDataInfo: busDir=${busDir.absolutePath}, exists=${busDir.exists()}, busFiles=${busFiles?.size ?: "null"}, busCount=$busCount, lastDownload=$lastDownload"
+        )
         if (busCount > 0) {
-            Log.d(TAG, "Bus files sample: ${busFiles?.take(5)?.map { "${it.name} (${it.length()} bytes)" }}")
+            Log.d(
+                TAG,
+                "Bus files sample: ${
+                    busFiles?.take(5)?.map { "${it.name} (${it.length()} bytes)" }
+                }"
+            )
         }
 
         return OfflineDataInfo(
@@ -334,7 +360,11 @@ class OfflineRepository(private val context: Context) {
                 }
                 Log.d(TAG, "Wrote ${file.name}: ${file.length()} bytes")
             } catch (e: Exception) {
-                Log.e(TAG, "FAILED writing to ${file.name}: ${e.javaClass.simpleName}: ${e.message}", e)
+                Log.e(
+                    TAG,
+                    "FAILED writing to ${file.name}: ${e.javaClass.simpleName}: ${e.message}",
+                    e
+                )
             }
         }
 

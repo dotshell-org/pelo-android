@@ -11,10 +11,10 @@ import retrofit2.http.Query
  * Retrofit interface for Grand Lyon's WFS API
  */
 interface GrandLyonApi {
-    
+
     /**
      * Retrieves TCL metro/funicular lines from Grand Lyon's WFS API
-     * 
+     *
      * @param service Service type (WFS)
      * @param version WFS protocol version (2.0.0)
      * @param request Request type (GetFeature)
@@ -124,7 +124,7 @@ interface GrandLyonApi {
 
     /**
      * Retrieves TCL transport stops from Grand Lyon's WFS API
-     * 
+     *
      * @param service Service type (WFS)
      * @param version WFS protocol version (2.0.0)
      * @param request Request type (GetFeature)

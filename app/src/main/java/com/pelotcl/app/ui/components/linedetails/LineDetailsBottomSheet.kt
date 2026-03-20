@@ -1,4 +1,4 @@
-package com.pelotcl.app.ui.components
+package com.pelotcl.app.ui.components.linedetails
 
 import android.os.Build
 import android.util.Log
@@ -189,7 +189,11 @@ fun LineDetailsBottomSheet(
     var lineStops by remember(lineKey) { mutableStateOf<List<LineStopInfo>>(emptyList()) }
     var isLoading by remember(lineKey) { mutableStateOf(true) }
     val alertsKey = lineInfo?.lineName
-    var lineAlerts by remember(alertsKey) { mutableStateOf<List<com.pelotcl.app.data.model.TrafficAlert>>(emptyList()) }
+    var lineAlerts by remember(alertsKey) {
+        mutableStateOf<List<com.pelotcl.app.data.model.TrafficAlert>>(
+            emptyList()
+        )
+    }
 
     // Cleanup when lineInfo changes or component leaves composition
     DisposableEffect(lineKey) {
@@ -213,7 +217,11 @@ fun LineDetailsBottomSheet(
             try {
                 lineAlerts = viewModel.getAlertsForLine(lineInfo.lineName)
             } catch (e: Exception) {
-                Log.e("LineDetailsBottomSheet", "Error loading alerts for line ${lineInfo.lineName}", e)
+                Log.e(
+                    "LineDetailsBottomSheet",
+                    "Error loading alerts for line ${lineInfo.lineName}",
+                    e
+                )
             }
         }
     }
@@ -226,15 +234,22 @@ fun LineDetailsBottomSheet(
             is TransportLinesUiState.Success -> (linesState as TransportLinesUiState.Success).lines
                 .map { it.properties.ligne.uppercase() }
                 .toSet()
+
             is TransportLinesUiState.PartialSuccess -> (linesState as TransportLinesUiState.PartialSuccess).lines
                 .map { it.properties.ligne.uppercase() }
                 .toSet()
+
             else -> emptySet()
         }
     }
 
     // Load stops when lineInfo, loadedLineNames, or selectedDirection changes
-    LaunchedEffect(lineInfo?.lineName, lineInfo?.currentStationName, loadedLineNames, selectedDirection) {
+    LaunchedEffect(
+        lineInfo?.lineName,
+        lineInfo?.currentStationName,
+        loadedLineNames,
+        selectedDirection
+    ) {
         if (lineInfo != null) {
             isLoading = true
             // Toujours tenter de charger les arrêts, même si la ligne n'est pas encore
@@ -303,15 +318,21 @@ fun LineDetailsBottomSheet(
             ) {
                 // Fixed Header
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp),
                     horizontalArrangement = Arrangement.Start,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = onBackToStation) {
-                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to station", tint = Gray700)
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back to station",
+                            tint = Gray700
+                        )
                     }
                     Spacer(modifier = Modifier.width(8.dp))
-                    
+
                     // Central header (line icon + station name)
                     Row(
                         modifier = Modifier
@@ -319,7 +340,8 @@ fun LineDetailsBottomSheet(
                             .padding(vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        val resourceId = BusIconHelper.getResourceIdForLine(context, lineInfo.lineName)
+                        val resourceId =
+                            BusIconHelper.getResourceIdForLine(context, lineInfo.lineName)
                         Box(
                             modifier = Modifier.size(50.dp),
                             contentAlignment = Alignment.Center
@@ -454,7 +476,11 @@ fun LineDetailsBottomSheet(
         }
 
         if (sheetState != null) {
-            ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = Color.White) {
+            ModalBottomSheet(
+                onDismissRequest = onDismiss,
+                sheetState = sheetState,
+                containerColor = Color.White
+            ) {
                 content()
             }
         } else {
@@ -566,7 +592,9 @@ private fun TrafficAlertsSection(
                 androidx.compose.material3.HorizontalDivider(
                     color = Color.LightGray,
                     thickness = 1.dp,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 14.dp)
                 )
             }
         }
@@ -714,7 +742,9 @@ private fun NextSchedulesSection(
     val lineColor = getLineColor(lineInfo.lineName)
 
     Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         if (availableDirections.isNotEmpty()) {
@@ -817,7 +847,11 @@ private fun NextSchedulesSection(
 
                 Spacer(modifier = Modifier.weight(1f))
 
-                Icon(imageVector = Icons.Default.ChevronRight, contentDescription = "See all", tint = Gray700)
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = "See all",
+                    tint = Gray700
+                )
             }
         }
     }
@@ -835,20 +869,46 @@ private fun StopItemWithLine(
     isFavorite: Boolean = false
 ) {
     Row(
-        modifier = modifier.fillMaxWidth().padding(vertical = 4.dp).height(IntrinsicSize.Min).clickable { onStopClick() },
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .height(IntrinsicSize.Min)
+            .clickable { onStopClick() },
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(modifier = Modifier.width(40.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier
+            .width(40.dp)
+            .fillMaxHeight(), contentAlignment = Alignment.Center) {
             if (!isFirst) {
-                Box(modifier = Modifier.width(4.dp).height(35.dp).offset(y = (-16).dp).background(lineColor).align(Alignment.Center))
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .height(35.dp)
+                        .offset(y = (-16).dp)
+                        .background(lineColor)
+                        .align(Alignment.Center)
+                )
             }
             if (!isLast) {
-                Box(modifier = Modifier.width(4.dp).height(35.dp).offset(y = (16).dp).background(lineColor).align(Alignment.Center))
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .height(35.dp)
+                        .offset(y = (16).dp)
+                        .background(lineColor)
+                        .align(Alignment.Center)
+                )
             }
             Box(
-                modifier = Modifier.size(16.dp).clip(CircleShape)
+                modifier = Modifier
+                    .size(16.dp)
+                    .clip(CircleShape)
                     .background(if (stop.isCurrentStop) lineColor else Color.White)
-                    .border(width = if (stop.isCurrentStop) 0.dp else 3.dp, color = lineColor, shape = CircleShape)
+                    .border(
+                        width = if (stop.isCurrentStop) 0.dp else 3.dp,
+                        color = lineColor,
+                        shape = CircleShape
+                    )
             )
         }
 
@@ -863,7 +923,9 @@ private fun StopItemWithLine(
         }
 
         Row(
-            modifier = Modifier.weight(1f).padding(start = 12.dp),
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -911,7 +973,9 @@ private fun ConnectionBadge(
     val resourceId = BusIconHelper.getResourceIdForLine(context, lineName)
 
     val modifier = if (onClick != null) {
-        Modifier.size(size).clickable { onClick() }
+        Modifier
+            .size(size)
+            .clickable { onClick() }
     } else {
         Modifier.size(size)
     }

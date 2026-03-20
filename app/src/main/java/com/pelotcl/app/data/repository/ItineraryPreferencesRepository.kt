@@ -21,7 +21,7 @@ class ItineraryPreferencesRepository(private val context: Context) {
      */
     fun isJdLinesEnabled(): Boolean {
         if (!prefs.contains(keyEnableJDLines)) {
-            prefs.edit { putBoolean(keyEnableJDLines, true)}
+            prefs.edit { putBoolean(keyEnableJDLines, true) }
         }
         return prefs.getBoolean(keyEnableJDLines, true)
     }
@@ -30,7 +30,7 @@ class ItineraryPreferencesRepository(private val context: Context) {
      * Enable or disable Junior Direct (JD) lines in routing.
      */
     fun setJdLinesEnabled(enabled: Boolean) {
-        prefs.edit { putBoolean(keyEnableJDLines, enabled)}
+        prefs.edit { putBoolean(keyEnableJDLines, enabled) }
     }
 
     /**
@@ -39,7 +39,7 @@ class ItineraryPreferencesRepository(private val context: Context) {
      */
     fun isRxLineEnabled(): Boolean {
         if (!prefs.contains(keyEnableRXLine)) {
-            prefs.edit { putBoolean(keyEnableRXLine, true)}
+            prefs.edit { putBoolean(keyEnableRXLine, true) }
         }
         return prefs.getBoolean(keyEnableRXLine, true)
     }
@@ -54,24 +54,24 @@ class ItineraryPreferencesRepository(private val context: Context) {
     /**
      * Get set of route name patterns to block based on user preferences.
      * Returns patterns that can be used with blockedRouteNames parameter.
-     * 
+     *
      * raptor-kt will block any route whose name starts with these patterns,
      * so "JD" will block all JD lines (JD2, JD3, JD844, etc.)
      */
     fun getBlockedRoutePatterns(): Set<String> {
         val blocked = mutableSetOf<String>()
-        
+
         if (!isJdLinesEnabled()) {
             // Block all JD lines - raptor-kt will match any route starting with "JD"
             for (i in 2..999) {
                 blocked.add("JD$i")
             }
         }
-        
+
         if (!isRxLineEnabled()) {
             blocked.add("RX")
         }
-        
+
         return blocked
     }
 }

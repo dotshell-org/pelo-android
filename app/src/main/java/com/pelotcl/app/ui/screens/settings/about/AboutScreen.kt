@@ -1,4 +1,4 @@
-package com.pelotcl.app.ui.screens
+package com.pelotcl.app.ui.screens.settings.about
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column

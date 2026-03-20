@@ -46,7 +46,7 @@ fun MapLibreView(
             getMapAsync { map ->
                 // Disable map rotation
                 map.uiSettings.isRotateGesturesEnabled = false
-                
+
                 map.setStyle(styleUrl) { style ->
                     // Configuration of initial camera position
                     val targetPosition = if (centerOnUserLocation && userLocation != null) {
@@ -54,18 +54,18 @@ fun MapLibreView(
                     } else {
                         initialPosition
                     }
-                    
+
                     val zoom = if (centerOnUserLocation && userLocation != null) {
                         15.0
                     } else {
                         initialZoom
                     }
-                    
+
                     map.cameraPosition = CameraPosition.Builder()
                         .target(targetPosition)
                         .zoom(zoom)
                         .build()
-                    
+
                     onMapReady(map)
                 }
             }
@@ -101,7 +101,7 @@ fun MapLibreView(
                     // Remove existing user location layer and source if any
                     style.getLayer("user-location-layer")?.let { style.removeLayer(it) }
                     style.getSource("user-location-source")?.let { style.removeSource(it) }
-                    
+
                     // Create GeoJSON for user location
                     val userLocationGeoJson = JsonObject().apply {
                         addProperty("type", "Feature")
@@ -114,23 +114,25 @@ fun MapLibreView(
                         }
                         add("geometry", geometryObject)
                     }.toString()
-                    
+
                     // Add source for user location
-                    val userLocationSource = GeoJsonSource("user-location-source", userLocationGeoJson)
+                    val userLocationSource =
+                        GeoJsonSource("user-location-source", userLocationGeoJson)
                     style.addSource(userLocationSource)
-                    
+
                     // Add a blue circle layer for user location
-                    val userLocationLayer = CircleLayer("user-location-layer", "user-location-source").apply {
-                        setProperties(
-                            PropertyFactory.circleRadius(10f),
-                            PropertyFactory.circleColor("#3B82F6"),
-                            PropertyFactory.circleStrokeWidth(3f),
-                            PropertyFactory.circleStrokeColor("#FFFFFF"),
-                            PropertyFactory.circleOpacity(1.0f)
-                        )
-                    }
+                    val userLocationLayer =
+                        CircleLayer("user-location-layer", "user-location-source").apply {
+                            setProperties(
+                                PropertyFactory.circleRadius(10f),
+                                PropertyFactory.circleColor("#3B82F6"),
+                                PropertyFactory.circleStrokeWidth(3f),
+                                PropertyFactory.circleStrokeColor("#FFFFFF"),
+                                PropertyFactory.circleOpacity(1.0f)
+                            )
+                        }
                     style.addLayer(userLocationLayer)
-                    
+
                     // Center on user location if requested
                     if (centerOnUserLocation) {
                         map.animateCamera(

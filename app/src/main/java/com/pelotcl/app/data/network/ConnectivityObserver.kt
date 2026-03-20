@@ -31,8 +31,10 @@ class ConnectivityObserver(context: Context) {
         }
 
         override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
-            val hasInternet = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            val isValidated = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+            val hasInternet =
+                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            val isValidated =
+                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
             _isOnline.value = hasInternet && isValidated
         }
     }

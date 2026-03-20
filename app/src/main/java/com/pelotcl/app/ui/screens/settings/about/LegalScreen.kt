@@ -1,4 +1,4 @@
-package com.pelotcl.app.ui.screens
+package com.pelotcl.app.ui.screens.settings.about
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -33,67 +33,67 @@ fun LegalScreen(
         LegalSection(
             title = "Éditeur",
             body = "L’Application Pelo est éditée par Dotshell. Dotshell n’est pas affiliée " +
-                "aux TCL ni au SYTRAL. Pour toute question, se référer aux moyens de contact " +
-                "indiqués dans l’Application."
+                    "aux TCL ni au SYTRAL. Pour toute question, se référer aux moyens de contact " +
+                    "indiqués dans l’Application."
         ),
         LegalSection(
             title = "Objet",
             body = "Les présentes CGU définissent les conditions d’accès et d’utilisation de " +
-                "l’Application Pelo (ci‑après « l’Application »). L’utilisation de " +
-                "l’Application vaut acceptation de ces conditions."
+                    "l’Application Pelo (ci‑après « l’Application »). L’utilisation de " +
+                    "l’Application vaut acceptation de ces conditions."
         ),
         LegalSection(
             title = "Description de l’application",
             body = "L’Application aide l’utilisateur à se déplacer dans le réseau TCL (Lyon et " +
-                "agglomération) via des outils de recherche et de planification. Les sources " +
-                "tierces sont listées dans la page « Crédits »."
+                    "agglomération) via des outils de recherche et de planification. Les sources " +
+                    "tierces sont listées dans la page « Crédits »."
         ),
         LegalSection(
             title = "Permissions",
             body = "L’Application peut solliciter les permissions suivantes selon les besoins " +
-                "techniques :\n" +
-                "• Localisation : Pour afficher les arrêts proches (traitée localement).\n" +
-                "• Réseau/Internet : Pour récupérer les horaires en temps réel."
+                    "techniques :\n" +
+                    "• Localisation : Pour afficher les arrêts proches (traitée localement).\n" +
+                    "• Réseau/Internet : Pour récupérer les horaires en temps réel."
         ),
         LegalSection(
             title = "Traitement des données et confidentialité",
             body = "Pelo est conçue selon le principe de la protection des données dès la " +
-                "conception.\n\n" +
-                "5.1. Stockage Local Exclusif\n" +
-                "L'intégralité de vos données d'usage (historique de recherche, paramètres " +
-                "de l'application, préférences d'affichage) est stockée exclusivement en " +
-                "local sur votre appareil. Dotshell ne dispose d'aucun accès à ces " +
-                "informations.\n\n" +
-                "5.2. Cas particulier des Favoris (Connexion Socket)\n" +
-                "Pour permettre la mise à jour en temps réel de vos lignes et arrêts favoris, " +
-                "une connexion technique temporaire (socket) est établie à l'ouverture de " +
-                "l'application et rompue dès sa fermeture.\n" +
-                "• Cet échange est strictement anonyme.\n" +
-                "• Aucune donnée permettant de vous identifier n'est transmise ou enregistrée " +
-                "sur un serveur externe.\n" +
-                "• Ce flux sert uniquement à la synchronisation technique des données de " +
-                "transport durant votre session de navigation.\n\n" +
-                "5.3. Absence de revente\n" +
-                "Dotshell ne collecte, ne vend, ni ne commercialise aucune donnée personnelle. " +
-                "Les requêtes réseau effectuées servent uniquement à interroger les API de " +
-                "transport nécessaires au service (voir page « Crédits »)."
+                    "conception.\n\n" +
+                    "5.1. Stockage Local Exclusif\n" +
+                    "L'intégralité de vos données d'usage (historique de recherche, paramètres " +
+                    "de l'application, préférences d'affichage) est stockée exclusivement en " +
+                    "local sur votre appareil. Dotshell ne dispose d'aucun accès à ces " +
+                    "informations.\n\n" +
+                    "5.2. Cas particulier des Favoris (Connexion Socket)\n" +
+                    "Pour permettre la mise à jour en temps réel de vos lignes et arrêts favoris, " +
+                    "une connexion technique temporaire (socket) est établie à l'ouverture de " +
+                    "l'application et rompue dès sa fermeture.\n" +
+                    "• Cet échange est strictement anonyme.\n" +
+                    "• Aucune donnée permettant de vous identifier n'est transmise ou enregistrée " +
+                    "sur un serveur externe.\n" +
+                    "• Ce flux sert uniquement à la synchronisation technique des données de " +
+                    "transport durant votre session de navigation.\n\n" +
+                    "5.3. Absence de revente\n" +
+                    "Dotshell ne collecte, ne vend, ni ne commercialise aucune donnée personnelle. " +
+                    "Les requêtes réseau effectuées servent uniquement à interroger les API de " +
+                    "transport nécessaires au service (voir page « Crédits »)."
         ),
         LegalSection(
             title = "Responsabilité",
             body = "Les informations (horaires, perturbations) sont fournies à titre indicatif. " +
-                "Dotshell décline toute responsabilité en cas d’inexactitude des données " +
-                "provenant de tiers ou d’indisponibilité du réseau de transport."
+                    "Dotshell décline toute responsabilité en cas d’inexactitude des données " +
+                    "provenant de tiers ou d’indisponibilité du réseau de transport."
         ),
         LegalSection(
             title = "Propriété intellectuelle",
             body = "Le code source de l’Application est distribué sous licence GPL‑3.0. " +
-                "Les marques et logos des réseaux de transport demeurent la propriété " +
-                "de leurs titulaires respectifs."
+                    "Les marques et logos des réseaux de transport demeurent la propriété " +
+                    "de leurs titulaires respectifs."
         ),
         LegalSection(
             title = "Mises à jour",
             body = "Dotshell se réserve le droit de modifier ces CGU. La version applicable est " +
-                "celle disponible dans l'Application au moment de son utilisation."
+                    "celle disponible dans l'Application au moment de son utilisation."
         )
     )
 

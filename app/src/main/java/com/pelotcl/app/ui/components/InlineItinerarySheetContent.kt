@@ -32,7 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.pelotcl.app.data.repository.JourneyResult
+import com.pelotcl.app.data.repository.raptor.JourneyResult
 import com.pelotcl.app.ui.screens.CompactJourneyCard
 import com.pelotcl.app.ui.screens.DatePickerDialog
 import com.pelotcl.app.ui.screens.JourneyDetailsSheetContent

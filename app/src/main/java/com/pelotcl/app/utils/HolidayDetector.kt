@@ -36,7 +36,8 @@ class HolidayDetector(context: Context) {
         for (i in 0 until holidaysArray.length()) {
             val holidayObject = holidaysArray.getJSONObject(i)
             val name = holidayObject.getString("name")
-            val startDate = LocalDate.parse(holidayObject.getString("start_date_inclusive"), formatter)
+            val startDate =
+                LocalDate.parse(holidayObject.getString("start_date_inclusive"), formatter)
             val endDate = if (holidayObject.isNull("end_date_inclusive")) {
                 null
             } else {
@@ -92,7 +93,6 @@ class HolidayDetector(context: Context) {
 
         return date == easterMonday || date == ascensionDay || date == whitMonday
     }
-
 
 
     /**

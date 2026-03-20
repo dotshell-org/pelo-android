@@ -41,6 +41,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.pelotcl.app.ui.components.linedetails.LineInfo
 import com.pelotcl.app.ui.screens.AllSchedulesInfo
 import com.pelotcl.app.ui.theme.Orange500
 import com.pelotcl.app.ui.theme.Red500
@@ -104,19 +105,35 @@ fun AllSchedulesSheetContent(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
-                Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Gray700)
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = Gray700
+                )
             }
             Spacer(modifier = Modifier.width(8.dp))
 
             val resourceId = BusIconHelper.getResourceIdForLine(context, allSchedulesInfo.lineName)
             if (resourceId != 0) {
-                Image(painter = painterResource(id = resourceId), contentDescription = "Line ${allSchedulesInfo.lineName}", modifier = Modifier.size(50.dp))
+                Image(
+                    painter = painterResource(id = resourceId),
+                    contentDescription = "Line ${allSchedulesInfo.lineName}",
+                    modifier = Modifier.size(50.dp)
+                )
             } else {
                 Box(
-                    modifier = Modifier.size(50.dp).clip(CircleShape).background(getLineColor(allSchedulesInfo.lineName)),
+                    modifier = Modifier
+                        .size(50.dp)
+                        .clip(CircleShape)
+                        .background(getLineColor(allSchedulesInfo.lineName)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = allSchedulesInfo.lineName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(
+                        text = allSchedulesInfo.lineName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
                 }
             }
             Spacer(modifier = Modifier.width(12.dp))
@@ -142,7 +159,9 @@ fun AllSchedulesSheetContent(
                     Button(
                         onClick = { onDirectionChange(directionId) },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (selectedDirection == directionId) getLineColor(allSchedulesInfo.lineName) else Color.LightGray,
+                            containerColor = if (selectedDirection == directionId) getLineColor(
+                                allSchedulesInfo.lineName
+                            ) else Color.LightGray,
                             contentColor = if (selectedDirection == directionId) Color.White else Color.DarkGray
                         ),
                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),

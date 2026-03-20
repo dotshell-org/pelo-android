@@ -26,7 +26,8 @@ import java.util.concurrent.TimeUnit
 class VehiclePositionsRepository {
 
     companion object {
-        private const val VEHICLE_POSITIONS_STREAM_URL = "https://api.dotshell.eu/pelo/v1/vehicle-monitoring/positions/stream"
+        private const val VEHICLE_POSITIONS_STREAM_URL =
+            "https://api.dotshell.eu/pelo/v1/vehicle-monitoring/positions/stream"
         private const val MAX_STREAM_BACKOFF_MS = 30_000L
     }
 
@@ -52,7 +53,10 @@ class VehiclePositionsRepository {
             val listener = object : EventSourceListener() {
                 override fun onOpen(eventSource: EventSource, response: Response) {
                     android.util.Log.d("VehiclePositionsRepo", "SSE connected to api.dotshell.eu")
-                    android.util.Log.d("DotshellRequest", "[SSE] Connection established to $VEHICLE_POSITIONS_STREAM_URL")
+                    android.util.Log.d(
+                        "DotshellRequest",
+                        "[SSE] Connection established to $VEHICLE_POSITIONS_STREAM_URL"
+                    )
                 }
 
                 override fun onEvent(
@@ -66,14 +70,24 @@ class VehiclePositionsRepository {
                         return
                     }
 
-                    android.util.Log.d("DotshellRequest", "[SSE] Event received: type=$type, id=$id")
+                    android.util.Log.d(
+                        "DotshellRequest",
+                        "[SSE] Event received: type=$type, id=$id"
+                    )
                     runCatching { parsePositionsEventData(data) }
-                        .onSuccess { 
-                            android.util.Log.d("DotshellRequest", "[SSE] Successfully parsed ${it.size} vehicle positions")
+                        .onSuccess {
+                            android.util.Log.d(
+                                "DotshellRequest",
+                                "[SSE] Successfully parsed ${it.size} vehicle positions"
+                            )
                             trySend(Result.success(it))
                         }
-                        .onFailure { 
-                            android.util.Log.e("DotshellRequest", "[SSE] Failed to parse event data", it)
+                        .onFailure {
+                            android.util.Log.e(
+                                "DotshellRequest",
+                                "[SSE] Failed to parse event data",
+                                it
+                            )
                             trySend(Result.failure(it))
                         }
                 }
@@ -88,12 +102,16 @@ class VehiclePositionsRepository {
                     t: Throwable?,
                     response: Response?
                 ) {
-                    android.util.Log.d("DotshellRequest", "[SSE] Connection closed, will reconnect automatically")
+                    android.util.Log.d(
+                        "DotshellRequest",
+                        "[SSE] Connection closed, will reconnect automatically"
+                    )
                     close(t ?: Exception("Vehicle positions SSE connection closed"))
                 }
             }
 
-            val eventSource = EventSources.createFactory(streamClient).newEventSource(request, listener)
+            val eventSource =
+                EventSources.createFactory(streamClient).newEventSource(request, listener)
             awaitClose { eventSource.cancel() }
         }.retryWhen { cause, attempt ->
             // Ajouter une limite maximale de tentatives (10) pour éviter les boucles infinies
@@ -102,7 +120,9 @@ class VehiclePositionsRepository {
                 return@retryWhen false
             }
 
-            val backoff = (1_000L * (1L shl attempt.coerceAtMost(5).toInt())).coerceAtMost(MAX_STREAM_BACKOFF_MS)
+            val backoff = (1_000L * (1L shl attempt.coerceAtMost(5).toInt())).coerceAtMost(
+                MAX_STREAM_BACKOFF_MS
+            )
             android.util.Log.w(
                 "VehiclePositionsRepo",
                 "SSE disconnected (${cause.message}), reconnecting in ${backoff}ms (attempt $attempt/10)"

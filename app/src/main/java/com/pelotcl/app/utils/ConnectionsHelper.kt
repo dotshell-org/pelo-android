@@ -33,16 +33,16 @@ object ConnectionsHelper {
 
     /**
      * Parses the desserte field and extracts all lines (including bus lines)
-     * 
+     *
      * Desserte field format:
      * - "A:A" = Metro A outbound direction (:A is the direction, not the line!)
      * - "5:A,86:A" = Buses 5 and 86 outbound direction
      * - "A:A,D:A" = Metros A and D
      * - "F1:A,F2:A" = Funiculars F1 and F2
      * - "T1:A,T2:A" = Trams T1 and T2
-     * 
+     *
      * IMPORTANT: Don't confuse ":A" (outbound direction) with metro line A
-     * 
+     *
      * @param desserte The stop's desserte field
      * @return List of all lines present in the desserte
      */

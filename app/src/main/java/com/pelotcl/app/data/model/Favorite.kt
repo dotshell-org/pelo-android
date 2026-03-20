@@ -16,9 +16,18 @@ data class Favorite(
     companion object {
         // Default icons that users can choose from
         val DEFAULT_ICONS = listOf(
-            "home", "work", "school", "shopping", "star", "heart", "bus", "train", "location", "flag"
+            "home",
+            "work",
+            "school",
+            "shopping",
+            "star",
+            "heart",
+            "bus",
+            "train",
+            "location",
+            "flag"
         )
-        
+
         // Default colors
         val DEFAULT_COLORS = listOf(
             "#FF5722", "#E91E63", "#9C27B0", "#673AB7", "#3F51B5",
@@ -26,7 +35,7 @@ data class Favorite(
             "#8BC34A", "#CDDC39", "#FFC107", "#FF9800", "#795548"
         )
     }
-    
+
     fun getIconColorAsColor(): Color {
         return try {
             Color(android.graphics.Color.parseColor(iconColor))

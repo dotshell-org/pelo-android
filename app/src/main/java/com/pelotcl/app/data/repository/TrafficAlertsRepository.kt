@@ -30,13 +30,13 @@ class TrafficAlertsRepository(context: Context) {
                 if (cachedAlerts != null && !isCacheExpired(cachedAlerts.second)) {
                     return@withContext Result.success(cachedAlerts.first)
                 }
-                
+
                 // Fetch from API with retry on transient failures
                 Log.d("TrafficAlertsRepository", "Fetching traffic alerts from API...")
                 val response = withRetry(maxRetries = 2, initialDelayMs = 500) {
                     api.getTrafficAlerts()
                 }
-                
+
                 if (response.success && response.alerts.isNotEmpty()) {
                     // Cache the response
                     cache.saveTrafficAlerts(response.alerts, response.timestamp)
@@ -46,7 +46,11 @@ class TrafficAlertsRepository(context: Context) {
                     try {
                         offlineRepo.saveTrafficAlerts(response.alerts)
                     } catch (e: Exception) {
-                        Log.w("TrafficAlertsRepository", "Failed to persist alerts to offline storage", e)
+                        Log.w(
+                            "TrafficAlertsRepository",
+                            "Failed to persist alerts to offline storage",
+                            e
+                        )
                     }
 
                     Result.success(response.alerts)
@@ -54,18 +58,28 @@ class TrafficAlertsRepository(context: Context) {
                     Result.success(emptyList())
                 }
             } catch (e: Exception) {
-                Log.e("TrafficAlertsRepository", "Error fetching traffic alerts, trying fallbacks", e)
+                Log.e(
+                    "TrafficAlertsRepository",
+                    "Error fetching traffic alerts, trying fallbacks",
+                    e
+                )
                 // Fallback 1: stale cache (any age)
                 val staleAlerts = cache.getTrafficAlertsStale()
                 if (!staleAlerts.isNullOrEmpty()) {
-                    Log.d("TrafficAlertsRepository", "Using stale cached alerts: ${staleAlerts.size}")
+                    Log.d(
+                        "TrafficAlertsRepository",
+                        "Using stale cached alerts: ${staleAlerts.size}"
+                    )
                     return@withContext Result.success(staleAlerts)
                 }
                 // Fallback 2: offline repository
                 try {
                     val offlineAlerts = offlineRepo.loadTrafficAlerts()
                     if (!offlineAlerts.isNullOrEmpty()) {
-                        Log.d("TrafficAlertsRepository", "Using offline alerts: ${offlineAlerts.size}")
+                        Log.d(
+                            "TrafficAlertsRepository",
+                            "Using offline alerts: ${offlineAlerts.size}"
+                        )
                         return@withContext Result.success(offlineAlerts)
                     }
                 } catch (offlineEx: Exception) {
@@ -90,9 +104,10 @@ class TrafficAlertsRepository(context: Context) {
             // Simple parsing - could be improved with proper date parsing
             val cacheTimeMillis = timestamp.toLongOrNull() ?: return true
             val currentTimeMillis = System.currentTimeMillis()
-            
-            val cacheAgeMinutes = TimeUnit.MILLISECONDS.toMinutes(currentTimeMillis - cacheTimeMillis)
-            
+
+            val cacheAgeMinutes =
+                TimeUnit.MILLISECONDS.toMinutes(currentTimeMillis - cacheTimeMillis)
+
             return cacheAgeMinutes > 5 // Cache expires after 5 minutes
         } catch (e: Exception) {
             return true // If we can't parse, consider cache expired

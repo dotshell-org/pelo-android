@@ -5,7 +5,7 @@ package com.pelotcl.app.data.gtfs
  * Avoids parsing the stop_times.txt file (>50MB) each time
  */
 object LineStopsCache {
-    
+
     /**
      * Normalizes a station name for comparison
      * Keeps only letters and converts to lowercase
@@ -13,7 +13,7 @@ object LineStopsCache {
     private fun normalizeStationName(name: String): String {
         return name.filter { it.isLetter() }.lowercase()
     }
-    
+
     /**
      * Normalizes the words of a station name handling abbreviations
      * Ex: "L." becomes "l", "Louis" becomes "louis"
@@ -21,16 +21,16 @@ object LineStopsCache {
      */
     private fun normalizeWords(name: String): List<String> {
         val ignoredWords = setOf("gare", "station", "arret")
-        
+
         return name.split(Regex("[\\s\\-,.]+"))
             .filter { it.isNotEmpty() }
-            .map { word -> 
+            .map { word ->
                 // Remove dots and keep only letters
                 word.filter { it.isLetter() }.lowercase()
             }
             .filter { it.isNotEmpty() && it !in ignoredWords }
     }
-    
+
     /**
      * Compares two station names flexibly
      * Handles abbreviations: "L. Pradel" matches "Louis Pradel"
@@ -40,30 +40,30 @@ object LineStopsCache {
         // First try simple comparison
         val normalized1 = normalizeStationName(name1)
         val normalized2 = normalizeStationName(name2)
-        
+
         if (normalized1 == normalized2) {
             return true
         }
-        
+
         // Then try with separated words to handle abbreviations
         val words1 = normalizeWords(name1)
         val words2 = normalizeWords(name2)
-        
+
         // If one of the two names has fewer words, it might be an abbreviated version
         if (words1.size != words2.size) {
             val shorter = if (words1.size < words2.size) words1 else words2
             val longer = if (words1.size < words2.size) words2 else words1
-            
+
             // Check if all words from the short version match with the long version
             // Either exactly or as beginning of word (for abbreviations)
             // Also handles compound words (ex: "partdieu" matches "part" + "dieu")
             var shorterIndex = 0
             var longerIndex = 0
-            
+
             while (shorterIndex < shorter.size && longerIndex < longer.size) {
                 val shortWord = shorter[shorterIndex]
                 val longWord = longer[longerIndex]
-                
+
                 // Exact match
                 if (shortWord == longWord) {
                     shorterIndex++
@@ -86,7 +86,7 @@ object LineStopsCache {
                     var combinedWord = longWord
                     var tempIndex = longerIndex + 1
                     var matched = false
-                    
+
                     // Try to combine consecutive words to see if we get the short word
                     while (tempIndex < longer.size && combinedWord.length < shortWord.length) {
                         combinedWord += longer[tempIndex]
@@ -99,7 +99,7 @@ object LineStopsCache {
                         }
                         tempIndex++
                     }
-                    
+
                     if (!matched) {
                         // No match, advance in the long version
                         longerIndex++
@@ -110,28 +110,28 @@ object LineStopsCache {
                     longerIndex++
                 }
             }
-            
+
             // If we matched all words from the short version, it's good
             return shorterIndex == shorter.size
         }
-        
+
         // Otherwise, check that all words match in order
         return words1.zip(words2).all { (w1, w2) ->
             w1 == w2 ||
-            (w1.length == 1 && w2.startsWith(w1)) ||
-            (w2.length == 1 && w1.startsWith(w2)) ||
-            (w1.length >= 3 && w2.startsWith(w1)) ||
-            (w2.length >= 3 && w1.startsWith(w2))
+                    (w1.length == 1 && w2.startsWith(w1)) ||
+                    (w2.length == 1 && w1.startsWith(w2)) ||
+                    (w1.length >= 3 && w2.startsWith(w1)) ||
+                    (w2.length >= 3 && w1.startsWith(w2))
         }
 
     }
-    
+
     /**
      * Predefined stops for metro lines
      */
     private val metroStops = mapOf(
         "A" to listOf(
-            "Perrache", "Ampère Victor Hugo", "Bellecour", "Cordeliers", 
+            "Perrache", "Ampère Victor Hugo", "Bellecour", "Cordeliers",
             "Hôtel de Ville L. Pradel", "Foch", "Masséna", "Charpennes Charles Hernu",
             "République Villeurbanne", "Gratte-Ciel", "Flachet - Alain Gilles", "Cusset",
             "Laurent Bonnevay", "Vaulx-en-Velin La Soie"
@@ -159,7 +159,7 @@ object LineStopsCache {
             "Vieux Lyon Cat. St Jean", "Fourvière"
         )
     )
-    
+
     /**
      * Predefined stops for main tram lines
      */
@@ -174,41 +174,125 @@ object LineStopsCache {
             "Musée des Confluences", "Halle Tony Garnier", "ENS Lyon", "Debourg"
         ),
         "T2" to listOf(
-            "Saint-Priest Bel Air", "Cordière", "Saint-Priest Jules Ferry", "Esplanade des Arts",
-            "St-Priest Hôtel de Ville", "Alfred de Vigny", "Salvador Allende", "Hauts de Feuilly",
-            "Parc Technologique", "Porte des Alpes", "Europe - Université", "Rebufer", "Les Alizés",
-            "Bron Hôtel de Ville", "Boutasse - C. Rousset", "Essarts - Iris", "Desgenettes",
-            "Ambroise Paré", "Grange Blanche", "Jean XXIII - M. Bastié", "Bachut - Mairie du 8ème",
-            "Villon", "Jet d'Eau - M. France", "Route de Vienne", "Garibaldi - Berthelot", "Jean Macé",
-            "Centre Berthelot", "Perrache", "Place des Archives", "Sainte-Blandine", "Hôtel Région Montrochet"
+            "Saint-Priest Bel Air",
+            "Cordière",
+            "Saint-Priest Jules Ferry",
+            "Esplanade des Arts",
+            "St-Priest Hôtel de Ville",
+            "Alfred de Vigny",
+            "Salvador Allende",
+            "Hauts de Feuilly",
+            "Parc Technologique",
+            "Porte des Alpes",
+            "Europe - Université",
+            "Rebufer",
+            "Les Alizés",
+            "Bron Hôtel de Ville",
+            "Boutasse - C. Rousset",
+            "Essarts - Iris",
+            "Desgenettes",
+            "Ambroise Paré",
+            "Grange Blanche",
+            "Jean XXIII - M. Bastié",
+            "Bachut - Mairie du 8ème",
+            "Villon",
+            "Jet d'Eau - M. France",
+            "Route de Vienne",
+            "Garibaldi - Berthelot",
+            "Jean Macé",
+            "Centre Berthelot",
+            "Perrache",
+            "Place des Archives",
+            "Sainte-Blandine",
+            "Hôtel Région Montrochet"
         ),
         "T3" to listOf(
-            "Meyzieu les Panettes", "Meyzieu Z.i.", "Meyzieu Lycée Beltrame", "Meyzieu Gare",
-            "Décines Grand Large", "Décines Centre", "Décines Roosevelt", "Vaulx-en-Velin La Soie",
-            "Bel Air - Les Brosses", "Gare de Villeurbanne", "Reconnaissance - Balzac", "Dauphiné - Lacassagne",
-            "Gare Part-Dieu Villette", "Vaulx-en-Velin La Soie"
+            "Meyzieu les Panettes",
+            "Meyzieu Z.i.",
+            "Meyzieu Lycée Beltrame",
+            "Meyzieu Gare",
+            "Décines Grand Large",
+            "Décines Centre",
+            "Décines Roosevelt",
+            "Vaulx-en-Velin La Soie",
+            "Bel Air - Les Brosses",
+            "Gare de Villeurbanne",
+            "Reconnaissance - Balzac",
+            "Dauphiné - Lacassagne",
+            "Gare Part-Dieu Villette",
+            "Vaulx-en-Velin La Soie"
         ),
         "T4" to listOf(
-            "Hôp. Feyzin Vénissieux", "Darnaise", "Lenine - Corsiere", "Maurice Thorez", "Division Leclerc",
-            "Venissy Frida Kahlo", "Herriot - Cagne", "Lycée Jacques Brel", "M. Houël Hôtel de Ville",
-            "Croizat - Paul Bert", "Gare de Vénissieux", "La Borelle", "Joliot-Curie - M. Sembat", "Etats-Unis Viviani",
-            "Beauvisage CISL", "Etats-Unis Tony Garnier", "Lycée Lumière", "Jet d'Eau - M. France", "Lycee Colbert",
-            "Manufacture Montluc", "Archives Departementales", "Gare Part-Dieu Villette", "Thiers - Lafayette",
-            "Collège Bellecombe", "Charpennes Charles Hernu", "Le Tonkin", "Condorcet", "Université Lyon 1",
-            "La Doua - Gaston Berger", "INSA - Einstein", "Croix-Luizet", "IUT Feyssine"
+            "Hôp. Feyzin Vénissieux",
+            "Darnaise",
+            "Lenine - Corsiere",
+            "Maurice Thorez",
+            "Division Leclerc",
+            "Venissy Frida Kahlo",
+            "Herriot - Cagne",
+            "Lycée Jacques Brel",
+            "M. Houël Hôtel de Ville",
+            "Croizat - Paul Bert",
+            "Gare de Vénissieux",
+            "La Borelle",
+            "Joliot-Curie - M. Sembat",
+            "Etats-Unis Viviani",
+            "Beauvisage CISL",
+            "Etats-Unis Tony Garnier",
+            "Lycée Lumière",
+            "Jet d'Eau - M. France",
+            "Lycee Colbert",
+            "Manufacture Montluc",
+            "Archives Departementales",
+            "Gare Part-Dieu Villette",
+            "Thiers - Lafayette",
+            "Collège Bellecombe",
+            "Charpennes Charles Hernu",
+            "Le Tonkin",
+            "Condorcet",
+            "Université Lyon 1",
+            "La Doua - Gaston Berger",
+            "INSA - Einstein",
+            "Croix-Luizet",
+            "IUT Feyssine"
         ),
         "T5" to listOf(
-            "Eurexpo Entrée Princ.", "Chassieu ZAC du Chêne", "Parc du Chêne", "Lycee J.P. Sartre", "De Tassigny - Curial",
-            "Les Alizés", "Bron Hôtel de Ville", "Boutasse - C. Rousset", "Essarts - Iris", "Desgenettes", "Ambroise Paré",
+            "Eurexpo Entrée Princ.",
+            "Chassieu ZAC du Chêne",
+            "Parc du Chêne",
+            "Lycee J.P. Sartre",
+            "De Tassigny - Curial",
+            "Les Alizés",
+            "Bron Hôtel de Ville",
+            "Boutasse - C. Rousset",
+            "Essarts - Iris",
+            "Desgenettes",
+            "Ambroise Paré",
             "Grange Blanche"
         ),
         "T6" to listOf(
-            "Hôpitaux Est - Pinel", "Vinatier", "Desgenettes", "Essarts - Laennec", "Mermoz - Pinel", "Mermoz - Moselle",
-            "Mermoz - Californie", "Grange Rouge - Santy", "Beauvisage CISL", "Beauvisage - Pressensé", "Petite Guille",
-            "Moulin à Vent", "Challemel Lacour Artill.", "Debourg", "Mermoz - Pinel"
+            "Hôpitaux Est - Pinel",
+            "Vinatier",
+            "Desgenettes",
+            "Essarts - Laennec",
+            "Mermoz - Pinel",
+            "Mermoz - Moselle",
+            "Mermoz - Californie",
+            "Grange Rouge - Santy",
+            "Beauvisage CISL",
+            "Beauvisage - Pressensé",
+            "Petite Guille",
+            "Moulin à Vent",
+            "Challemel Lacour Artill.",
+            "Debourg",
+            "Mermoz - Pinel"
         ),
         "T7" to listOf(
-            "Décines OL Vallée", "Décines Grand Large", "Décines Centre", "Décines Roosevelt", "Vaulx-en-Velin La Soie"
+            "Décines OL Vallée",
+            "Décines Grand Large",
+            "Décines Centre",
+            "Décines Roosevelt",
+            "Vaulx-en-Velin La Soie"
         ),
         "RX" to listOf(
             "Gare Part-Dieu Villette",
@@ -217,20 +301,47 @@ object LineStopsCache {
             "Aéroport St Exupéry -RX"
         ),
         "TB11" to listOf(
-            "Gare Saint-Paul", "La Feuillée", "Terrasses Presqu'île", "Cordeliers", "Saxe - Lafayette", "Halles Paul Bocuse",
-            "Part-Dieu Jules Favre", "Thiers - Lafayette", "Charmettes", "Instit. Art Contemporain", "Verlaine",
-            "Blanqui - Le Rize", "Grandclément", "Bernaix", "Cyprian - Léon Blum", "Bon Coin - Médipôle", "Laurent Bonnevay"
+            "Gare Saint-Paul",
+            "La Feuillée",
+            "Terrasses Presqu'île",
+            "Cordeliers",
+            "Saxe - Lafayette",
+            "Halles Paul Bocuse",
+            "Part-Dieu Jules Favre",
+            "Thiers - Lafayette",
+            "Charmettes",
+            "Instit. Art Contemporain",
+            "Verlaine",
+            "Blanqui - Le Rize",
+            "Grandclément",
+            "Bernaix",
+            "Cyprian - Léon Blum",
+            "Bon Coin - Médipôle",
+            "Laurent Bonnevay"
         ),
         "TB12" to listOf(
-            "Gare Part-Dieu - V. Merle", "Part-Dieu Servient", "Garibaldi Paul Bert", "Bir Hakeim", "Félix Faure Vivier Merle",
-            "Archives - Parc Mandela", "Rouget de Lisle", "Maisons Neuves", "Cyrano", "Reconnaissance - Balzac",
-            "Montchat Place Ronde", "Kimmerling-Genêts"
+            "Gare Part-Dieu - V. Merle",
+            "Part-Dieu Servient",
+            "Garibaldi Paul Bert",
+            "Bir Hakeim",
+            "Félix Faure Vivier Merle",
+            "Archives - Parc Mandela",
+            "Rouget de Lisle",
+            "Maisons Neuves",
+            "Cyrano",
+            "Reconnaissance - Balzac",
+            "Montchat Place Ronde",
+            "Kimmerling-Genêts"
         ),
         "TS" to listOf(
-            "Part-Dieu Villette Sud", "Vaulx-en-Velin La Soie", "Décines OL Vallée", "Meyzieu. Z.i.", "Meyzieu les Panettes"
+            "Part-Dieu Villette Sud",
+            "Vaulx-en-Velin La Soie",
+            "Décines OL Vallée",
+            "Meyzieu. Z.i.",
+            "Meyzieu les Panettes"
         )
     )
-    
+
     /**
      * Retrieves stops for a line from the cache
      * @return List of stops or null if the line is not in the cache
@@ -238,7 +349,7 @@ object LineStopsCache {
     fun getLineStops(lineName: String, currentStopName: String?): List<LineStopInfo>? {
         val normalizedLineName = lineName.trim().uppercase()
         val stops = metroStops[normalizedLineName] ?: tramStops[normalizedLineName]
-        
+
         return stops?.mapIndexed { index, stopName ->
             LineStopInfo(
                 stopId = "cache_${lineName}_${index}",

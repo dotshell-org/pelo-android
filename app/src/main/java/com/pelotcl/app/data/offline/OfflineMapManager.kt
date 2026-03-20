@@ -84,12 +84,17 @@ class OfflineMapManager(private val context: Context) {
                             val requiredResources = status.requiredResourceCount
 
                             if (requiredResources > 0) {
-                                val progress = completedResources.toFloat() / requiredResources.toFloat()
-                                _downloadState.value = MapTilesDownloadState.Downloading(progress.coerceIn(0f, 1f))
+                                val progress =
+                                    completedResources.toFloat() / requiredResources.toFloat()
+                                _downloadState.value =
+                                    MapTilesDownloadState.Downloading(progress.coerceIn(0f, 1f))
                             }
 
                             if (status.isComplete) {
-                                Log.d(TAG, "Offline region download complete: $completedResources resources")
+                                Log.d(
+                                    TAG,
+                                    "Offline region download complete: $completedResources resources"
+                                )
                                 _downloadState.value = MapTilesDownloadState.Complete
                             }
                         }

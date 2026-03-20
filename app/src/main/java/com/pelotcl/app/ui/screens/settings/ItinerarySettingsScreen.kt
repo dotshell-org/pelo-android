@@ -1,4 +1,4 @@
-package com.pelotcl.app.ui.screens
+package com.pelotcl.app.ui.screens.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border

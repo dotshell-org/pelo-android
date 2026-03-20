@@ -13,12 +13,12 @@ import com.pelotcl.app.data.model.Favorite
 class FavoritesRepository(private val context: Context) {
     private val prefs by lazy { context.getSharedPreferences("pelo_prefs", Context.MODE_PRIVATE) }
     private val gson = Gson()
-    
+
     // Legacy keys (kept for migration)
     private val keyFavorites = "favorites_lines"
     private val keyFavoriteStops = "favorites_stops"
     private val keyStopDessertePrefix = "stop_desserte_"
-    
+
     // New keys for the updated favorites system
     private val keyUserFavorites = "user_favorites_v2"
 
@@ -36,7 +36,7 @@ class FavoritesRepository(private val context: Context) {
     }
 
     fun saveFavoriteStops(favorites: Set<String>) {
-        prefs.edit { putStringSet(keyFavoriteStops, favorites)}
+        prefs.edit { putStringSet(keyFavoriteStops, favorites) }
     }
 
     fun toggleFavoriteStop(stopName: String, desserte: String? = null): Boolean {
@@ -44,12 +44,12 @@ class FavoritesRepository(private val context: Context) {
         if (favorites.contains(stopName)) {
             favorites.remove(stopName)
             // Clean up desserte when removing
-            prefs.edit { remove(keyStopDessertePrefix + stopName)}
+            prefs.edit { remove(keyStopDessertePrefix + stopName) }
         } else {
             favorites.add(stopName)
             // Store desserte alongside stop name
             if (!desserte.isNullOrEmpty()) {
-                prefs.edit { putString(keyStopDessertePrefix + stopName, desserte)}
+                prefs.edit { putString(keyStopDessertePrefix + stopName, desserte) }
             }
         }
         saveFavoriteStops(favorites)
@@ -61,11 +61,11 @@ class FavoritesRepository(private val context: Context) {
     }
 
     fun saveDesserteForStop(stopName: String, desserte: String) {
-        prefs.edit { putString(keyStopDessertePrefix + stopName, desserte)}
+        prefs.edit { putString(keyStopDessertePrefix + stopName, desserte) }
     }
-    
+
     // === New favorites system ===
-    
+
     /**
      * Get all user-created favorites
      */
@@ -100,7 +100,7 @@ class FavoritesRepository(private val context: Context) {
         if (favorites.any { it.name.equals(favorite.name, ignoreCase = true) }) {
             return false // Favorite with this name already exists
         }
-        
+
         favorites.add(favorite)
         saveUserFavorites(favorites)
         return true

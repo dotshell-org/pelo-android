@@ -93,6 +93,7 @@ object BusIconHelper {
             level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> {
                 desserteCache.evictAll()
             }
+
             level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> {
                 desserteCache.trimToSize(desserteCache.maxSize() / 2)
             }
@@ -102,14 +103,14 @@ object BusIconHelper {
     /**
      * Converts a line name to a drawable name (public version)
      * Normalizes line names and converts to drawable format
-     * 
+     *
      * @param lineName The line name (ex: "212", "C17", "A", "NAVI1")
      * @return The corresponding drawable name (ex: "_212", "c17", "a", "nav1")
      */
     fun getDrawableNameForLineName(lineName: String): String {
         return getDrawableNameForLine(lineName)
     }
-    
+
     /**
      * Parses the desserte string to extract the list of lines.
      * Handled cases:
@@ -118,12 +119,12 @@ object BusIconHelper {
      *  - "F1:A,F2:A" -> ["F1", "F2"] (funiculars)
      *  - "M:A:B" -> ["M", "B"] (bus M with multiple destinations, ignore :A/:R)
      *  - "C17:22:31" (old format) -> ["C17", "22", "31"]
-     * 
+     *
      * IMPORTANT: Don't confuse ":A" (outbound direction) with metro line A
      */
     private fun parseDesserte(desserte: String): List<String> {
         if (desserte.isBlank()) return emptyList()
-        
+
         // If string contains commas, each entry represents a line with direction (e.g.: 5:A or A:A)
         val entries = desserte.split(",")
         val rawLines: List<String> = if (entries.size > 1) {
@@ -142,7 +143,7 @@ object BusIconHelper {
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
             if (tokens.isEmpty()) return emptyList()
-            
+
             // For a single entry without comma like "A:A" (metro A outbound direction),
             // we only keep the first token
             if (tokens.size == 2) {
@@ -181,11 +182,11 @@ object BusIconHelper {
         }
         return unique
     }
-    
+
     /**
      * Converts a line name to a drawable name
      * Lines composed only of digits are prefixed with an underscore
-     * 
+     *
      * @param lineName The line name (ex: "212", "C17", "A")
      * @return The corresponding drawable name (ex: "_212", "c17", "a")
      */
@@ -193,10 +194,10 @@ object BusIconHelper {
         if (lineName.isBlank()) {
             return ""
         }
-        
+
         // Check if line is composed only of digits
         val isNumericOnly = lineName.all { it.isDigit() }
-        
+
         return if (isNumericOnly) {
             // Prefix with underscore for numeric lines
             "_$lineName"
