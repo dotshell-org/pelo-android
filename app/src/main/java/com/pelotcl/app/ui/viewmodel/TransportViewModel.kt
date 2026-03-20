@@ -265,8 +265,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
-     * Search for stops by name using SQLite
-     * This is the function called by the Search Bar in MainActivity
+     * Search for stops by name from offline schedule data.
+     * This is the function called by the Search Bar in MainActivity.
      */
     suspend fun searchStops(query: String): List<StationSearchResult> {
         return withContext(Dispatchers.IO) {
@@ -742,7 +742,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      * and populates StateFlows if possible. Does not block UI.
      * Uses 3-phase loading strategy for optimal UX:
      * - Phase 0 (instant): Show stale cache immediately if available
-     * - Phase 1 (immediate): Critical UI data (lines, stops, SQLite warmup)
+     * - Phase 1 (immediate): Critical UI data (lines, stops, schedule warmup)
      * - Phase 2 (deferred): Heavy processing (connections index, Raptor preload)
      */
     private fun preloadAllData() {
@@ -779,7 +779,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     } else null
                 }
 
-                // Warm up SQLite database in parallel (non-blocking)
+                // Warm up schedule data in parallel (non-blocking)
                 launch(Dispatchers.IO) {
                     schedulesRepository.warmupDatabase()
                 }

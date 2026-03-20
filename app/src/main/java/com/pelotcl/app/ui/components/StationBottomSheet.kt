@@ -59,7 +59,6 @@ import java.util.Calendar
 data class StationInfo(
     val nom: String,
     val lignes: List<String>, // List of line names (ex: ["A", "D", "F1"])
-    val isPmr: Boolean = false,
     val desserte: String = "" // Complete service string for reference
 )
 
@@ -274,21 +273,6 @@ fun StationBottomSheet(
                         color = Color.Black,
                         modifier = Modifier.weight(1f)
                     )
-                    
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // PMR icon if station is accessible
-                        if (stationInfo.isPmr) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Accessible,
-                                contentDescription = "Station accessible PMR",
-                                tint = Color(0xFF2563EB),
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))

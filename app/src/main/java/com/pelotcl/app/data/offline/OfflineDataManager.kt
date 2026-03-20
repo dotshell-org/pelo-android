@@ -447,7 +447,6 @@ class OfflineDataManager(context: Context) {
                         familleTransport = "TRAM",
                         dateDebut = "", dateFin = null,
                         codeTypeLigne = "TRAM", nomTypeLigne = "Tramway",
-                        pmr = true, codeTriLigne = "RX", nomVersion = "",
                         lastUpdate = "", lastUpdateFme = "",
                         gid = gid, couleur = "#E30613"
                     ),

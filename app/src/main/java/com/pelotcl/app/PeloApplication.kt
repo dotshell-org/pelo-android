@@ -20,7 +20,7 @@ class PeloApplication : Application(), Configuration.Provider {
     }
 
     // On-demand WorkManager initialization (replaces automatic ContentProvider init)
-    // This defers SQLite init until WorkManager is first accessed, saving ~50-100ms on cold start
+    // This defers non-critical startup work until WorkManager is first accessed.
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setMinimumLoggingLevel(Log.INFO)

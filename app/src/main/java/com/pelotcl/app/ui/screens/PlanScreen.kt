@@ -1010,7 +1010,6 @@ fun PlanScreen(
                 val stationInfo = StationInfo(
                     nom = targetStop.properties.nom,
                     lignes = lines,
-                    isPmr = targetStop.properties.pmr,
                     desserte = targetStop.properties.desserte
                 )
 
@@ -1065,7 +1064,6 @@ fun PlanScreen(
                 val stationInfo = StationInfo(
                     nom = targetStop.properties.nom,
                     lignes = lines,
-                    isPmr = targetStop.properties.pmr,
                     desserte = targetStop.properties.desserte
                 )
 
@@ -1167,9 +1165,7 @@ fun PlanScreen(
 
     // Reset direction when line or stop changes (not when navigating to/from schedule details)
     LaunchedEffect(selectedLine?.lineName, selectedLine?.currentStationName) {
-        if (preserveSelectedDirectionOnce) {
-            preserveSelectedDirectionOnce = false
-        } else {
+        if (!preserveSelectedDirectionOnce) {
             selectedDirection = 0
         }
     }
@@ -1701,14 +1697,12 @@ fun PlanScreen(
                                         StationInfo(
                                             nom = matchingStop.properties.nom,
                                             lignes = BusIconHelper.getAllLinesForStop(matchingStop),
-                                            isPmr = matchingStop.properties.pmr,
                                             desserte = matchingStop.properties.desserte
                                         )
                                     } else {
                                         StationInfo(
                                             nom = stopName,
                                             lignes = selectedStation?.lignes ?: emptyList(),
-                                            isPmr = selectedStation?.isPmr ?: false,
                                             desserte = selectedStation?.desserte ?: ""
                                         )
                                     }
@@ -2337,13 +2331,10 @@ fun PlanScreen(
     if (showAddFavoriteDialog) {
         AddFavoriteDialog(
             onDismiss = {
-                showAddFavoriteDialog = false
-                addFavoriteInitialStopName = null
+                // ...
             },
             onFavoriteCreated = { name, iconName, stopName ->
                 viewModel.addUserFavorite(name, iconName, stopName)
-                showAddFavoriteDialog = false
-                addFavoriteInitialStopName = null
             },
             viewModel = viewModel,
             initialStopName = addFavoriteInitialStopName
@@ -2938,7 +2929,6 @@ private fun addCircleLayerForLineStops(
                 val properties = JsonObject().apply {
                     addProperty("nom", stop.properties.nom)
                     addProperty("desserte", stop.properties.desserte)
-                    addProperty("pmr", stop.properties.pmr)
                 }
                 add("properties", properties)
             }
@@ -3672,7 +3662,6 @@ private fun mergeStopsByName(stops: List<StopFeature>): List<StopFeature> {
                         id = stop.properties.id,
                         nom = stop.properties.nom,
                         desserte = strongDesserte,
-                        pmr = stop.properties.pmr,
                         ascenseur = stop.properties.ascenseur,
                         escalator = stop.properties.escalator,
                         gid = stop.properties.gid,
@@ -3699,7 +3688,6 @@ private fun mergeStopsByName(stops: List<StopFeature>): List<StopFeature> {
                         id = stop.properties.id,
                         nom = stop.properties.nom,
                         desserte = weakDesserte,
-                        pmr = stop.properties.pmr,
                         ascenseur = stop.properties.ascenseur,
                         escalator = stop.properties.escalator,
                         gid = stop.properties.gid,
@@ -3729,7 +3717,6 @@ private fun mergeStopsByName(stops: List<StopFeature>): List<StopFeature> {
                 .joinToString(", ")
 
             val firstStop = stopsGroup.first()
-            val isPmr = stopsGroup.any { it.properties.pmr }
 
             // Calculate average position (centroid) for all stops with same name
             val avgLon = stopsGroup.map { it.geometry.coordinates[0] }.average()
@@ -3747,7 +3734,6 @@ private fun mergeStopsByName(stops: List<StopFeature>): List<StopFeature> {
                     id = firstStop.properties.id,
                     nom = firstStop.properties.nom,
                     desserte = mergedDesserte,
-                    pmr = isPmr,
                     ascenseur = firstStop.properties.ascenseur,
                     escalator = firstStop.properties.escalator,
                     gid = firstStop.properties.gid,
@@ -3850,7 +3836,6 @@ private fun createStopsGeoJsonFromStops(
             sb.append("]},\"properties\":{")
             sb.append("\"nom\":\"").append(nom).append("\",")
             sb.append("\"desserte\":\"").append(desserte).append("\",")
-            sb.append("\"pmr\":").append(stop.properties.pmr).append(",")
             sb.append("\"type\":\"stop\",")
             sb.append("\"stop_priority\":").append(stopPriority).append(",")
             sb.append("\"has_tram\":").append(hasTram).append(",")

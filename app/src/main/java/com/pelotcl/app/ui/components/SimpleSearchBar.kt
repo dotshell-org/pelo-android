@@ -79,7 +79,6 @@ import com.pelotcl.app.utils.BusIconHelper
 data class StationSearchResult(
     val stopName: String,
     val lines: List<String>,
-    val isPmr: Boolean = false
 )
 
 @Immutable

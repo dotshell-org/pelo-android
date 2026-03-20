@@ -95,22 +95,22 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Preload disk cache and SQLite in parallel BEFORE UI (critical for first render)
+        // Preload disk cache and binary schedule data in parallel BEFORE UI (critical for first render)
         // Retrofit initialization is deferred to after setContent
         appScope.launch {
             try {
-                // Parallel cache and SQLite warmup - these are needed for initial UI
+                // Parallel cache and schedule-data warmup - these are needed for initial UI
                 val cacheJob = launch {
                     val cache = TransportCache(applicationContext)
                     cache.preloadFromDisk()
                 }
-                val sqliteJob = launch {
+                val schedulesJob = launch {
                     val schedulesRepo = com.pelotcl.app.data.gtfs.SchedulesRepository.getInstance(applicationContext)
                     schedulesRepo.warmupDatabase()
                 }
-                // Wait for cache and SQLite (critical for UI)
+                // Wait for cache and schedule data warmup (critical for UI)
                 cacheJob.join()
-                sqliteJob.join()
+                schedulesJob.join()
             } catch (e: Exception) {
                 android.util.Log.w("MainActivity", "Startup preload failed: ${e.message}")
             }

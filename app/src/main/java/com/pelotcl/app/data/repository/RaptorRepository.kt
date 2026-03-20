@@ -7,6 +7,8 @@ import com.pelotcl.app.data.cache.JourneyCache
 import com.pelotcl.app.utils.SearchUtils
 import io.raptor.PeriodData
 import io.raptor.RaptorLibrary
+import io.raptor.data.NetworkLoader
+import io.raptor.model.Route
 import io.raptor.model.Stop
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -59,6 +61,8 @@ class RaptorRepository private constructor(private val context: Context) {
 
     // Performance: Cache of normalized stop names to avoid repeated normalization during search
     private var normalizedStopNames: Map<Stop, String> = emptyMap()
+    private var routesByPeriod: Map<String, List<Route>> = emptyMap()
+    private var stopsByPeriod: Map<String, List<Stop>> = emptyMap()
 
     // Performance: Reusable StringBuilder for cache key building (ThreadLocal for thread safety)
     private val cacheKeyBuilder = ThreadLocal.withInitial { StringBuilder(64) }
@@ -163,6 +167,8 @@ class RaptorRepository private constructor(private val context: Context) {
                 }
 
                 raptorLibrary = RaptorLibrary(periods)
+                routesByPeriod = loadRoutesByPeriod()
+                stopsByPeriod = loadStopsByPeriod()
 
                 // Set initial period based on current day
                 updatePeriodForDate(LocalDate.now())
@@ -274,6 +280,64 @@ class RaptorRepository private constructor(private val context: Context) {
      */
     private fun ensureCorrectPeriod(date: LocalDate = LocalDate.now()) {
         updatePeriodForDate(date)
+    }
+
+    private fun periodForFlags(isSchoolHoliday: Boolean, isPublicHoliday: Boolean): String {
+        val dayOfWeek = Calendar.getInstance().get(Calendar.DAY_OF_WEEK)
+        if (isPublicHoliday) return PERIOD_SUNDAY
+        return when (dayOfWeek) {
+            Calendar.SATURDAY -> PERIOD_SATURDAY
+            Calendar.SUNDAY -> PERIOD_SUNDAY
+            else -> if (isSchoolHoliday) PERIOD_SCHOOL_OFF_WEEKDAYS else PERIOD_SCHOOL_ON_WEEKDAYS
+        }
+    }
+
+    private fun loadRoutesByPeriod(): Map<String, List<Route>> {
+        val periodIds = listOf(
+            PERIOD_SATURDAY,
+            PERIOD_SUNDAY,
+            PERIOD_SCHOOL_ON_WEEKDAYS,
+            PERIOD_SCHOOL_OFF_WEEKDAYS
+        )
+        return periodIds.associateWith { periodId ->
+            context.assets.open("routes_$periodId.bin").use { input ->
+                NetworkLoader.loadRoutes(BufferedInputStream(input, 8192))
+            }
+        }
+    }
+
+    private fun loadStopsByPeriod(): Map<String, List<Stop>> {
+        val periodIds = listOf(
+            PERIOD_SATURDAY,
+            PERIOD_SUNDAY,
+            PERIOD_SCHOOL_ON_WEEKDAYS,
+            PERIOD_SCHOOL_OFF_WEEKDAYS
+        )
+        return periodIds.associateWith { periodId ->
+            context.assets.open("stops_$periodId.bin").use { input ->
+                NetworkLoader.loadStops(BufferedInputStream(input, 8192))
+            }
+        }
+    }
+
+    private data class RouteVariant(
+        val route: Route,
+        val stopNames: List<String>
+    )
+
+    private fun getVariantsForRoute(periodId: String, routeName: String): List<RouteVariant> {
+        val routes = routesByPeriod[periodId] ?: return emptyList()
+        val stops = stopsByPeriod[periodId] ?: return emptyList()
+        val stopById = stops.associateBy { it.id }
+        return routes
+            .filter { it.name.equals(routeName, ignoreCase = true) }
+            .map { route ->
+                val stopNames = route.stopIds.toList().mapNotNull { stopById[it]?.name }
+                RouteVariant(route, stopNames)
+            }
+            .filter { it.stopNames.isNotEmpty() }
+            .distinctBy { it.stopNames.joinToString("|") }
+            .sortedBy { it.stopNames.lastOrNull() ?: "" }
     }
 
     /**
@@ -748,6 +812,95 @@ class RaptorRepository private constructor(private val context: Context) {
         val minutes = calendar.get(Calendar.MINUTE)
         val seconds = calendar.get(Calendar.SECOND)
         return hours * 3600 + minutes * 60 + seconds
+    }
+
+    fun searchLinesByName(query: String): List<com.pelotcl.app.ui.components.LineSearchResult> {
+        val routes = routesByPeriod[raptorLibrary?.getCurrentPeriod()] ?: emptyList()
+        val allNames = routes
+            .map { it.name }
+            .distinct()
+        if (query.isBlank()) {
+            return allNames.sorted().map {
+                com.pelotcl.app.ui.components.LineSearchResult(lineName = it, category = "Bus")
+            }
+        }
+        val normalizedQuery = query.trim().uppercase()
+        return allNames
+            .filter {
+                it.uppercase().contains(normalizedQuery) || normalizedQuery.contains(it.uppercase())
+            }
+            .sortedWith(compareBy<String>(
+                { if (it.equals(normalizedQuery, ignoreCase = true)) 0 else if (it.uppercase().startsWith(normalizedQuery)) 1 else 2 },
+                { it }
+            ))
+            .take(20)
+            .map { lineName ->
+                com.pelotcl.app.ui.components.LineSearchResult(
+                    lineName = lineName,
+                    category = "Bus"
+                )
+            }
+    }
+
+    fun getHeadsigns(routeName: String): Map<Int, String> {
+        val period = raptorLibrary?.getCurrentPeriod() ?: PERIOD_SCHOOL_ON_WEEKDAYS
+        val variants = getVariantsForRoute(period, routeName)
+        return variants.mapIndexed { index, variant ->
+            index to (variant.stopNames.lastOrNull() ?: "Direction ${index + 1}")
+        }.toMap()
+    }
+
+    fun getStopSequences(routeName: String, directionId: Int): List<Pair<String, Int>> {
+        val period = raptorLibrary?.getCurrentPeriod() ?: PERIOD_SCHOOL_ON_WEEKDAYS
+        val variants = getVariantsForRoute(period, routeName)
+        val selected = variants.getOrNull(directionId) ?: return emptyList()
+        return selected.stopNames.mapIndexed { index, stopName -> stopName to (index + 1) }
+    }
+
+    fun getSchedules(
+        lineName: String,
+        stopName: String,
+        directionId: Int,
+        isSchoolHoliday: Boolean,
+        isPublicHoliday: Boolean
+    ): List<String> {
+        val period = periodForFlags(isSchoolHoliday, isPublicHoliday)
+        val variants = getVariantsForRoute(period, lineName)
+        val selected = variants.getOrNull(directionId) ?: return emptyList()
+        val stopIdx = selected.stopNames.indexOfFirst { it.equals(stopName, ignoreCase = true) }
+        if (stopIdx < 0) return emptyList()
+
+        val route = selected.route
+        val times = mutableListOf<String>()
+        for (trip in 0 until route.tripCount) {
+            val seconds = route.flatStopTimes[(trip * route.stopCountInRoute) + stopIdx]
+            val hour = seconds / 3600
+            val minute = (seconds % 3600) / 60
+            times.add(String.format(java.util.Locale.ROOT, "%02d:%02d", hour, minute))
+        }
+        return times.distinct().sorted()
+    }
+
+    fun getDesserteForStop(stopName: String): String? {
+        val period = raptorLibrary?.getCurrentPeriod() ?: PERIOD_SCHOOL_ON_WEEKDAYS
+        val stops = stopsByPeriod[period] ?: return null
+        val routes = routesByPeriod[period] ?: return null
+        val routeById = routes.groupBy { it.id }
+
+        val dessertes = stops
+            .filter { it.name.equals(stopName, ignoreCase = true) }
+            .flatMap { stop ->
+                stop.routeIds.flatMap { routeId ->
+                    val variants = routeById[routeId].orEmpty()
+                        .distinctBy { it.stopIds.joinToString(",") }
+                    variants.mapIndexed { index, route ->
+                        val dir = if (index == 0) "A" else "R"
+                        "${route.name}:$dir"
+                    }
+                }
+            }
+            .distinct()
+        return if (dessertes.isEmpty()) null else dessertes.joinToString(",")
     }
 }
 

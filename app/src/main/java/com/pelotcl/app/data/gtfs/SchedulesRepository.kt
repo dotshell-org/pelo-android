@@ -1,38 +1,21 @@
 package com.pelotcl.app.data.gtfs
 
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
-import android.database.sqlite.SQLiteOpenHelper
-import android.util.Log
 import android.util.LruCache
+import com.pelotcl.app.data.repository.RaptorRepository
 import com.pelotcl.app.ui.components.LineSearchResult
 import com.pelotcl.app.ui.components.StationSearchResult
-import com.pelotcl.app.data.repository.TransportRepository
-import com.pelotcl.app.utils.SearchUtils
-import java.io.FileOutputStream
-import java.io.IOException
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
-enum class LineType {
-    METRO, FUNICULAR, NAVIGONE, TRAM, BUS, CHRONO
-}
+class SchedulesRepository private constructor(context: Context) {
 
-class SchedulesRepository(context: Context) {
-
-    private val appContext: Context = context.applicationContext
-    private val dbHelper = SchedulesDatabaseHelper(appContext)
-
-    // Mutex for thread-safe access to allStopsCache
-    private val allStopsMutex = Mutex()
-    // In-memory cache for all stops (loaded from DB)
-    private var allStopsCache: List<Triple<String, String, Boolean>>? = null
-    // Cache of normalized stop names for fast search (indexed same as allStopsCache)
-    private var normalizedNamesCache: List<String>? = null
+    private val appContext = context.applicationContext
+    private val raptorRepository = RaptorRepository.getInstance(appContext)
 
     companion object {
         @Volatile
         private var INSTANCE: SchedulesRepository? = null
+
+        private val searchCache = LruCache<String, List<StationSearchResult>>(30)
 
         fun getInstance(context: Context): SchedulesRepository {
             return INSTANCE ?: synchronized(this) {
@@ -42,910 +25,88 @@ class SchedulesRepository(context: Context) {
 
         fun mergeDessertes(dessertes: List<String>): String {
             return dessertes
-                .flatMap { it.split(",") }
+                .flatMap { it.split(',') }
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
                 .distinct()
                 .joinToString(",")
         }
 
-        // LRU Cache for schedules: key = "lineName|stopName|directionId|isHoliday"
-        // Reduced from 100 to 50 entries to limit memory during rapid navigation
-        private val schedulesCache = LruCache<String, List<String>>(50)
-
-        // LRU Cache for headsigns: key = routeName
-        // Reduced from 50 to 30 entries
-        private val headsignsCache = LruCache<String, Map<Int, String>>(30)
-
-        // LRU Cache for search results: key = normalized query (3+ chars)
-        private val searchCache = LruCache<String, List<StationSearchResult>>(30)
-
-        // LRU Cache for stop sequences: key = "routeName|directionId"
-        // Reduced from 100 to 40 entries
-        private val stopSequencesCache = LruCache<String, List<Pair<String, Int>>>(40)
-
-        // Track if database has been warmed up
-        @Volatile
-        private var isDatabaseWarmedUp = false
-
-
-
-        /**
-         * Trim caches under memory pressure.
-         * @param level The trim memory level from ComponentCallbacks2
-         */
         fun trimCaches(level: Int) {
-            when {
-                level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> {
-                    schedulesCache.evictAll()
-                    headsignsCache.evictAll()
-                    searchCache.evictAll()
-                    stopSequencesCache.evictAll()
-                    INSTANCE?.allStopsCache = null
-                    INSTANCE?.normalizedNamesCache = null
-                }
-                level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> {
-                    schedulesCache.trimToSize(schedulesCache.maxSize() / 2)
-                    headsignsCache.trimToSize(headsignsCache.maxSize() / 2)
-                    searchCache.trimToSize(searchCache.maxSize() / 2)
-                    stopSequencesCache.trimToSize(stopSequencesCache.maxSize() / 2)
-                }
+            if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) {
+                searchCache.evictAll()
+            } else if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+                searchCache.trimToSize(searchCache.maxSize() / 2)
             }
         }
     }
 
-    /**
-     * Warm up the SQLite database by triggering a simple query.
-     * This initializes the database connection, applies optimizations,
-     * and loads the page cache. Call on IO dispatcher at startup.
-     */
     fun warmupDatabase() {
-        if (isDatabaseWarmedUp) return
-        try {
-            val db = dbHelper.readableDatabase
-            // Simple query to warm up the cache and trigger PRAGMA settings
-            db.rawQuery("SELECT 1 FROM arrets LIMIT 1", null).use { cursor ->
-                cursor.moveToFirst()
-            }
-            // Also warm up the schedules table (most queried)
-            db.rawQuery("SELECT 1 FROM schedules LIMIT 1", null).use { cursor ->
-                cursor.moveToFirst()
-            }
-            isDatabaseWarmedUp = true
-        } catch (e: Exception) {
-            Log.w("SchedulesRepository", "Database warmup failed: ${e.message}")
-        }
-    }
-
-    /**
-     * Search for lines by name from GTFS database
-     * This includes all lines (bus, chrono, metro, etc.)
-     */
-    fun searchLinesByName(query: String): List<LineSearchResult> {
-        if (query.isBlank()) return emptyList()
-        
-        val normalizedQuery = query.trim().uppercase()
-        val results = mutableListOf<LineSearchResult>()
-        
-        try {
-            val db = dbHelper.readableDatabase
-            // Get distinct route names from directions table (which contains all available routes)
-            val cursor = db.rawQuery(
-                "SELECT DISTINCT route_name FROM directions ORDER BY route_name",
-                null
-            )
-            
-            val allRoutes = mutableListOf<String>()
-            while (cursor.moveToNext()) {
-                allRoutes.add(cursor.getString(0))
-            }
-            cursor.close()
-            
-            // Filter by query
-            val matchingRoutes = allRoutes.filter { routeName ->
-                routeName.uppercase().contains(normalizedQuery) ||
-                normalizedQuery.contains(routeName.uppercase())
-            }.sortedWith(compareBy(
-                { if (it.equals(normalizedQuery, ignoreCase = true)) 0 else if (it.uppercase().startsWith(normalizedQuery)) 1 else 2 },
-                { it }
-            )).take(20)
-            
-            results.addAll(matchingRoutes.map { routeName ->
-                LineSearchResult(
-                    lineName = routeName,
-                    category = getLineCategoryName(routeName)
-                )
-            })
-            
-        } catch (e: Exception) {
-            Log.e("SchedulesRepository", "Error searching lines: ${e.message}")
-        }
-        
-        return results
-    }
-
-    /**
-     * Returns all distinct route names from the GTFS directions table.
-     */
-    fun getAllRouteNames(): List<String> {
-        val results = mutableListOf<String>()
-        try {
-            val db = dbHelper.readableDatabase
-            val cursor = db.rawQuery(
-                "SELECT DISTINCT route_name FROM directions ORDER BY route_name",
-                null
-            )
-            while (cursor.moveToNext()) {
-                val name = cursor.getString(0)
-                if (!name.isNullOrBlank()) {
-                    results.add(name)
-                }
-            }
-            cursor.close()
-        } catch (e: Exception) {
-            Log.e("SchedulesRepository", "Error loading route names: ${e.message}")
-        }
-        return results
-    }
-
-    /**
-     * Returns only bus-like route names (bus/chrono/PL/etc.).
-     */
-    fun getAllBusLikeRouteNames(): List<String> {
-        return getAllRouteNames().filter { isBusLikeLine(it) }
-    }
-
-    /**
-     * Get the category name for a line (Metro, Tram, Bus, etc.)
-     */
-    private fun getLineCategoryName(lineName: String): String {
-        val upperLine = lineName.uppercase()
-        return when {
-            upperLine in setOf("A", "B", "C", "D") -> "Métro"
-            upperLine == "F1" || upperLine == "F2" -> "Funiculaire"
-            upperLine.startsWith("T") && upperLine.length == 2 -> "Tramway"
-            upperLine.startsWith("TB") -> "Trambus"
-            upperLine == "RX" || upperLine.contains("RHON") -> "Tramway"
-            upperLine.startsWith("NAV") || upperLine.startsWith("NAVI") -> "Navigône"
-            upperLine.startsWith("C") && upperLine.length >= 2 && !upperLine.all { it.isDigit() } -> "Chrono"
-            upperLine.startsWith("PL") -> "Pleine Lune"
-            upperLine.startsWith("GE") -> "Gare Express"
-            upperLine.startsWith("S") && !upperLine.all { it.isDigit() } -> "Soyeuse"
-            upperLine.startsWith("ZI") -> "Zone Industrielle"
-            upperLine.startsWith("N") && !upperLine.all { it.isDigit() } -> "Navette"
-            upperLine.startsWith("JD") -> "Junior Direct"
-            else -> "Bus"
-        }
-    }
-
-    private fun isBusLikeLine(lineName: String): Boolean {
-        val upperLine = lineName.uppercase()
-        return when {
-            upperLine in setOf("A", "B", "C", "D") -> false
-            upperLine == "F1" || upperLine == "F2" -> false
-            upperLine.startsWith("T") && upperLine.length == 2 -> false
-            upperLine.startsWith("TB") -> false
-            upperLine == "RX" || upperLine.contains("RHON") -> false
-            upperLine.startsWith("NAV") || upperLine.startsWith("NAVI") -> false
-            else -> true
-        }
+        // Binary-only mode: warm up by initializing raptor assets.
     }
 
     suspend fun searchStopsByName(query: String): List<StationSearchResult> {
-        // Don't cache very short queries (too many results, not useful)
-        val normalizedQuery = SearchUtils.normalizeForSearch(query)
-        if (normalizedQuery.length >= 2) {
-            searchCache.get(normalizedQuery)?.let { return it }
-        }
+        val cacheKey = query.trim().lowercase()
+        searchCache.get(cacheKey)?.let { return it }
 
-        val results = mutableListOf<StationSearchResult>()
-        try {
-            // Utiliser la recherche en mémoire pour une gestion fiable des accents
-            // (SQLite LIKE ne gère pas bien les accents sur Android)
-            val allStops = getAllStops()
-            val normalizedNames = normalizedNamesCache ?: return emptyList()
-
-            // Filtrer les candidats avec fuzzy matching optimisé (utilise le cache des noms normalisés)
-            val filteredWithIndex = allStops.indices.filter { index ->
-                SearchUtils.fuzzyContainsNormalized(normalizedNames[index], normalizedQuery)
-            }.map { index -> allStops[index] to normalizedNames[index] }
-
-            // Trier: priorité aux arrêts qui commencent par la query (avec noms pré-normalisés)
-            val sorted = filteredWithIndex.sortedWith(
-                compareBy(
-                    { !SearchUtils.fuzzyStartsWithNormalized(it.second, normalizedQuery) },
-                    { it.first.first }
-                )
-            ).take(50).map { it.first }
-
-            // Convertir en StationSearchResult et fusionner les arrêts du même nom
-            val stopsByName = mutableMapOf<String, MutableList<String>>()
-            val pmrByName = mutableMapOf<String, Boolean>()
-
-            sorted.forEach { (name, desserteRaw, isPmr) ->
-                val lines = if (desserteRaw.isNotBlank()) {
-                    // Parse pour enlever les suffixes :A et :R et extraire uniquement les noms de lignes
-                    desserteRaw.split(",")
-                        .mapNotNull { part ->
-                            val trimmed = part.trim()
-                            if (trimmed.isEmpty()) null else trimmed.substringBefore(":").trim()
-                        }
-                        .filter { it.isNotEmpty() }
-                } else {
-                    listOf()
-                }
-
-                // Fusionner les lignes pour le même arrêt
-                stopsByName.getOrPut(name) { mutableListOf() }.addAll(lines)
-                // Un arrêt est PMR s'il l'est dans au moins une de ses entrées
-                pmrByName[name] = pmrByName.getOrDefault(name, false) || isPmr
-            }
-
-            // Créer les résultats avec lignes fusionnées et dédupliquées
-            stopsByName.forEach { (name, lines) ->
-                results.add(StationSearchResult(name, lines.distinct(), pmrByName[name] ?: false))
-            }
-
-        } catch (e: Exception) {
-            Log.e("SchedulesRepository", "Error searching stops: ${e.message}")
-            // Fallback: search within cached API stops if SQLite fails (e.g. no such table)
-            return try {
-                val repo = TransportRepository(appContext)
-                val stopsResult = repo.getAllStops()
-
-                // Grouper les arrêts par nom et fusionner leurs lignes
-                val stopsByName = mutableMapOf<String, MutableList<String>>()
-                val pmrByName = mutableMapOf<String, Boolean>()
-
-                stopsResult.getOrNull()?.features
-                    ?.asSequence()
-                    ?.filter { SearchUtils.fuzzyContains(it.properties.nom, query) }
-                    ?.forEach { stop ->
-                        val desserteRaw = stop.properties.desserte
-                        val lines = if (desserteRaw.isBlank()) {
-                            listOf()
-                        } else {
-                            desserteRaw.split(',')
-                                .mapNotNull { part ->
-                                    val trimmed = part.trim()
-                                    if (trimmed.isEmpty()) null else trimmed.substringBefore(":").trim()
-                                }
-                                .filter { it.isNotEmpty() }
-                        }
-
-                        val name = stop.properties.nom
-                        stopsByName.getOrPut(name) { mutableListOf() }.addAll(lines)
-                        pmrByName[name] = pmrByName.getOrDefault(name, false) || stop.properties.pmr
+        val results = raptorRepository.searchStopsByName(query)
+            .map { stop ->
+                val desserte = raptorRepository.getDesserteForStop(stop.name).orEmpty()
+                val lines = desserte.split(',')
+                    .mapNotNull { part ->
+                        val token = part.trim()
+                        if (token.isEmpty()) null else token.substringBefore(':').trim()
                     }
-
-                // Créer les résultats avec lignes fusionnées
-                stopsByName.map { (name, lines) ->
-                    StationSearchResult(name, lines.distinct(), pmrByName[name] ?: false)
-                }
-                    .sortedWith(compareBy({ !SearchUtils.fuzzyStartsWith(it.stopName, query) }, { it.stopName }))
-                    .take(50)
-                    .toList()
-            } catch (t: Throwable) {
-                Log.e("SchedulesRepository", "Fallback search failed: ${t.message}")
-                emptyList()
+                    .filter { it.isNotEmpty() }
+                    .distinct()
+                StationSearchResult(stop.name, lines)
             }
-        }
+            .distinctBy { it.stopName.lowercase() }
+            .take(50)
 
-        // Cache the results (only for queries with 2+ chars)
-        if (results.isNotEmpty() && normalizedQuery.length >= 2) {
-            searchCache.put(normalizedQuery, results)
+        if (cacheKey.length >= 2 && results.isNotEmpty()) {
+            searchCache.put(cacheKey, results)
         }
-
         return results
     }
 
-    /**
-     * Helper to load all stops into memory once for efficient filtering.
-     * Thread-safe using Mutex. Also builds the normalized names cache.
-     */
-    private suspend fun getAllStops(): List<Triple<String, String, Boolean>> {
-        allStopsCache?.let { return it }
-
-        return allStopsMutex.withLock {
-            allStopsCache?.let { return it }
-
-            val stops = mutableListOf<Triple<String, String, Boolean>>()
-            val normalizedNames = mutableListOf<String>()
-            try {
-                val db = dbHelper.readableDatabase
-                // Load critical columns for search: name, lines served (desserte), isPMR
-                val cursor = db.rawQuery("SELECT nom, desserte, pmr FROM arrets", null)
-
-                while (cursor.moveToNext()) {
-                    val name = cursor.getString(0)
-                    val desserteRaw = cursor.getString(1) ?: ""
-                    val isPmr = cursor.getInt(2) == 1
-                    stops.add(Triple(name, desserteRaw, isPmr))
-                    normalizedNames.add(SearchUtils.normalizeForSearch(name))
-                }
-                cursor.close()
-            } catch (e: Exception) {
-                Log.e("SchedulesRepository", "Error loading all stops: ${e.message}")
-            }
-
-            // Cache the immutable lists
-            val immutableStops = stops.toList()
-            allStopsCache = immutableStops
-            normalizedNamesCache = normalizedNames.toList()
-            immutableStops
-        }
+    fun searchLinesByName(query: String): List<LineSearchResult> {
+        return raptorRepository.searchLinesByName(query)
     }
 
-    private fun getLineType(lineName: String): LineType {
-        return when {
-            lineName.uppercase() in setOf("A", "B", "C", "D") -> LineType.METRO
-            lineName.uppercase().startsWith("F") -> LineType.FUNICULAR
-            lineName.uppercase().startsWith("NAV") -> LineType.NAVIGONE
-            lineName.uppercase().startsWith("T") && !lineName.uppercase().startsWith("TB") -> LineType.TRAM
-            lineName.uppercase().startsWith("C") && lineName.substring(1).toIntOrNull() != null -> LineType.CHRONO
-            else -> LineType.BUS
-        }
+    fun getAllRouteNames(): List<String> {
+        return raptorRepository.searchLinesByName("").map { it.lineName }.distinct().sorted()
+    }
+
+    fun getAllBusLikeRouteNames(): List<String> {
+        return getAllRouteNames()
     }
 
     fun getHeadsigns(routeName: String): Map<Int, String> {
-        // Check cache first
-        headsignsCache.get(routeName)?.let { return it }
-
-        val result = mutableMapOf<Int, String>()
-        try {
-            val db = dbHelper.readableDatabase
-            val cursor = db.rawQuery(
-                "SELECT direction_id, trip_headsign FROM directions WHERE route_name = ?",
-                arrayOf(routeName)
-            )
-            while (cursor.moveToNext()) {
-                val directionId = cursor.getInt(0)
-                val headsign = cursor.getString(1)
-                result[directionId] = headsign
-            }
-            cursor.close()
-
-            // Cache the result
-            if (result.isNotEmpty()) {
-                headsignsCache.put(routeName, result)
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        return result
+        return raptorRepository.getHeadsigns(routeName)
     }
 
     fun getDesserteForStop(stopName: String): String? {
-        try {
-            val db = dbHelper.readableDatabase
-            val cursor = db.rawQuery(
-                "SELECT desserte FROM arrets WHERE nom = ? COLLATE NOCASE",
-                arrayOf(stopName)
-            )
-            val allDessertes = mutableListOf<String>()
-            while (cursor.moveToNext()) {
-                val desserte = cursor.getString(0)
-                if (!desserte.isNullOrBlank()) {
-                    allDessertes.add(desserte)
-                }
-            }
-            cursor.close()
-            if (allDessertes.isEmpty()) return null
-            return mergeDessertes(allDessertes)
-        } catch (e: Exception) {
-            Log.e("SchedulesRepository", "Error getting desserte for stop $stopName: ${e.message}")
-            return null
-        }
+        return raptorRepository.getDesserteForStop(stopName)
     }
 
-
-    /**
-     * Retrieves the canonical stop sequence for a line and direction from GTFS data.
-     * @param routeName The route/line name (e.g., "86", "A", "T1")
-     * @param directionId The direction ID (0 or 1)
-     * @return List of pairs (station_name, stop_sequence) ordered by sequence, or empty if not found
-     */
     fun getStopSequences(routeName: String, directionId: Int): List<Pair<String, Int>> {
-        val cacheKey = "$routeName|$directionId"
-        stopSequencesCache.get(cacheKey)?.let { return it }
-
-        val result = mutableListOf<Pair<String, Int>>()
-        try {
-            val db = dbHelper.readableDatabase
-            val cursor = db.rawQuery(
-                """
-                SELECT station_name, stop_sequence 
-                FROM stop_sequences 
-                WHERE route_name = ? AND direction_id = ?
-                ORDER BY stop_sequence ASC
-                """.trimIndent(),
-                arrayOf(routeName, directionId.toString())
-            )
-            while (cursor.moveToNext()) {
-                val stationName = cursor.getString(0)
-                val stopSequence = cursor.getInt(1)
-                result.add(Pair(stationName, stopSequence))
-            }
-            cursor.close()
-
-            if (result.isNotEmpty()) {
-                stopSequencesCache.put(cacheKey, result)
-            }
-        } catch (e: Exception) {
-            Log.e("SchedulesRepository", "Error getting stop sequences for $routeName dir $directionId", e)
-        }
-        return result
+        return raptorRepository.getStopSequences(routeName, directionId)
     }
 
-    fun getSchedules(lineName: String, stopName: String, directionId: Int, isSchoolHoliday: Boolean, isPublicHoliday: Boolean): List<String> {
-        // Build cache key
-        val cacheKey = "$lineName|$stopName|$directionId|$isSchoolHoliday|$isPublicHoliday"
-        schedulesCache.get(cacheKey)?.let {
-            return it
-        }
-
-        val result = mutableListOf<String>()
-        try {
-            val db = dbHelper.readableDatabase
-
-            val lineType = getLineType(lineName)
-
-            // School holidays only affect bus schedules (AM vs AV)
-            val effectiveIsSchoolHoliday = if (lineType == LineType.METRO || lineType == LineType.FUNICULAR || lineType == LineType.TRAM) {
-                false
-            } else {
-                isSchoolHoliday
-            }
-
-            val calendar = java.util.Calendar.getInstance()
-            val dayOfWeek = calendar.get(java.util.Calendar.DAY_OF_WEEK)
-            val actualDayColumn = when (dayOfWeek) {
-                java.util.Calendar.MONDAY -> "monday"
-                java.util.Calendar.TUESDAY -> "tuesday"
-                java.util.Calendar.WEDNESDAY -> "wednesday"
-                java.util.Calendar.THURSDAY -> "thursday"
-                java.util.Calendar.FRIDAY -> "friday"
-                java.util.Calendar.SATURDAY -> "saturday"
-                else -> "sunday"
-            }
-
-            // CRITICAL: Public holidays always use Sunday schedules, regardless of actual day
-            val dayColumn = if (isPublicHoliday) {
-                "sunday"
-            } else {
-                actualDayColumn
-            }
-
-            // Format today's date as YYYYMMDD for GTFS calendar date comparison
-            val todayFormatted = String.format(
-                java.util.Locale.US,
-                "%04d%02d%02d",
-                calendar.get(java.util.Calendar.YEAR),
-                calendar.get(java.util.Calendar.MONTH) + 1,
-                calendar.get(java.util.Calendar.DAY_OF_MONTH)
-            )
-
-            val isWeekday = actualDayColumn in setOf("monday", "tuesday", "wednesday", "thursday", "friday")
-            var appliedAmAvFilter = false
-            var serviceIdFilter = ""
-            val isStrongLine = lineType == LineType.METRO || lineType == LineType.FUNICULAR || lineType == LineType.TRAM
-
-            fun hasMatchingServicePattern(patternSuffix: String, withDateValidation: Boolean): Boolean {
-                val dateClause = if (withDateValidation) {
-                    "AND c.start_date <= ? AND c.end_date >= ?"
-                } else {
-                    ""
-                }
-                val args = if (withDateValidation) {
-                    arrayOf(lineName, directionId.toString(), todayFormatted, todayFormatted, stopName, "%$patternSuffix%")
-                } else {
-                    arrayOf(lineName, directionId.toString(), stopName, "%$patternSuffix%")
-                }
-
-                val cursor = db.rawQuery(
-                    """
-                    SELECT COUNT(*)
-                    FROM schedules s
-                    JOIN calendar c ON s.service_id = c.service_id
-                    WHERE s.route_name = ?
-                    AND s.direction_id = ?
-                    AND c.$dayColumn = 1
-                    $dateClause
-                    AND s.station_name = ? COLLATE NOCASE
-                    AND s.service_id LIKE ?
-                    """.trimIndent(),
-                    args
-                )
-                val count = if (cursor.moveToFirst()) cursor.getInt(0) else 0
-                cursor.close()
-                return count > 0
-            }
-
-            fun runSchedulesQuery(
-                withDateValidation: Boolean,
-                localServiceIdFilter: String,
-                localStrongLineServiceFilter: String
-            ): List<String> {
-                val dateClause = if (withDateValidation) {
-                    "AND c.start_date <= ? AND c.end_date >= ?"
-                } else {
-                    ""
-                }
-
-                val args = if (withDateValidation) {
-                    arrayOf(lineName, directionId.toString(), todayFormatted, todayFormatted, stopName)
-                } else {
-                    arrayOf(lineName, directionId.toString(), stopName)
-                }
-
-                val values = mutableListOf<String>()
-                val cursor = db.rawQuery(
-                    """
-                    SELECT DISTINCT substr(s.arrival_time, 1, 5) AS arrival_time
-                    FROM schedules s
-                    JOIN calendar c ON s.service_id = c.service_id
-                    WHERE s.route_name = ?
-                    AND s.direction_id = ?
-                    AND c.$dayColumn = 1
-                    $dateClause
-                    $localServiceIdFilter
-                    $localStrongLineServiceFilter
-                    AND s.station_name = ? COLLATE NOCASE
-                    ORDER BY s.arrival_time
-                    """.trimIndent(),
-                    args
-                )
-                while (cursor.moveToNext()) {
-                    values.add(cursor.getString(0))
-                }
-                cursor.close()
-                return values
-            }
-
-            // For bus lines on weekdays: use AM (normal) or AV (school holiday) schedules
-            // Note: This is separate from public holidays which override the dayColumn to Sunday
-            if (lineType != LineType.METRO && lineType != LineType.FUNICULAR && lineType != LineType.NAVIGONE && lineType != LineType.TRAM && isWeekday && !isPublicHoliday) {
-                val desiredPattern = if (effectiveIsSchoolHoliday) "AV" else "AM"
-                val hasPatternWithDate = hasMatchingServicePattern(desiredPattern, withDateValidation = true)
-                val hasPatternWithoutDate = hasMatchingServicePattern(desiredPattern, withDateValidation = false)
-
-                if (hasPatternWithDate || hasPatternWithoutDate) {
-                    appliedAmAvFilter = true
-                    serviceIdFilter = "AND s.service_id LIKE '%$desiredPattern%'"
-                } else {
-                    Log.w(
-                        "SchedulesDebug",
-                        "AM/AV pattern '$desiredPattern' not found for line='$lineName', using generic weekday service selection"
-                    )
-                }
-            }
-
-            // Debug: Check if stop exists in DB
-            val stopCheckCursor = db.rawQuery(
-                "SELECT COUNT(*) FROM schedules WHERE station_name = ? COLLATE NOCASE",
-                arrayOf(stopName)
-            )
-            stopCheckCursor.close()
-
-            // Debug: Check if line+stop combination exists
-            val lineStopCheckCursor = db.rawQuery(
-                "SELECT COUNT(*) FROM schedules WHERE route_name = ? AND station_name = ? COLLATE NOCASE",
-                arrayOf(lineName, stopName)
-            )
-            lineStopCheckCursor.close()
-
-            // For strong lines (metro/tram/funicular), select only ONE service_id to avoid
-            // mixing schedules from overlapping service periods (e.g., school vs vacation)
-            // We select the service with the MOST schedules (main service for the day)
-            var strongLineServiceFilter = ""
-            if (isStrongLine) {
-                val serviceIdCursor = db.rawQuery(
-                    """
-                    SELECT s.service_id, COUNT(*) as cnt
-                    FROM schedules s
-                    JOIN calendar c ON s.service_id = c.service_id
-                    WHERE s.route_name = ? 
-                    AND s.direction_id = ?
-                    AND c.$dayColumn = 1
-                    AND c.start_date <= ?
-                    AND c.end_date >= ?
-                    AND s.station_name = ? COLLATE NOCASE
-                    GROUP BY s.service_id
-                    ORDER BY cnt DESC
-                    LIMIT 1
-                    """,
-                    arrayOf(lineName, directionId.toString(), todayFormatted, todayFormatted, stopName)
-                )
-                if (serviceIdCursor.moveToFirst()) {
-                    val selectedServiceId = serviceIdCursor.getString(0)
-                    strongLineServiceFilter = "AND s.service_id = '$selectedServiceId'"
-                }
-                serviceIdCursor.close()
-            }
-
-            // First attempt: with date validation (strict GTFS compliance)
-            result.addAll(
-                runSchedulesQuery(
-                    withDateValidation = true,
-                    localServiceIdFilter = serviceIdFilter,
-                    localStrongLineServiceFilter = strongLineServiceFilter
-                )
-            )
-
-            // Fallback 1: If no results with date validation, try without date filter
-            // This handles expired GTFS data gracefully
-            if (result.isEmpty()) {
-                // For strong lines, also try to get a single service_id without date filter
-                if (strongLineServiceFilter.isEmpty() && isStrongLine) {
-                    val serviceIdCursor = db.rawQuery(
-                        """
-                        SELECT s.service_id, COUNT(*) as cnt
-                        FROM schedules s
-                        JOIN calendar c ON s.service_id = c.service_id
-                        WHERE s.route_name = ? 
-                        AND s.direction_id = ?
-                        AND c.$dayColumn = 1
-                        AND s.station_name = ? COLLATE NOCASE
-                        GROUP BY s.service_id
-                        ORDER BY cnt DESC
-                        LIMIT 1
-                        """,
-                        arrayOf(lineName, directionId.toString(), stopName)
-                    )
-                    if (serviceIdCursor.moveToFirst()) {
-                        val selectedServiceId = serviceIdCursor.getString(0)
-                        strongLineServiceFilter = "AND s.service_id = '$selectedServiceId'"
-                    }
-                    serviceIdCursor.close()
-                }
-
-                result.addAll(
-                    runSchedulesQuery(
-                        withDateValidation = false,
-                        localServiceIdFilter = serviceIdFilter,
-                        localStrongLineServiceFilter = strongLineServiceFilter
-                    )
-                )
-            }
-
-            // Fallback 2 (resilience): if AM/AV filtering produced no result,
-            // retry without AM/AV to avoid empty schedules when GTFS service naming changes.
-            if (result.isEmpty() && appliedAmAvFilter) {
-                Log.w("SchedulesDebug", "Retrying without AM/AV service_id filter for line='$lineName' stop='$stopName'")
-                result.addAll(
-                    runSchedulesQuery(
-                        withDateValidation = true,
-                        localServiceIdFilter = "",
-                        localStrongLineServiceFilter = strongLineServiceFilter
-                    )
-                )
-                if (result.isEmpty()) {
-                    result.addAll(
-                        runSchedulesQuery(
-                            withDateValidation = false,
-                            localServiceIdFilter = "",
-                            localStrongLineServiceFilter = strongLineServiceFilter
-                        )
-                    )
-                }
-            }
-
-        } catch (e: Exception) {
-            Log.e("SchedulesDebug", "EXCEPTION in getSchedules: ${e.message}", e)
-        }
-
-        val finalResult = result.distinct().sorted()
-        if (finalResult.isEmpty()) {
-            Log.w("SchedulesDebug", "NO SCHEDULES FOUND for line='$lineName' stop='$stopName' dir=$directionId")
-        }
-
-        // Cache the result (even empty results to avoid repeated queries)
-        schedulesCache.put(cacheKey, finalResult)
-
-        return finalResult
-    }
-
-    private class SchedulesDatabaseHelper(private val context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
-
-        companion object {
-            private const val DB_NAME = "schedules.db"
-            private const val DB_VERSION = 6  // Incremented to force re-copy from assets
-        }
-
-        override fun onCreate(db: SQLiteDatabase) {
-            // Nothing to do here, because we copy the database from assets
-        }
-
-        override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-
-            context.deleteDatabase(DB_NAME)
-        }
-
-        override fun getReadableDatabase(): SQLiteDatabase {
-            val dbFile = context.getDatabasePath(DB_NAME)
-
-            // Check if database needs to be copied or updated
-            var needsCopy = !dbFile.exists()
-
-            if (!needsCopy && dbFile.exists()) {
-                // Check if version is outdated OR if tables are missing
-                try {
-                    val existingDb = SQLiteDatabase.openDatabase(dbFile.path, null, SQLiteDatabase.OPEN_READONLY)
-                    val existingVersion = existingDb.version
-
-                    // Check if schedules table exists
-                    val cursor = existingDb.rawQuery(
-                        "SELECT name FROM sqlite_master WHERE type='table' AND name='schedules'",
-                        null
-                    )
-                    val hasSchedulesTable = cursor.count > 0
-                    cursor.close()
-                    existingDb.close()
-
-                    if (existingVersion < DB_VERSION || !hasSchedulesTable) {
-                        context.deleteDatabase(DB_NAME)
-                        needsCopy = true
-                    }
-                } catch (e: Exception) {
-                    Log.e("SchedulesDebug", "Error opening database, will re-copy: ${e.message}")
-                    context.deleteDatabase(DB_NAME)
-                    needsCopy = true
-                }
-            }
-
-            if (needsCopy) {
-                copyDatabase()
-            }
-
-            val db = try {
-                super.getReadableDatabase()
-            } catch (e: Exception) {
-                Log.e("SchedulesDebug", "Error opening database, will re-copy: ${e.message}")
-                context.deleteDatabase(DB_NAME)
-                copyDatabase()
-                super.getReadableDatabase()
-            }
-
-            // Final verification: check if tables exist after opening
-            try {
-                val cursor = db.rawQuery(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name='schedules'",
-                    null
-                )
-                val hasTable = cursor.count > 0
-                cursor.close()
-                if (!hasTable) {
-                    Log.e("SchedulesDebug", "CRITICAL: schedules table still missing after copy! Forcing re-copy...")
-                    db.close()
-                    context.deleteDatabase(DB_NAME)
-                    copyDatabase()
-                    return super.getReadableDatabase()
-                }
-            } catch (e: Exception) {
-                Log.e("SchedulesDebug", "Error verifying tables: ${e.message}")
-            }
-
-            // Optimize database for read-heavy workload
-            optimizeDatabase(db)
-            // Ensure indexes exist for fast queries
-            ensureIndexes(db)
-            return db
-        }
-
-        override fun getWritableDatabase(): SQLiteDatabase {
-            // Use same logic as getReadableDatabase for consistency
-            val dbFile = context.getDatabasePath(DB_NAME)
-
-            var needsCopy = !dbFile.exists()
-
-            if (!needsCopy && dbFile.exists()) {
-                try {
-                    val existingDb = SQLiteDatabase.openDatabase(dbFile.path, null, SQLiteDatabase.OPEN_READONLY)
-                    val existingVersion = existingDb.version
-                    existingDb.close()
-                    if (existingVersion < DB_VERSION) {
-                        context.deleteDatabase(DB_NAME)
-                        needsCopy = true
-                    }
-                } catch (e: Exception) {
-                    context.deleteDatabase(DB_NAME)
-                    needsCopy = true
-                }
-            }
-
-            if (needsCopy) {
-                copyDatabase()
-            }
-
-            val db = super.getWritableDatabase()
-            optimizeDatabase(db)
-            ensureIndexes(db)
-            return db
-        }
-
-        /**
-         * Apply SQLite performance optimizations (WAL mode, cache size, etc.)
-         * These settings provide 30-50% faster reads for our read-heavy workload.
-         */
-        private fun optimizeDatabase(db: SQLiteDatabase) {
-            try {
-                // Enable WAL mode for better concurrent read performance
-                db.execSQL("PRAGMA journal_mode=WAL")
-                // Reduce sync frequency (safe for read-heavy apps)
-                db.execSQL("PRAGMA synchronous=NORMAL")
-                // Increase page cache to 8MB (negative = KB)
-                db.execSQL("PRAGMA cache_size=-8000")
-                // Memory-map up to 64MB for faster reads
-                db.execSQL("PRAGMA mmap_size=67108864")
-                // Optimize temp storage
-                db.execSQL("PRAGMA temp_store=MEMORY")
-            } catch (e: Exception) {
-                Log.w("SchedulesRepository", "Could not apply SQLite optimizations: ${e.message}")
-            }
-        }
-
-        /**
-         * Create composite indexes if they don't exist for faster schedule queries.
-         * These indexes dramatically speed up getSchedules() lookups.
-         */
-        private fun ensureIndexes(db: SQLiteDatabase) {
-            try {
-                // Composite index for schedule lookups (route_name, direction_id, station_name)
-                db.execSQL("""
-                    CREATE INDEX IF NOT EXISTS idx_schedules_lookup 
-                    ON schedules(route_name, direction_id, station_name)
-                """)
-
-                // Index for station name searches
-                db.execSQL("""
-                    CREATE INDEX IF NOT EXISTS idx_arrets_nom 
-                    ON arrets(nom)
-                """)
-
-                // Index for calendar service_id lookups
-                db.execSQL("""
-                    CREATE INDEX IF NOT EXISTS idx_calendar_service 
-                    ON calendar(service_id)
-                """)
-
-                // Index for directions lookups
-                db.execSQL("""
-                    CREATE INDEX IF NOT EXISTS idx_directions_route 
-                    ON directions(route_name)
-                """)
-            } catch (e: Exception) {
-                Log.w("SchedulesRepository", "Could not create indexes: ${e.message}")
-            }
-        }
-
-        private fun copyDatabase() {
-            Log.e("SchedulesDebug", "copyDatabase: Copying schedules.db from assets...")
-            try {
-                val inputStream = context.assets.open("databases/$DB_NAME")
-                val outFile = context.getDatabasePath(DB_NAME)
-
-                if (outFile.parentFile?.exists() == false) {
-                    outFile.parentFile?.mkdirs()
-                }
-
-                val outputStream = FileOutputStream(outFile)
-                inputStream.copyTo(outputStream)
-                outputStream.flush()
-                outputStream.close()
-                inputStream.close()
-
-                // Set version to match expected version to avoid immediate upgrade loop
-                try {
-                    val db = SQLiteDatabase.openDatabase(outFile.path, null, SQLiteDatabase.OPEN_READWRITE)
-                    db.version = DB_VERSION
-                    db.close()
-                } catch (e: Exception) {
-                    Log.e("SchedulesDebug", "Error setting database version: ${e.message}")
-                }
-            } catch (e: IOException) {
-                e.printStackTrace()
-                Log.e("SchedulesDebug", "Error copying database: ${e.message}")
-            }
-        }
+    fun getSchedules(
+        lineName: String,
+        stopName: String,
+        directionId: Int,
+        isSchoolHoliday: Boolean,
+        isPublicHoliday: Boolean
+    ): List<String> {
+        return raptorRepository.getSchedules(
+            lineName = lineName,
+            stopName = stopName,
+            directionId = directionId,
+            isSchoolHoliday = isSchoolHoliday,
+            isPublicHoliday = isPublicHoliday
+        )
     }
 }

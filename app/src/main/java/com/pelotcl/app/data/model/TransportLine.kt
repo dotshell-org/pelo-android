@@ -90,7 +90,6 @@ data class TransportLineProperties(
     @SerializedName("nom_type_ligne")
     @SerialName("nom_type_ligne")
     val nomTypeLigne: String = "",
-    val pmr: Boolean = false,
     @SerializedName("code_tri_ligne")
     @SerialName("code_tri_ligne")
     val codeTriLigne: String = "",

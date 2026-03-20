@@ -56,7 +56,6 @@ data class StopProperties(
     val id: Int = 0,
     val nom: String = "",
     val desserte: String = "", // Lines serving this stop (e.g. "C:A", "M:A:B")
-    val pmr: Boolean = false, // Accessible for people with reduced mobility
     val ascenseur: Boolean = false,
     val escalator: Boolean = false,
     val gid: Int = 0,
