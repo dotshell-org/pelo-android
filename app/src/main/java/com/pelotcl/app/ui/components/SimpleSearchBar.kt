@@ -28,7 +28,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Directions
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -51,6 +50,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -86,6 +87,15 @@ data class LineSearchResult(
     val lineName: String,
     val category: String = ""
 )
+
+/**
+ * What types of matches are shown in the search menu (stops, lines, or both).
+ */
+enum class TransportSearchContent {
+    STOPS_ONLY,
+    LINES_ONLY,
+    STOPS_AND_LINES
+}
 
 private sealed class UnifiedSearchResult {
     abstract val sortKey: String
@@ -126,10 +136,27 @@ fun SimpleSearchBar(
     onQueryChange: (String) -> Unit = {},
     showDarkOutline: Boolean = false,
     onExpandedChange: (Boolean) -> Unit = {},
-    onStopOptionsClick: (StationSearchResult) -> Unit = {}
+    onStopOptionsClick: (StationSearchResult) -> Unit = {},
+    content: TransportSearchContent = TransportSearchContent.STOPS_AND_LINES,
+    showHistory: Boolean = true,
+    startExpanded: Boolean = false,
+    searchPlaceholder: String = "Rechercher",
+    externalQuery: String? = null,
+    externalOnQueryChange: ((String) -> Unit)? = null,
+    focusNonce: Int = 0,
+    minQueryLengthForResults: Int = 1
 ) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
-    var query by rememberSaveable { mutableStateOf("") }
+    val isControlled = externalQuery != null && externalOnQueryChange != null
+    var internalQuery by rememberSaveable { mutableStateOf("") }
+    val queryText = if (isControlled) externalQuery!! else internalQuery
+
+    fun setQueryText(q: String) {
+        if (isControlled) externalOnQueryChange!!(q) else internalQuery = q
+        onQueryChange(q)
+    }
+
+    var expanded by remember(startExpanded) { mutableStateOf(startExpanded) }
+    val focusRequester = remember { FocusRequester() }
 
     val density = LocalDensity.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -138,18 +165,48 @@ fun SimpleSearchBar(
     var previousImeHeight by remember { mutableIntStateOf(0) }
     var keyboardHiddenByScroll by remember { mutableStateOf(false) }
 
-    LaunchedEffect(imeHeight, searchHistory.isEmpty()) {
-        if (previousImeHeight > 0 && imeHeight == 0 && query.isEmpty() && expanded && !keyboardHiddenByScroll && searchHistory.isEmpty()) {
+    val historyEmptyOrDisabled = !showHistory || searchHistory.isEmpty()
+
+    LaunchedEffect(imeHeight, historyEmptyOrDisabled) {
+        if (previousImeHeight > 0 && imeHeight == 0 && queryText.isEmpty() && expanded && !keyboardHiddenByScroll && historyEmptyOrDisabled) {
             expanded = false
         }
         if (imeHeight > 0) {
             keyboardHiddenByScroll = false
         }
+        previousImeHeight = imeHeight
     }
 
     fun setExpandedState(next: Boolean) {
         expanded = next
         onExpandedChange(next)
+    }
+
+    val combinedResults = remember(lineSearchResults, searchResults, content) {
+        buildList {
+            if (content != TransportSearchContent.STOPS_ONLY) {
+                addAll(lineSearchResults.map { UnifiedSearchResult.Line(it) })
+            }
+            if (content != TransportSearchContent.LINES_ONLY) {
+                addAll(searchResults.map { UnifiedSearchResult.Stop(it) })
+            }
+        }.sortedBy { it.sortKey }
+    }
+
+    val pickOnlyStopRows = content == TransportSearchContent.STOPS_ONLY && !showHistory
+    val trimmedQuery = queryText.trim()
+    val showNoResults = trimmedQuery.length >= minQueryLengthForResults &&
+        when (content) {
+            TransportSearchContent.STOPS_ONLY -> searchResults.isEmpty()
+            TransportSearchContent.LINES_ONLY -> lineSearchResults.isEmpty()
+            TransportSearchContent.STOPS_AND_LINES -> searchResults.isEmpty() && lineSearchResults.isEmpty()
+        }
+
+    LaunchedEffect(focusNonce) {
+        if (focusNonce > 0 || startExpanded) {
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        }
     }
 
     Box(
@@ -174,30 +231,37 @@ fun SimpleSearchBar(
                 .padding(horizontal = if (expanded) 0.dp else 10.dp),
             inputField = {
                 SearchBarDefaults.InputField(
-                    modifier = if (showDarkOutline && !expanded) {
+                    modifier = (if (showDarkOutline && !expanded) {
                         Modifier
                             .clip(RoundedCornerShape(28.dp))
                             .border(1.dp, Color.Gray, RoundedCornerShape(28.dp))
                     } else {
                         Modifier
-                    },
-                    query = query,
-                    onQueryChange = { q ->
-                        query = q
-                        onQueryChange(q)
-                    },
+                    }).focusRequester(focusRequester),
+                    query = queryText,
+                    onQueryChange = { q -> setQueryText(q) },
                     onSearch = {
-                        searchResults.firstOrNull()?.let { onSearch(it) }
-                        setExpandedState(false)
-                        query = ""
+                        when (val first = combinedResults.firstOrNull()) {
+                            is UnifiedSearchResult.Stop -> {
+                                setExpandedState(false)
+                                setQueryText("")
+                                onSearch(first.result)
+                            }
+                            is UnifiedSearchResult.Line -> {
+                                setExpandedState(false)
+                                setQueryText("")
+                                onLineSearch(first.result)
+                            }
+                            null -> {}
+                        }
                     },
                     expanded = expanded,
                     onExpandedChange = { shouldExpand ->
-                        if (shouldExpand || (searchHistory.isEmpty() && !keyboardHiddenByScroll)) {
+                        if (shouldExpand || (historyEmptyOrDisabled && !keyboardHiddenByScroll)) {
                             setExpandedState(shouldExpand)
                         }
                     },
-                    placeholder = { Text("Rechercher", color = Color.White) },
+                    placeholder = { Text(searchPlaceholder, color = Color.White) },
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Default.Search,
@@ -225,7 +289,7 @@ fun SimpleSearchBar(
             },
             expanded = expanded,
             onExpandedChange = { shouldExpand ->
-                if (shouldExpand || (searchHistory.isEmpty() && !keyboardHiddenByScroll)) {
+                if (shouldExpand || (historyEmptyOrDisabled && !keyboardHiddenByScroll)) {
                     setExpandedState(shouldExpand)
                 }
             },
@@ -263,11 +327,8 @@ fun SimpleSearchBar(
                         interactionSource = remember { MutableInteractionSource() }
                     ) {}
             ) {
-                if (query.isEmpty()) {
-                    // Removed favorite stops section - using new favorites system instead
-                    // The favorites bar handles favorite stops now
-
-                    if (searchHistory.isNotEmpty()) {
+                if (queryText.isEmpty()) {
+                    if (showHistory && searchHistory.isNotEmpty()) {
                         SectionHeader(icon = Icons.Default.History, text = "Recherches récentes")
                         searchHistory.forEach { historyItem ->
                             HistoryListItem(
@@ -275,12 +336,11 @@ fun SimpleSearchBar(
                                 showRemove = true,
                                 onClick = {
                                     onHistoryItemClick(historyItem)
-                                    query = ""
+                                    setQueryText("")
                                     setExpandedState(false)
                                 },
                                 onOptionsClick = {
-                                    query = ""
-                                    onQueryChange("")
+                                    setQueryText("")
                                     setExpandedState(false)
                                     keyboardController?.hide()
                                     onHistoryItemOptionsClick(historyItem)
@@ -291,39 +351,43 @@ fun SimpleSearchBar(
                     }
                 }
 
-                val combinedResults = remember(lineSearchResults, searchResults) {
-                    val lines = lineSearchResults.map { UnifiedSearchResult.Line(it) }
-                    val stops = searchResults.map { UnifiedSearchResult.Stop(it) }
-                    (lines + stops).sortedBy { it.sortKey }
-                }
-
                 combinedResults.forEach { unifiedResult ->
                     when (unifiedResult) {
                         is UnifiedSearchResult.Line -> {
                             LineSearchResultItem(
                                 lineResult = unifiedResult.result,
                                 onClick = {
-                                    query = ""
+                                    setQueryText("")
                                     setExpandedState(false)
                                     onLineSearch(unifiedResult.result)
                                 }
                             )
                         }
                         is UnifiedSearchResult.Stop -> {
-                            StopSearchResultItem(
-                                result = unifiedResult.result,
-                                onClick = {
-                                    query = ""
-                                    setExpandedState(false)
-                                    onSearch(unifiedResult.result)
-                                },
-                                onOptionsClick = {
-                                    query = ""
-                                    onQueryChange("")
-                                    setExpandedState(false)
-                                    onStopOptionsClick(unifiedResult.result)
-                                }
-                            )
+                            if (pickOnlyStopRows) {
+                                StopSearchPickerListItem(
+                                    result = unifiedResult.result,
+                                    onClick = {
+                                        setQueryText("")
+                                        setExpandedState(false)
+                                        onSearch(unifiedResult.result)
+                                    }
+                                )
+                            } else {
+                                StopSearchResultItem(
+                                    result = unifiedResult.result,
+                                    onClick = {
+                                        setQueryText("")
+                                        setExpandedState(false)
+                                        onSearch(unifiedResult.result)
+                                    },
+                                    onOptionsClick = {
+                                        setQueryText("")
+                                        setExpandedState(false)
+                                        onStopOptionsClick(unifiedResult.result)
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -341,7 +405,7 @@ fun SimpleSearchBar(
                         }
                 )
 
-                if (searchResults.isEmpty() && lineSearchResults.isEmpty() && query.isNotEmpty()) {
+                if (showNoResults) {
                     ListItem(
                         headlineContent = {
                             Text(
@@ -358,6 +422,43 @@ fun SimpleSearchBar(
             }
         }
     }
+}
+
+@Composable
+private fun StopSearchPickerListItem(
+    result: StationSearchResult,
+    onClick: () -> Unit
+) {
+    ListItem(
+        headlineContent = {
+            Column(modifier = Modifier.padding(horizontal = 24.dp)) {
+                Spacer(modifier = Modifier.size(6.dp))
+                Text(
+                    result.stopName,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontWeight = FontWeight.Bold
+                )
+                if (result.lines.isNotEmpty()) {
+                    Spacer(modifier = Modifier.size(4.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        result.lines.take(4).forEach { lineName ->
+                            SearchConnectionBadge(lineName = lineName)
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.size(4.dp))
+            }
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Black),
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .fillMaxWidth()
+    )
 }
 
 @Composable

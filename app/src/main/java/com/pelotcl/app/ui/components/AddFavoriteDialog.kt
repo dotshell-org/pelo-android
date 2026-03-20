@@ -3,7 +3,6 @@ package com.pelotcl.app.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,62 +19,38 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.SearchBar
-import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.semantics.isTraversalGroup
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -83,8 +58,6 @@ import androidx.compose.ui.window.DialogProperties
 import com.pelotcl.app.ui.theme.Gray700
 import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
-import com.pelotcl.app.utils.BusIconHelper
-import kotlinx.coroutines.delay
 
 /**
  * Dialog for creating a new favorite from predefined presets.
@@ -118,23 +91,17 @@ fun AddFavoriteDialog(
     var selectedStop by remember(initialStopName) {
         mutableStateOf(initialStopName?.let { StationSearchResult(stopName = it, lines = emptyList()) })
     }
-    var stopQuery by remember { mutableStateOf("") }
-    var stopResults by remember { mutableStateOf<List<StationSearchResult>>(emptyList()) }
+    var stopSearchOverlayQuery by remember { mutableStateOf("") }
     var showStopSearchFullscreen by remember { mutableStateOf(false) }
+
+    LaunchedEffect(showStopSearchFullscreen) {
+        if (showStopSearchFullscreen) {
+            stopSearchOverlayQuery = ""
+        }
+    }
 
     val isOtherSelected = selectedPreset?.name == "Autre"
     val finalFavoriteTitle = if (isOtherSelected) customOtherTitle.trim() else (selectedPreset?.name ?: "")
-
-    LaunchedEffect(stopQuery) {
-        val query = stopQuery.trim()
-        if (query.length < 2) {
-            stopResults = emptyList()
-            return@LaunchedEffect
-        }
-
-        delay(250)
-        stopResults = viewModel.searchStops(query)
-    }
 
     LaunchedEffect(Unit) {
         sheetState.expand()
@@ -307,23 +274,41 @@ fun AddFavoriteDialog(
     }
 
     if (showStopSearchFullscreen) {
-        StopSearchFullscreenOverlay(
-            query = stopQuery,
-            searchResults = stopResults,
-            onQueryChange = { newQuery ->
-                stopQuery = newQuery
-                if (selectedStop?.stopName != newQuery) {
-                    selectedStop = null
-                }
-            },
-            onDismiss = { showStopSearchFullscreen = false },
-            onResultSelected = { result ->
-                selectedStop = result
-                stopQuery = ""
-                stopResults = emptyList()
-                showStopSearchFullscreen = false
+        Dialog(
+            onDismissRequest = { showStopSearchFullscreen = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+            ) {
+                TransportSearchBar(
+                    viewModel = viewModel,
+                    modifier = Modifier.fillMaxSize(),
+                    content = TransportSearchContent.STOPS_ONLY,
+                    showHistory = false,
+                    startExpanded = true,
+                    showDarkOutline = false,
+                    searchPlaceholder = "Rechercher un arrêt",
+                    query = stopSearchOverlayQuery,
+                    onQueryChange = { q ->
+                        stopSearchOverlayQuery = q
+                        if (selectedStop?.stopName != q) {
+                            selectedStop = null
+                        }
+                    },
+                    onExpandedChange = { expanded ->
+                        if (!expanded) showStopSearchFullscreen = false
+                    },
+                    onStopPrimary = { result ->
+                        selectedStop = result
+                        stopSearchOverlayQuery = ""
+                        showStopSearchFullscreen = false
+                    }
+                )
             }
-        )
+        }
     }
 }
 
@@ -395,233 +380,3 @@ private data class FavoritePreset(
     val name: String,
     val iconName: String
 )
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun StopSearchFullscreenOverlay(
-    query: String,
-    searchResults: List<StationSearchResult>,
-    onQueryChange: (String) -> Unit,
-    onDismiss: () -> Unit,
-    onResultSelected: (StationSearchResult) -> Unit
-) {
-    val keyboardController = LocalSoftwareKeyboardController.current
-    val focusRequester = remember { FocusRequester() }
-    var expanded by rememberSaveable { mutableStateOf(true) }
-    var queryField by remember {
-        mutableStateOf(
-            TextFieldValue(
-                text = query,
-                selection = TextRange(query.length)
-            )
-        )
-    }
-
-    LaunchedEffect(query) {
-        queryField = TextFieldValue(
-            text = query,
-            selection = TextRange(query.length)
-        )
-    }
-
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-        keyboardController?.show()
-    }
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black)
-                .semantics { isTraversalGroup = true }
-                .clickable(
-                    indication = null,
-                    interactionSource = remember { MutableInteractionSource() }
-                ) {
-                    if (expanded) {
-                        expanded = false
-                        keyboardController?.hide()
-                        onDismiss()
-                    }
-                }
-        ) {
-            SearchBar(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .fillMaxWidth()
-                    .semantics { traversalIndex = 0f }
-                    .padding(horizontal = if (expanded) 0.dp else 10.dp),
-                inputField = {
-                    SearchBarDefaults.InputField(
-                        query = queryField.text,
-                        onQueryChange = { updated ->
-                            queryField = TextFieldValue(updated, TextRange(updated.length))
-                            onQueryChange(updated)
-                        },
-                        onSearch = {
-                            searchResults.firstOrNull()?.let(onResultSelected)
-                        },
-                        expanded = expanded,
-                        onExpandedChange = { shouldExpand ->
-                            expanded = shouldExpand
-                            if (!shouldExpand) onDismiss()
-                        },
-                        placeholder = { Text("Rechercher", color = Color.White) },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = "Search",
-                                tint = Color.White,
-                                modifier = Modifier.padding(
-                                    start = if (expanded) 32.dp else 0.dp,
-                                    end = if (expanded) 12.dp else 0.dp
-                                )
-                            )
-                        },
-                        modifier = Modifier
-                            .focusRequester(focusRequester)
-                            .fillMaxWidth(),
-                        colors = TextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            cursorColor = Color.White,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            disabledIndicatorColor = Color.Transparent,
-                            focusedContainerColor = Color.Black,
-                            unfocusedContainerColor = Color.Black,
-                            focusedPlaceholderColor = Color.White.copy(alpha = 0.6f),
-                            unfocusedPlaceholderColor = Color.White.copy(alpha = 0.6f)
-                        )
-                    )
-                },
-                expanded = expanded,
-                onExpandedChange = { shouldExpand ->
-                    expanded = shouldExpand
-                    if (!shouldExpand) onDismiss()
-                },
-                colors = SearchBarDefaults.colors(
-                    containerColor = Color.Black,
-                    dividerColor = Color.Transparent
-                )
-            ) {
-                val scrollState = rememberScrollState()
-
-                LaunchedEffect(scrollState) {
-                    snapshotFlow { scrollState.isScrollInProgress }
-                        .collect { isScrolling ->
-                            if (isScrolling) {
-                                keyboardController?.hide()
-                            }
-                        }
-                }
-
-                Column(
-                    Modifier
-                        .padding(top = 12.dp, bottom = 28.dp)
-                        .pointerInput(Unit) {
-                            awaitPointerEventScope {
-                                while (true) {
-                                    awaitFirstDown(requireUnconsumed = false)
-                                }
-                            }
-                        }
-                        .verticalScroll(scrollState)
-                        .clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() }
-                        ) {}
-                ) {
-                    if (queryField.text.length >= 2) {
-                        searchResults.forEach { result ->
-                            FavoriteStopSearchResultItem(
-                                result = result,
-                                onClick = { onResultSelected(result) }
-                            )
-                        }
-                    }
-
-                    Spacer(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(60.dp)
-                            .clickable(
-                                indication = null,
-                                interactionSource = remember { MutableInteractionSource() }
-                            ) {
-                                expanded = false
-                                keyboardController?.hide()
-                                onDismiss()
-                            }
-                    )
-
-                    if (searchResults.isEmpty() && queryField.text.isNotEmpty()) {
-                        Text(
-                            text = "Aucun résultat",
-                            color = Color.White.copy(alpha = 0.6f),
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 24.dp, vertical = 12.dp)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FavoriteSearchConnectionBadge(lineName: String) {
-    val context = LocalContext.current
-    val resourceId = BusIconHelper.getResourceIdForLine(context, lineName)
-
-    if (resourceId != 0) {
-        Image(
-            painter = painterResource(id = resourceId),
-            contentDescription = lineName,
-            modifier = Modifier.size(30.dp)
-        )
-    }
-}
-
-@Composable
-private fun FavoriteStopSearchResultItem(
-    result: StationSearchResult,
-    onClick: () -> Unit
-) {
-    ListItem(
-        headlineContent = {
-            Column(modifier = Modifier.padding(horizontal = 24.dp)) {
-                Spacer(modifier = Modifier.size(6.dp))
-                Text(
-                    result.stopName,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    fontWeight = FontWeight.Bold
-                )
-                if (result.lines.isNotEmpty()) {
-                    Spacer(modifier = Modifier.size(4.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        result.lines.take(4).forEach { lineName ->
-                            FavoriteSearchConnectionBadge(lineName = lineName)
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.size(4.dp))
-            }
-        },
-        colors = ListItemDefaults.colors(containerColor = Color.Black),
-        modifier = Modifier
-            .clickable(onClick = onClick)
-            .fillMaxWidth()
-    )
-}

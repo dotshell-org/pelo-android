@@ -56,10 +56,9 @@ import androidx.navigation.compose.rememberNavController
 import com.google.android.gms.location.LocationServices
 import com.pelotcl.app.ui.components.AddFavoriteDialog
 import com.pelotcl.app.ui.components.FavoritesBar
-import com.pelotcl.app.ui.components.LineSearchResult
-import com.pelotcl.app.ui.components.SimpleSearchBar
+import com.pelotcl.app.ui.components.TransportSearchBar
+import com.pelotcl.app.ui.components.TransportSearchContent
 import com.pelotcl.app.ui.components.StationSearchResult
-import com.pelotcl.app.data.repository.SearchHistoryRepository
 import com.pelotcl.app.data.repository.SearchHistoryItem
 import com.pelotcl.app.data.repository.SearchType
 import com.pelotcl.app.data.repository.MapStyle
@@ -228,14 +227,6 @@ fun NavBar(modifier: Modifier = Modifier) {
     }
     val viewModel: TransportViewModel = viewModel(factory = viewModelFactory)
     
-    // Search history repository
-    val searchHistoryRepository = remember { SearchHistoryRepository(context) }
-
-    var searchQuery by remember { mutableStateOf("") }
-    var stationSearchResults by remember { mutableStateOf<List<StationSearchResult>>(emptyList()) }
-    var lineSearchResults by remember { mutableStateOf<List<LineSearchResult>>(emptyList()) }
-    var searchHistory by remember { mutableStateOf<List<SearchHistoryItem>>(emptyList()) }
-    var selectedStationFromSearch by remember { mutableStateOf<StationSearchResult?>(null) }
     var currentMapStyle by remember { mutableStateOf(MapStyle.POSITRON) }
     var isSearchExpanded by remember { mutableStateOf(false) }
     var stopOptionsSelectedStop by remember { mutableStateOf<StationSearchResult?>(null) }
@@ -245,11 +236,6 @@ fun NavBar(modifier: Modifier = Modifier) {
     val userFavorites by viewModel.userFavorites.collectAsState()
     var showAddFavoriteDialog by remember { mutableStateOf(false) }
     
-    // Load search history on startup
-    LaunchedEffect(Unit) {
-        searchHistory = searchHistoryRepository.getSearchHistory()
-    }
-
     LaunchedEffect(favoriteStops, stopsUiState) {
         val stops = (stopsUiState as? TransportStopsUiState.Success)?.stops
         favoriteStopItems = favoriteStops.map { stopName ->
@@ -329,26 +315,6 @@ fun NavBar(modifier: Modifier = Modifier) {
     DisposableEffect(Unit) {
         onDispose {
             LocationHelper.stopLocationUpdates(fusedLocationClient)
-        }
-    }
-
-    LaunchedEffect(searchQuery) {
-        val current = searchQuery.trim()
-        if (current.isNotEmpty()) {
-            // Debounce to avoid querying on every keystroke
-            delay(300)
-            if (current == searchQuery.trim()) {
-                // Search for stops
-                val stopResults = viewModel.searchStops(current)
-                stationSearchResults = stopResults
-                
-                // Search for lines
-                val lineResults = viewModel.searchLines(current)
-                lineSearchResults = lineResults
-            }
-        } else {
-            stationSearchResults = emptyList()
-            lineSearchResults = emptyList()
         }
     }
 
@@ -477,8 +443,6 @@ fun NavBar(modifier: Modifier = Modifier) {
                     },
                     itinerarySelectedStopName = itineraryDestinationStop,
                     onItinerarySelectionHandled = { itineraryDestinationStop = null },
-                    searchSelectedStop = selectedStationFromSearch,
-                    onSearchSelectionHandled = { selectedStationFromSearch = null },
                     optionsSelectedStop = stopOptionsSelectedStop,
                     onOptionsSelectionHandled = { stopOptionsSelectedStop = null },
                     viewModel = viewModel,
@@ -527,77 +491,20 @@ fun NavBar(modifier: Modifier = Modifier) {
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
             ) {
-                SimpleSearchBar(
-                    searchResults = stationSearchResults,
-                    lineSearchResults = lineSearchResults,
-                    searchHistory = searchHistory,
-                    onQueryChange = { query ->
-                        searchQuery = query
-                    },
-                    onSearch = { result ->
-                        // Save to search history
-                        searchHistoryRepository.addToHistory(
-                            SearchHistoryItem(
-                                query = result.stopName,
-                                type = SearchType.STOP,
-                                lines = result.lines
-                            )
-                        )
-                        searchHistory = searchHistoryRepository.getSearchHistory()
-                        
-                        // onSearch launches itinerary (main click behavior)
-                        itineraryDestinationStop = result.stopName
-                        searchQuery = ""
-                    },
-                    onLineSearch = { lineResult ->
-                        // Save to search history
-                        searchHistoryRepository.addToHistory(
-                            SearchHistoryItem(
-                                query = lineResult.lineName,
-                                type = SearchType.LINE
-                            )
-                        )
-                        searchHistory = searchHistoryRepository.getSearchHistory()
-                        
-                        // Select the line to show its details (via PlanScreen's LaunchedEffect)
-                        viewModel.selectLine(lineResult.lineName)
-                        searchQuery = ""
-                    },
-                    onHistoryItemClick = { historyItem ->
-                        if (historyItem.type == SearchType.LINE) {
-                            // Open line details (via PlanScreen's LaunchedEffect)
-                            viewModel.selectLine(historyItem.query)
-                        } else {
-                            // Main click on history item launches itinerary
-                            itineraryDestinationStop = historyItem.query
-                        }
-                    },
-                    onHistoryItemRemove = { historyItem ->
-                        searchHistoryRepository.removeFromHistory(historyItem.query, historyItem.type)
-                        searchHistory = searchHistoryRepository.getSearchHistory()
-                    },
-                    showDarkOutline = currentMapStyle == MapStyle.DARK_MATTER,
+                TransportSearchBar(
+                    viewModel = viewModel,
+                    currentMapStyle = currentMapStyle,
+                    content = TransportSearchContent.STOPS_AND_LINES,
+                    showHistory = true,
                     onExpandedChange = { expanded -> isSearchExpanded = expanded },
-                    onStopOptionsClick = { stopResult ->
-                        searchHistoryRepository.addToHistory(
-                            SearchHistoryItem(
-                                query = stopResult.stopName,
-                                type = SearchType.STOP,
-                                lines = stopResult.lines
-                            )
-                        )
-                        searchHistory = searchHistoryRepository.getSearchHistory()
-                        // onStopOptionsClick shows stop details (button click behavior)
+                    onStopPrimary = { stop ->
+                        itineraryDestinationStop = stop.stopName
+                    },
+                    onStopSecondary = { stopResult ->
                         stopOptionsSelectedStop = stopResult
                     },
-                    onHistoryItemOptionsClick = { historyItem ->
-                        if (historyItem.type == SearchType.STOP) {
-                            // Button click on history item shows stop details
-                            stopOptionsSelectedStop = StationSearchResult(
-                                stopName = historyItem.query,
-                                lines = historyItem.lines
-                            )
-                        }
+                    onLineSelected = { line ->
+                        viewModel.selectLine(line.lineName)
                     }
                 )
             }
