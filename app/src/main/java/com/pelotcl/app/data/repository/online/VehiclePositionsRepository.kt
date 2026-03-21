@@ -1,10 +1,10 @@
 package com.pelotcl.app.data.repository.online
 
 import android.util.Log
-import com.pelotcl.app.data.model.SiriData
-import com.pelotcl.app.data.model.SimpleVehiclePosition
-import com.pelotcl.app.data.model.VehicleActivity
-import com.pelotcl.app.data.model.VehiclePositionsResponse
+import com.pelotcl.app.core.data.model.SiriData
+import com.pelotcl.app.core.data.model.SimpleVehiclePosition
+import com.pelotcl.app.core.data.model.VehicleActivity
+import com.pelotcl.app.core.data.model.VehiclePositionsResponse
 import com.pelotcl.app.utils.DotshellRequestLogger
 import com.google.gson.Gson
 import com.google.gson.JsonObject

@@ -4,8 +4,8 @@ import android.content.ComponentCallbacks2
 import android.content.Context
 import android.util.LruCache
 import com.pelotcl.app.data.repository.itinerary.RaptorRepository
-import com.pelotcl.app.ui.components.LineSearchResult
-import com.pelotcl.app.ui.components.StationSearchResult
+import com.pelotcl.app.core.ui.components.LineSearchResult
+import com.pelotcl.app.core.ui.components.StationSearchResult
 
 class SchedulesRepository private constructor(context: Context) {
 

@@ -1,7 +1,8 @@
 package com.pelotcl.app.data.network
 
 import android.content.Context
-import com.pelotcl.app.data.network.GrandLyonApi
+import com.pelotcl.app.core.data.network.TransportApi
+import com.pelotcl.app.core.data.network.TransportConfig
 import com.pelotcl.app.utils.DotshellRequestLogger
 import okhttp3.Cache
 import okhttp3.CacheControl
@@ -14,10 +15,10 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Singleton object to create and provide the Retrofit instance with HTTP caching
+ * Now uses TransportConfig to be city-agnostic
  */
 object RetrofitInstance {
 
-    private const val BASE_URL = "https://data.grandlyon.com/"
     private const val CACHE_SIZE =
         50L * 1024 * 1024 // 50 MB for better caching of large WFS GeoJSON payloads
     private const val CACHE_MAX_AGE_MINUTES = 30 // Cache validity for online requests
@@ -30,13 +31,13 @@ object RetrofitInstance {
     private var retrofit: Retrofit? = null
 
     @Volatile
-    private var apiInstance: GrandLyonApi? = null
+    private var apiInstance: TransportApi? = null
 
     /**
      * Initialize the RetrofitInstance with application context for HTTP caching.
-     * Should be called once at app startup (e.g., in Application.onCreate or MainActivity).
+     * Should be called once at app startup with the appropriate TransportConfig.
      */
-    fun initialize(context: Context) {
+    fun initialize(context: Context, config: TransportConfig) {
         if (okHttpClient != null) return
 
         synchronized(this) {
@@ -85,37 +86,39 @@ object RetrofitInstance {
                 .build()
 
             retrofit = Retrofit.Builder()
-                .baseUrl(BASE_URL)
+                .baseUrl(config.baseUrl)
                 .client(okHttpClient!!)
                 .addConverterFactory(GsonConverterFactory.create())
                 .build()
 
-            apiInstance = retrofit!!.create(GrandLyonApi::class.java)
+            // Note: We can't create the specific API instance here since we don't know
+            // the concrete implementation. This should be handled by DI.
         }
     }
 
     /**
-     * Get the API instance. Falls back to non-cached client if not initialized.
+     * Get a Retrofit instance configured with the given TransportConfig.
+     * This allows creating specific API implementations.
      */
-    val api: GrandLyonApi
-        get() {
-            apiInstance?.let { return it }
+    fun getRetrofit(config: TransportConfig): Retrofit {
+        if (retrofit != null) return retrofit!!
 
-            // Fallback: create without cache if not initialized
-            synchronized(this) {
-                if (apiInstance == null) {
-                    val fallbackClient = OkHttpClient.Builder()
-                        .addInterceptor(DotshellRequestLogger.interceptor("http"))
-                        .build()
-                    val fallbackRetrofit = Retrofit.Builder()
-                        .baseUrl(BASE_URL)
-                        .client(fallbackClient)
-                        .addConverterFactory(GsonConverterFactory.create())
-                        .build()
-                    apiInstance = fallbackRetrofit.create(GrandLyonApi::class.java)
-                }
-                return apiInstance!!
+        synchronized(this) {
+            if (retrofit == null) {
+                retrofit = Retrofit.Builder()
+                    .baseUrl(config.baseUrl)
+                    .addConverterFactory(GsonConverterFactory.create())
+                    .build()
             }
+            return retrofit!!
         }
+    }
+
+    /**
+     * Get the cached OkHttpClient for custom API creation
+     */
+    fun getOkHttpClient(): OkHttpClient? {
+        return okHttpClient
+    }
 
 }

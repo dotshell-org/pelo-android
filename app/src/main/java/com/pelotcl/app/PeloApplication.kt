@@ -6,7 +6,7 @@ import androidx.work.Configuration
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import com.pelotcl.app.data.cache.JourneyCache
+import com.pelotcl.app.core.data.cache.JourneyCache
 import com.pelotcl.app.data.repository.offline.SchedulesRepository
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.worker.TrafficAlertsWorker

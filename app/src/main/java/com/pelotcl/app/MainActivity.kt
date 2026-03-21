@@ -54,28 +54,28 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.google.android.gms.location.LocationServices
-import com.pelotcl.app.ui.components.favorites.AddFavoriteDialog
-import com.pelotcl.app.ui.components.favorites.FavoritesBar
-import com.pelotcl.app.ui.components.TransportSearchBar
-import com.pelotcl.app.ui.components.TransportSearchContent
-import com.pelotcl.app.ui.components.StationSearchResult
+import com.pelotcl.app.core.ui.components.favorites.AddFavoriteDialog
+import com.pelotcl.app.core.ui.components.favorites.FavoritesBar
+import com.pelotcl.app.core.ui.components.TransportSearchBar
+import com.pelotcl.app.core.ui.components.TransportSearchContent
+import com.pelotcl.app.core.ui.components.StationSearchResult
 import com.pelotcl.app.data.repository.offline.SearchHistoryItem
 import com.pelotcl.app.data.repository.offline.SearchType
 import com.pelotcl.app.data.repository.offline.MapStyle
-import com.pelotcl.app.ui.screens.settings.about.AboutScreen
-import com.pelotcl.app.ui.screens.settings.about.ContactScreen
-import com.pelotcl.app.ui.screens.settings.about.CreditsScreen
-import com.pelotcl.app.ui.screens.settings.about.LegalScreen
-import com.pelotcl.app.ui.screens.plan.PlanScreen
-import com.pelotcl.app.ui.screens.settings.ItinerarySettingsScreen
-import com.pelotcl.app.ui.screens.settings.OfflineSettingsScreen
-import com.pelotcl.app.ui.screens.settings.SettingsScreen
-import com.pelotcl.app.ui.theme.PeloTheme
-import com.pelotcl.app.ui.theme.Red500
-import com.pelotcl.app.ui.viewmodel.TransportViewModel
-import com.pelotcl.app.ui.viewmodel.TransportStopsUiState
+import com.pelotcl.app.core.ui.screens.settings.about.AboutScreen
+import com.pelotcl.app.core.ui.screens.settings.about.ContactScreen
+import com.pelotcl.app.core.ui.screens.settings.about.CreditsScreen
+import com.pelotcl.app.core.ui.screens.settings.about.LegalScreen
+import com.pelotcl.app.core.ui.screens.plan.PlanScreen
+import com.pelotcl.app.core.ui.screens.settings.ItinerarySettingsScreen
+import com.pelotcl.app.core.ui.screens.settings.OfflineSettingsScreen
+import com.pelotcl.app.core.ui.screens.settings.SettingsScreen
+import com.pelotcl.app.core.ui.theme.PeloTheme
+import com.pelotcl.app.core.ui.theme.Red500
+import com.pelotcl.app.core.ui.viewmodel.TransportViewModel
+import com.pelotcl.app.core.ui.viewmodel.TransportStopsUiState
 import com.pelotcl.app.data.network.RetrofitInstance
-import com.pelotcl.app.data.cache.TransportCache
+import com.pelotcl.app.core.data.cache.TransportCache
 import com.pelotcl.app.data.repository.offline.SchedulesRepository
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LocationHelper
@@ -140,8 +140,11 @@ class MainActivity : ComponentActivity() {
             // Avoids ~960 individual getIdentifier() calls during first map render
             BusIconHelper.preloadResourceIds(applicationContext)
 
+            // Initialize transport services with Lyon TCL configuration
+            com.pelotcl.app.core.service.TransportServiceProvider.initialize(applicationContext)
+            
             // Initialize HTTP cache for network requests (not needed for cached data display)
-            RetrofitInstance.initialize(applicationContext)
+            RetrofitInstance.initialize(applicationContext, com.pelotcl.app.core.service.TransportServiceProvider.getTransportConfig())
 
             // Preload Raptor library in background (only needed for itinerary calculations)
             // yield() gives the UI thread priority without an arbitrary delay
@@ -235,16 +238,16 @@ fun NavBar(modifier: Modifier = Modifier) {
     var currentMapStyle by remember { mutableStateOf(MapStyle.POSITRON) }
     var isSearchExpanded by remember { mutableStateOf(false) }
     var stopOptionsSelectedStop by remember { mutableStateOf<StationSearchResult?>(null) }
-    val favoriteStops by viewModel.favoriteStops.collectAsState()
+    val favoriteStops by viewModel.favoriteStops.collectAsState(initial = emptySet())
     var favoriteStopItems by remember { mutableStateOf<List<SearchHistoryItem>>(emptyList()) }
-    val stopsUiState by viewModel.stopsUiState.collectAsState()
-    val userFavorites by viewModel.userFavorites.collectAsState()
+    val stopsUiState by viewModel.stopsUiState.collectAsState(initial = TransportStopsUiState.Loading)
+    val userFavorites by viewModel.userFavorites.collectAsState(initial = emptyList())
     var showAddFavoriteDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(favoriteStops, stopsUiState) {
         val stops = (stopsUiState as? TransportStopsUiState.Success)?.stops
         favoriteStopItems = favoriteStops.map { stopName ->
-            val stop = stops?.find { it.properties.nom.equals(stopName, ignoreCase = true) }
+            val stop = stops?.find { (it as com.pelotcl.app.core.data.model.StopFeature).properties.nom.equals(stopName, ignoreCase = true) }
             val lines = stop?.let { BusIconHelper.getAllLinesForStop(it) } ?: emptyList()
             SearchHistoryItem(
                 query = stopName,

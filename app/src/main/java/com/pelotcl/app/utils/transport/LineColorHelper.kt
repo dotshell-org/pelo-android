@@ -1,6 +1,6 @@
 package com.pelotcl.app.utils
 
-import com.pelotcl.app.data.model.Feature
+import com.pelotcl.app.core.data.model.Feature
 import androidx.core.graphics.toColorInt
 
 /**
@@ -27,9 +27,9 @@ object LineColorHelper {
      * @return La couleur en format hexadécimal (#RRGGBB)
      */
     fun getColorForLine(feature: Feature): String {
-        val ligne = feature.properties.ligne
-        val familleTransport = feature.properties.familleTransport
-        val nomTypeLigne = feature.properties.nomTypeLigne.lowercase()
+        val ligne = feature.properties.ligne.orEmpty()
+        val familleTransport = feature.properties.familleTransport.orEmpty()
+        val nomTypeLigne = feature.properties.nomTypeLigne.orEmpty().lowercase()
 
         return when {
             // Rhône Express
@@ -45,11 +45,11 @@ object LineColorHelper {
             ligne == "D" && familleTransport == "MET" -> METRO_D_COLOR
 
             // Funicular (detection by line name or type)
-            ligne == "F1" || ligne == "F2" || nomTypeLigne?.contains("funiculaire") == true -> FUNICULAR_COLOR
+            ligne == "F1" || ligne == "F2" || nomTypeLigne.contains("funiculaire") -> FUNICULAR_COLOR
 
             // Navigone (water shuttle) - famille_transport = "BAT" (bateau)
             familleTransport == "BAT" || ligne.uppercase()
-                .startsWith("NAVI") || nomTypeLigne?.contains("fluvial") == true -> NAVIGONE_COLOR
+                .startsWith("NAVI") || nomTypeLigne.contains("fluvial") -> NAVIGONE_COLOR
 
             // Trams (famille TRA ou TRAM)
             familleTransport == "TRA" || familleTransport == "TRAM" -> TRAM_COLOR

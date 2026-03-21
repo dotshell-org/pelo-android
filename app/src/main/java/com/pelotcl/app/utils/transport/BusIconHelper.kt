@@ -2,7 +2,7 @@ package com.pelotcl.app.utils
 
 import android.content.Context
 import android.util.LruCache
-import com.pelotcl.app.data.model.StopFeature
+import com.pelotcl.app.core.data.model.StopFeature
 
 /**
  * Utility to determine appropriate icons for bus stops

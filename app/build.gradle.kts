@@ -84,6 +84,7 @@ android {
 dependencies {
     implementation(libs.material)
     implementation(libs.androidx.compose.foundation.layout)
+    implementation(libs.transport.runtime)
     coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

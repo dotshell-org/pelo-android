@@ -4,7 +4,8 @@ import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.pelotcl.app.data.model.TrafficAlert
+import com.pelotcl.app.core.data.model.TrafficAlert
+import com.pelotcl.app.core.service.TransportServiceProvider
 import com.pelotcl.app.data.repository.online.TrafficAlertsRepository
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -19,7 +20,7 @@ class TrafficAlertsWorker(
 
     }
 
-    private val trafficAlertsRepository = TrafficAlertsRepository(applicationContext)
+    private val trafficAlertsRepository = TrafficAlertsRepository(TransportServiceProvider.getTransportApi(), applicationContext)
 
     override suspend fun doWork(): Result {
         return try {

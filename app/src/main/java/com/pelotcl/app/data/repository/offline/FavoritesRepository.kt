@@ -4,7 +4,7 @@ import android.content.Context
 import androidx.core.content.edit
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import com.pelotcl.app.data.model.Favorite
+import com.pelotcl.app.core.data.model.Favorite
 
 /**
  * Repository for managing favorites - both the new user-created favorites

@@ -3,7 +3,7 @@ package com.pelotcl.app.data.repository.itinerary
 import android.content.Context
 import android.util.Log
 import android.util.LruCache
-import com.pelotcl.app.data.cache.JourneyCache
+import com.pelotcl.app.core.data.cache.JourneyCache
 import com.pelotcl.app.utils.SearchUtils
 import io.raptor.PeriodData
 import io.raptor.RaptorLibrary
@@ -61,6 +61,7 @@ class RaptorRepository private constructor(private val context: Context) {
 
     // Performance: Cache of normalized stop names to avoid repeated normalization during search
     private var normalizedStopNames: Map<Stop, String> = emptyMap()
+    private var stopIdsByNormalizedName: Map<String, List<Int>> = emptyMap()
     private var routesByPeriod: Map<String, List<Route>> = emptyMap()
     private var stopsByPeriod: Map<String, List<Stop>> = emptyMap()
 
@@ -364,6 +365,9 @@ class RaptorRepository private constructor(private val context: Context) {
         normalizedStopNames = stopsCache.associateWith { stop ->
             SearchUtils.normalizeForSearch(stop.name)
         }
+        stopIdsByNormalizedName = stopsCache
+            .groupBy { stop -> SearchUtils.normalizeForSearch(stop.name) }
+            .mapValues { (_, stops) -> stops.map { it.id }.distinct() }
     }
 
     /**
@@ -429,6 +433,26 @@ class RaptorRepository private constructor(private val context: Context) {
                 Log.e("RaptorRepository", "Error searching stops: ${e.message}", e)
                 emptyList()
             }
+        }
+
+    /**
+     * Resolve stop IDs for a stop name with fast exact lookup.
+     * Falls back to fuzzy search only when exact lookup fails.
+     */
+    suspend fun resolveStopIdsByName(
+        stopName: String,
+        maxIds: Int = 4
+    ): List<Int> =
+        withContext(Dispatchers.Default) {
+            ensureInitialized()
+            val normalized = SearchUtils.normalizeForSearch(stopName)
+            if (normalized.isBlank()) return@withContext emptyList()
+
+            stopIdsByNormalizedName[normalized]?.let { ids ->
+                if (ids.isNotEmpty()) return@withContext ids.take(maxIds)
+            }
+
+            searchStopsByName(stopName).map { it.id }.take(maxIds)
         }
 
     /**
@@ -866,14 +890,14 @@ class RaptorRepository private constructor(private val context: Context) {
         return hours * 3600 + minutes * 60 + seconds
     }
 
-    fun searchLinesByName(query: String): List<com.pelotcl.app.ui.components.LineSearchResult> {
+    fun searchLinesByName(query: String): List<com.pelotcl.app.core.ui.components.LineSearchResult> {
         val routes = routesByPeriod[raptorLibrary?.getCurrentPeriod()] ?: emptyList()
         val allNames = routes
             .map { it.name }
             .distinct()
         if (query.isBlank()) {
             return allNames.sorted().map {
-                com.pelotcl.app.ui.components.LineSearchResult(lineName = it, category = "Bus")
+                com.pelotcl.app.core.ui.components.LineSearchResult(lineName = it, category = "Bus")
             }
         }
         val normalizedQuery = query.trim().uppercase()
@@ -892,7 +916,7 @@ class RaptorRepository private constructor(private val context: Context) {
             ))
             .take(20)
             .map { lineName ->
-                com.pelotcl.app.ui.components.LineSearchResult(
+                com.pelotcl.app.core.ui.components.LineSearchResult(
                     lineName = lineName,
                     category = "Bus"
                 )

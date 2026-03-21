@@ -1,173 +1,196 @@
 package com.pelotcl.app.data.network
 
 import com.google.gson.JsonObject
-import com.pelotcl.app.data.model.FeatureCollection
-import com.pelotcl.app.data.model.StopCollection
-import com.pelotcl.app.data.model.TrafficAlertsResponse
+import com.pelotcl.app.core.data.model.FeatureCollection
+import com.pelotcl.app.core.data.model.StopCollection
+import com.pelotcl.app.core.data.model.TrafficAlertsResponse
+import com.pelotcl.app.transport.lyontcl.LyonTclApi
 import retrofit2.http.GET
 import retrofit2.http.Query
 
 /**
- * Retrofit interface for Grand Lyon's WFS API
+ * Ancienne interface GrandLyonApi - maintenant dépréciée
+ * Cette classe est maintenue pour la compatibilité mais utilise l'implémentation moderne
+ * @see LyonTclApi pour la nouvelle implémentation
  */
-interface GrandLyonApi {
-
+@Deprecated(
+    "Cette interface est dépréciée. Utilisez plutôt TransportApi via l'injection de dépendances.",
+    ReplaceWith("TransportApi", "com.pelotcl.app.core.data.network.TransportApi")
+)
+interface GrandLyonApi : LyonTclApi {
+    
+    // Tous les endpoints sont hérités de LyonTclApi
+    // Cette interface existe uniquement pour la rétrocompatibilité
+    
     /**
-     * Retrieves TCL metro/funicular lines from Grand Lyon's WFS API
-     *
-     * @param service Service type (WFS)
-     * @param version WFS protocol version (2.0.0)
-     * @param request Request type (GetFeature)
-     * @param typename Data layer name
-     * @param outputFormat Output format (application/json)
-     * @param srsName Spatial reference system (EPSG:4171)
-     * @param startIndex Start index for pagination
-     * @param sortBy Sort field
-     * @param count Number of results to return
+     * @deprecated Utilisez plutôt TransportApi.getMetroLines()
      */
+    @Deprecated(
+        "Utilisez TransportApi.getMetroLines()",
+        level = DeprecationLevel.WARNING
+    )
     @GET("geoserver/sytral/ows")
-    suspend fun getTransportLines(
-        @Query("SERVICE") service: String = "WFS",
-        @Query("VERSION") version: String = "2.0.0",
-        @Query("request") request: String = "GetFeature",
-        @Query("typename") typename: String = "sytral:tcl_sytral.tcllignemf_2_0_0",
-        @Query("outputFormat") outputFormat: String = "application/json",
-        @Query("SRSNAME") srsName: String = "EPSG:4171",
-        @Query("startIndex") startIndex: Int = 0,
-        @Query("sortby") sortBy: String = "gid",
-        @Query("count") count: Int = 1000
+    override suspend fun getMetroLines(
+        @Query("SERVICE") service: String,
+        @Query("VERSION") version: String,
+        @Query("request") request: String,
+        @Query("typename") typename: String,
+        @Query("outputFormat") outputFormat: String,
+        @Query("SRSNAME") srsName: String,
+        @Query("startIndex") startIndex: Int,
+        @Query("sortby") sortBy: String,
+        @Query("count") count: Int
     ): FeatureCollection
 
     /**
-     * Retrieves TCL tram lines from Grand Lyon's WFS API
+     * @deprecated Utilisez plutôt TransportApi.getTramLines()
      */
+    @Deprecated(
+        "Utilisez TransportApi.getTramLines()",
+        level = DeprecationLevel.WARNING
+    )
     @GET("geoserver/sytral/ows")
-    suspend fun getTramLines(
-        @Query("SERVICE") service: String = "WFS",
-        @Query("VERSION") version: String = "2.0.0",
-        @Query("request") request: String = "GetFeature",
-        @Query("typename") typename: String = "sytral:tcl_sytral.tcllignetram_2_0_0",
-        @Query("outputFormat") outputFormat: String = "application/json",
-        @Query("SRSNAME") srsName: String = "EPSG:4171",
-        @Query("startIndex") startIndex: Int = 0,
-        @Query("sortby") sortBy: String = "gid",
-        @Query("count") count: Int = 1000
+    override suspend fun getTramLines(
+        @Query("SERVICE") service: String,
+        @Query("VERSION") version: String,
+        @Query("request") request: String,
+        @Query("typename") typename: String,
+        @Query("outputFormat") outputFormat: String,
+        @Query("SRSNAME") srsName: String,
+        @Query("startIndex") startIndex: Int,
+        @Query("sortby") sortBy: String,
+        @Query("count") count: Int
     ): FeatureCollection
 
     /**
-     * Retrieves TCL bus lines from Grand Lyon's WFS API
-     * Lines are sorted by gid to guarantee correct order
+     * @deprecated Utilisez plutôt TransportApi.getBusLines()
      */
+    @Deprecated(
+        "Utilisez TransportApi.getBusLines()",
+        level = DeprecationLevel.WARNING
+    )
     @GET("geoserver/sytral/ows")
-    suspend fun getBusLines(
-        @Query("SERVICE") service: String = "WFS",
-        @Query("VERSION") version: String = "2.0.0",
-        @Query("request") request: String = "GetFeature",
-        @Query("typename") typename: String = "sytral:tcl_sytral.tcllignebus_2_0_0",
-        @Query("outputFormat") outputFormat: String = "application/json",
-        @Query("SRSNAME") srsName: String = "EPSG:4171",
-        @Query("startIndex") startIndex: Int = 0,
-        @Query("sortby") sortBy: String = "gid",
-        @Query("count") count: Int = 10000
+    override suspend fun getBusLines(
+        @Query("SERVICE") service: String,
+        @Query("VERSION") version: String,
+        @Query("request") request: String,
+        @Query("typename") typename: String,
+        @Query("outputFormat") outputFormat: String,
+        @Query("SRSNAME") srsName: String,
+        @Query("startIndex") startIndex: Int,
+        @Query("sortby") sortBy: String,
+        @Query("count") count: Int,
+        @Query("cql_filter") cqlFilter: String?
     ): FeatureCollection
 
     /**
-     * Retrieves a single bus line by name from Grand Lyon's WFS API using CQL filter.
-     * Much more efficient than downloading all 10,000 bus features.
+     * @deprecated Utilisez plutôt TransportApi.getBusLineByName()
      */
+    @Deprecated(
+        "Utilisez TransportApi.getBusLineByName()",
+        level = DeprecationLevel.WARNING
+    )
     @GET("geoserver/sytral/ows")
-    suspend fun getBusLineByName(
-        @Query("SERVICE") service: String = "WFS",
-        @Query("VERSION") version: String = "2.0.0",
-        @Query("request") request: String = "GetFeature",
-        @Query("typename") typename: String = "sytral:tcl_sytral.tcllignebus_2_0_0",
-        @Query("outputFormat") outputFormat: String = "application/json",
-        @Query("SRSNAME") srsName: String = "EPSG:4171",
-        @Query("sortby") sortBy: String = "gid",
-        @Query("count") count: Int = 10,
+    override suspend fun getBusLineByName(
+        @Query("SERVICE") service: String,
+        @Query("VERSION") version: String,
+        @Query("request") request: String,
+        @Query("typename") typename: String,
+        @Query("outputFormat") outputFormat: String,
+        @Query("SRSNAME") srsName: String,
+        @Query("sortby") sortBy: String,
+        @Query("count") count: Int,
         @Query("cql_filter") cqlFilter: String
     ): FeatureCollection
 
     /**
-     * Retrieves TCL trambus lines from Grand Lyon's WFS API
+     * @deprecated Utilisez plutôt TransportApi.getNavigoneLines()
      */
+    @Deprecated(
+        "Utilisez TransportApi.getNavigoneLines()",
+        level = DeprecationLevel.WARNING
+    )
     @GET("geoserver/sytral/ows")
-    suspend fun getTrambusLines(
-        @Query("SERVICE") service: String = "WFS",
-        @Query("VERSION") version: String = "2.0.0",
-        @Query("request") request: String = "GetFeature",
-        @Query("typename") typename: String = "sytral:tcl_sytral.tcllignebus_2_0_0",
-        @Query("outputFormat") outputFormat: String = "application/json",
-        @Query("SRSNAME") srsName: String = "EPSG:4171",
-        @Query("startIndex") startIndex: Int = 0,
-        @Query("sortby") sortBy: String = "gid",
-        @Query("count") count: Int = 1000,
-        @Query("cql_filter") cqlFilter: String = "ligne LIKE 'TB%'"
+    override suspend fun getNavigoneLines(
+        @Query("SERVICE") service: String,
+        @Query("VERSION") version: String,
+        @Query("request") request: String,
+        @Query("typename") typename: String,
+        @Query("outputFormat") outputFormat: String,
+        @Query("SRSNAME") srsName: String,
+        @Query("startIndex") startIndex: Int,
+        @Query("sortby") sortBy: String,
+        @Query("count") count: Int
     ): FeatureCollection
 
     /**
-     * Retrieves TCL navigone (river shuttle) lines from Grand Lyon's WFS API
-     * This includes the NAVI1 line (Confluence-Île Barbe)
+     * @deprecated Utilisez plutôt TransportApi.getTrambusLines()
      */
+    @Deprecated(
+        "Utilisez TransportApi.getTrambusLines()",
+        level = DeprecationLevel.WARNING
+    )
     @GET("geoserver/sytral/ows")
-    suspend fun getNavigoneLines(
-        @Query("SERVICE") service: String = "WFS",
-        @Query("VERSION") version: String = "2.0.0",
-        @Query("request") request: String = "GetFeature",
-        @Query("typename") typename: String = "sytral:tcl_sytral.tcllignefluv",
-        @Query("outputFormat") outputFormat: String = "application/json",
-        @Query("SRSNAME") srsName: String = "EPSG:4171",
-        @Query("startIndex") startIndex: Int = 0,
-        @Query("sortby") sortBy: String = "gid",
-        @Query("count") count: Int = 1000
+    override suspend fun getTrambusLines(
+        @Query("SERVICE") service: String,
+        @Query("VERSION") version: String,
+        @Query("request") request: String,
+        @Query("typename") typename: String,
+        @Query("outputFormat") outputFormat: String,
+        @Query("SRSNAME") srsName: String,
+        @Query("startIndex") startIndex: Int,
+        @Query("sortby") sortBy: String,
+        @Query("count") count: Int,
+        @Query("cql_filter") cqlFilter: String
     ): FeatureCollection
 
     /**
-     * Retrieves TCL transport stops from Grand Lyon's WFS API
-     *
-     * @param service Service type (WFS)
-     * @param version WFS protocol version (2.0.0)
-     * @param request Request type (GetFeature)
-     * @param typename Stops data layer name
-     * @param outputFormat Output format (application/json)
-     * @param srsName Spatial reference system (EPSG:4171)
-     * @param startIndex Start index for pagination
-     * @param sortBy Sort field
-     * @param count Number of results to return
+     * @deprecated Utilisez plutôt TransportApi.getTransportStops()
      */
+    @Deprecated(
+        "Utilisez TransportApi.getTransportStops()",
+        level = DeprecationLevel.WARNING
+    )
     @GET("geoserver/sytral/ows")
-    suspend fun getTransportStops(
-        @Query("SERVICE") service: String = "WFS",
-        @Query("VERSION") version: String = "2.0.0",
-        @Query("request") request: String = "GetFeature",
-        @Query("typename") typename: String = "sytral:tcl_sytral.tclarret",
-        @Query("outputFormat") outputFormat: String = "application/json",
-        @Query("SRSNAME") srsName: String = "EPSG:4171",
-        @Query("startIndex") startIndex: Int = 0,
-        @Query("sortby") sortBy: String = "gid",
-        @Query("count") count: Int = 10000
+    override suspend fun getTransportStops(
+        @Query("SERVICE") service: String,
+        @Query("VERSION") version: String,
+        @Query("request") request: String,
+        @Query("typename") typename: String,
+        @Query("outputFormat") outputFormat: String,
+        @Query("SRSNAME") srsName: String,
+        @Query("startIndex") startIndex: Int,
+        @Query("sortby") sortBy: String,
+        @Query("count") count: Int
     ): StopCollection
 
     /**
-     * Récupère la géométrie de la ligne Rhônexpress (RX) depuis l'API WFS (brut JSON)
-     * Utilisé car le schéma de la couche RX diffère des couches TCL classiques.
+     * @deprecated Utilisez plutôt TransportApi.getTrafficAlerts()
      */
-    @GET("geoserver/sytral/ows")
-    suspend fun getRhonexpressRaw(
-        @Query("SERVICE") service: String = "WFS",
-        @Query("VERSION") version: String = "2.0.0",
-        @Query("request") request: String = "GetFeature",
-        @Query("typename") typename: String = "sytral:rx_rhonexpress.rxligne_2_0_0",
-        @Query("outputFormat") outputFormat: String = "application/json",
-        @Query("SRSNAME") srsName: String = "EPSG:4326",
-        @Query("startIndex") startIndex: Int = 0,
-        @Query("sortby") sortBy: String = "gid",
-        @Query("count") count: Int = 1000
-    ): JsonObject
+    @Deprecated(
+        "Utilisez TransportApi.getTrafficAlerts()",
+        level = DeprecationLevel.WARNING
+    )
+    @GET("https://api.dotshell.eu/pelo/v1/traffic/alerts")
+    override suspend fun getTrafficAlerts(): TrafficAlertsResponse
 
     /**
-     * Récupère les alertes de trafic pour toutes les lignes
+     * @deprecated Utilisez plutôt TransportApi.getSpecialLineRaw()
      */
-    @GET("https://api.dotshell.eu/pelo/v1/traffic/alerts")
-    suspend fun getTrafficAlerts(): TrafficAlertsResponse
+    @Deprecated(
+        "Utilisez TransportApi.getSpecialLineRaw()",
+        level = DeprecationLevel.WARNING
+    )
+    @GET("geoserver/sytral/ows")
+    override suspend fun getSpecialLineRaw(
+        @Query("SERVICE") service: String,
+        @Query("VERSION") version: String,
+        @Query("request") request: String,
+        @Query("typename") typename: String,
+        @Query("outputFormat") outputFormat: String,
+        @Query("SRSNAME") srsName: String,
+        @Query("startIndex") startIndex: Int,
+        @Query("sortby") sortBy: String,
+        @Query("count") count: Int
+    ): JsonObject
 }
