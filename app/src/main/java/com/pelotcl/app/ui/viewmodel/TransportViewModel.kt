@@ -11,7 +11,6 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.viewModelScope
-import com.pelotcl.app.data.cache.LineStopsCache
 import com.pelotcl.app.data.model.Feature
 import com.pelotcl.app.data.model.SimpleVehiclePosition
 import com.pelotcl.app.data.model.StopFeature
@@ -115,7 +114,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     val availableDirections: StateFlow<List<Int>> = _availableDirections.asStateFlow()
 
     private val _favoriteLines = MutableStateFlow<Set<String>>(emptySet())
-    val favoriteLines: StateFlow<Set<String>> = _favoriteLines.asStateFlow()
     private val _favoriteStops = MutableStateFlow<Set<String>>(emptySet())
     val favoriteStops: StateFlow<Set<String>> = _favoriteStops.asStateFlow()
     private val _userFavorites =
@@ -194,7 +192,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         // Observe connectivity changes
         viewModelScope.launch {
             connectivityObserver.isOnline.collect { online ->
-                val wasOffline = _isOffline.value
                 _isOffline.value = !online
             }
         }
@@ -302,10 +299,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun loadHeadsign(routeName: String) {
         lineDetailScope.launch {
-            // GTFS uses "NAVI1" for Navigone while the app displays "NAV1"
-            val gtfsRouteName =
-                if (routeName.equals("NAV1", ignoreCase = true)) "NAVI1" else routeName
-            val headsigns = schedulesRepository.getHeadsigns(gtfsRouteName)
+            val headsigns = schedulesRepository.getHeadsigns(routeName)
             _headsigns.value = headsigns
         }
     }
@@ -321,7 +315,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             val today = LocalDate.now()
             val isSchoolHoliday = holidayDetector.isSchoolHoliday(today)
             val isPublicHoliday = holidayDetector.isFrenchPublicHoliday(today)
-            val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
 
             // Candidate directions list: those exposed by _headsigns otherwise 0 and 1 by default
             val candidateDirections =
@@ -331,7 +324,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             for (dir in candidateDirections) {
                 try {
                     val schedules = schedulesRepository.getSchedules(
-                        gtfsLineName,
+                        lineName,
                         stopName,
                         dir,
                         isSchoolHoliday,
@@ -365,11 +358,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             val isSchoolHoliday = holidayDetector.isSchoolHoliday(today)
             val isPublicHoliday = holidayDetector.isFrenchPublicHoliday(today)
 
-            // The GTFS data uses NAVI1 for the Navigone, but the app displays NAV1
-            val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
-
             val allSchedulesForDay = schedulesRepository.getSchedules(
-                gtfsLineName,
+                lineName,
                 stopName,
                 directionId,
                 isSchoolHoliday,
@@ -485,14 +475,12 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         val previews = mutableListOf<StopDeparturePreview>()
 
         normalizedLines.forEach { displayLineName ->
-            val gtfsLineName =
-                if (displayLineName.equals("NAV1", ignoreCase = true)) "NAVI1" else displayLineName
-            val headsigns = schedulesRepository.getHeadsigns(gtfsLineName)
+            val headsigns = schedulesRepository.getHeadsigns(displayLineName)
             val candidateDirections = headsigns.keys.ifEmpty { setOf(0, 1) }.toList().sorted()
 
             candidateDirections.forEach { directionId ->
                 val schedules = schedulesRepository.getSchedules(
-                    lineName = gtfsLineName,
+                    lineName = displayLineName,
                     stopName = stopName,
                     directionId = directionId,
                     isSchoolHoliday = isSchoolHoliday,
@@ -690,18 +678,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     // Partitions stops into geographic cells for O(visible_cells) viewport queries
     val spatialGrid = SpatialGrid()
 
-    // === OPTIMIZATION: Pre-computed GeoJSON cache for stops ===
-    // Cached GeoJSON string for all stops (avoids re-computation on each map display)
-    private var cachedStopsGeoJson: String? = null
 
-    // Set of required icon names for the cached GeoJSON
-    private var cachedRequiredIcons: Set<String>? = null
-
-    // Cached set of used slot indices for the GeoJSON (avoids recalculation)
-    private var cachedUsedSlots: Set<Int>? = null
-
-    // Cheap hash of stops list to detect changes and invalidate cache (O(1) instead of O(n))
-    private var cachedStopsHash: Long = 0L
 
     // === OPTIMIZATION: Pre-loaded icon bitmaps cache with memory management ===
     // LruCache with 10MB max size for bitmap icons, responds to memory pressure
@@ -712,46 +689,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
 
-    /**
-     * Cheap O(1) hash for stop list identity check.
-     * Uses size + first/last element hash instead of iterating all elements.
-     * The list only changes via full replacement, never element-level mutation.
-     */
-    private fun cheapListHash(stops: List<StopFeature>): Long {
-        if (stops.isEmpty()) return 0L
-        return stops.size.toLong() * 31 +
-                stops.first().hashCode().toLong() * 17 +
-                stops.last().hashCode().toLong()
-    }
-
-    /**
-     * Returns cached stops GeoJSON data if available and valid.
-     * Returns null if cache is invalid or stops have changed.
-     * The Triple contains (geoJson, requiredIcons, usedSlots).
-     */
-    fun getCachedStopsGeoJson(currentStops: List<StopFeature>): Triple<String, Set<String>, Set<Int>>? {
-        val currentHash = cheapListHash(currentStops)
-        return if (cachedStopsGeoJson != null && cachedRequiredIcons != null && cachedUsedSlots != null && currentHash == cachedStopsHash) {
-            Triple(cachedStopsGeoJson!!, cachedRequiredIcons!!, cachedUsedSlots!!)
-        } else {
-            null
-        }
-    }
-
-    /**
-     * Caches the GeoJSON data for stops including used slots.
-     */
-    fun cacheStopsGeoJson(
-        stops: List<StopFeature>,
-        geoJson: String,
-        requiredIcons: Set<String>,
-        usedSlots: Set<Int>
-    ) {
-        cachedStopsHash = cheapListHash(stops)
-        cachedStopsGeoJson = geoJson
-        cachedRequiredIcons = requiredIcons
-        cachedUsedSlots = usedSlots
-    }
 
     /**
      * Returns a cached icon bitmap by name, or null if not cached.
@@ -901,16 +838,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
-     * Normalizes a line name for comparison (handles NAVI1 -> NAV1)
-     */
-    private fun normalizeLineName(lineName: String): String {
-        return when (lineName.uppercase()) {
-            "NAVI1" -> "NAV1"
-            else -> lineName.uppercase()
-        }
-    }
-
-    /**
      * Normalizes a line name for alert matching (removes spaces and hyphens)
      */
     private fun normalizeLineForAlerts(line: String): String {
@@ -920,8 +847,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             .replace("TRAM", "")
             .replace("METRO", "")
             .trim()
-        // Apply same normalization as normalizeLineName (e.g. NAVI1 → NAV1)
-        return normalizeLineName(cleaned)
+        return cleaned
     }
 
     /**
@@ -931,10 +857,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     fun getConnectionsForStop(stopName: String, currentLine: String): List<Connection> {
         val normalized = normalizeStopName(stopName)
         val connections = connectionsIndex[normalized] ?: emptyList()
-        // Exclude the current line (with normalization to handle NAVI1 vs NAV1)
-        val normalizedCurrentLine = normalizeLineName(currentLine)
         return connections
-            .filter { normalizeLineName(it.lineName) != normalizedCurrentLine }
+            .filter { it.lineName != currentLine }
             .sortedWith(compareBy<Connection> {
                 when (it.transportType) {
                     com.pelotcl.app.utils.TransportType.METRO -> 1
@@ -976,7 +900,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
                     _stopsUiState.value = TransportStopsUiState.Success(stopCollection.features)
                 }
-                .onFailure { exception ->
+                .onFailure { _ ->
                     _stopsUiState.value = TransportStopsUiState.Error
                 }
         }
@@ -1087,12 +1011,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
      * @return List of StopFeatures serving that line, or empty list if not found
      */
     fun getStopsFeaturesForLine(lineName: String): List<StopFeature> {
-        // Handle NAV1/NAVI1 normalization
-        val searchKeys = if (lineName.equals("NAV1", ignoreCase = true)) {
-            listOf("NAV1", "NAVI1")
-        } else {
-            listOf(lineName.uppercase())
-        }
+        val searchKeys = listOf(lineName.uppercase())
 
         // Return first match from index
         for (key in searchKeys) {
@@ -1153,24 +1072,6 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    /**
-     * Toggle favorite status for a line and persist
-     */
-    fun toggleFavorite(lineName: String) {
-        viewModelScope.launch {
-            // Normalize to uppercase for consistency
-            val normalized = lineName.uppercase()
-            val current = _favoriteLines.value.toMutableSet()
-            if (current.contains(normalized)) {
-                current.remove(normalized)
-            } else {
-                current.add(normalized)
-            }
-            favoritesRepository.saveFavorites(current)
-            _favoriteLines.value = current
-        }
-    }
-
     fun toggleFavoriteStop(stopName: String) {
         viewModelScope.launch {
             // Merge desserte from ALL WFS stops with the same name (pôle merging)
@@ -1206,7 +1107,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 _userFavorites.value = favoritesRepository.getUserFavorites()
             }
             success
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             false
         }
     }
@@ -1221,50 +1122,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 _userFavorites.value = favoritesRepository.getUserFavorites()
             }
             success
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             false
-        }
-    }
-
-    /**
-     * Update an existing user-created favorite
-     */
-    fun updateUserFavorite(
-        favoriteId: String,
-        name: String,
-        iconName: String,
-        iconColor: String,
-        stopName: String
-    ): Boolean {
-        return try {
-            val currentFavorites = _userFavorites.value
-            val existingFavorite = currentFavorites.find { it.id == favoriteId }
-            if (existingFavorite != null) {
-                val updatedFavorite = existingFavorite.copy(
-                    name = name,
-                    iconName = iconName,
-                    iconColor = iconColor,
-                    stopName = stopName
-                )
-                val success = favoritesRepository.updateFavorite(updatedFavorite)
-                if (success) {
-                    _userFavorites.value = favoritesRepository.getUserFavorites()
-                }
-                success
-            } else {
-                false
-            }
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    /**
-     * Refresh the user favorites list
-     */
-    fun refreshUserFavorites() {
-        viewModelScope.launch(Dispatchers.IO) {
-            _userFavorites.value = favoritesRepository.getUserFavorites()
         }
     }
 
@@ -1376,11 +1235,8 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         val cacheKey = "$lineName|${currentStopName ?: ""}|$directionId"
         lineStopsCache.get(cacheKey)?.let { return it }
 
-        // GTFS uses "NAVI1" for Navigone while the app displays "NAV1"
-        val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
-
         // First, try to retrieve from GTFS stop_sequences table (most accurate)
-        val gtfsSequences = schedulesRepository.getStopSequences(gtfsLineName, directionId)
+        val gtfsSequences = schedulesRepository.getStopSequences(lineName, directionId)
         if (gtfsSequences.isNotEmpty()) {
             val allStops = getCachedStopsSync()
             // Build a map of normalized name -> official stop name and connections
@@ -1412,69 +1268,15 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
 
-        // Second, try to retrieve from static cache (for metros and trams)
-        val cachedStops =
-            LineStopsCache.getLineStops(lineName, currentStopName)
-        if (cachedStops != null) {
-            // Align cache labels with official GTFS labels (strict comparison required DB side)
-            val allStops = getCachedStopsSync()
-            // Build set of official names served by the line (all directions)
-            val officialStopsForLine: Set<String> = allStops.filter { stop ->
-                val desserte = stop.properties.desserte
-                desserte.split(',').any { part ->
-                    val lineCode = part.split(':').first().trim()
-                    lineCode.equals(lineName, ignoreCase = true) ||
-                            (lineName.equals("NAV1", ignoreCase = true) && lineCode.equals(
-                                "NAVI1",
-                                ignoreCase = true
-                            ))
-                }
-            }.map { it.properties.nom }.toSet()
-
-            // Index by normalized name -> exact official name
-            val normalizedToOfficial = officialStopsForLine.associateBy { normalizeStopName(it) }
-
-            // Replace cached name with official label if found
-            // Then deduplicate by name (double platforms, writing variants), preserving order
-            val mapped = cachedStops.map { stop ->
-                val officialName =
-                    normalizedToOfficial[normalizeStopName(stop.stopName)] ?: stop.stopName
-                val connections = getConnectionsForStop(officialName, lineName)
-                stop.copy(
-                    stopName = officialName,
-                    connections = connections.map { it.lineName }
-                )
-            }
-            val dedup = mapped.distinctBy { normalizeStopName(it.stopName) }
-            val result = dedup.mapIndexed { index, stop ->
-                stop.copy(
-                    stopSequence = index + 1,
-                    isCurrentStop = currentStopName?.let {
-                        normalizeStopName(stop.stopName) == normalizeStopName(it)
-                    } ?: stop.isCurrentStop
-                )
-            }
-            // Cache the result for future lookups
-            lineStopsCache.put(cacheKey, result)
-            return result
-        }
-
         // Get all stops from cache
         val allStops = getCachedStopsSync()
-
-        // API uses NAVI1 but we display NAV1, so we need to search for both
-        val searchNames = if (lineName.equals("NAV1", ignoreCase = true)) {
-            listOf("NAV1", "NAVI1")
-        } else {
-            listOf(lineName)
-        }
 
         // Filter stops that are served by this line
         val lineStops = allStops.filter { stop ->
             val desserte = stop.properties.desserte
             desserte.split(',').any { part ->
                 val lineCode = part.split(':').first().trim()
-                searchNames.any { searchName -> lineCode.equals(searchName, ignoreCase = true) }
+                lineCode.equals(lineName, ignoreCase = true)
             }
         }
 
@@ -1517,20 +1319,15 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     val directionStops = lineStops.filter { stop ->
                         // Be defensive: desserte can be blank in some rare cases
                         val desserte = stop.properties.desserte
-                        // Look for "86:A" or "86:R" (or "NAVI1:A" for NAV1) in the desserte
                         val matches = desserte.split(",").any { line ->
                             val trimmed = line.trim()
                             // Check all search names with the direction
                             val result = if (mainDirection.isNotEmpty()) {
-                                searchNames.any { searchName ->
-                                    trimmed.equals("$searchName:$mainDirection", ignoreCase = true)
-                                }
+                                trimmed.equals("$lineName:$mainDirection", ignoreCase = true)
                             } else {
                                 // If direction unknown, accept any entry for the searchName
-                                searchNames.any { searchName ->
-                                    // e.g. "86:A" or "86:R" or just "86"
-                                    trimmed.startsWith(searchName, ignoreCase = true)
-                                }
+                                // e.g. "86:A" or "86:R" or just "86"
+                                trimmed.startsWith(lineName, ignoreCase = true)
                             }
                             result
                         }
@@ -1576,7 +1373,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                         )
                     }
                     // Cache the result for future lookups
-                    lineStopsCache.put(cacheKey, result)
+                    // lineStopsCache.put(cacheKey, result)
                     return result
                 }
             }
@@ -1600,7 +1397,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             )
         }
         // Cache the result for future lookups
-        lineStopsCache.put(cacheKey, result)
+        // lineStopsCache.put(cacheKey, result)
         return result
     }
 
@@ -1634,10 +1431,9 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
             }
             .distinct()
 
-        // Combine and deduplicate using normalized names (e.g. NAVI1 & NAV1 → keep first seen)
         // Prefer names from Features (GeoJSON) since they're used for API lookups
         return (linesFromFeatures + linesFromStops)
-            .groupBy { normalizeLineName(it) }
+            .groupBy { it }
             .map { (_, variants) -> variants.first() }
             .filter { it.isNotEmpty() && !it.equals("TS", ignoreCase = true) }
             .sortedWith(
@@ -1647,7 +1443,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     when {
                         line.uppercase() in setOf("A", "B", "C", "D") -> 0 // Metros first
                         line.uppercase().startsWith("F") -> 1 // Funiculars
-                        line.uppercase().startsWith("NAV") -> 2 // Navigone
+                        line.uppercase().startsWith("NAVI") -> 2 // Navigone
                         line.uppercase().startsWith("T") && !line.uppercase()
                             .startsWith("TB") -> 3 // Trams
                         else -> 4 // The rest (buses)

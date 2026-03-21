@@ -16,7 +16,7 @@ fun getTransportType(lineName: String): TransportType {
         lineName.matches(Regex("T[1-7]")) -> TransportType.TRAM
         lineName in listOf("A", "B", "C", "D") -> TransportType.METRO
         lineName in listOf("F1", "F2") -> TransportType.FUNICULAR
-        lineName.uppercase().startsWith("NAV") -> TransportType.NAVIGONE
+        lineName.uppercase().startsWith("NAVI") -> TransportType.NAVIGONE
         // Bus lines can be numbers, "C" followed by numbers, or other letters.
         // It's simpler to consider everything else as a bus by default.
         else -> TransportType.BUS

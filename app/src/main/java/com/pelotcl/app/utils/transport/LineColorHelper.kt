@@ -29,12 +29,7 @@ object LineColorHelper {
     fun getColorForLine(feature: Feature): String {
         val ligne = feature.properties.ligne
         val familleTransport = feature.properties.familleTransport
-        val nomTypeLigne = feature.properties.nomTypeLigne?.lowercase()
-
-        // Safe null checks for all conditions - return default bus color if any property is null
-        if (ligne == null || familleTransport == null) {
-            return BUS_COLOR
-        }
+        val nomTypeLigne = feature.properties.nomTypeLigne.lowercase()
 
         return when {
             // Rhône Express
@@ -54,7 +49,7 @@ object LineColorHelper {
 
             // Navigone (water shuttle) - famille_transport = "BAT" (bateau)
             familleTransport == "BAT" || ligne.uppercase()
-                .startsWith("NAV") || nomTypeLigne?.contains("fluvial") == true -> NAVIGONE_COLOR
+                .startsWith("NAVI") || nomTypeLigne?.contains("fluvial") == true -> NAVIGONE_COLOR
 
             // Trams (famille TRA ou TRAM)
             familleTransport == "TRA" || familleTransport == "TRAM" -> TRAM_COLOR
@@ -81,7 +76,7 @@ object LineColorHelper {
             upperLine == "C" -> METRO_C_COLOR
             upperLine == "D" -> METRO_D_COLOR
             upperLine == "F1" || upperLine == "F2" -> FUNICULAR_COLOR
-            upperLine.startsWith("NAV") -> NAVIGONE_COLOR
+            upperLine.startsWith("NAVI") -> NAVIGONE_COLOR
             (upperLine.startsWith("T") && !upperLine.startsWith("TB")) -> TRAM_COLOR
             else -> BUS_COLOR
         }

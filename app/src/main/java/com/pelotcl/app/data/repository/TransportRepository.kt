@@ -690,9 +690,6 @@ class TransportRepository(context: Context? = null) {
                     }
                 }
 
-                // No need to load navigone stops separately - they are in the main API with code NAVI1
-                // (which will be normalized to NAV1 in BusIconHelper)
-
                 val allStopsFeatures = response.features
 
                 // Intelligently filter tram, trambus, and rhonexpress stops:

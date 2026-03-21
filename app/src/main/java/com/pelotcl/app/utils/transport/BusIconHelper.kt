@@ -105,7 +105,7 @@ object BusIconHelper {
      * Normalizes line names and converts to drawable format
      *
      * @param lineName The line name (ex: "212", "C17", "A", "NAVI1")
-     * @return The corresponding drawable name (ex: "_212", "c17", "a", "nav1")
+     * @return The corresponding drawable name (ex: "_212", "c17", "a", "navi1")
      */
     fun getDrawableNameForLineName(lineName: String): String {
         return getDrawableNameForLine(lineName)

@@ -414,8 +414,7 @@ private fun StopSelectionStep(
                             .mapNotNull { entry ->
                                 val parts = entry.split(":")
                                 if (parts.size >= 2) {
-                                    val name = parts[0].trim()
-                                    if (name.equals("NAVI1", ignoreCase = true)) "NAV1" else name
+                                    parts[0].trim()
                                 } else null
                             }
                             .distinct()
@@ -494,17 +493,15 @@ private fun LineSelectionStep(
             .distinct()
 
         lineNames.mapNotNull { line ->
-            val displayLine = if (line.equals("NAVI1", ignoreCase = true)) "NAV1" else line
-            val gtfsLine = if (line.equals("NAV1", ignoreCase = true)) "NAVI1" else line
-            val headsigns = schedulesRepository.getHeadsigns(gtfsLine)
+            val headsigns = schedulesRepository.getHeadsigns(line)
 
             if (headsigns.isEmpty()) return@mapNotNull null
 
             val dirs = headsigns.map { (dirId, headsign) ->
-                LineDirection(displayLine, dirId, headsign)
+                LineDirection(line, dirId, headsign)
             }.sortedBy { it.directionId }
 
-            LineWithDirections(displayLine, dirs)
+            LineWithDirections(line, dirs)
         }
     }
 

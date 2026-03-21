@@ -163,7 +163,7 @@ private fun isMetroTramOrFunicular(lineName: String): Boolean {
     return when {
         upperName in setOf("A", "B", "C", "D") -> true
         upperName in setOf("F1", "F2") -> true
-        upperName.startsWith("NAV") -> true
+        upperName.startsWith("NAVI") -> true
         upperName.startsWith("T") -> true
         upperName == "RX" -> true
         else -> false
@@ -179,7 +179,7 @@ private fun isLiveTrackableLine(lineName: String): Boolean {
     return when {
         upperName in setOf("A", "B", "C", "D") -> false // metro
         upperName in setOf("F1", "F2") -> false // funicular
-        upperName.startsWith("NAV") -> false // Navigone
+        upperName.startsWith("NAVI") -> false // Navigone
         upperName == "RX" -> false
         else -> true // bus + tram + trambus
     }
@@ -915,7 +915,7 @@ fun PlanScreen(
                     // Determine line width property based on type
                     val upperName = lineFeature.properties.ligne.uppercase()
                     val width = when {
-                        lineFeature.properties.familleTransport == "BAT" || upperName.startsWith("NAV") -> 2f
+                        lineFeature.properties.familleTransport == "BAT" || upperName.startsWith("NAVI") -> 2f
                         lineFeature.properties.familleTransport == "TRA" || lineFeature.properties.familleTransport == "TRAM" || upperName.startsWith(
                             "TB"
                         ) -> 2f
@@ -3127,7 +3127,7 @@ private fun addLineToMap(
         val upperLineName = ligne.uppercase()
         val familleTransport = feature.properties.familleTransport
         val lineWidth = when {
-            familleTransport == "BAT" || upperLineName.startsWith("NAV") -> 2f
+            familleTransport == "BAT" || upperLineName.startsWith("NAVI") -> 2f
             familleTransport == "TRA" || familleTransport == "TRAM" || upperLineName.startsWith("TB") -> 2f
             else -> 4f
         }
@@ -3164,69 +3164,61 @@ private suspend fun addStopsToMap(
     scope: CoroutineScope,
     viewModel: TransportViewModel? = null
 ) {
-    // OPTIMIZATION: Try to use cached GeoJSON + usedSlots if available
-    val cachedData = viewModel?.getCachedStopsGeoJson(stops)
-
     val (stopsGeoJson, requiredIcons, usedSlots) = // Full cache hit — GeoJSON, icons, AND usedSlots are all cached
-        cachedData
-            ?: // Compute GeoJSON and cache it
-            withContext(Dispatchers.Default) {
-                val requiredIcons = mutableSetOf<String>()
-                val usedSlots = mutableSetOf<Int>()
+        withContext(Dispatchers.Default) {
+            val requiredIcons = mutableSetOf<String>()
+            val usedSlots = mutableSetOf<Int>()
 
-                // Use centralized BusIconHelper cache for resource ID lookups
-                fun checkIconAvailable(name: String): Boolean {
-                    return BusIconHelper.getResourceIdForDrawableName(context, name) != 0
-                }
-
-                // Add mode icons to required icons
-                listOf("mode_bus", "mode_chrono", "mode_jd").forEach { modeIcon ->
-                    if (checkIconAvailable(modeIcon)) {
-                        requiredIcons.add(modeIcon)
-                    }
-                }
-
-                stops.forEach { stop ->
-                    val lineNames = BusIconHelper.getAllLinesForStop(stop)
-                    if (lineNames.isEmpty()) return@forEach
-
-                    // Separate lignes fortes from bus lines
-                    val lignesFortes = lineNames.filter { isMetroTramOrFunicular(it) }
-                    val busLines = lineNames.filter { !isMetroTramOrFunicular(it) }
-
-                    // Add line icons for lignes fortes only
-                    lignesFortes.forEach { lineName ->
-                        val drawableName = BusIconHelper.getDrawableNameForLineName(lineName)
-                        if (checkIconAvailable(drawableName)) {
-                            requiredIcons.add(drawableName)
-                        }
-                    }
-
-                    // Calculate usedSlots
-                    val uniqueModes = busLines.mapNotNull { getModeIconForLine(it) }.distinct()
-                        .filter { checkIconAvailable(it) }
-                    val validLignesFortes = lignesFortes.count { lineName ->
-                        val drawableName = BusIconHelper.getDrawableNameForLineName(lineName)
-                        checkIconAvailable(drawableName)
-                    }
-                    val n = validLignesFortes + uniqueModes.size
-                    if (n > 0) {
-                        var slot = -(n - 1)
-                        repeat(n) {
-                            usedSlots.add(slot)
-                            slot += 2
-                        }
-                    }
-                }
-
-                // Pass all stops to merge function, using StringBuilder for fast GeoJSON creation
-                val stopsGeoJson = createStopsGeoJsonFromStops(stops, requiredIcons)
-
-                // Cache the result for future use (including usedSlots)
-                viewModel?.cacheStopsGeoJson(stops, stopsGeoJson, requiredIcons, usedSlots)
-
-                Triple(stopsGeoJson, requiredIcons, usedSlots)
+            // Use centralized BusIconHelper cache for resource ID lookups
+            fun checkIconAvailable(name: String): Boolean {
+                return BusIconHelper.getResourceIdForDrawableName(context, name) != 0
             }
+
+            // Add mode icons to required icons
+            listOf("mode_bus", "mode_chrono", "mode_jd").forEach { modeIcon ->
+                if (checkIconAvailable(modeIcon)) {
+                    requiredIcons.add(modeIcon)
+                }
+            }
+
+            stops.forEach { stop ->
+                val lineNames = BusIconHelper.getAllLinesForStop(stop)
+                if (lineNames.isEmpty()) return@forEach
+
+                // Separate lignes fortes from bus lines
+                val lignesFortes = lineNames.filter { isMetroTramOrFunicular(it) }
+                val busLines = lineNames.filter { !isMetroTramOrFunicular(it) }
+
+                // Add line icons for lignes fortes only
+                lignesFortes.forEach { lineName ->
+                    val drawableName = BusIconHelper.getDrawableNameForLineName(lineName)
+                    if (checkIconAvailable(drawableName)) {
+                        requiredIcons.add(drawableName)
+                    }
+                }
+
+                // Calculate usedSlots
+                val uniqueModes = busLines.mapNotNull { getModeIconForLine(it) }.distinct()
+                    .filter { checkIconAvailable(it) }
+                val validLignesFortes = lignesFortes.count { lineName ->
+                    val drawableName = BusIconHelper.getDrawableNameForLineName(lineName)
+                    checkIconAvailable(drawableName)
+                }
+                val n = validLignesFortes + uniqueModes.size
+                if (n > 0) {
+                    var slot = -(n - 1)
+                    repeat(n) {
+                        usedSlots.add(slot)
+                        slot += 2
+                    }
+                }
+            }
+
+            // Pass all stops to merge function, using StringBuilder for fast GeoJSON creation
+            val stopsGeoJson = createStopsGeoJsonFromStops(stops, requiredIcons)
+
+            Triple(stopsGeoJson, requiredIcons, usedSlots)
+        }
 
     map.getStyle { style ->
         val sourceId = "transport-stops"

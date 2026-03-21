@@ -475,7 +475,7 @@ private fun categorizeLines(
             upperLine.startsWith("C") && upperLine.length >= 2 -> chrono.add(line)
             upperLine.startsWith("PL") -> pleineLune.add(line)
             upperLine.startsWith("JD") -> jd.add(line)
-            upperLine.startsWith("NAV") -> navigone.add(line)
+            upperLine.startsWith("NAVI") -> navigone.add(line)
             upperLine.startsWith("GE") -> gareExpress.add(line)
             upperLine.startsWith("S") -> soyeuses.add(line)
             upperLine.startsWith("ZI") -> zi.add(line)

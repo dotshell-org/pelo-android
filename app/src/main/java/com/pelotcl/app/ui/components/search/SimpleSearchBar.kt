@@ -114,7 +114,7 @@ private fun isStrongLine(line: String): Boolean {
     return when {
         upperLine in setOf("A", "B", "C", "D") -> true
         upperLine in setOf("F1", "F2") -> true
-        upperLine.startsWith("NAV") -> true
+        upperLine.startsWith("NAVI") -> true
         upperLine.startsWith("T") -> true
         upperLine == "RX" -> true
         else -> false
@@ -148,10 +148,10 @@ fun SimpleSearchBar(
 ) {
     val isControlled = externalQuery != null && externalOnQueryChange != null
     var internalQuery by rememberSaveable { mutableStateOf("") }
-    val queryText = if (isControlled) externalQuery!! else internalQuery
+    val queryText = if (isControlled) externalQuery else internalQuery
 
     fun setQueryText(q: String) {
-        if (isControlled) externalOnQueryChange!!(q) else internalQuery = q
+        if (isControlled) externalOnQueryChange(q) else internalQuery = q
         onQueryChange(q)
     }
 

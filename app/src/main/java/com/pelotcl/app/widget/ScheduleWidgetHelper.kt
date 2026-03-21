@@ -52,8 +52,7 @@ object ScheduleWidgetHelper {
     ): List<UpcomingDeparture> {
         val ctx = buildScheduleContext(context)
 
-        val gtfsLineName = if (lineName.equals("NAV1", ignoreCase = true)) "NAVI1" else lineName
-        val headsigns = ctx.repo.getHeadsigns(gtfsLineName)
+        val headsigns = ctx.repo.getHeadsigns(lineName)
 
         val directionsToQuery = if (directionId == DIRECTION_BOTH) {
             headsigns.keys.toList().ifEmpty { listOf(0, 1) }
@@ -65,7 +64,7 @@ object ScheduleWidgetHelper {
         for (dir in directionsToQuery) {
             val directionName = headsigns[dir] ?: ""
             val schedules = ctx.repo.getSchedules(
-                gtfsLineName, stopName, dir, ctx.isSchoolHoliday, ctx.isPublicHoliday
+                lineName, stopName, dir, ctx.isSchoolHoliday, ctx.isPublicHoliday
             )
             schedules.mapNotNull { time ->
                 minutesUntil(time, ctx.now)?.let {
@@ -100,9 +99,7 @@ object ScheduleWidgetHelper {
         val lineGroups = lineDirections.groupBy { it.first }
 
         for ((line, directions) in lineGroups) {
-            val gtfsLineName = if (line.equals("NAV1", ignoreCase = true)) "NAVI1" else line
-            val displayLineName = if (gtfsLineName == "NAVI1") "NAV1" else line
-            val headsigns = ctx.repo.getHeadsigns(gtfsLineName)
+            val headsigns = ctx.repo.getHeadsigns(line)
 
             for ((_, dirLetter) in directions) {
                 val directionId = when (dirLetter.uppercase()) {
@@ -113,12 +110,12 @@ object ScheduleWidgetHelper {
 
                 val directionName = headsigns[directionId] ?: ""
                 val schedules = ctx.repo.getSchedules(
-                    gtfsLineName, stopName, directionId, ctx.isSchoolHoliday, ctx.isPublicHoliday
+                    line, stopName, directionId, ctx.isSchoolHoliday, ctx.isPublicHoliday
                 )
 
                 schedules.mapNotNull { time ->
                     minutesUntil(time, ctx.now)?.let {
-                        UpcomingDeparture(displayLineName, directionName, time, it)
+                        UpcomingDeparture(line, directionName, time, it)
                     }
                 }.let { allDepartures.addAll(it) }
             }
