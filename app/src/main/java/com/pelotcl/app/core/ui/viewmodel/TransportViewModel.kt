@@ -122,6 +122,15 @@ class TransportViewModel(private val context: Context) : ViewModel() {
 
     private val _offlineDataInfo = MutableStateFlow(OfflineDataInfo())
     val offlineDataInfo: StateFlow<OfflineDataInfo> = _offlineDataInfo.asStateFlow()
+
+    // Cache for expensive line aggregation used by LinesBottomSheet.
+    private var cachedAvailableLines: List<String> = emptyList()
+    private var cachedAvailableLinesUiState: TransportLinesUiState? = null
+    private var cachedAvailableLinesStopsState: TransportStopsUiState? = null
+
+    // Cache alert line index to avoid O(lines * alerts) recomputation in UI.
+    private var cachedAlertIndexSource: List<TrafficAlert>? = null
+    private var cachedAlertSeverityByLine: Map<String, AlertSeverity> = emptyMap()
     
     init {
         loadTransportLines()
@@ -303,11 +312,41 @@ class TransportViewModel(private val context: Context) : ViewModel() {
     }
 
     fun getAllAvailableLines(): List<String> {
-        val state = uiState.value
-        if (state is TransportLinesUiState.Success) {
-            return state.lines.map { it.properties.ligne }.distinct()
+        val currentUiState = uiState.value
+        val currentStopsState = stopsUiState.value
+
+        if (currentUiState === cachedAvailableLinesUiState &&
+            currentStopsState === cachedAvailableLinesStopsState
+        ) {
+            return cachedAvailableLines
         }
-        return emptyList()
+
+        val linesFromLoadedFeatures = when (currentUiState) {
+            is TransportLinesUiState.Success -> currentUiState.lines.map { it.properties.ligne }
+            is TransportLinesUiState.PartialSuccess -> currentUiState.lines.map { it.properties.ligne }
+            else -> emptyList()
+        }
+
+        val linesFromStops = when (currentStopsState) {
+            is TransportStopsUiState.Success -> currentStopsState.stops
+                .asSequence()
+                .flatMap { stop -> parseLineCodesFromDesserte(stop.properties.desserte).asSequence() }
+                .toList()
+
+            else -> emptyList()
+        }
+
+        val aggregated = (linesFromLoadedFeatures + linesFromStops)
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinctBy { it.uppercase() }
+            .toList()
+
+        cachedAvailableLinesUiState = currentUiState
+        cachedAvailableLinesStopsState = currentStopsState
+        cachedAvailableLines = aggregated
+        return aggregated
     }
 
     fun getStopsForLine(lineName: String, currentStopName: String? = null, directionId: Int? = null): List<LineStopInfo> {
@@ -315,13 +354,14 @@ class TransportViewModel(private val context: Context) : ViewModel() {
         if (state !is TransportStopsUiState.Success) return emptyList()
 
         val effectiveDirection = directionId ?: 0
-        val stopSequences = schedulesRepository.getStopSequences(lineName, effectiveDirection)
+        val effectiveLineName = resolveScheduleRouteName(lineName)
+        val stopSequences = schedulesRepository.getStopSequences(effectiveLineName, effectiveDirection)
         val stopSequenceByName = stopSequences
             .associate { (stopNameFromGtfs, sequence) -> stopNameFromGtfs.uppercase() to sequence }
 
         val filteredStops = state.stops.filter { stop ->
             parseLineCodesFromDesserte(stop.properties.desserte)
-                .any { it.equals(lineName, ignoreCase = true) }
+                .any { areEquivalentRouteNames(it, lineName) }
         }
 
         if (filteredStops.isEmpty()) return emptyList()
@@ -384,7 +424,7 @@ class TransportViewModel(private val context: Context) : ViewModel() {
 
     fun loadHeadsign(lineName: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            _headsigns.value = schedulesRepository.getHeadsigns(lineName)
+            _headsigns.value = schedulesRepository.getHeadsigns(resolveScheduleRouteName(lineName))
         }
     }
 
@@ -403,7 +443,7 @@ class TransportViewModel(private val context: Context) : ViewModel() {
             val available = candidateDirections.filter { directionId ->
                 runCatching {
                     schedulesRepository.getSchedules(
-                        lineName = lineName,
+                        lineName = resolveScheduleRouteName(lineName),
                         stopName = stopName,
                         directionId = directionId,
                         isSchoolHoliday = isSchoolHoliday,
@@ -427,7 +467,7 @@ class TransportViewModel(private val context: Context) : ViewModel() {
             val isPublicHoliday = holidayDetector.isFrenchPublicHoliday(today)
 
             val allSchedulesForDay = schedulesRepository.getSchedules(
-                lineName = lineName,
+                lineName = resolveScheduleRouteName(lineName),
                 stopName = stopName,
                 directionId = directionId,
                 isSchoolHoliday = isSchoolHoliday,
@@ -452,9 +492,67 @@ class TransportViewModel(private val context: Context) : ViewModel() {
     }
 
     fun getAlertSeverityForLine(lineName: String): AlertSeverity? {
-        val mostSevereAlert = getAlertsForLine(lineName).minByOrNull { it.severityLevel }
-        return mostSevereAlert?.let {
-            AlertSeverity.fromSeverityType(it.severityType, it.severityLevel)
+        val token = normalizeLineToken(lineName)
+        if (token.isEmpty() || !isLikelyLineToken(token)) return null
+        return getOrBuildAlertSeverityIndex()[token]
+    }
+
+    fun getAlertSeverityMapForLines(lineNames: List<String>): Map<String, AlertSeverity> {
+        if (lineNames.isEmpty()) return emptyMap()
+        val severityByLine = getOrBuildAlertSeverityIndex()
+        if (severityByLine.isEmpty()) return emptyMap()
+
+        return lineNames
+            .asSequence()
+            .mapNotNull { lineName ->
+                val token = normalizeLineToken(lineName)
+                if (token.isEmpty() || !isLikelyLineToken(token)) return@mapNotNull null
+                severityByLine[token]?.let { severity ->
+                    lineName.uppercase() to severity
+                }
+            }
+            .toMap()
+    }
+
+    private fun getOrBuildAlertSeverityIndex(): Map<String, AlertSeverity> {
+        val alerts = trafficAlerts.value
+        if (alerts === cachedAlertIndexSource) return cachedAlertSeverityByLine
+
+        val index = mutableMapOf<String, AlertSeverity>()
+        alerts
+            .asSequence()
+            .distinctBy { it.alertNumber }
+            .forEach { alert ->
+                val severity = AlertSeverity.fromSeverityType(alert.severityType, alert.severityLevel)
+                extractAlertLineTokens(alert).forEach { token ->
+                    val existing = index[token]
+                    if (existing == null || severity.level < existing.level) {
+                        index[token] = severity
+                    }
+                }
+            }
+
+        cachedAlertIndexSource = alerts
+        cachedAlertSeverityByLine = index
+        return index
+    }
+
+    private fun extractAlertLineTokens(alert: TrafficAlert): Set<String> {
+        val lineCodeTokens = parseAlertTokens(alert.lineCode)
+        val lineNameTokens = parseAlertTokens(alert.lineName)
+        val shouldUseObjectList = alert.objectType.contains("ligne", ignoreCase = true) ||
+                alert.objectType.contains("line", ignoreCase = true) ||
+                alert.objectType.contains("route", ignoreCase = true) ||
+                (lineCodeTokens.isEmpty() && lineNameTokens.isEmpty())
+
+        return buildSet {
+            addAll(lineCodeTokens)
+            addAll(lineNameTokens)
+            if (shouldUseObjectList) {
+                addAll(parseAlertTokens(alert.objectList))
+            }
+            addAll(parseLineMentionsFromText(alert.title))
+            addAll(parseLineMentionsFromText(alert.message))
         }
     }
 
@@ -564,7 +662,10 @@ class TransportViewModel(private val context: Context) : ViewModel() {
     fun getStopsFeaturesForLine(lineName: String): List<StopFeature> {
         val state = stopsUiState.value
         if (state is TransportStopsUiState.Success) {
-            return state.stops.filter { it.properties.desserte.split(":").contains(lineName) }
+            return state.stops.filter { stop ->
+                parseLineCodesFromDesserte(stop.properties.desserte)
+                    .any { areEquivalentRouteNames(it, lineName) }
+            }
         }
         return emptyList()
     }
@@ -629,6 +730,31 @@ class TransportViewModel(private val context: Context) : ViewModel() {
             token.contains("RHONEXPRESS") -> "RX"
             else -> token
         }
+    }
+
+    private fun canonicalRouteName(raw: String): String {
+        val token = raw.trim().uppercase()
+        return when (token) {
+            "NAVI1" -> "NAV1"
+            else -> token
+        }
+    }
+
+    private fun resolveScheduleRouteName(raw: String): String {
+        val normalized = raw.trim().uppercase()
+        val candidates = when (normalized) {
+            "NAVI1", "NAV1" -> listOf("NAVI1", "NAV1")
+            else -> listOf(normalized)
+        }
+
+        val routeNames = schedulesRepository.getAllRouteNames()
+        val routeNamesUpper = routeNames.map { it.uppercase() }.toSet()
+        val matched = candidates.firstOrNull { it in routeNamesUpper }
+        return matched ?: canonicalRouteName(raw)
+    }
+
+    private fun areEquivalentRouteNames(first: String, second: String): Boolean {
+        return canonicalRouteName(first) == canonicalRouteName(second)
     }
 
     private fun isLikelyLineToken(token: String): Boolean {

@@ -158,12 +158,33 @@ private const val SELECTED_STOP_MIN_ZOOM = 9.0f
 private const val LIVE_MODE_ZOOM_LEVEL =
     12.0f // Zoom level for live tracking mode (below PRIORITY_STOPS_MIN_ZOOM to hide stop icons)
 
+private fun canonicalLineName(lineName: String): String {
+    val upperName = lineName.trim().uppercase()
+    return when (upperName) {
+        "NAVI1" -> "NAV1"
+        else -> upperName
+    }
+}
+
+private fun normalizeLineNameForUi(lineName: String): String {
+    return if (canonicalLineName(lineName) == "NAV1") "NAVI1" else lineName
+}
+
+private fun areEquivalentLineNames(first: String, second: String): Boolean {
+    return canonicalLineName(first) == canonicalLineName(second)
+}
+
+private fun isNavigoneLine(lineName: String): Boolean {
+    val upperName = lineName.trim().uppercase()
+    return upperName.startsWith("NAVI") || canonicalLineName(upperName) == "NAV1"
+}
+
 private fun isMetroTramOrFunicular(lineName: String): Boolean {
     val upperName = lineName.uppercase()
     return when {
         upperName in setOf("A", "B", "C", "D") -> true
         upperName in setOf("F1", "F2") -> true
-        upperName.startsWith("NAVI") -> true
+        isNavigoneLine(upperName) -> true
         upperName.startsWith("T") -> true
         upperName == "RX" -> true
         else -> false
@@ -179,7 +200,7 @@ private fun isLiveTrackableLine(lineName: String): Boolean {
     return when {
         upperName in setOf("A", "B", "C", "D") -> false // metro
         upperName in setOf("F1", "F2") -> false // funicular
-        upperName.startsWith("NAVI") -> false // Navigone
+        isNavigoneLine(upperName) -> false // Navigone
         upperName == "RX" -> false
         else -> true // bus + tram + trambus
     }
@@ -924,7 +945,7 @@ fun PlanScreen(
                     // Determine line width property based on type
                     val upperName = lineFeature.properties.ligne.uppercase()
                     val width = when {
-                        lineFeature.properties.familleTransport == "BAT" || upperName.startsWith("NAVI") -> 2f
+                        lineFeature.properties.familleTransport == "BAT" || isNavigoneLine(upperName) -> 2f
                         lineFeature.properties.familleTransport == "TRA" || lineFeature.properties.familleTransport == "TRAM" || upperName.startsWith(
                             "TB"
                         ) -> 2f
@@ -1509,7 +1530,7 @@ fun PlanScreen(
                 if ((currentSheetState == SheetContentState.LINE_DETAILS || currentSheetState == SheetContentState.ALL_SCHEDULES) && currentSelectedLine != null) {
                     val selectedName = currentSelectedLine.lineName
                     val hasSelectedInState =
-                        lines.any { it.properties.ligne.equals(selectedName, ignoreCase = true) }
+                        lines.any { areEquivalentLineNames(it.properties.ligne, selectedName) }
 
                     if (!hasSelectedInState && isMetroTramOrFunicular(selectedName)) {
                         viewModel.reloadStrongLines()
@@ -2397,10 +2418,7 @@ fun PlanScreen(
                                 else -> emptyList()
                             }
                             val isLoaded = currentLines.any {
-                                it.properties.ligne.equals(
-                                    lineName,
-                                    ignoreCase = true
-                                )
+                                areEquivalentLineNames(it.properties.ligne, lineName)
                             }
 
                             if (!isLoaded) {
@@ -2592,13 +2610,26 @@ private fun filterMapLines(
     allLines: List<Feature>,
     selectedLineName: String
 ): Int {
+    val selectedAliases = when (canonicalLineName(selectedLineName)) {
+        "NAV1" -> listOf("NAV1", "NAVI1")
+        else -> listOf(selectedLineName.trim().uppercase())
+    }
+
     map.getStyle { style ->
         val layerId = "all-lines-layer"
         val existingLayer = style.getLayer(layerId)
 
         if (existingLayer != null) {
+            val filterExpressions = selectedAliases.map { alias ->
+                Expression.eq(Expression.get("ligne"), alias)
+            }.toTypedArray()
+            val lineFilter = if (filterExpressions.size == 1) {
+                filterExpressions.first()
+            } else {
+                Expression.any(*filterExpressions)
+            }
             (existingLayer as? LineLayer)?.setFilter(
-                Expression.eq(Expression.get("ligne"), selectedLineName)
+                lineFilter
             )
         }
 
@@ -2609,7 +2640,7 @@ private fun filterMapLines(
 
             val individualLayerId = "layer-${ligne}-${codeTrace}"
             style.getLayer(individualLayerId)?.let { layer ->
-                val shouldBeVisible = ligne.equals(selectedLineName, ignoreCase = true)
+                val shouldBeVisible = areEquivalentLineNames(ligne, selectedLineName)
                 layer.setProperties(
                     PropertyFactory.visibility(if (shouldBeVisible) "visible" else "none")
                 )
@@ -2617,7 +2648,7 @@ private fun filterMapLines(
         }
     }
     val visibleCandidates =
-        allLines.count { it.properties.ligne.equals(selectedLineName, ignoreCase = true) }
+        allLines.count { areEquivalentLineNames(it.properties.ligne, selectedLineName) }
     return visibleCandidates
 }
 
@@ -2627,7 +2658,7 @@ private fun zoomToLine(
     selectedLineName: String
 ) {
     val lineFeatures = allLines.filter {
-        it.properties.ligne.equals(selectedLineName, ignoreCase = true)
+        areEquivalentLineNames(it.properties.ligne, selectedLineName)
     }
 
     if (lineFeatures.isEmpty()) return
@@ -2710,7 +2741,7 @@ private fun filterMapStops(
     val tramLayerPrefix = "transport-stops-layer-tram"
     val secondaryLayerPrefix = "transport-stops-layer-secondary"
 
-    val linePropertyName = "has_line_${selectedLineName.uppercase()}"
+    val linePropertyName = "has_line_${canonicalLineName(selectedLineName)}"
 
     // Filter layers by slot
     (-25..25).forEach { idx ->
@@ -2770,7 +2801,7 @@ private fun filterMapStopsWithSelectedStop(
         val priorityLayerPrefix = "transport-stops-layer-priority"
         val tramLayerPrefix = "transport-stops-layer-tram"
         val secondaryLayerPrefix = "transport-stops-layer-secondary"
-        val linePropertyName = "has_line_${selectedLineName.uppercase()}"
+        val linePropertyName = "has_line_${canonicalLineName(selectedLineName)}"
 
         // Filter layers by slot
         (-25..25).forEach { idx ->
@@ -2837,7 +2868,7 @@ private fun addCircleLayerForLineStops(
     val normalizedSelectedStop = normalizeStopName(selectedStopName)
 
     val lineColor = allLines
-        .find { it.properties.ligne.equals(selectedLineName, ignoreCase = true) }
+        .find { areEquivalentLineNames(it.properties.ligne, selectedLineName) }
         ?.let { LineColorHelper.getColorForLine(it) }
         ?: "#EF4444"
 
@@ -2851,7 +2882,7 @@ private fun addCircleLayerForLineStops(
         // Fallback: filter all stops (slower, but works if index not ready)
         allStops.filter { stop ->
             val lines = BusIconHelper.getAllLinesForStop(stop)
-            val hasLine = lines.any { it.equals(selectedLineName, ignoreCase = true) }
+            val hasLine = lines.any { areEquivalentLineNames(it, selectedLineName) }
             val isNotSelected = normalizeStopName(stop.properties.nom) != normalizedSelectedStop
             hasLine && isNotSelected
         }
@@ -3157,7 +3188,7 @@ private fun addLineToMap(
         val upperLineName = ligne.uppercase()
         val familleTransport = feature.properties.familleTransport
         val lineWidth = when {
-            familleTransport == "BAT" || upperLineName.startsWith("NAVI") -> 2f
+            familleTransport == "BAT" || isNavigoneLine(upperLineName) -> 2f
             familleTransport == "TRA" || familleTransport == "TRAM" || upperLineName.startsWith("TB") -> 2f
             else -> 4f
         }
@@ -3460,7 +3491,7 @@ private suspend fun addStopsToMap(
                                 val lineName =
                                     if (props.has("lineName")) props.get("lineName").asString else ""
                                 if (lineName.isNotEmpty()) {
-                                    onLineClick(lineName)
+                                    onLineClick(normalizeLineNameForUi(lineName))
                                     return@OnMapClickListener true
                                 }
                             } catch (_: Exception) {
@@ -3543,7 +3574,7 @@ private suspend fun addStopsToMap(
                                 val lineName =
                                     if (props.has("ligne")) props.get("ligne").asString else ""
                                 if (lineName.isNotEmpty()) {
-                                    onLineClick(lineName)
+                                    onLineClick(normalizeLineNameForUi(lineName))
                                     return@OnMapClickListener true
                                 }
                             } catch (_: Exception) {

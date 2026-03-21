@@ -2,7 +2,6 @@ package com.pelotcl.app.core.ui.screens.plan
 
 import android.content.Context
 import android.os.Build
-import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -124,30 +123,11 @@ fun LinesBottomSheet(
         )
     }
 
-    // Compute a map of alerts for all lines to be used by Chips
+    // Compute alerts using ViewModel indexing (fast path, avoids O(lines * alerts)).
     val lineAlerts = remember(trafficAlerts, allLines) {
-        Log.d(
-            "AlertCheck",
-            "Recomputing lineAlerts map. trafficAlerts size: ${trafficAlerts.size}, allLines size: ${allLines.size}"
-        )
-        if (viewModel != null && allLines.isNotEmpty()) {
-            val alertsMap = mutableMapOf<String, TrafficAlertSeverity>()
-            allLines.forEach { lineName ->
-                // Log each line check to see why it might be missing
-                try {
-                    val severity = viewModel.getAlertSeverityForLine(lineName)
-                    if (severity != null) {
-                        Log.d("AlertCheck", "Line $lineName has alert severity: ${severity.name}")
-                        alertsMap[lineName.uppercase()] = severity
-                    }
-                } catch (e: Exception) {
-                    Log.e("LinesBottomSheet", "Error loading alerts for line $lineName", e)
-                }
-            }
-            Log.d("AlertCheck", "Computed alertsMap size: ${alertsMap.size}")
-            alertsMap
+        if (viewModel != null && allLines.isNotEmpty() && trafficAlerts.isNotEmpty()) {
+            viewModel.getAlertSeverityMapForLines(allLines)
         } else {
-            Log.d("AlertCheck", "viewModel is null or allLines is empty")
             emptyMap()
         }
     }
@@ -442,8 +422,11 @@ private fun categorizeLines(
     lines: List<String>,
     context: Context
 ): Map<String, List<String>> {
-    // First filter lines that don't have icons
-    val linesWithIcon = lines.filter { hasLineIcon(it, context) }
+    // Keep lines with icons, and keep NAVI* even without a dedicated icon file.
+    val linesWithIcon = lines.filter { line ->
+        val upperLine = line.uppercase()
+        hasLineIcon(line, context) || upperLine.startsWith("NAVI")
+    }
 
     val metros = mutableListOf<String>()
     val trams = mutableListOf<String>()
@@ -524,7 +507,7 @@ private fun categorizeLines(
     if (metros.isNotEmpty()) result["Métro"] = naturalSort(metros)
     if (funiculaires.isNotEmpty()) result["Funiculaire"] = naturalSort(funiculaires)
     if (trams.isNotEmpty()) result["Tramway"] = naturalSort(trams)
-    if (navigone.isNotEmpty()) result["Navigône"] = naturalSort(navigone)
+    if (navigone.isNotEmpty()) result["Navigone"] = naturalSort(navigone)
     if (chrono.isNotEmpty()) result["Chrono"] = naturalSort(chrono)
     if (pleineLune.isNotEmpty()) result["Pleine Lune"] = naturalSort(pleineLune)
     if (gareExpress.isNotEmpty()) result["Gare Express"] = naturalSort(gareExpress)
