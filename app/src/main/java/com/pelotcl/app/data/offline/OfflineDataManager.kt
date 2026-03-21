@@ -2,14 +2,15 @@ package com.pelotcl.app.data.offline
 
 import android.content.Context
 import android.util.Log
-import com.pelotcl.app.data.api.RetrofitInstance
+import com.pelotcl.app.data.network.RetrofitInstance
 import com.pelotcl.app.data.model.Feature
 import com.pelotcl.app.data.model.Geometry
 import com.pelotcl.app.data.model.TransportLineProperties
-import com.pelotcl.app.data.repository.MapStyle
+import com.pelotcl.app.data.repository.offline.MapStyle
 import com.pelotcl.app.utils.withRetry
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import com.pelotcl.app.data.repository.offline.SchedulesRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -57,7 +58,7 @@ class OfflineDataManager(context: Context) {
     private val offlineRepository = OfflineRepository(context)
     private val offlineMapManager = OfflineMapManager(context)
     private val schedulesRepository =
-        com.pelotcl.app.data.gtfs.SchedulesRepository.getInstance(context)
+        SchedulesRepository.getInstance(context)
 
     private val _downloadState = MutableStateFlow<OfflineDownloadState>(OfflineDownloadState.Idle)
     val downloadState: StateFlow<OfflineDownloadState> = _downloadState.asStateFlow()

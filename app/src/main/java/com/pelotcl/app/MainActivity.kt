@@ -54,19 +54,19 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.google.android.gms.location.LocationServices
-import com.pelotcl.app.ui.components.AddFavoriteDialog
-import com.pelotcl.app.ui.components.FavoritesBar
+import com.pelotcl.app.ui.components.favorites.AddFavoriteDialog
+import com.pelotcl.app.ui.components.favorites.FavoritesBar
 import com.pelotcl.app.ui.components.TransportSearchBar
 import com.pelotcl.app.ui.components.TransportSearchContent
 import com.pelotcl.app.ui.components.StationSearchResult
-import com.pelotcl.app.data.repository.SearchHistoryItem
-import com.pelotcl.app.data.repository.SearchType
-import com.pelotcl.app.data.repository.MapStyle
+import com.pelotcl.app.data.repository.offline.SearchHistoryItem
+import com.pelotcl.app.data.repository.offline.SearchType
+import com.pelotcl.app.data.repository.offline.MapStyle
 import com.pelotcl.app.ui.screens.settings.about.AboutScreen
 import com.pelotcl.app.ui.screens.settings.about.ContactScreen
 import com.pelotcl.app.ui.screens.settings.about.CreditsScreen
 import com.pelotcl.app.ui.screens.settings.about.LegalScreen
-import com.pelotcl.app.ui.screens.PlanScreen
+import com.pelotcl.app.ui.screens.plan.PlanScreen
 import com.pelotcl.app.ui.screens.settings.ItinerarySettingsScreen
 import com.pelotcl.app.ui.screens.settings.OfflineSettingsScreen
 import com.pelotcl.app.ui.screens.settings.SettingsScreen
@@ -74,8 +74,9 @@ import com.pelotcl.app.ui.theme.PeloTheme
 import com.pelotcl.app.ui.theme.Red500
 import com.pelotcl.app.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.ui.viewmodel.TransportStopsUiState
-import com.pelotcl.app.data.api.RetrofitInstance
+import com.pelotcl.app.data.network.RetrofitInstance
 import com.pelotcl.app.data.cache.TransportCache
+import com.pelotcl.app.data.repository.offline.SchedulesRepository
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LocationHelper
 import kotlinx.coroutines.CoroutineScope
@@ -105,7 +106,7 @@ class MainActivity : ComponentActivity() {
                 }
                 val schedulesJob = launch {
                     val schedulesRepo =
-                        com.pelotcl.app.data.gtfs.SchedulesRepository.getInstance(applicationContext)
+                        SchedulesRepository.getInstance(applicationContext)
                     schedulesRepo.warmupDatabase()
                 }
                 // Wait for cache and schedule data warmup (critical for UI)
@@ -147,7 +148,7 @@ class MainActivity : ComponentActivity() {
             kotlinx.coroutines.yield()
             try {
                 val raptorRepo =
-                    com.pelotcl.app.data.repository.raptor.RaptorRepository.getInstance(
+                    com.pelotcl.app.data.repository.itinerary.RaptorRepository.getInstance(
                         applicationContext
                     )
                 raptorRepo.initialize()

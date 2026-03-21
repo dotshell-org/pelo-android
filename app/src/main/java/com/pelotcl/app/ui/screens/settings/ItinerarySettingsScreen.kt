@@ -42,7 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
-import com.pelotcl.app.data.repository.ItineraryPreferencesRepository
+import com.pelotcl.app.data.repository.itinerary.ItineraryPreferencesRepository
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

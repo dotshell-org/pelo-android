@@ -1,7 +1,7 @@
 package com.pelotcl.app.data.repository
 
 import android.content.Context
-import com.pelotcl.app.data.api.RetrofitInstance
+import com.pelotcl.app.data.network.RetrofitInstance
 import com.pelotcl.app.data.cache.TransportCache
 import com.pelotcl.app.data.model.Feature
 import com.pelotcl.app.data.model.FeatureCollection

@@ -3,9 +3,9 @@ package com.pelotcl.app.data.cache
 import android.content.Context
 import android.util.Log
 import android.util.LruCache
-import com.pelotcl.app.data.repository.raptor.IntermediateStop
-import com.pelotcl.app.data.repository.raptor.JourneyLeg
-import com.pelotcl.app.data.repository.raptor.JourneyResult
+import com.pelotcl.app.data.repository.itinerary.IntermediateStop
+import com.pelotcl.app.data.repository.itinerary.JourneyLeg
+import com.pelotcl.app.data.repository.itinerary.JourneyResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock

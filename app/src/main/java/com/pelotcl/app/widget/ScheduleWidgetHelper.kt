@@ -3,7 +3,7 @@ package com.pelotcl.app.widget
 import android.content.Context
 import android.os.Build
 import androidx.annotation.RequiresApi
-import com.pelotcl.app.data.gtfs.SchedulesRepository
+import com.pelotcl.app.data.repository.offline.SchedulesRepository
 import com.pelotcl.app.utils.HolidayDetector
 import java.time.LocalDate
 import java.time.LocalTime

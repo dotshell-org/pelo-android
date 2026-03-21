@@ -11,21 +11,24 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.viewModelScope
+import com.pelotcl.app.data.cache.LineStopsCache
 import com.pelotcl.app.data.model.Feature
 import com.pelotcl.app.data.model.SimpleVehiclePosition
 import com.pelotcl.app.data.model.StopFeature
-import com.pelotcl.app.data.repository.raptor.RaptorRepository
+import com.pelotcl.app.data.repository.itinerary.RaptorRepository
 import com.pelotcl.app.data.repository.TransportRepository
-import com.pelotcl.app.data.repository.TrafficAlertsRepository
-import com.pelotcl.app.data.repository.VehiclePositionsRepository
+import com.pelotcl.app.data.repository.online.TrafficAlertsRepository
+import com.pelotcl.app.data.repository.online.VehiclePositionsRepository
 import com.pelotcl.app.ui.components.LineSearchResult
 import com.pelotcl.app.ui.components.StationSearchResult
 import com.pelotcl.app.utils.Connection
-import com.pelotcl.app.data.repository.FavoritesRepository
+import com.pelotcl.app.data.repository.offline.FavoritesRepository
 import com.pelotcl.app.data.cache.SpatialGrid
+import com.pelotcl.app.data.model.LineStopInfo
 import com.pelotcl.app.data.network.ConnectivityObserver
 import com.pelotcl.app.data.offline.OfflineDataInfo
 import com.pelotcl.app.data.offline.OfflineDataManager
+import com.pelotcl.app.data.repository.offline.SchedulesRepository
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.ConnectionsHelper
 import com.pelotcl.app.utils.HolidayDetector
@@ -94,7 +97,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     val stopsUiState: StateFlow<TransportStopsUiState> = _stopsUiState.asStateFlow()
 
     private val schedulesRepository =
-        com.pelotcl.app.data.gtfs.SchedulesRepository.getInstance(application.applicationContext)
+        SchedulesRepository.getInstance(application.applicationContext)
     private val holidayDetector by lazy { HolidayDetector(application.applicationContext) }
     private val favoritesRepository = FavoritesRepository(application.applicationContext)
 
@@ -245,7 +248,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     .map { it.properties.desserte }
                     .filter { it.isNotEmpty() }
                 if (matchingDessertes.isNotEmpty()) {
-                    val merged = com.pelotcl.app.data.gtfs.SchedulesRepository.mergeDessertes(
+                    val merged = SchedulesRepository.mergeDessertes(
                         matchingDessertes
                     )
                     favoritesRepository.saveDesserteForStop(stopName, merged)
@@ -681,7 +684,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
     // LruCache for line stops to avoid expensive geometric calculations
     // Key = "lineName|currentStopName", Value = list of LineStopInfo
     // Reduced from 30 to 15 entries to limit memory usage during rapid navigation
-    private val lineStopsCache = LruCache<String, List<com.pelotcl.app.data.gtfs.LineStopInfo>>(15)
+    private val lineStopsCache = LruCache<String, List<LineStopInfo>>(15)
 
     // === OPTIMIZATION: Spatial grid index for fast bounding-box queries ===
     // Partitions stops into geographic cells for O(visible_cells) viewport queries
@@ -1176,7 +1179,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 .map { it.properties.desserte }
                 .filter { it.isNotEmpty() }
             val desserte = if (matchingDessertes.isNotEmpty()) {
-                com.pelotcl.app.data.gtfs.SchedulesRepository.mergeDessertes(matchingDessertes)
+                SchedulesRepository.mergeDessertes(matchingDessertes)
             } else null
 
             favoritesRepository.toggleFavoriteStop(stopName, desserte)
@@ -1368,7 +1371,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
         lineName: String,
         currentStopName: String? = null,
         directionId: Int = 0
-    ): List<com.pelotcl.app.data.gtfs.LineStopInfo> {
+    ): List<LineStopInfo> {
         // Check LruCache first for ultra-fast repeated lookups
         val cacheKey = "$lineName|${currentStopName ?: ""}|$directionId"
         lineStopsCache.get(cacheKey)?.let { return it }
@@ -1391,7 +1394,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                 val officialName = matchingStop?.properties?.nom ?: stationName
                 val connections = getConnectionsForStop(officialName, lineName)
 
-                com.pelotcl.app.data.gtfs.LineStopInfo(
+                LineStopInfo(
                     stopId = matchingStop?.properties?.id?.toString()
                         ?: "gtfs_${lineName}_${sequence}",
                     stopName = officialName,
@@ -1411,7 +1414,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
         // Second, try to retrieve from static cache (for metros and trams)
         val cachedStops =
-            com.pelotcl.app.data.gtfs.LineStopsCache.getLineStops(lineName, currentStopName)
+            LineStopsCache.getLineStops(lineName, currentStopName)
         if (cachedStops != null) {
             // Align cache labels with official GTFS labels (strict comparison required DB side)
             val allStops = getCachedStopsSync()
@@ -1562,7 +1565,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
                     // Convert to LineStopInfo
                     val result = dedupOrdered.mapIndexed { index, stop ->
                         val connections = getConnectionsForStop(stop.properties.nom, lineName)
-                        com.pelotcl.app.data.gtfs.LineStopInfo(
+                        LineStopInfo(
                             stopId = stop.properties.id.toString(),
                             stopName = stop.properties.nom,
                             stopSequence = index + 1,
@@ -1586,7 +1589,7 @@ class TransportViewModel(application: Application) : AndroidViewModel(applicatio
 
         val result = uniqueStops.mapIndexed { index, stop ->
             val connections = getConnectionsForStop(stop.properties.nom, lineName)
-            com.pelotcl.app.data.gtfs.LineStopInfo(
+            LineStopInfo(
                 stopId = stop.properties.id.toString(),
                 stopName = stop.properties.nom,
                 stopSequence = index + 1,

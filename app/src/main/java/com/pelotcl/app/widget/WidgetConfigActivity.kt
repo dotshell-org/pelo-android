@@ -58,8 +58,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.state.updateAppWidgetState
-import com.pelotcl.app.data.gtfs.SchedulesRepository
-import com.pelotcl.app.data.repository.FavoritesRepository
+import com.pelotcl.app.data.repository.offline.SchedulesRepository
+import com.pelotcl.app.data.repository.offline.FavoritesRepository
 import com.pelotcl.app.utils.BusIconHelper
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
