@@ -54,29 +54,29 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.google.android.gms.location.LocationServices
-import com.pelotcl.app.core.ui.components.favorites.AddFavoriteDialog
-import com.pelotcl.app.core.ui.components.favorites.FavoritesBar
-import com.pelotcl.app.core.ui.components.TransportSearchBar
-import com.pelotcl.app.core.ui.components.TransportSearchContent
-import com.pelotcl.app.core.ui.components.StationSearchResult
-import com.pelotcl.app.core.data.repository.offline.SearchHistoryItem
-import com.pelotcl.app.core.data.repository.offline.SearchType
-import com.pelotcl.app.core.data.repository.offline.MapStyle
-import com.pelotcl.app.core.ui.screens.settings.about.AboutScreen
-import com.pelotcl.app.core.ui.screens.settings.about.ContactScreen
-import com.pelotcl.app.core.ui.screens.settings.about.CreditsScreen
-import com.pelotcl.app.core.ui.screens.settings.about.LegalScreen
-import com.pelotcl.app.core.ui.screens.plan.PlanScreen
-import com.pelotcl.app.core.ui.screens.settings.ItinerarySettingsScreen
-import com.pelotcl.app.core.ui.screens.settings.OfflineSettingsScreen
-import com.pelotcl.app.core.ui.screens.settings.SettingsScreen
-import com.pelotcl.app.core.ui.theme.PeloTheme
-import com.pelotcl.app.core.ui.theme.Red500
-import com.pelotcl.app.core.ui.viewmodel.TransportViewModel
-import com.pelotcl.app.core.ui.viewmodel.TransportStopsUiState
-import com.pelotcl.app.core.data.network.RetrofitInstance
-import com.pelotcl.app.core.data.cache.TransportCache
-import com.pelotcl.app.core.data.repository.offline.SchedulesRepository
+import com.pelotcl.app.generic.ui.components.favorites.AddFavoriteDialog
+import com.pelotcl.app.generic.ui.components.favorites.FavoritesBar
+import com.pelotcl.app.generic.ui.components.TransportSearchBar
+import com.pelotcl.app.generic.ui.components.TransportSearchContent
+import com.pelotcl.app.generic.ui.components.StationSearchResult
+import com.pelotcl.app.generic.data.repository.offline.SearchHistoryItem
+import com.pelotcl.app.generic.data.repository.offline.SearchType
+import com.pelotcl.app.generic.data.repository.offline.MapStyleCompat
+import com.pelotcl.app.generic.ui.screens.settings.about.AboutScreen
+import com.pelotcl.app.generic.ui.screens.settings.about.ContactScreen
+import com.pelotcl.app.generic.ui.screens.settings.about.CreditsScreen
+import com.pelotcl.app.generic.ui.screens.settings.about.LegalScreen
+import com.pelotcl.app.generic.ui.screens.plan.PlanScreen
+import com.pelotcl.app.generic.ui.screens.settings.ItinerarySettingsScreen
+import com.pelotcl.app.generic.ui.screens.settings.OfflineSettingsScreen
+import com.pelotcl.app.generic.ui.screens.settings.SettingsScreen
+import com.pelotcl.app.generic.ui.theme.PeloTheme
+import com.pelotcl.app.generic.ui.theme.Red500
+import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
+import com.pelotcl.app.generic.ui.viewmodel.TransportStopsUiState
+import com.pelotcl.app.generic.data.network.RetrofitInstance
+import com.pelotcl.app.generic.data.cache.TransportCache
+import com.pelotcl.app.generic.data.repository.offline.SchedulesRepository
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LocationHelper
 import kotlinx.coroutines.CoroutineScope
@@ -141,17 +141,17 @@ class MainActivity : ComponentActivity() {
             BusIconHelper.preloadResourceIds(applicationContext)
 
             // Initialize transport services with Lyon TCL configuration
-            com.pelotcl.app.core.service.TransportServiceProvider.initialize(applicationContext)
+            com.pelotcl.app.generic.service.TransportServiceProvider.initialize(applicationContext)
             
             // Initialize HTTP cache for network requests (not needed for cached data display)
-            RetrofitInstance.initialize(applicationContext, com.pelotcl.app.core.service.TransportServiceProvider.getTransportConfig())
+            RetrofitInstance.initialize(applicationContext, com.pelotcl.app.generic.service.TransportServiceProvider.getTransportConfig())
 
             // Preload Raptor library in background (only needed for itinerary calculations)
             // yield() gives the UI thread priority without an arbitrary delay
             kotlinx.coroutines.yield()
             try {
                 val raptorRepo =
-                    com.pelotcl.app.core.data.repository.itinerary.RaptorRepository.getInstance(
+                    com.pelotcl.app.generic.data.repository.itinerary.RaptorRepository.getInstance(
                         applicationContext
                     )
                 raptorRepo.initialize()
@@ -163,7 +163,7 @@ class MainActivity : ComponentActivity() {
             // Refresh home screen widgets with fresh schedule data
             delay(3000)
             try {
-                val widget = com.pelotcl.app.core.widget.PeloWidget()
+                val widget = com.pelotcl.app.generic.widget.PeloWidget()
                 val manager = androidx.glance.appwidget.GlanceAppWidgetManager(applicationContext)
                 val glanceIds = manager.getGlanceIds(widget.javaClass)
                 for (glanceId in glanceIds) {
@@ -235,7 +235,7 @@ fun NavBar(modifier: Modifier = Modifier) {
     }
     val viewModel: TransportViewModel = viewModel(factory = viewModelFactory)
 
-    var currentMapStyle by remember { mutableStateOf(MapStyle.POSITRON) }
+    var currentMapStyle by remember { mutableStateOf(MapStyleCompat.POSITRON) }
     var isSearchExpanded by remember { mutableStateOf(false) }
     var stopOptionsSelectedStop by remember { mutableStateOf<StationSearchResult?>(null) }
     val favoriteStops by viewModel.favoriteStops.collectAsState(initial = emptySet())
@@ -247,7 +247,7 @@ fun NavBar(modifier: Modifier = Modifier) {
     LaunchedEffect(favoriteStops, stopsUiState) {
         val stops = (stopsUiState as? TransportStopsUiState.Success)?.stops
         favoriteStopItems = favoriteStops.map { stopName ->
-            val stop = stops?.find { (it as com.pelotcl.app.core.data.model.StopFeature).properties.nom.equals(stopName, ignoreCase = true) }
+            val stop = stops?.find { (it as com.pelotcl.app.generic.data.model.StopFeature).properties.nom.equals(stopName, ignoreCase = true) }
             val lines = stop?.let { BusIconHelper.getAllLinesForStop(it) } ?: emptyList()
             SearchHistoryItem(
                 query = stopName,

@@ -1,6 +1,6 @@
 package com.pelotcl.app.utils
 
-import com.pelotcl.app.core.data.model.Feature
+import com.pelotcl.app.generic.data.model.Feature
 import androidx.core.graphics.toColorInt
 
 /**
