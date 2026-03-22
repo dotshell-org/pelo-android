@@ -142,7 +142,7 @@ class TransportViewModel(private val context: Context) : ViewModel() {
                 val result = transportRepository.getAllLines()
                 result.onSuccess { lines ->
                     _linesState.value = TransportLinesState.Success(lines)
-                    _uiState.value = TransportLinesUiState.Success(lines.features)
+                    _uiState.value = TransportLinesUiState.Success(lines.features.orEmpty())
                 }.onFailure { error ->
                     _linesState.value = TransportLinesState.Error(error.message ?: "Unknown error")
                     _uiState.value = TransportLinesUiState.Error(error.message ?: "Unknown error")
@@ -172,7 +172,7 @@ class TransportViewModel(private val context: Context) : ViewModel() {
             }
 
             val onlineStops = runCatching {
-                withContext(Dispatchers.IO) { transportApi.getTransportStops().features }
+                withContext(Dispatchers.IO) { transportApi.getTransportStops().features.orEmpty() }
             }.getOrElse { error ->
                 _stopsUiState.value =
                     TransportStopsUiState.Error(error.message ?: "Unable to load transport stops")
