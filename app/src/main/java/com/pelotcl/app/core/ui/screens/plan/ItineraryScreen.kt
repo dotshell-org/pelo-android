@@ -59,8 +59,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.pelotcl.app.data.repository.itinerary.JourneyLeg
-import com.pelotcl.app.data.repository.itinerary.JourneyResult
+import com.pelotcl.app.core.data.repository.itinerary.JourneyLeg
+import com.pelotcl.app.core.data.repository.itinerary.JourneyResult
 import com.pelotcl.app.core.ui.theme.Gray700
 import com.pelotcl.app.core.ui.theme.Red500
 import androidx.compose.runtime.Immutable

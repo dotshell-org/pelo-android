@@ -3,12 +3,12 @@ package com.pelotcl.app.core.service
 import android.content.Context
 import com.pelotcl.app.core.data.network.TransportApi
 import com.pelotcl.app.core.data.network.TransportConfig
-import com.pelotcl.app.data.network.RetrofitInstance
-import com.pelotcl.app.transport.lyontcl.LyonTclConfig
-import com.pelotcl.app.transport.lyontcl.ui.theme.LyonTclTheme
+import com.pelotcl.app.core.data.network.RetrofitInstance
 import com.pelotcl.app.core.ui.theme.TransportTheme
-import com.pelotcl.app.transport.lyontcl.ui.screens.about.LyonTclAboutScreen
 import com.pelotcl.app.core.ui.screens.about.AboutScreenContract
+import com.pelotcl.app.implementation.TransportConfigImpl
+import com.pelotcl.app.implementation.ui.screens.about.AboutScreenImpl
+import com.pelotcl.app.implementation.ui.theme.TransportThemeImpl
 
 /**
  * Fournisseur de services pour l'application
@@ -27,7 +27,7 @@ object TransportServiceProvider {
      */
     fun initialize(context: Context) {
         // Configuration Lyon TCL
-        transportConfig = LyonTclConfig
+        transportConfig = TransportConfigImpl
         
         // Initialiser Retrofit avec la configuration
         RetrofitInstance.initialize(context, transportConfig)
@@ -37,10 +37,10 @@ object TransportServiceProvider {
             .create(TransportApi::class.java)
         
         // Thème Lyon TCL
-        transportTheme = LyonTclTheme()
+        transportTheme = TransportThemeImpl()
         
         // Écrans "À propos" Lyon TCL
-        aboutScreen = LyonTclAboutScreen()
+        aboutScreen = AboutScreenImpl()
         
         // Appliquer le thème par défaut
         com.pelotcl.app.core.ui.theme.TransportThemeProvider.setTheme(transportTheme)

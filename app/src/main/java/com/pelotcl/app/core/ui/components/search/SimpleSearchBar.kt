@@ -70,8 +70,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pelotcl.app.R
-import com.pelotcl.app.data.repository.offline.SearchHistoryItem
-import com.pelotcl.app.data.repository.offline.SearchType
+import com.pelotcl.app.core.data.repository.offline.SearchHistoryItem
+import com.pelotcl.app.core.data.repository.offline.SearchType
 import com.pelotcl.app.core.ui.theme.Red500
 import com.pelotcl.app.core.ui.theme.Stone900
 import com.pelotcl.app.utils.BusIconHelper

@@ -7,7 +7,7 @@
     android:resizeMode="horizontal|vertical"
     android:updatePeriodMillis="1800000"
     android:initialLayout="@layout/widget_loading"
-    android:configure="com.pelotcl.app.widget.WidgetConfigActivity"
+    android:configure="com.pelotcl.app.core.widget.WidgetConfigActivity"
     android:widgetCategory="home_screen"
 android:previewLayout="@layout/widget_preview_line_minutes"
     android:targetCellWidth="3"

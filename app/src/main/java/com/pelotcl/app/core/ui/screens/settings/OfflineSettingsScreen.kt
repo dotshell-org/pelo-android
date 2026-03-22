@@ -46,8 +46,8 @@ import com.pelotcl.app.R
 import com.pelotcl.app.core.data.offline.OfflineDataInfo
 import com.pelotcl.app.core.data.offline.OfflineDownloadState
 import com.pelotcl.app.core.data.offline.OfflineRepository
-import com.pelotcl.app.data.repository.offline.MapStyle
-import com.pelotcl.app.data.repository.offline.MapStyleCategory
+import com.pelotcl.app.core.data.repository.offline.MapStyle
+import com.pelotcl.app.core.data.repository.offline.MapStyleCategory
 import com.pelotcl.app.core.ui.viewmodel.TransportViewModel
 import java.text.SimpleDateFormat
 import java.util.Date

@@ -7,9 +7,9 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.pelotcl.app.core.data.cache.JourneyCache
-import com.pelotcl.app.data.repository.offline.SchedulesRepository
+import com.pelotcl.app.core.data.repository.offline.SchedulesRepository
 import com.pelotcl.app.utils.BusIconHelper
-import com.pelotcl.app.worker.TrafficAlertsWorker
+import com.pelotcl.app.core.worker.TrafficAlertsWorker
 import java.util.concurrent.TimeUnit
 
 class PeloApplication : Application(), Configuration.Provider {

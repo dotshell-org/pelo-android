@@ -6,11 +6,11 @@ import com.pelotcl.app.core.data.network.TransportApi
 import com.pelotcl.app.core.data.model.Feature
 import com.pelotcl.app.core.data.model.Geometry
 import com.pelotcl.app.core.data.model.TransportLineProperties
-import com.pelotcl.app.data.repository.offline.MapStyle
+import com.pelotcl.app.core.data.repository.offline.MapStyle
 import com.pelotcl.app.utils.withRetry
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
-import com.pelotcl.app.data.repository.offline.SchedulesRepository
+import com.pelotcl.app.core.data.repository.offline.SchedulesRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async

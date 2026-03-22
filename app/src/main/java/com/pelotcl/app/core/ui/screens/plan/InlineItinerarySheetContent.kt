@@ -33,7 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.pelotcl.app.data.repository.itinerary.JourneyResult
+import com.pelotcl.app.core.data.repository.itinerary.JourneyResult
 import com.pelotcl.app.core.ui.screens.plan.SelectedStop
 import com.pelotcl.app.core.ui.screens.plan.TimeMode
 import com.pelotcl.app.core.ui.viewmodel.TransportViewModel

@@ -59,9 +59,9 @@ import com.pelotcl.app.core.ui.components.favorites.FavoritesBar
 import com.pelotcl.app.core.ui.components.TransportSearchBar
 import com.pelotcl.app.core.ui.components.TransportSearchContent
 import com.pelotcl.app.core.ui.components.StationSearchResult
-import com.pelotcl.app.data.repository.offline.SearchHistoryItem
-import com.pelotcl.app.data.repository.offline.SearchType
-import com.pelotcl.app.data.repository.offline.MapStyle
+import com.pelotcl.app.core.data.repository.offline.SearchHistoryItem
+import com.pelotcl.app.core.data.repository.offline.SearchType
+import com.pelotcl.app.core.data.repository.offline.MapStyle
 import com.pelotcl.app.core.ui.screens.settings.about.AboutScreen
 import com.pelotcl.app.core.ui.screens.settings.about.ContactScreen
 import com.pelotcl.app.core.ui.screens.settings.about.CreditsScreen
@@ -74,9 +74,9 @@ import com.pelotcl.app.core.ui.theme.PeloTheme
 import com.pelotcl.app.core.ui.theme.Red500
 import com.pelotcl.app.core.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.core.ui.viewmodel.TransportStopsUiState
-import com.pelotcl.app.data.network.RetrofitInstance
+import com.pelotcl.app.core.data.network.RetrofitInstance
 import com.pelotcl.app.core.data.cache.TransportCache
-import com.pelotcl.app.data.repository.offline.SchedulesRepository
+import com.pelotcl.app.core.data.repository.offline.SchedulesRepository
 import com.pelotcl.app.utils.BusIconHelper
 import com.pelotcl.app.utils.LocationHelper
 import kotlinx.coroutines.CoroutineScope
@@ -151,7 +151,7 @@ class MainActivity : ComponentActivity() {
             kotlinx.coroutines.yield()
             try {
                 val raptorRepo =
-                    com.pelotcl.app.data.repository.itinerary.RaptorRepository.getInstance(
+                    com.pelotcl.app.core.data.repository.itinerary.RaptorRepository.getInstance(
                         applicationContext
                     )
                 raptorRepo.initialize()
@@ -163,7 +163,7 @@ class MainActivity : ComponentActivity() {
             // Refresh home screen widgets with fresh schedule data
             delay(3000)
             try {
-                val widget = com.pelotcl.app.widget.PeloWidget()
+                val widget = com.pelotcl.app.core.widget.PeloWidget()
                 val manager = androidx.glance.appwidget.GlanceAppWidgetManager(applicationContext)
                 val glanceIds = manager.getGlanceIds(widget.javaClass)
                 for (glanceId in glanceIds) {

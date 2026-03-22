@@ -8,10 +8,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import com.pelotcl.app.data.repository.offline.MapStyle
-import com.pelotcl.app.data.repository.offline.SearchHistoryItem
-import com.pelotcl.app.data.repository.offline.SearchHistoryRepository
-import com.pelotcl.app.data.repository.offline.SearchType
+import com.pelotcl.app.core.data.repository.offline.MapStyle
+import com.pelotcl.app.core.data.repository.offline.SearchHistoryItem
+import com.pelotcl.app.core.data.repository.offline.SearchHistoryRepository
+import com.pelotcl.app.core.data.repository.offline.SearchType
 import com.pelotcl.app.core.ui.viewmodel.TransportViewModel
 import kotlinx.coroutines.delay
 

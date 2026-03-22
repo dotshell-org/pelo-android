@@ -109,9 +109,9 @@ import com.pelotcl.app.core.data.model.Feature
 import com.pelotcl.app.core.data.model.StopFeature
 import com.pelotcl.app.core.data.model.StopGeometry
 import com.pelotcl.app.core.data.model.StopProperties
-import com.pelotcl.app.data.repository.itinerary.JourneyResult
-import com.pelotcl.app.data.repository.offline.MapStyle
-import com.pelotcl.app.data.repository.offline.MapStyleRepository
+import com.pelotcl.app.core.data.repository.itinerary.JourneyResult
+import com.pelotcl.app.core.data.repository.offline.MapStyle
+import com.pelotcl.app.core.data.repository.offline.MapStyleRepository
 import com.pelotcl.app.core.ui.components.favorites.AddFavoriteDialog
 import com.pelotcl.app.core.ui.components.MapLibreView
 import com.pelotcl.app.core.ui.components.StationBottomSheet
