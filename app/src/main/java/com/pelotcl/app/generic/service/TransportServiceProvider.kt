@@ -89,27 +89,7 @@ object TransportServiceProvider {
         }
         return transportApi
     }
-    
-    /**
-     * Obtient le thème de transport
-     */
-    fun getTransportTheme(): TransportTheme {
-        if (!::transportTheme.isInitialized) {
-            error("TransportServiceProvider not initialized. Call initialize() first.")
-        }
-        return transportTheme
-    }
-    
-    /**
-     * Obtient les écrans "À propos"
-     */
-    fun getAboutScreen(): AboutScreenContract {
-        if (!::aboutScreen.isInitialized) {
-            error("TransportServiceProvider not initialized. Call initialize() first.")
-        }
-        return aboutScreen
-    }
-    
+
     /**
      * Obtient la configuration des styles de carte
      */
@@ -129,51 +109,5 @@ object TransportServiceProvider {
         }
         return vehiclePositionsService
     }
-    
-    /**
-     * Obtient le service des lignes de transport
-     */
-    fun getTransportLineService(): TransportLineService {
-        if (!::transportLineService.isInitialized) {
-            error("TransportServiceProvider not initialized. Call initialize() first.")
-        }
-        return transportLineService
-    }
-    
-    /**
-     * Obtient le service des alertes trafic
-     */
-    fun getTrafficAlertsService(): TrafficAlertsService {
-        if (!::trafficAlertsService.isInitialized) {
-            error("TransportServiceProvider not initialized. Call initialize() first.")
-        }
-        return trafficAlertsService
-    }
-    
-    /**
-     * Méthode utilitaire pour créer un repository avec l'API injectée
-     */
-    inline fun <reified T> createRepository(
-        context: Context? = null,
-        noinline creator: (TransportApi, Context?) -> T
-    ): T {
-        return creator(getTransportApi(), context)
-    }
-    
-    /**
-     * Méthode utilitaire pour créer un repository avec les services injectés
-     */
-    inline fun <reified T> createRepositoryWithServices(
-        context: Context? = null,
-        noinline creator: (TransportApi, MapStyleConfig, VehiclePositionsService, TransportLineService, TrafficAlertsService, Context?) -> T
-    ): T {
-        return creator(
-            getTransportApi(),
-            getMapStyleConfig(),
-            getVehiclePositionsService(),
-            getTransportLineService(),
-            getTrafficAlertsService(),
-            context
-        )
-    }
+
 }

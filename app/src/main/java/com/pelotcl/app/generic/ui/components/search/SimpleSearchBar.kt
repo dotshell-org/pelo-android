@@ -1,4 +1,4 @@
-package com.pelotcl.app.generic.ui.components
+package com.pelotcl.app.generic.ui.components.search
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -74,7 +74,7 @@ import com.pelotcl.app.generic.data.repository.offline.SearchHistoryItem
 import com.pelotcl.app.generic.data.repository.offline.SearchType
 import com.pelotcl.app.generic.ui.theme.Red500
 import com.pelotcl.app.generic.ui.theme.Stone900
-import com.pelotcl.app.utils.BusIconHelper
+import com.pelotcl.app.utils.transport.BusIconHelper
 
 @Immutable
 data class StationSearchResult(
@@ -151,7 +151,7 @@ fun SimpleSearchBar(
     val queryText = if (isControlled) externalQuery else internalQuery
 
     fun setQueryText(q: String) {
-        if (isControlled) externalOnQueryChange(q) else internalQuery = q
+        if (isControlled) externalOnQueryChange(q) else
         onQueryChange(q)
     }
 
@@ -174,7 +174,6 @@ fun SimpleSearchBar(
         if (imeHeight > 0) {
             keyboardHiddenByScroll = false
         }
-        previousImeHeight = imeHeight
     }
 
     fun setExpandedState(next: Boolean) {

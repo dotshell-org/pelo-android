@@ -77,25 +77,5 @@ class TransportThemeImpl : TransportTheme {
             else -> primaryColor
         }
     }
-    
-    /**
-     * Obtient la couleur pour une ligne spécifique par son code
-     * Gère les cas spécifiques des lignes de transport
-     */
-    @Composable
-    fun getLineColorByCode(lineCode: String): Color {
-        // Lignes de métro (A, B, C, D)
-        if (lineCode.matches(Regex("^[ABCD]$"))) return metroLineColor
-        
-        // Lignes de tramway (T1-T6, Rhônexpress)
-        if (lineCode.matches(Regex("^T[1-6]$"))) return tramLineColor
-        if (lineCode.equals("RX", ignoreCase = true)) return Color(0xFF00A0B0)
-        
-        // Lignes de bus spéciales
-        if (lineCode.matches(Regex("^C[1-9][0-9]?$"))) return Color(0xFFE57300) // Chrono
-        if (lineCode.matches(Regex("^TB[1-9][0-9]?$"))) return Color(0xFFF57C00) // Trambus
-        
-        // Bus normaux
-        return busLineColor
-    }
+
 }

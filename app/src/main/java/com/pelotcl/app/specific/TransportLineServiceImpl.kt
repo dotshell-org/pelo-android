@@ -1,6 +1,5 @@
 package com.pelotcl.app.specific
 
-import com.google.gson.JsonObject
 import com.pelotcl.app.generic.data.model.FeatureCollection
 import com.pelotcl.app.generic.data.model.StopCollection
 import com.pelotcl.app.generic.data.network.TransportLineService
@@ -158,22 +157,5 @@ class TransportLineServiceImpl : TransportLineService {
             else -> throw IllegalArgumentException("Unknown transport type: $type")
         }
     }
-    
-    /**
-     * Get special line geometry (like Rhonexpress)
-     * @return JsonObject containing the special line geometry
-     */
-    suspend fun getSpecialLineGeometry(): JsonObject {
-        return apiService.getSpecialLineRaw(
-            service = "WFS",
-            version = "2.0.0",
-            request = "GetFeature",
-            typename = "sytral:tcl_sytral.tcllignebus_2_0_0",
-            outputFormat = "application/json",
-            srsName = "EPSG:4326",
-            startIndex = 0,
-            sortBy = "gid",
-            count = 1000
-        )
-    }
+
 }

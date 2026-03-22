@@ -50,9 +50,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.pelotcl.app.generic.ui.components.StationSearchResult
-import com.pelotcl.app.generic.ui.components.TransportSearchBar
-import com.pelotcl.app.generic.ui.components.TransportSearchContent
+import com.pelotcl.app.generic.ui.components.search.StationSearchResult
+import com.pelotcl.app.generic.ui.components.search.TransportSearchBar
+import com.pelotcl.app.generic.ui.components.search.TransportSearchContent
 import com.pelotcl.app.generic.ui.theme.Gray700
 import com.pelotcl.app.generic.ui.theme.Red500
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
@@ -84,7 +84,7 @@ fun AddFavoriteDialog(
         )
     }
 
-    var selectedPreset by remember { mutableStateOf<FavoritePreset?>(presets.firstOrNull()) }
+    var selectedPreset by remember { mutableStateOf(presets.firstOrNull()) }
     var customOtherTitle by remember { mutableStateOf("") }
     var selectedStop by remember(initialStopName) {
         mutableStateOf(initialStopName?.let {

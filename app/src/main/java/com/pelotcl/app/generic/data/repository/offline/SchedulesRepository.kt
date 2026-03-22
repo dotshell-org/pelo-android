@@ -4,13 +4,13 @@ import android.content.ComponentCallbacks2
 import android.content.Context
 import android.util.LruCache
 import com.pelotcl.app.generic.data.repository.itinerary.RaptorRepository
-import com.pelotcl.app.generic.ui.components.LineSearchResult
-import com.pelotcl.app.generic.ui.components.StationSearchResult
+import com.pelotcl.app.generic.ui.components.search.LineSearchResult
+import com.pelotcl.app.generic.ui.components.search.StationSearchResult
 
 class SchedulesRepository private constructor(context: Context) {
 
     private val appContext = context.applicationContext
-    private val raptorRepository = RaptorRepository.Companion.getInstance(appContext)
+    private val raptorRepository = RaptorRepository.getInstance(appContext)
 
     companion object {
         @Volatile
@@ -22,15 +22,6 @@ class SchedulesRepository private constructor(context: Context) {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: SchedulesRepository(context.applicationContext).also { INSTANCE = it }
             }
-        }
-
-        fun mergeDessertes(dessertes: List<String>): String {
-            return dessertes
-                .flatMap { it.split(',') }
-                .map { it.trim() }
-                .filter { it.isNotEmpty() }
-                .distinct()
-                .joinToString(",")
         }
 
         fun trimCaches(level: Int) {

@@ -9,8 +9,6 @@ import com.google.android.gms.location.Priority
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.maplibre.android.geometry.LatLng
 import kotlin.coroutines.resume
-import kotlin.math.pow
-import kotlin.math.sqrt
 
 /**
  * Helper object for location-related utilities
@@ -97,41 +95,4 @@ object LocationHelper {
         }
     }
 
-    /**
-     * Calculate the distance in meters between two LatLng points using the Haversine formula
-     * @param from The starting point
-     * @param to The ending point
-     * @return The distance in meters
-     */
-    fun distanceInMeters(from: LatLng, to: LatLng): Double {
-        val earthRadius = 6371000.0 // Earth's radius in meters
-
-        val lat1Rad = Math.toRadians(from.latitude)
-        val lat2Rad = Math.toRadians(to.latitude)
-        val deltaLatRad = Math.toRadians(to.latitude - from.latitude)
-        val deltaLonRad = Math.toRadians(to.longitude - from.longitude)
-
-        val a = kotlin.math.sin(deltaLatRad / 2).pow(2) +
-                kotlin.math.cos(lat1Rad) * kotlin.math.cos(lat2Rad) *
-                kotlin.math.sin(deltaLonRad / 2).pow(2)
-        val c = 2 * kotlin.math.atan2(sqrt(a), sqrt(1 - a))
-
-        return earthRadius * c
-    }
-
-    /**
-     * Check if two locations are significantly different (more than threshold meters apart)
-     * @param oldLocation The previous location
-     * @param newLocation The new location
-     * @param thresholdMeters The minimum distance in meters to consider locations as different (default: 100m)
-     * @return true if the locations are significantly different
-     */
-    fun isSignificantlyDifferent(
-        oldLocation: LatLng?,
-        newLocation: LatLng?,
-        thresholdMeters: Double = 100.0
-    ): Boolean {
-        if (oldLocation == null || newLocation == null) return true
-        return distanceInMeters(oldLocation, newLocation) > thresholdMeters
-    }
 }

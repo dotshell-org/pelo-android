@@ -8,7 +8,6 @@ import com.pelotcl.app.generic.data.model.Favorite
 import com.pelotcl.app.generic.data.model.SimpleVehiclePosition
 import com.pelotcl.app.generic.data.model.StopFeature
 import com.pelotcl.app.generic.data.network.TransportApi
-import com.pelotcl.app.generic.data.network.TransportConfig
 import com.pelotcl.app.generic.service.TransportServiceProvider
 import com.pelotcl.app.generic.data.repository.TransportRepository
 import com.pelotcl.app.generic.data.repository.online.TrafficAlertsRepository
@@ -21,8 +20,8 @@ import com.pelotcl.app.generic.data.model.LineStopInfo
 import com.pelotcl.app.generic.data.model.TrafficAlert
 import com.pelotcl.app.generic.data.model.AlertSeverity
 import com.pelotcl.app.generic.data.repository.itinerary.RaptorRepository
-import com.pelotcl.app.generic.ui.components.LineSearchResult
-import com.pelotcl.app.generic.ui.components.StationSearchResult
+import com.pelotcl.app.generic.ui.components.search.LineSearchResult
+import com.pelotcl.app.generic.ui.components.search.StationSearchResult
 import com.pelotcl.app.utils.HolidayDetector
 import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
@@ -41,28 +40,19 @@ import kotlinx.coroutines.withContext
  */
 class TransportViewModel(private val context: Context) : ViewModel() {
 
-    private val transportConfig: TransportConfig = TransportServiceProvider.getTransportConfig()
     private val transportApi: TransportApi = TransportServiceProvider.getTransportApi()
-    private val mapStyleConfig = TransportServiceProvider.getMapStyleConfig()
     private val vehiclePositionsService = TransportServiceProvider.getVehiclePositionsService()
-    private val transportLineService = TransportServiceProvider.getTransportLineService()
-    private val trafficAlertsService = TransportServiceProvider.getTrafficAlertsService()
-    private val transportRepository: TransportRepository
+    private val transportRepository: TransportRepository = TransportRepository(context)
     private val trafficAlertsRepository = TrafficAlertsRepository(transportApi, context)
     private val vehiclePositionsRepository = VehiclePositionsRepository(vehiclePositionsService)
     private val schedulesRepository = SchedulesRepository.getInstance(context)
     private val holidayDetector by lazy { HolidayDetector(context.applicationContext) }
     private var vehiclePositionsJob: Job? = null
     private var globalLiveJob: Job? = null
-
-    init {
-        transportRepository = TransportRepository(context)
-    }
     private val favoritesRepository = FavoritesRepository(context)
     val raptorRepository = RaptorRepository.getInstance(context)
     val offlineDataManager = OfflineDataManager(transportApi, context)
     private val _linesState = MutableStateFlow<TransportLinesState>(TransportLinesState.Loading)
-    val linesState: StateFlow<TransportLinesState> = _linesState.asStateFlow()
 
     // Compatibilité avec PlanScreen.kt qui utilise TransportLinesUiState
     private val _uiState = MutableStateFlow<TransportLinesUiState>(TransportLinesUiState.Loading)
@@ -70,7 +60,6 @@ class TransportViewModel(private val context: Context) : ViewModel() {
     
     // État pour les alertes trafic
     private val _alertsState = MutableStateFlow<TrafficAlertsState>(TrafficAlertsState.Loading)
-    val alertsState: StateFlow<TrafficAlertsState> = _alertsState.asStateFlow()
 
     // État pour les arrêts de transport
     private val _stopsUiState = MutableStateFlow<TransportStopsUiState>(TransportStopsUiState.Loading)
@@ -289,7 +278,7 @@ class TransportViewModel(private val context: Context) : ViewModel() {
                 }
             }
             .sortedWith(
-                compareBy<StopDeparturePreview>(
+                compareBy(
                     { parseTimeToMinutes(it.nextDeparture) ?: Int.MAX_VALUE },
                     { it.lineName },
                     { it.directionId }
@@ -492,12 +481,6 @@ class TransportViewModel(private val context: Context) : ViewModel() {
 
             _nextSchedules.value = nextThree
         }
-    }
-
-    fun getAlertSeverityForLine(lineName: String): AlertSeverity? {
-        val token = normalizeLineToken(lineName)
-        if (token.isEmpty() || !isLikelyLineToken(token)) return null
-        return getOrBuildAlertSeverityIndex()[token]
     }
 
     fun getAlertSeverityMapForLines(lineNames: List<String>): Map<String, AlertSeverity> {
@@ -786,8 +769,7 @@ class TransportViewModel(private val context: Context) : ViewModel() {
     }
 
     private fun canonicalRouteName(raw: String): String {
-        val token = raw.trim().uppercase()
-        return when (token) {
+        return when (val token = raw.trim().uppercase()) {
             "NAVI1" -> "NAV1"
             else -> token
         }
@@ -800,8 +782,7 @@ class TransportViewModel(private val context: Context) : ViewModel() {
     }
 
     private fun resolveScheduleRouteName(raw: String): String {
-        val normalized = raw.trim().uppercase()
-        val candidates = when (normalized) {
+        val candidates = when (val normalized = raw.trim().uppercase()) {
             "NAVI1", "NAV1" -> listOf("NAVI1", "NAV1")
             else -> listOf(normalized)
         }
@@ -925,21 +906,7 @@ class TransportViewModel(private val context: Context) : ViewModel() {
         val nextDeparture: String
     )
 
-    
-    /**
-     * Obtient la configuration de transport
-     */
-    fun getTransportConfig(): TransportConfig = transportConfig
-    
-    /**
-     * Obtient le repository de transport
-     */
-    fun getTransportRepository(): TransportRepository = transportRepository
-    
-    /**
-     * Obtient le repository des alertes trafic
-     */
-    fun getTrafficAlertsRepository(): TrafficAlertsRepository = trafficAlertsRepository
+
 }
 
 /**
@@ -956,7 +923,7 @@ sealed class TransportLinesState {
  */
 sealed class TrafficAlertsState {
     object Loading : TrafficAlertsState()
-    data class Success(val alerts: List<com.pelotcl.app.generic.data.model.TrafficAlert>) : TrafficAlertsState()
+    data class Success(val alerts: List<TrafficAlert>) : TrafficAlertsState()
     data class Error(val message: String) : TrafficAlertsState()
 }
 
@@ -975,6 +942,6 @@ sealed class TransportLinesUiState {
  */
 sealed class TransportStopsUiState {
     object Loading : TransportStopsUiState()
-    data class Success(val stops: List<com.pelotcl.app.generic.data.model.StopFeature>) : TransportStopsUiState()
+    data class Success(val stops: List<StopFeature>) : TransportStopsUiState()
     data class Error(val message: String) : TransportStopsUiState()
 }

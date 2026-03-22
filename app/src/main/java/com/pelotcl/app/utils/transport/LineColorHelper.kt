@@ -1,4 +1,4 @@
-package com.pelotcl.app.utils
+package com.pelotcl.app.utils.transport
 
 import com.pelotcl.app.generic.data.model.Feature
 import androidx.core.graphics.toColorInt
@@ -27,9 +27,9 @@ object LineColorHelper {
      * @return La couleur en format hexadécimal (#RRGGBB)
      */
     fun getColorForLine(feature: Feature): String {
-        val ligne = feature.properties.ligne.orEmpty()
-        val familleTransport = feature.properties.familleTransport.orEmpty()
-        val nomTypeLigne = feature.properties.nomTypeLigne.orEmpty().lowercase()
+        val ligne = feature.properties.ligne
+        val familleTransport = feature.properties.familleTransport
+        val nomTypeLigne = feature.properties.nomTypeLigne.lowercase()
 
         return when {
             // Rhône Express

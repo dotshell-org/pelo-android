@@ -44,8 +44,8 @@ import androidx.compose.ui.unit.dp
 import com.pelotcl.app.generic.ui.theme.Orange500
 import com.pelotcl.app.generic.ui.theme.Red500
 import com.pelotcl.app.generic.ui.theme.Gray700
-import com.pelotcl.app.utils.BusIconHelper
-import com.pelotcl.app.utils.LineColorHelper
+import com.pelotcl.app.utils.transport.BusIconHelper
+import com.pelotcl.app.utils.transport.LineColorHelper
 import java.util.Calendar
 
 private fun getLineColor(lineName: String): Color {

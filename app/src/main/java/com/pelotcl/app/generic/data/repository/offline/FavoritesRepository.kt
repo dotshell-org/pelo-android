@@ -14,22 +14,11 @@ class FavoritesRepository(private val context: Context) {
     private val prefs by lazy { context.getSharedPreferences("pelo_prefs", Context.MODE_PRIVATE) }
     private val gson = Gson()
 
-    // Legacy keys (kept for migration)
-    private val keyFavorites = "favorites_lines"
     private val keyFavoriteStops = "favorites_stops"
     private val keyStopDessertePrefix = "stop_desserte_"
 
     // New keys for the updated favorites system
     private val keyUserFavorites = "user_favorites_v2"
-
-    // === Legacy methods (kept for backward compatibility) ===
-    fun getFavorites(): Set<String> {
-        return prefs.getStringSet(keyFavorites, emptySet()) ?: emptySet()
-    }
-
-    fun saveFavorites(favorites: Set<String>) {
-        prefs.edit { putStringSet(keyFavorites, favorites) }
-    }
 
     fun getFavoriteStops(): Set<String> {
         return prefs.getStringSet(keyFavoriteStops, emptySet()) ?: emptySet()
@@ -58,10 +47,6 @@ class FavoritesRepository(private val context: Context) {
 
     fun getDesserteForStop(stopName: String): String? {
         return prefs.getString(keyStopDessertePrefix + stopName, null)
-    }
-
-    fun saveDesserteForStop(stopName: String, desserte: String) {
-        prefs.edit { putString(keyStopDessertePrefix + stopName, desserte) }
     }
 
     // === New favorites system ===
@@ -115,20 +100,6 @@ class FavoritesRepository(private val context: Context) {
         favorites.removeAll { it.id == favoriteId }
         saveUserFavorites(favorites)
         return favorites.size < initialSize
-    }
-
-    /**
-     * Update an existing favorite
-     */
-    fun updateFavorite(updatedFavorite: Favorite): Boolean {
-        val favorites = getUserFavorites().toMutableList()
-        val index = favorites.indexOfFirst { it.id == updatedFavorite.id }
-        if (index >= 0) {
-            favorites[index] = updatedFavorite
-            saveUserFavorites(favorites)
-            return true
-        }
-        return false
     }
 
     /**

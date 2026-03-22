@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit
  */
 class TrafficAlertsRepository(
     private val transportApi: TransportApi,
-    private val context: Context
+    context: Context
 ) {
 
     private val cache = TrafficAlertsCache(context)

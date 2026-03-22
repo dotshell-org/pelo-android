@@ -51,27 +51,4 @@ class ItineraryPreferencesRepository(private val context: Context) {
         prefs.edit { putBoolean(keyEnableRXLine, enabled) }
     }
 
-    /**
-     * Get set of route name patterns to block based on user preferences.
-     * Returns patterns that can be used with blockedRouteNames parameter.
-     *
-     * raptor-kt will block any route whose name starts with these patterns,
-     * so "JD" will block all JD lines (JD2, JD3, JD844, etc.)
-     */
-    fun getBlockedRoutePatterns(): Set<String> {
-        val blocked = mutableSetOf<String>()
-
-        if (!isJdLinesEnabled()) {
-            // Block all JD lines - raptor-kt will match any route starting with "JD"
-            for (i in 2..999) {
-                blocked.add("JD$i")
-            }
-        }
-
-        if (!isRxLineEnabled()) {
-            blocked.add("RX")
-        }
-
-        return blocked
-    }
 }

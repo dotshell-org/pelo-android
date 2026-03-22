@@ -13,19 +13,6 @@ import retrofit2.http.Query
  */
 interface TransportApi {
 
-    @GET("geoserver/sytral/ows")
-    suspend fun getTransportLines(
-        @Query("SERVICE") service: String = "WFS",
-        @Query("VERSION") version: String = "2.0.0",
-        @Query("request") request: String = "GetFeature",
-        @Query("typename") typename: String,
-        @Query("outputFormat") outputFormat: String = "application/json",
-        @Query("SRSNAME") srsName: String = "EPSG:4171",
-        @Query("startIndex") startIndex: Int = 0,
-        @Query("sortby") sortBy: String = "gid",
-        @Query("count") count: Int = 1000
-    ): FeatureCollection
-
     /**
      * Récupère les lignes de métro/funiculaire
      */

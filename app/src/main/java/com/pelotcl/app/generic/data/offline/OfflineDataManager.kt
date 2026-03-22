@@ -67,11 +67,6 @@ class OfflineDataManager(
     val downloadState: StateFlow<OfflineDownloadState> = _downloadState.asStateFlow()
 
     private val _offlineDataInfo = MutableStateFlow(offlineRepository.getOfflineDataInfo())
-    val offlineDataInfo: StateFlow<OfflineDataInfo> = _offlineDataInfo.asStateFlow()
-
-    fun refreshInfo() {
-        _offlineDataInfo.value = offlineRepository.getOfflineDataInfo()
-    }
 
     /**
      * Cancels an ongoing download.
@@ -155,7 +150,7 @@ class OfflineDataManager(
                                 fetchRhonexpressFeatures()
                             } catch (e: Exception) {
                                 Log.w(TAG, "Failed to download RX (non-critical)", e)
-                                null as List<com.pelotcl.app.generic.data.model.Feature>?
+                                null as List<Feature>?
                             }
                         }
                         val stopsDeferred = async {

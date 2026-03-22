@@ -65,7 +65,6 @@ fun FavoritesBar(
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val density = LocalDensity.current
         val textMeasurer = rememberTextMeasurer()
-        val buttonTextStyle = chipTextStyle
         val buttonBaseContentWidth = 15.dp + 16.dp + 16.dp + 4.dp // start + end + icon + spacer
         val outerHorizontalPadding = 16.dp + 12.dp
         val interItemSpacing = 8.dp
@@ -73,7 +72,7 @@ fun FavoritesBar(
         fun estimateButtonWidth(text: String): Dp {
             val textWidthPx = textMeasurer.measure(
                 text = AnnotatedString(text),
-                style = buttonTextStyle
+                style = chipTextStyle
             ).size.width.toFloat()
             val textWidthDp = with(density) { textWidthPx.toDp() }
             return buttonBaseContentWidth + textWidthDp
@@ -141,21 +140,20 @@ fun FavoritesBar(
 
         favoriteToDelete?.let { favorite ->
             AlertDialog(
-                onDismissRequest = { favoriteToDelete = null },
+                onDismissRequest = { },
                 title = { Text("Supprimer le favori") },
                 text = { Text("Voulez-vous supprimer \"${favorite.name}\" ?") },
                 confirmButton = {
                     TextButton(
                         onClick = {
                             onRemoveFavoriteClick(favorite)
-                            favoriteToDelete = null
                         }
                     ) {
                         Text("Supprimer")
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { favoriteToDelete = null }) {
+                    TextButton(onClick = { }) {
                         Text("Annuler")
                     }
                 }

@@ -26,8 +26,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -48,11 +48,11 @@ import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -61,26 +61,24 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pelotcl.app.generic.data.model.AlertSeverity
 import com.pelotcl.app.generic.data.model.LineStopInfo
+import com.pelotcl.app.generic.data.model.TrafficAlert
 import com.pelotcl.app.generic.ui.theme.Gray700
 import com.pelotcl.app.generic.ui.theme.Green500
 import com.pelotcl.app.generic.ui.theme.Orange500
 import com.pelotcl.app.generic.ui.theme.Red500
-import com.pelotcl.app.generic.ui.components.LineSearchResult
 import com.pelotcl.app.generic.ui.viewmodel.TransportLinesUiState
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
-import androidx.compose.runtime.Immutable
-import androidx.compose.ui.unit.Dp
-import com.pelotcl.app.utils.BusIconHelper
-import com.pelotcl.app.utils.LineColorHelper
-import com.pelotcl.app.generic.data.model.AlertSeverity
-import com.pelotcl.app.generic.data.model.TrafficAlert
+import com.pelotcl.app.utils.transport.BusIconHelper
+import com.pelotcl.app.utils.transport.LineColorHelper
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -203,20 +201,6 @@ fun LineDetailsBottomSheet(
         onDispose {
             // Cancel any pending coroutines and clear stale states when switching lines
             viewModel.resetLineDetailState()
-        }
-    }
-
-    val connections by produceState<List<LineSearchResult>>(
-        initialValue = emptyList(),
-        key1 = lineInfo?.currentStationName,
-        key2 = lineInfo?.lineName,
-        key3 = viewModel
-    ) {
-        if (lineInfo != null) {
-            viewModel.getConnectionsForStop(lineInfo.currentStationName, lineInfo.lineName)
-                .collect { value = it }
-        } else {
-            value = emptyList()
         }
     }
 

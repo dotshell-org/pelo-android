@@ -89,7 +89,7 @@ class TransportRepository(context: Context? = null) {
                         cache?.saveNavigoneLines(navigone.features)
                         navigone.features
                     } catch (e: Exception) {
-                        android.util.Log.w(
+                        Log.w(
                             "TransportRepository",
                             "Failed to load navigone lines: ${e.message}"
                         )
@@ -109,7 +109,7 @@ class TransportRepository(context: Context? = null) {
                         cache?.saveTrambusLines(trambus.features)
                         trambus.features
                     } catch (e: Exception) {
-                        android.util.Log.w(
+                        Log.w(
                             "TransportRepository",
                             "Failed to load trambus lines: ${e.message}"
                         )
@@ -122,7 +122,7 @@ class TransportRepository(context: Context? = null) {
                 val rxFeatures: List<Feature> = try {
                     fetchRhonexpressFromWfs()
                 } catch (e: Exception) {
-                    android.util.Log.w(
+                    Log.w(
                         "TransportRepository",
                         "Failed to load Rhônexpress from WFS: ${e.message}"
                     )

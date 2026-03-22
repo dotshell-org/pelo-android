@@ -66,8 +66,8 @@ import com.pelotcl.app.generic.ui.theme.Red500
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.window.Dialog
-import com.pelotcl.app.utils.BusIconHelper
-import com.pelotcl.app.utils.LineColorHelper
+import com.pelotcl.app.utils.transport.BusIconHelper
+import com.pelotcl.app.utils.transport.LineColorHelper
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale

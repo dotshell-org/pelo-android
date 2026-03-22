@@ -8,7 +8,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.pelotcl.app.generic.data.cache.JourneyCache
 import com.pelotcl.app.generic.data.repository.offline.SchedulesRepository
-import com.pelotcl.app.utils.BusIconHelper
+import com.pelotcl.app.utils.transport.BusIconHelper
 import com.pelotcl.app.generic.worker.TrafficAlertsWorker
 import java.util.concurrent.TimeUnit
 

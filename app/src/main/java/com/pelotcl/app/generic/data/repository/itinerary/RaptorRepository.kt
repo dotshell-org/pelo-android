@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import android.util.LruCache
 import com.pelotcl.app.generic.data.cache.JourneyCache
+import com.pelotcl.app.generic.ui.components.search.LineSearchResult
 import com.pelotcl.app.utils.SearchUtils
 import io.raptor.PeriodData
 import io.raptor.RaptorLibrary
@@ -369,11 +370,6 @@ class RaptorRepository private constructor(private val context: Context) {
             .groupBy { stop -> SearchUtils.normalizeForSearch(stop.name) }
             .mapValues { (_, stops) -> stops.map { it.id }.distinct() }
     }
-
-    /**
-     * Check if Raptor is initialized without triggering initialization
-     */
-    fun isReady(): Boolean = isInitialized && raptorLibrary != null
 
     /**
      * Ensure initialized before use (internal helper)
@@ -874,14 +870,6 @@ class RaptorRepository private constructor(private val context: Context) {
         journeyDiskCache.preloadToMemory()
     }
 
-    /**
-     * Clean up expired cache entries.
-     * Call periodically (e.g., once per day).
-     */
-    suspend fun cleanupExpiredCache() {
-        journeyDiskCache.cleanupExpired()
-    }
-
     private fun getCurrentTimeInSeconds(): Int {
         val calendar = Calendar.getInstance()
         val hours = calendar.get(Calendar.HOUR_OF_DAY)
@@ -890,14 +878,14 @@ class RaptorRepository private constructor(private val context: Context) {
         return hours * 3600 + minutes * 60 + seconds
     }
 
-    fun searchLinesByName(query: String): List<com.pelotcl.app.generic.ui.components.LineSearchResult> {
+    fun searchLinesByName(query: String): List<LineSearchResult> {
         val routes = routesByPeriod[raptorLibrary?.getCurrentPeriod()] ?: emptyList()
         val allNames = routes
             .map { it.name }
             .distinct()
         if (query.isBlank()) {
             return allNames.sorted().map {
-                com.pelotcl.app.generic.ui.components.LineSearchResult(lineName = it, category = "Bus")
+                LineSearchResult(lineName = it, category = "Bus")
             }
         }
         val normalizedQuery = query.trim().uppercase()
@@ -906,7 +894,7 @@ class RaptorRepository private constructor(private val context: Context) {
                 it.uppercase().contains(normalizedQuery) || normalizedQuery.contains(it.uppercase())
             }
             .sortedWith(
-                compareBy<String>(
+                compareBy(
                 {
                     if (it.equals(normalizedQuery, ignoreCase = true)) 0 else if (it.uppercase()
                             .startsWith(normalizedQuery)
@@ -916,7 +904,7 @@ class RaptorRepository private constructor(private val context: Context) {
             ))
             .take(20)
             .map { lineName ->
-                com.pelotcl.app.generic.ui.components.LineSearchResult(
+                LineSearchResult(
                     lineName = lineName,
                     category = "Bus"
                 )

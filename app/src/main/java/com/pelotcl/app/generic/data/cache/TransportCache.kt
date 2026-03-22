@@ -45,8 +45,7 @@ class TransportCache(context: Context) {
     private var metroLinesCache: List<Feature>? = null
     @Volatile
     private var tramLinesCache: List<Feature>? = null
-    @Volatile
-    private var busLinesCache: List<Feature>? = null
+
     @Volatile
     private var navigoneLinesCache: List<Feature>? = null
     @Volatile
@@ -59,8 +58,7 @@ class TransportCache(context: Context) {
     private var metroLinesTimestamp: Long = 0
     @Volatile
     private var tramLinesTimestamp: Long = 0
-    @Volatile
-    private var busLinesTimestamp: Long = 0
+
     @Volatile
     private var navigoneLinesTimestamp: Long = 0
     @Volatile
@@ -110,7 +108,7 @@ class TransportCache(context: Context) {
      * Check if cache needs refresh (has data but expired).
      * Useful to decide whether to show stale data while refreshing.
      */
-    suspend fun needsCacheRefresh(): Boolean {
+    fun needsCacheRefresh(): Boolean {
         // If no cache at all, we need to load
         if (!hasAnyCachedData()) return true
 
@@ -313,33 +311,6 @@ class TransportCache(context: Context) {
     }
 
     /**
-     * Retrieves bus lines from cache (MEMORY ONLY)
-     * Buses are not persisted to disk because they're too large
-     */
-    suspend fun getBusLines(): List<Feature>? = mutex.withLock {
-        // Check memory cache only
-        if (busLinesCache != null && isTimestampValid(busLinesTimestamp)) {
-            return@withLock busLinesCache
-        }
-
-        // Buses are not cached on disk
-        null
-    }
-
-    /**
-     * Saves stops to cache using compressed file storage
-     * WARNING: Stops are large, we keep all stops (including buses) on disk with Gzip compression
-     */
-    suspend fun saveStops(stops: List<StopFeature>) = mutex.withLock {
-        stopsCache = stops
-        stopsTimestamp = System.currentTimeMillis()
-
-        // Save timestamp to prefs and data to compressed file
-        prefs.edit { putLong(KEY_STOPS_TIMESTAMP, stopsTimestamp) }
-        writeToCompressedFile(FILE_STOPS, stops)
-    }
-
-    /**
      * Retrieves stops from cache
      */
     suspend fun getStops(): List<StopFeature>? = mutex.withLock {
@@ -383,80 +354,5 @@ class TransportCache(context: Context) {
     // ===== STALE CACHE METHODS FOR CACHE-FIRST STRATEGY =====
     // These methods return cached data even if expired, for immediate display
     // The caller should then refresh from network in the background
-
-    /**
-     * Returns metro lines from cache even if expired (stale).
-     * Use this for immediate display, then refresh from network.
-     */
-    suspend fun getMetroLinesStale(): List<Feature>? = mutex.withLock {
-        // Return memory cache if available (regardless of expiration)
-        if (metroLinesCache != null) {
-            return@withLock metroLinesCache
-        }
-
-        // Try to load from disk (regardless of expiration)
-        val lines = readFromCompressedFile<List<Feature>>(FILE_METRO_LINES)
-        if (lines != null) {
-            metroLinesCache = lines
-            metroLinesTimestamp = prefs.getLong(KEY_METRO_LINES_TIMESTAMP, 0)
-            return@withLock lines
-        }
-
-        null
-    }
-
-    /**
-     * Returns tram lines from cache even if expired (stale).
-     */
-    suspend fun getTramLinesStale(): List<Feature>? = mutex.withLock {
-        if (tramLinesCache != null) {
-            return@withLock tramLinesCache
-        }
-
-        val lines = readFromCompressedFile<List<Feature>>(FILE_TRAM_LINES)
-        if (lines != null) {
-            tramLinesCache = lines
-            tramLinesTimestamp = prefs.getLong(KEY_TRAM_LINES_TIMESTAMP, 0)
-            return@withLock lines
-        }
-
-        null
-    }
-
-    /**
-     * Returns Navigone lines from cache even if expired (stale).
-     */
-    suspend fun getNavigoneLinesStale(): List<Feature>? = mutex.withLock {
-        if (navigoneLinesCache != null) {
-            return@withLock navigoneLinesCache
-        }
-
-        val lines = readFromCompressedFile<List<Feature>>(FILE_NAVIGONE_LINES)
-        if (lines != null) {
-            navigoneLinesCache = lines
-            navigoneLinesTimestamp = prefs.getLong(KEY_NAVIGONE_LINES_TIMESTAMP, 0)
-            return@withLock lines
-        }
-
-        null
-    }
-
-    /**
-     * Returns Trambus lines from cache even if expired (stale).
-     */
-    suspend fun getTrambusLinesStale(): List<Feature>? = mutex.withLock {
-        if (trambusLinesCache != null) {
-            return@withLock trambusLinesCache
-        }
-
-        val lines = readFromCompressedFile<List<Feature>>(FILE_TRAMBUS_LINES)
-        if (lines != null) {
-            trambusLinesCache = lines
-            trambusLinesTimestamp = prefs.getLong(KEY_TRAMBUS_LINES_TIMESTAMP, 0)
-            return@withLock lines
-        }
-
-        null
-    }
 
 }

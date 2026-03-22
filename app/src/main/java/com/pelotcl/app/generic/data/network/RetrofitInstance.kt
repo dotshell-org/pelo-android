@@ -28,9 +28,6 @@ object RetrofitInstance {
     @Volatile
     private var retrofit: Retrofit? = null
 
-    @Volatile
-    private var apiInstance: TransportApi? = null
-
     /**
      * Initialize the RetrofitInstance with application context for HTTP caching.
      * Should be called once at app startup with the appropriate TransportConfig.
@@ -110,13 +107,6 @@ object RetrofitInstance {
             }
             return retrofit!!
         }
-    }
-
-    /**
-     * Get the cached OkHttpClient for custom API creation
-     */
-    fun getOkHttpClient(): OkHttpClient? {
-        return okHttpClient
     }
 
 }

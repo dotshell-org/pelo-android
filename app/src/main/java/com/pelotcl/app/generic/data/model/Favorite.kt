@@ -1,7 +1,5 @@
 package com.pelotcl.app.generic.data.model
 
-import androidx.compose.ui.graphics.Color
-
 /**
  * Represents a user-created favorite with a name, icon, and associated stop
  */
@@ -14,19 +12,6 @@ data class Favorite(
     val stopId: String? = null // Optional stop ID
 ) {
     companion object {
-        // Default icons that users can choose from
-        val DEFAULT_ICONS = listOf(
-            "home",
-            "work",
-            "school",
-            "shopping",
-            "star",
-            "heart",
-            "bus",
-            "train",
-            "location",
-            "flag"
-        )
 
         // Default colors
         val DEFAULT_COLORS = listOf(
@@ -36,11 +21,4 @@ data class Favorite(
         )
     }
 
-    fun getIconColorAsColor(): Color {
-        return try {
-            Color(android.graphics.Color.parseColor(iconColor))
-        } catch (e: IllegalArgumentException) {
-            Color(0xFFFF5722) // Default to deep orange if parsing fails
-        }
-    }
 }

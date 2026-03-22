@@ -60,7 +60,7 @@ import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.state.updateAppWidgetState
 import com.pelotcl.app.generic.data.repository.offline.SchedulesRepository
 import com.pelotcl.app.generic.data.repository.offline.FavoritesRepository
-import com.pelotcl.app.utils.BusIconHelper
+import com.pelotcl.app.utils.transport.BusIconHelper
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 

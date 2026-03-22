@@ -1,3 +1,5 @@
+@file:Suppress("VariableNeverRead")
+
 package com.pelotcl.app.generic.ui.screens.plan
 
 import android.os.Build
@@ -86,7 +88,6 @@ fun InlineItinerarySheetContent(
         try {
             val today = LocalDate.now()
             val date = selectedDate ?: today
-            var autoSwitchedToTomorrow = false
             journeys = withContext(Dispatchers.IO) {
                 if (timeMode == TimeMode.ARRIVAL) {
                     raptorRepository.getOptimizedPathsArriveBy(
@@ -164,7 +165,6 @@ fun InlineItinerarySheetContent(
                     }
                     selectedDate = tomorrow
                     selectedTimeSeconds = 0
-                    autoSwitchedToTomorrow = true
                 }
             }
 

@@ -185,33 +185,6 @@ class JourneyCache private constructor(context: Context) {
         }
     }
 
-    /**
-     * Clear only today's expired entries (call periodically)
-     */
-    suspend fun cleanupExpired() = withContext(Dispatchers.IO) {
-        mutex.withLock {
-            try {
-                val files = cacheDir.listFiles() ?: return@withContext
-                val now = System.currentTimeMillis()
-                val oneDayMs = 24 * 60 * 60 * 1000L
-
-                var deletedCount = 0
-                for (file in files) {
-                    // Delete files older than 24 hours
-                    if (now - file.lastModified() > oneDayMs) {
-                        file.delete()
-                        deletedCount++
-                    }
-                }
-
-                // Also enforce size limit
-                enforceDiskSizeLimit()
-            } catch (e: Exception) {
-                Log.w(TAG, "Cleanup failed: ${e.message}")
-            }
-        }
-    }
-
     private fun checkDateChange() {
         val today = getCurrentDayOfYear()
         if (today != cachedDate) {

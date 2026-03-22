@@ -59,28 +59,4 @@ class TrafficAlertsCache(context: Context) {
         }
     }
 
-    /**
-     * Gets the timestamp in millis when alerts were last saved.
-     * Returns null if no alerts have been cached.
-     */
-    fun getTimestampMillis(): Long? {
-        val millis = sharedPrefs.getLong(TIMESTAMP_MILLIS_KEY, 0L)
-        return if (millis > 0L) millis else null
-    }
-
-    /**
-     * Gets traffic alerts from cache regardless of expiration (for offline mode).
-     * Returns alerts even if they're stale.
-     */
-    fun getTrafficAlertsStale(): List<TrafficAlert>? {
-        try {
-            val alertsJson = sharedPrefs.getString(ALERTS_CACHE_KEY, null) ?: return null
-            val type = object : TypeToken<List<TrafficAlert>>() {}.type
-            return gson.fromJson(alertsJson, type)
-        } catch (e: Exception) {
-            Log.e("TrafficAlertsCache", "Error reading stale traffic alerts from cache", e)
-            return null
-        }
-    }
-
 }

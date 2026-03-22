@@ -96,14 +96,6 @@ object SearchUtils {
     }
 
     /**
-     * Check if a text starts with a query with fuzzy matching
-     * Optimized to minimize allocations and string operations
-     */
-    fun fuzzyStartsWith(text: String, query: String): Boolean {
-        return fuzzyStartsWithNormalized(normalizeForSearch(text), normalizeForSearch(query))
-    }
-
-    /**
      * Optimized version that accepts pre-normalized text and query.
      * Use this when searching through many items with cached normalized names.
      */

@@ -3,7 +3,6 @@ package com.pelotcl.app.generic.data.repository.offline
 import android.content.Context
 import androidx.core.content.edit
 import com.pelotcl.app.generic.data.network.MapStyleConfig
-import com.pelotcl.app.generic.data.network.MapStyleCategory
 import com.pelotcl.app.generic.data.network.MapStyleData
 
 /**
@@ -48,20 +47,4 @@ class MapStyleRepository(
             ?: mapStyleConfig.getDefaultMapStyle()
     }
 
-    /**
-     * Get all available map styles
-     */
-    fun getAllMapStyles(): List<MapStyleData> {
-        return mapStyleConfig.getStandardMapStyles() + mapStyleConfig.getSatelliteMapStyle()
-    }
-
-    /**
-     * Get map styles by category
-     */
-    fun getMapStylesByCategory(category: MapStyleCategory): List<MapStyleData> {
-        return when (category) {
-            MapStyleCategory.STANDARD -> mapStyleConfig.getStandardMapStyles()
-            MapStyleCategory.SATELLITE -> listOf(mapStyleConfig.getSatelliteMapStyle())
-        }
-    }
 }

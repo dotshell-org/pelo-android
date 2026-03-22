@@ -117,15 +117,15 @@ import com.pelotcl.app.generic.ui.components.favorites.AddFavoriteDialog
 import com.pelotcl.app.generic.ui.components.MapLibreView
 import com.pelotcl.app.generic.ui.components.StationBottomSheet
 import com.pelotcl.app.generic.ui.components.StationInfo
-import com.pelotcl.app.generic.ui.components.StationSearchResult
-import com.pelotcl.app.generic.ui.components.TransportSearchBar
-import com.pelotcl.app.generic.ui.components.TransportSearchContent
+import com.pelotcl.app.generic.ui.components.search.StationSearchResult
+import com.pelotcl.app.generic.ui.components.search.TransportSearchBar
+import com.pelotcl.app.generic.ui.components.search.TransportSearchContent
 import com.pelotcl.app.generic.ui.theme.Red500
 import com.pelotcl.app.generic.ui.viewmodel.TransportLinesUiState
 import com.pelotcl.app.generic.ui.viewmodel.TransportStopsUiState
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
-import com.pelotcl.app.utils.BusIconHelper
-import com.pelotcl.app.utils.LineColorHelper
+import com.pelotcl.app.utils.transport.BusIconHelper
+import com.pelotcl.app.utils.transport.LineColorHelper
 import com.pelotcl.app.utils.LocationHelper.startLocationUpdates
 import com.pelotcl.app.utils.LocationHelper.stopLocationUpdates
 import kotlinx.coroutines.CoroutineScope
@@ -160,8 +160,7 @@ private const val LIVE_MODE_ZOOM_LEVEL =
     12.0f // Zoom level for live tracking mode (below PRIORITY_STOPS_MIN_ZOOM to hide stop icons)
 
 private fun canonicalLineName(lineName: String): String {
-    val upperName = lineName.trim().uppercase()
-    return when (upperName) {
+    return when (val upperName = lineName.trim().uppercase()) {
         "NAVI1" -> "NAV1"
         else -> upperName
     }
@@ -616,7 +615,7 @@ fun PlanScreen(
 
     // Map style from settings — re-read when returning to the Plan tab
     // When offline, use the effective style (fallback to a downloaded style if needed)
-    val mapStyleRepository = remember { MapStyleRepository(context, com.pelotcl.app.generic.service.TransportServiceProvider.getMapStyleConfig()) }
+    val mapStyleRepository = remember { MapStyleRepository(context, TransportServiceProvider.getMapStyleConfig()) }
     val offlineDataInfo by viewModel.offlineDataInfo.collectAsState(initial = com.pelotcl.app.generic.data.offline.OfflineDataInfo())
     var mapStyleUrl by remember { mutableStateOf(mapStyleRepository.getSelectedStyle().styleUrl) }
     var selectedMapStyle by remember {
@@ -705,8 +704,6 @@ fun PlanScreen(
                     SheetValue.Hidden -> scaffoldSheetState.bottomSheetState.hide()
                 }
             }
-            requestedSheetValueForNextContent = null
-            previousSheetContentState = sheetContentState
             return@LaunchedEffect
         }
 
@@ -793,19 +790,17 @@ fun PlanScreen(
         }
 
         if (itineraryDepartureStop == null) {
-            val location = locationAtOpen
-            val stops = stopsAtOpen
-            if (location != null) {
+            if (locationAtOpen != null) {
                 val nearestStops = viewModel.raptorRepository.findNearestStops(
-                    latitude = location.latitude,
-                    longitude = location.longitude,
+                    latitude = locationAtOpen.latitude,
+                    longitude = locationAtOpen.longitude,
                     limit = 5
                 )
                 val nearestStopNames = nearestStops.map { it.name }.distinct()
                 itineraryNearbyDepartureStops = nearestStopNames
 
                 val nearestStopName = nearestStopNames.firstOrNull()
-                    ?: stops?.let { findNearestStopName(location, it) }
+                    ?: stopsAtOpen?.let { findNearestStopName(locationAtOpen, it) }
                 if (!nearestStopName.isNullOrBlank()) {
                     val ids = viewModel.raptorRepository.resolveStopIdsByName(nearestStopName)
                     if (ids.isNotEmpty()) {
@@ -841,7 +836,6 @@ fun PlanScreen(
                 sheetContentState = null
             }
 
-            previousSheetValue = current
         }
     }
 
@@ -1059,11 +1053,10 @@ fun PlanScreen(
             sheetContentState = SheetContentState.ITINERARY
             itineraryArrivalStop =
                 SelectedStop(name = itinerarySelectedStopName, stopIds = emptyList())
-            val requestedStopName = itinerarySelectedStopName
-            val ids = viewModel.raptorRepository.resolveStopIdsByName(requestedStopName)
-            if (itineraryInitialStopName == requestedStopName) {
+            val ids = viewModel.raptorRepository.resolveStopIdsByName(itinerarySelectedStopName)
+            if (itineraryInitialStopName == itinerarySelectedStopName) {
                 itineraryArrivalStop =
-                    SelectedStop(name = requestedStopName, stopIds = ids)
+                    SelectedStop(name = itinerarySelectedStopName, stopIds = ids)
             }
             onItinerarySelectionHandled()
         }
@@ -1811,12 +1804,11 @@ fun PlanScreen(
                                     )
                                     sheetContentState = SheetContentState.ITINERARY
                                     scope.launch {
-                                        val requestedStopName = stopName
                                         val ids =
-                                            viewModel.raptorRepository.resolveStopIdsByName(requestedStopName)
-                                        if (itineraryInitialStopName == requestedStopName) {
+                                            viewModel.raptorRepository.resolveStopIdsByName(stopName)
+                                        if (itineraryInitialStopName == stopName) {
                                             itineraryArrivalStop = SelectedStop(
-                                                name = requestedStopName,
+                                                name = stopName,
                                                 stopIds = ids)
                                         }
                                     }
@@ -1913,12 +1905,11 @@ fun PlanScreen(
                                     )
                                     sheetContentState = SheetContentState.ITINERARY
                                     scope.launch {
-                                        val requestedStopName = stopName
                                         val ids =
-                                            viewModel.raptorRepository.resolveStopIdsByName(requestedStopName)
-                                        if (itineraryInitialStopName == requestedStopName) {
+                                            viewModel.raptorRepository.resolveStopIdsByName(stopName)
+                                        if (itineraryInitialStopName == stopName) {
                                             itineraryArrivalStop = SelectedStop(
-                                                name = requestedStopName,
+                                                name = stopName,
                                                 stopIds = ids)
                                         }
                                     }
@@ -2331,7 +2322,7 @@ fun PlanScreen(
             },
             focusNonce = itinerarySearchFocusNonce,
             onExpandedChange = { expanded ->
-                if (!expanded) itinerarySearchTarget = null
+
             },
             onStopPrimary = { result ->
                 scope.launch {
@@ -2346,7 +2337,6 @@ fun PlanScreen(
                         itineraryArrivalStop = selectedStop
                         itineraryArrivalQuery = ""
                     }
-                    itinerarySearchTarget = null
                 }
             }
         )

@@ -56,9 +56,9 @@ import androidx.navigation.compose.rememberNavController
 import com.google.android.gms.location.LocationServices
 import com.pelotcl.app.generic.ui.components.favorites.AddFavoriteDialog
 import com.pelotcl.app.generic.ui.components.favorites.FavoritesBar
-import com.pelotcl.app.generic.ui.components.TransportSearchBar
-import com.pelotcl.app.generic.ui.components.TransportSearchContent
-import com.pelotcl.app.generic.ui.components.StationSearchResult
+import com.pelotcl.app.generic.ui.components.search.TransportSearchBar
+import com.pelotcl.app.generic.ui.components.search.TransportSearchContent
+import com.pelotcl.app.generic.ui.components.search.StationSearchResult
 import com.pelotcl.app.generic.data.repository.offline.SearchHistoryItem
 import com.pelotcl.app.generic.data.repository.offline.SearchType
 import com.pelotcl.app.generic.data.repository.offline.MapStyleCompat
@@ -77,7 +77,7 @@ import com.pelotcl.app.generic.ui.viewmodel.TransportStopsUiState
 import com.pelotcl.app.generic.data.network.RetrofitInstance
 import com.pelotcl.app.generic.data.cache.TransportCache
 import com.pelotcl.app.generic.data.repository.offline.SchedulesRepository
-import com.pelotcl.app.utils.BusIconHelper
+import com.pelotcl.app.utils.transport.BusIconHelper
 import com.pelotcl.app.utils.LocationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -239,14 +239,13 @@ fun NavBar(modifier: Modifier = Modifier) {
     var isSearchExpanded by remember { mutableStateOf(false) }
     var stopOptionsSelectedStop by remember { mutableStateOf<StationSearchResult?>(null) }
     val favoriteStops by viewModel.favoriteStops.collectAsState(initial = emptySet())
-    var favoriteStopItems by remember { mutableStateOf<List<SearchHistoryItem>>(emptyList()) }
     val stopsUiState by viewModel.stopsUiState.collectAsState(initial = TransportStopsUiState.Loading)
     val userFavorites by viewModel.userFavorites.collectAsState(initial = emptyList())
     var showAddFavoriteDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(favoriteStops, stopsUiState) {
         val stops = (stopsUiState as? TransportStopsUiState.Success)?.stops
-        favoriteStopItems = favoriteStops.map { stopName ->
+        favoriteStops.map { stopName ->
             val stop = stops?.find { (it as com.pelotcl.app.generic.data.model.StopFeature).properties.nom.equals(stopName, ignoreCase = true) }
             val lines = stop?.let { BusIconHelper.getAllLinesForStop(it) } ?: emptyList()
             SearchHistoryItem(
@@ -488,8 +487,8 @@ fun NavBar(modifier: Modifier = Modifier) {
 
         // Calculate UI element positions - declared outside if blocks for shared access
         val searchBarHeight = 56.dp // Standard Material 3 search bar height
-        val addFavoriteButtonHeight = 40.dp // Favorites row height approximation
-        val spacingBetweenElements = 4.dp // Spacing between UI elements
+        40.dp // Favorites row height approximation
+        4.dp // Spacing between UI elements
 
         // Position calculations:
         // Favorites row sits below search bar and contains the create button + favorites chips

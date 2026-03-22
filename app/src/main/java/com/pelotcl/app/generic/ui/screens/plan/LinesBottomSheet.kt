@@ -20,7 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import com.pelotcl.app.utils.BusIconHelper
+import com.pelotcl.app.utils.transport.BusIconHelper
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -54,7 +54,7 @@ import androidx.core.text.isDigitsOnly
 import com.pelotcl.app.generic.data.model.AlertSeverity
 import com.pelotcl.app.generic.data.model.AlertSeverity as TrafficAlertSeverity
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
-import com.pelotcl.app.utils.LineColorHelper
+import com.pelotcl.app.utils.transport.LineColorHelper
 
 /**
  * Bottom Sheet qui affiche toutes les lignes organisées par catégories
@@ -263,32 +263,6 @@ fun LinesBottomSheet(
             }
         }
     }
-}
-
-private fun naturalComparatorString(a: String, b: String): Int {
-    val partsA = a.split(Regex("(?<=\\D)(?=\\d)|(?<=\\d)(?=\\D)"))
-    val partsB = b.split(Regex("(?<=\\D)(?=\\d)|(?<=\\d)(?=\\D)"))
-    val maxParts = maxOf(partsA.size, partsB.size)
-
-    for (i in 0 until maxParts) {
-        val partA = partsA.getOrNull(i)
-        val partB = partsB.getOrNull(i)
-
-        if (partA == null) return -1
-        if (partB == null) return 1
-
-        val numA = partA.toIntOrNull()
-        val numB = partB.toIntOrNull()
-
-        if (numA != null && numB != null) {
-            val numCompare = numA.compareTo(numB)
-            if (numCompare != 0) return numCompare
-        } else {
-            val strCompare = partA.compareTo(partB)
-            if (strCompare != 0) return strCompare
-        }
-    }
-    return 0
 }
 
 /**

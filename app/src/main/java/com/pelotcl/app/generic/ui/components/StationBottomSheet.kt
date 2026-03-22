@@ -49,7 +49,7 @@ import com.pelotcl.app.generic.ui.theme.Green500
 import com.pelotcl.app.generic.ui.theme.Orange500
 import com.pelotcl.app.generic.ui.theme.Red500
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
-import com.pelotcl.app.utils.BusIconHelper
+import com.pelotcl.app.utils.transport.BusIconHelper
 import java.util.Calendar
 
 /**
@@ -218,7 +218,7 @@ fun StationBottomSheet(
     val actionsInset = 8.dp
 
     if (stationInfo != null) {
-        val allStopLines by produceState<List<String>>(
+        val allStopLines by produceState(
             initialValue = stationInfo.lignes,
             key1 = stationInfo.nom,
             key2 = stationInfo.lignes,
@@ -243,14 +243,11 @@ fun StationBottomSheet(
             key2 = allStopLines,
             key3 = viewModel
         ) {
-            value = if (viewModel == null) {
-                emptyList()
-            } else {
-                viewModel.getNextDeparturesForStop(
-                    stopName = stationInfo.nom,
-                    lines = allStopLines
-                )
-            }
+            value = viewModel?.getNextDeparturesForStop(
+                stopName = stationInfo.nom,
+                lines = allStopLines
+            )
+                ?: emptyList()
         }
 
         val departures = departuresState.value

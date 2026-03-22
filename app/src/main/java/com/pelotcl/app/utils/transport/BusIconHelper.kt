@@ -1,6 +1,8 @@
-package com.pelotcl.app.utils
+package com.pelotcl.app.utils.transport
 
+import android.content.ComponentCallbacks2
 import android.content.Context
+import android.util.Log
 import android.util.LruCache
 import com.pelotcl.app.generic.data.model.StopFeature
 
@@ -80,7 +82,7 @@ object BusIconHelper {
                 resourceIdCache[field.name] = field.getInt(null)
             }
         } catch (e: Exception) {
-            android.util.Log.w("BusIconHelper", "Failed to preload resource IDs: ${e.message}")
+            Log.w("BusIconHelper", "Failed to preload resource IDs: ${e.message}")
         }
     }
 
@@ -90,11 +92,11 @@ object BusIconHelper {
      */
     fun trimCache(level: Int) {
         when {
-            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> {
+            level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> {
                 desserteCache.evictAll()
             }
 
-            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> {
+            level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> {
                 desserteCache.trimToSize(desserteCache.maxSize() / 2)
             }
         }

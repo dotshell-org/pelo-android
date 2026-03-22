@@ -19,18 +19,4 @@ class VehiclePositionsRepository(
         return vehiclePositionsService.streamAllVehiclePositions()
     }
 
-    /**
-     * Streams vehicle positions for a specific line
-     */
-    fun streamVehiclePositionsByLine(lineName: String): Flow<Result<List<SimpleVehiclePosition>>> {
-        return vehiclePositionsService.streamVehiclePositionsByLine(lineName)
-    }
-
-    /**
-     * Streams vehicle positions for strong lines only
-     */
-    fun streamStrongLinesVehiclePositions(): Flow<Result<List<SimpleVehiclePosition>>> {
-        return vehiclePositionsService.streamStrongLinesVehiclePositions()
-    }
-
 }

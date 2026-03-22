@@ -1,4 +1,4 @@
-package com.pelotcl.app.generic.ui.components
+package com.pelotcl.app.generic.ui.components.search
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import com.pelotcl.app.generic.data.network.MapStyleData
 import com.pelotcl.app.generic.data.repository.offline.MapStyleCompat
 import com.pelotcl.app.generic.data.repository.offline.SearchHistoryItem
 import com.pelotcl.app.generic.data.repository.offline.SearchHistoryRepository
@@ -19,7 +20,7 @@ import kotlinx.coroutines.delay
 fun TransportSearchBar(
     viewModel: TransportViewModel,
     modifier: Modifier = Modifier,
-    currentMapStyle: com.pelotcl.app.generic.data.network.MapStyleData = MapStyleCompat.POSITRON,
+    currentMapStyle: MapStyleData = MapStyleCompat.POSITRON,
     content: TransportSearchContent = TransportSearchContent.STOPS_AND_LINES,
     showHistory: Boolean = true,
     startExpanded: Boolean = false,
@@ -44,7 +45,7 @@ fun TransportSearchBar(
     val isParentControlled = query != null && onQueryChange != null
     val effectiveQuery = if (isParentControlled) query else uncontrolledQuery
     val setEffectiveQuery: (String) -> Unit = { q ->
-        if (isParentControlled) onQueryChange(q) else uncontrolledQuery = q
+
     }
 
     val resolvedMinLen = minQueryLengthForResults
@@ -60,11 +61,7 @@ fun TransportSearchBar(
     var searchHistory by remember { mutableStateOf<List<SearchHistoryItem>>(emptyList()) }
 
     fun reloadHistory() {
-        if (searchHistoryRepository != null) {
-            searchHistory = searchHistoryRepository.getSearchHistory()
-        } else {
-            searchHistory = emptyList()
-        }
+        searchHistory = searchHistoryRepository?.getSearchHistory() ?: emptyList()
     }
 
     fun addStopToHistory(stop: StationSearchResult) {
@@ -108,15 +105,15 @@ fun TransportSearchBar(
         delay(resolvedDebounce)
         if (current != effectiveQuery.trim()) return@LaunchedEffect
 
-        if (content != TransportSearchContent.LINES_ONLY) {
-            stationSearchResults = viewModel.searchStops(current)
+        stationSearchResults = if (content != TransportSearchContent.LINES_ONLY) {
+            viewModel.searchStops(current)
         } else {
-            stationSearchResults = emptyList()
+            emptyList()
         }
-        if (content != TransportSearchContent.STOPS_ONLY) {
-            lineSearchResults = viewModel.searchLines(current)
+        lineSearchResults = if (content != TransportSearchContent.STOPS_ONLY) {
+            viewModel.searchLines(current)
         } else {
-            lineSearchResults = emptyList()
+            emptyList()
         }
     }
 

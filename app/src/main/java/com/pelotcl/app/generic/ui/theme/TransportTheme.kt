@@ -82,8 +82,7 @@ object TransportThemeProvider {
     fun setTheme(theme: TransportTheme) {
         currentTheme = theme
     }
-    
-    fun getTheme(): TransportTheme = currentTheme
+
 }
 
 /**
