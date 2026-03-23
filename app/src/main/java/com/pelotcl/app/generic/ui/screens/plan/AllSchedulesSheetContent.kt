@@ -42,8 +42,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.pelotcl.app.generic.ui.theme.Orange500
-import com.pelotcl.app.generic.ui.theme.Red500
+import com.pelotcl.app.generic.ui.theme.AccentColor
 import com.pelotcl.app.generic.ui.theme.Gray700
+import com.pelotcl.app.generic.ui.theme.PrimaryColor
+import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.utils.transport.BusIconHelper
 import com.pelotcl.app.utils.transport.LineColorHelper
 import java.util.Calendar
@@ -54,9 +56,9 @@ private fun getLineColor(lineName: String): Color {
 }
 
 private fun getAllDayScheduleColor(hour: String, minute: String): Color {
-    val hourInt = hour.toIntOrNull() ?: return Color.Black
-    val minuteInt = minute.toIntOrNull() ?: return Color.Black
-    if (hourInt !in 0..23 || minuteInt !in 0..59) return Color.Black
+    val hourInt = hour.toIntOrNull() ?: return PrimaryColor
+    val minuteInt = minute.toIntOrNull() ?: return PrimaryColor
+    if (hourInt !in 0..23 || minuteInt !in 0..59) return PrimaryColor
 
     val now = Calendar.getInstance()
     val nowMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
@@ -65,9 +67,9 @@ private fun getAllDayScheduleColor(hour: String, minute: String): Color {
 
     return when {
         diffMinutes < 0 -> Color.Gray
-        diffMinutes < 2 -> Red500
+        diffMinutes < 2 -> AccentColor
         diffMinutes < 15 -> Orange500
-        else -> Color.Black
+        else -> PrimaryColor
     }
 }
 
@@ -130,7 +132,7 @@ fun AllSchedulesSheetContent(
                         text = allSchedulesInfo.lineName,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = SecondaryColor
                     )
                 }
             }
@@ -139,7 +141,7 @@ fun AllSchedulesSheetContent(
                 text = lineInfo?.currentStationName ?: "",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = Color.Black
+                color = PrimaryColor
             )
         }
 
@@ -160,7 +162,7 @@ fun AllSchedulesSheetContent(
                             containerColor = if (selectedDirection == directionId) getLineColor(
                                 allSchedulesInfo.lineName
                             ) else Color.LightGray,
-                            contentColor = if (selectedDirection == directionId) Color.White else Color.DarkGray
+                            contentColor = if (selectedDirection == directionId) SecondaryColor else Color.DarkGray
                         ),
                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
                         modifier = Modifier

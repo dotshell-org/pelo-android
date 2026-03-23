@@ -287,3 +287,8 @@ val Rose700 = Color(0xFFBE123C)
 val Rose800 = Color(0xFF9F1239)
 val Rose900 = Color(0xFF881337)
 val Rose950 = Color(0xFF4C0519)
+
+// Theme Colors
+val PrimaryColor = Color.Black
+val SecondaryColor = Color.White
+val AccentColor = Red500

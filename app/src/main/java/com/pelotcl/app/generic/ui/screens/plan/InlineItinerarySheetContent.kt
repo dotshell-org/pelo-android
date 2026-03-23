@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.pelotcl.app.generic.data.repository.itinerary.JourneyResult
+import com.pelotcl.app.generic.ui.theme.PrimaryColor
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -207,7 +208,7 @@ fun InlineItinerarySheetContent(
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Retour",
-                            tint = Color.Black
+                            tint = PrimaryColor
                         )
                     }
                 }
@@ -215,11 +216,11 @@ fun InlineItinerarySheetContent(
                     "Itineraire",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = Color.Black
+                    color = PrimaryColor
                 )
             }
             IconButton(onClick = onClose) {
-                Icon(Icons.Default.Close, contentDescription = "Fermer", tint = Color.Black)
+                Icon(Icons.Default.Close, contentDescription = "Fermer", tint = PrimaryColor)
             }
         }
 
@@ -248,7 +249,7 @@ fun InlineItinerarySheetContent(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    CircularProgressIndicator(color = Color.Black)
+                    CircularProgressIndicator(color = PrimaryColor)
                 }
             } else if (errorText != null) {
                 Column(
@@ -258,7 +259,7 @@ fun InlineItinerarySheetContent(
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(text = errorText!!, color = Color.Black)
+                    Text(text = errorText!!, color = PrimaryColor)
                 }
             } else {
                 LazyColumn(

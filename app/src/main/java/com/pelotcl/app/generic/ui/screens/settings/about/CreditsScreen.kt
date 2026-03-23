@@ -28,6 +28,8 @@ import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pelotcl.app.generic.ui.theme.PrimaryColor
+import com.pelotcl.app.generic.ui.theme.SecondaryColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,7 +44,7 @@ fun CreditsScreen(
                 title = {
                     Text(
                         text = "Crédits",
-                        color = Color.White,
+                        color = SecondaryColor,
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -51,16 +53,16 @@ fun CreditsScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Retour",
-                            tint = Color.White
+                            tint = SecondaryColor
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Black
+                    containerColor = PrimaryColor
                 )
             )
         },
-        containerColor = Color.Black
+        containerColor = PrimaryColor
     ) { paddingValues ->
         val uriHandler = LocalUriHandler.current
 
@@ -73,7 +75,7 @@ fun CreditsScreen(
         ) {
             Text(
                 text = "Données de transport",
-                color = Color.White,
+                color = SecondaryColor,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(bottom = 8.dp)
@@ -108,7 +110,7 @@ fun CreditsScreen(
                         "l’exception des alertes trafic pour lesquelles les bus scolaires Junior " +
                         "Direct ont été fusionnés aux lignes classiques et les doublons ont été " +
                         "supprimés.",
-                color = Color.White,
+                color = SecondaryColor,
                 fontSize = 14.sp,
                 lineHeight = 20.sp,
                 modifier = Modifier.padding(bottom = 8.dp)
@@ -132,7 +134,7 @@ fun CreditsScreen(
 
             Text(
                 text = "Cartographie",
-                color = Color.White,
+                color = SecondaryColor,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(bottom = 8.dp, top = 8.dp)
@@ -145,7 +147,7 @@ fun CreditsScreen(
                         "Liberty) sont fournis par OpenMapTiles. L’application utilise par " +
                         "défaut le thème Positron (Light) de Map Tiler.\n\n" +
                         "Les tuiles de la vue satellite proviennent de la ESRI World Imagery.",
-                color = Color.White,
+                color = SecondaryColor,
                 fontSize = 14.sp,
                 lineHeight = 20.sp,
                 modifier = Modifier.padding(bottom = 8.dp)
@@ -185,7 +187,7 @@ fun CreditsScreen(
 
             Text(
                 text = "Développement",
-                color = Color.White,
+                color = SecondaryColor,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(bottom = 8.dp, top = 8.dp)
@@ -201,7 +203,7 @@ fun CreditsScreen(
                         "TCL-API-mirror pour le miroir des données en temps réel.\n\n" +
                         "Toute contribution est ouverte à la communauté.\n\n" +
                         "Pour plus d’information, rendez-vous sur dotshell.eu.",
-                color = Color.White,
+                color = SecondaryColor,
                 fontSize = 14.sp,
                 lineHeight = 20.sp,
                 modifier = Modifier.padding(bottom = 8.dp)

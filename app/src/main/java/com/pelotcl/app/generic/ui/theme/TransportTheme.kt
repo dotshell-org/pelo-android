@@ -9,22 +9,7 @@ import androidx.compose.ui.graphics.Color
  * Chaque ville doit fournir sa propre implémentation
  */
 interface TransportTheme {
-    
-    /**
-     * Couleur principale du réseau
-     */
-    val primaryColor: Color
-    
-    /**
-     * Couleur secondaire du réseau
-     */
-    val secondaryColor: Color
-    
-    /**
-     * Couleur d'accentuation
-     */
-    val accentColor: Color
-    
+
     /**
      * Couleur pour les lignes de métro
      */
@@ -90,9 +75,6 @@ object TransportThemeProvider {
  */
 @Immutable
 class DefaultTransportTheme : TransportTheme {
-    override val primaryColor: Color = Color(0xFF2196F3) // Bleu par défaut
-    override val secondaryColor: Color = Color(0xFF9C27B0) // Violet par défaut
-    override val accentColor: Color = Color(0xFFFFC107) // Jaune par défaut
     override val metroLineColor: Color = Color(0xFFE91E63) // Rose
     override val tramLineColor: Color = Color(0xFF4CAF50) // Vert
     override val busLineColor: Color = Color(0xFF9C27B0) // Violet
@@ -106,9 +88,9 @@ class DefaultTransportTheme : TransportTheme {
         // Appliquer le thème Material par défaut
         androidx.compose.material3.MaterialTheme(
             colorScheme = androidx.compose.material3.lightColorScheme(
-                primary = primaryColor,
-                secondary = secondaryColor,
-                tertiary = accentColor,
+                primary = PrimaryColor,
+                secondary = SecondaryColor,
+                tertiary = AccentColor,
                 error = errorColor
             ),
             content = content
@@ -121,7 +103,7 @@ class DefaultTransportTheme : TransportTheme {
             "metro", "funicular" -> metroLineColor
             "tram", "tramway" -> tramLineColor
             "bus" -> busLineColor
-            else -> primaryColor
+            else -> PrimaryColor
         }
     }
 }

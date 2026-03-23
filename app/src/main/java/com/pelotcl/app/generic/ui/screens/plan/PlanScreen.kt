@@ -120,7 +120,9 @@ import com.pelotcl.app.generic.ui.components.StationInfo
 import com.pelotcl.app.generic.ui.components.search.StationSearchResult
 import com.pelotcl.app.generic.ui.components.search.TransportSearchBar
 import com.pelotcl.app.generic.ui.components.search.TransportSearchContent
-import com.pelotcl.app.generic.ui.theme.Red500
+import com.pelotcl.app.generic.ui.theme.PrimaryColor
+import com.pelotcl.app.generic.ui.theme.AccentColor
+import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.generic.ui.viewmodel.TransportLinesUiState
 import com.pelotcl.app.generic.ui.viewmodel.TransportStopsUiState
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
@@ -454,7 +456,7 @@ private fun MapStyleSelectionSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = Color.White,
+        containerColor = SecondaryColor,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ) {
         Column(
@@ -464,7 +466,7 @@ private fun MapStyleSelectionSheet(
         ) {
             Text(
                 text = "Thème",
-                color = Color.Black
+                color = PrimaryColor
             )
             Spacer(modifier = Modifier.size(16.dp))
 
@@ -500,7 +502,7 @@ private fun MapStyleSelectionSheet(
 
                         Text(
                             text = mapStyleLabel(style),
-                            color = if (enabled) Color.Black else Color(0xFF9CA3AF)
+                            color = if (enabled) PrimaryColor else Color(0xFF9CA3AF)
                         )
                     }
                 }
@@ -540,7 +542,7 @@ private fun MapStyleSelectionSheet(
 
                             Text(
                                 text = mapStyleLabel(style),
-                                color = if (enabled) Color.Black else Color(0xFF9CA3AF)
+                                color = if (enabled) PrimaryColor else Color(0xFF9CA3AF)
                             )
                         }
                     }
@@ -1687,7 +1689,7 @@ fun PlanScreen(
         sheetPeekHeight = peekHeight,
         sheetShape = unifiedSheetShape,
         modifier = modifier,
-        sheetContainerColor = Color.White,
+        sheetContainerColor = SecondaryColor,
         sheetContent = {
             Column(
                 modifier = Modifier
@@ -2090,7 +2092,7 @@ fun PlanScreen(
                                 Modifier
                             }
                         ),
-                    containerColor = Color.Black,
+                    containerColor = PrimaryColor,
                     shape = CircleShape,
                     elevation = FloatingActionButtonDefaults.elevation(
                         defaultElevation = 0.dp
@@ -2104,7 +2106,7 @@ fun PlanScreen(
                             radius = size.minDimension / 2.5f
                         )
                         drawCircle(
-                            color = Color.White,
+                            color = SecondaryColor,
                             radius = size.minDimension / 2.5f,
                             style = Stroke(width = 7f)
                         )
@@ -2141,7 +2143,7 @@ fun PlanScreen(
                             Color.Gray
                         ) else null,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.Black
+                            containerColor = PrimaryColor
                         ),
                         shape = CircleShape,
                         elevation = ButtonDefaults.buttonElevation(
@@ -2155,7 +2157,7 @@ fun PlanScreen(
                         Icon(
                             imageVector = Icons.Filled.Layers,
                             contentDescription = "Layers",
-                            tint = Color.White,
+                            tint = SecondaryColor,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -2188,10 +2190,10 @@ fun PlanScreen(
                         val buttonColor = when {
                             hasVehicles -> Color(0xFFEF4444) // Red when active with vehicles
                             isActiveNoVehicles -> Color(0xFF9CA3AF) // Gray when active but no vehicles
-                            else -> Color.Black // Black when inactive
+                            else -> PrimaryColor // Black when inactive
                         }
                         val showLiveBorder =
-                            isDarkMatterStyle && buttonColor == Color.Black && !isSearchExpanded
+                            isDarkMatterStyle && buttonColor == PrimaryColor && !isSearchExpanded
                         Button(
                             onClick = {
                                 if (isLiveModeEnabled) {
@@ -2231,13 +2233,13 @@ fun PlanScreen(
                                         .size(8.dp)
                                         .graphicsLayer { translationY = dotOffset }
                                 ) {
-                                    drawCircle(color = Color.White)
+                                    drawCircle(color = SecondaryColor)
                                 }
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
                                     text = "LIVE",
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    color = SecondaryColor
                                 )
                             }
                         }
@@ -2294,7 +2296,7 @@ fun PlanScreen(
                                 .offset(y = 10.dp)
                                 .size(42.dp)
                                 .clip(CircleShape)
-                                .background(Color.White)
+                                .background(SecondaryColor)
                                 .clickable {
                                     val previousDeparture = itineraryDepartureStop
                                     itineraryDepartureStop = itineraryArrivalStop
@@ -2305,7 +2307,7 @@ fun PlanScreen(
                             Icon(
                                 imageVector = Icons.Default.SwapVert,
                                 contentDescription = "Inverser",
-                                tint = Color.Black,
+                                tint = PrimaryColor,
                                 modifier = Modifier.size(22.dp)
                             )
                         }
@@ -2402,7 +2404,7 @@ fun PlanScreen(
 
         ModalBottomSheet(
             onDismissRequest = onLinesSheetDismiss,
-            containerColor = Color.White,
+            containerColor = SecondaryColor,
             sheetState = modalBottomSheetState
         ) {
             LinesBottomSheet(
@@ -2498,34 +2500,34 @@ private fun ItinerarySearchBarField(
                 placeholder = {
                     Text(
                         text = placeholder,
-                        color = Color.White
+                        color = SecondaryColor
                     )
                 },
                 leadingIcon = {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = Red500
+                        tint = AccentColor
                     )
                 },
                 colors = TextFieldDefaults.colors(
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    cursorColor = Color.White,
+                    focusedTextColor = SecondaryColor,
+                    unfocusedTextColor = SecondaryColor,
+                    cursorColor = SecondaryColor,
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                     disabledIndicatorColor = Color.Transparent,
-                    focusedContainerColor = Color.Black,
-                    unfocusedContainerColor = Color.Black,
-                    focusedPlaceholderColor = Color.White.copy(alpha = 0.6f),
-                    unfocusedPlaceholderColor = Color.White.copy(alpha = 0.6f)
+                    focusedContainerColor = PrimaryColor,
+                    unfocusedContainerColor = PrimaryColor,
+                    focusedPlaceholderColor = SecondaryColor.copy(alpha = 0.6f),
+                    unfocusedPlaceholderColor = SecondaryColor.copy(alpha = 0.6f)
                 )
             )
         },
         expanded = false,
         onExpandedChange = { if (it) onClick() },
         colors = SearchBarDefaults.colors(
-            containerColor = Color.Black,
+            containerColor = PrimaryColor,
             dividerColor = Color.Transparent
         )
     ) {}

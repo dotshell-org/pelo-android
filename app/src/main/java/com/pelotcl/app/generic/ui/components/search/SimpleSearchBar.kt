@@ -72,7 +72,9 @@ import androidx.compose.ui.unit.sp
 import com.pelotcl.app.R
 import com.pelotcl.app.generic.data.repository.offline.SearchHistoryItem
 import com.pelotcl.app.generic.data.repository.offline.SearchType
-import com.pelotcl.app.generic.ui.theme.Red500
+import com.pelotcl.app.generic.ui.theme.PrimaryColor
+import com.pelotcl.app.generic.ui.theme.AccentColor
+import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.generic.ui.theme.Stone900
 import com.pelotcl.app.utils.transport.BusIconHelper
 
@@ -211,7 +213,7 @@ fun SimpleSearchBar(
     Box(
         modifier = (if (expanded) Modifier
             .fillMaxSize()
-            .background(Color.Black) else modifier)
+            .background(PrimaryColor) else modifier)
             .semantics { isTraversalGroup = true }
             .padding(0.dp)
             .clickable(
@@ -264,12 +266,12 @@ fun SimpleSearchBar(
                             setExpandedState(shouldExpand)
                         }
                     },
-                    placeholder = { Text(searchPlaceholder, color = Color.White) },
+                    placeholder = { Text(searchPlaceholder, color = SecondaryColor) },
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Default.Search,
                             contentDescription = "Search",
-                            tint = Red500,
+                            tint = AccentColor,
                             modifier = Modifier.padding(
                                 start = if (expanded) 32.dp else 0.dp,
                                 end = if (expanded) 12.dp else 0.dp
@@ -277,16 +279,16 @@ fun SimpleSearchBar(
                         )
                     },
                     colors = TextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        cursorColor = Color.White,
+                        focusedTextColor = SecondaryColor,
+                        unfocusedTextColor = SecondaryColor,
+                        cursorColor = SecondaryColor,
                         focusedIndicatorColor = Color.Transparent,
                         unfocusedIndicatorColor = Color.Transparent,
                         disabledIndicatorColor = Color.Transparent,
-                        focusedContainerColor = Color.Black,
-                        unfocusedContainerColor = Color.Black,
-                        focusedPlaceholderColor = Color.White.copy(alpha = 0.6f),
-                        unfocusedPlaceholderColor = Color.White.copy(alpha = 0.6f)
+                        focusedContainerColor = PrimaryColor,
+                        unfocusedContainerColor = PrimaryColor,
+                        focusedPlaceholderColor = SecondaryColor.copy(alpha = 0.6f),
+                        unfocusedPlaceholderColor = SecondaryColor.copy(alpha = 0.6f)
                     )
                 )
             },
@@ -297,7 +299,7 @@ fun SimpleSearchBar(
                 }
             },
             colors = SearchBarDefaults.colors(
-                containerColor = Color.Black,
+                containerColor = PrimaryColor,
                 dividerColor = Color.Transparent
             )
         ) {
@@ -414,12 +416,12 @@ fun SimpleSearchBar(
                         headlineContent = {
                             Text(
                                 "Aucun résultat",
-                                color = Color.White.copy(alpha = 0.6f),
+                                color = SecondaryColor.copy(alpha = 0.6f),
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
                             )
                         },
-                        colors = ListItemDefaults.colors(containerColor = Color.Black),
+                        colors = ListItemDefaults.colors(containerColor = PrimaryColor),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -439,7 +441,7 @@ private fun StopSearchPickerListItem(
                 Spacer(modifier = Modifier.size(6.dp))
                 Text(
                     result.stopName,
-                    color = Color.White,
+                    color = SecondaryColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     fontWeight = FontWeight.Bold
@@ -458,7 +460,7 @@ private fun StopSearchPickerListItem(
                 Spacer(modifier = Modifier.size(4.dp))
             }
         },
-        colors = ListItemDefaults.colors(containerColor = Color.Black),
+        colors = ListItemDefaults.colors(containerColor = PrimaryColor),
         modifier = Modifier
             .clickable(onClick = onClick)
             .fillMaxWidth()
@@ -474,13 +476,13 @@ private fun SectionHeader(icon: ImageVector, text: String) {
         Icon(
             imageVector = icon,
             contentDescription = text,
-            tint = Color.White.copy(alpha = 0.6f),
+            tint = SecondaryColor.copy(alpha = 0.6f),
             modifier = Modifier.size(16.dp)
         )
         Spacer(modifier = Modifier.size(8.dp))
         Text(
             text = text,
-            color = Color.White.copy(alpha = 0.6f),
+            color = SecondaryColor.copy(alpha = 0.6f),
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium
         )
@@ -513,7 +515,7 @@ private fun StopSearchResultItem(
                 Spacer(modifier = Modifier.size(6.dp))
                 Text(
                     result.stopName,
-                    color = Color.White,
+                    color = SecondaryColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     fontWeight = FontWeight.Bold
@@ -555,14 +557,14 @@ private fun StopSearchResultItem(
                 Icon(
                     imageVector = Icons.Default.Directions,
                     contentDescription = "Itinéraire",
-                    tint = Color.White,
+                    tint = SecondaryColor,
                     modifier = Modifier
                         .size(17.dp)
                         .align(Alignment.Center)
                 )
             }
         },
-        colors = ListItemDefaults.colors(containerColor = Color.Black),
+        colors = ListItemDefaults.colors(containerColor = PrimaryColor),
         modifier = Modifier
             .clickable(onClick = onOptionsClick)
             .fillMaxWidth()
@@ -591,7 +593,7 @@ private fun HistoryListItem(
                 ) {
                     Text(
                         historyItem.query,
-                        color = Color.White,
+                        color = SecondaryColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         fontWeight = FontWeight.Medium
@@ -634,7 +636,7 @@ private fun HistoryListItem(
                         Icon(
                             imageVector = Icons.Default.Directions,
                             contentDescription = "Itinéraire",
-                            tint = Color.White,
+                            tint = SecondaryColor,
                             modifier = Modifier
                                 .size(17.dp)
                                 .align(Alignment.Center)
@@ -646,14 +648,14 @@ private fun HistoryListItem(
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Supprimer",
-                            tint = Color.White.copy(alpha = 0.5f),
+                            tint = SecondaryColor.copy(alpha = 0.5f),
                             modifier = Modifier.size(18.dp)
                         )
                     }
                 }
             }
         },
-        colors = ListItemDefaults.colors(containerColor = Color.Black),
+        colors = ListItemDefaults.colors(containerColor = PrimaryColor),
         modifier = Modifier
             .clickable(onClick = if (historyItem.type == SearchType.LINE) onClick else onOptionsClick)
             .fillMaxWidth()
@@ -697,7 +699,7 @@ private fun LineSearchResultItem(
                 Column(modifier = Modifier.padding(start = 10.dp)) {
                     Text(
                         "${lineResult.category} ${lineResult.lineName}",
-                        color = Color.White,
+                        color = SecondaryColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         fontWeight = FontWeight.Bold
@@ -705,7 +707,7 @@ private fun LineSearchResultItem(
                 }
             }
         },
-        colors = ListItemDefaults.colors(containerColor = Color.Black),
+        colors = ListItemDefaults.colors(containerColor = PrimaryColor),
         modifier = Modifier
             .clickable(onClick = onClick)
             .fillMaxWidth()

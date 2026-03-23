@@ -27,6 +27,8 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pelotcl.app.generic.ui.theme.PrimaryColor
+import com.pelotcl.app.generic.ui.theme.SecondaryColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,7 +45,7 @@ fun ContactScreen(
                 title = {
                     Text(
                         text = "Nous contacter",
-                        color = Color.White,
+                        color = SecondaryColor,
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -52,16 +54,16 @@ fun ContactScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Retour",
-                            tint = Color.White
+                            tint = SecondaryColor
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Black
+                    containerColor = PrimaryColor
                 )
             )
         },
-        containerColor = Color.Black
+        containerColor = PrimaryColor
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -72,7 +74,7 @@ fun ContactScreen(
         ) {
             Text(
                 text = "Une question ? Un problème ?",
-                color = Color.White,
+                color = SecondaryColor,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 16.dp)
@@ -80,7 +82,7 @@ fun ContactScreen(
 
             Text(
                 text = "N'hésitez pas à nous contacter pour toute question, suggestion ou pour signaler un bug.",
-                color = Color.White,
+                color = SecondaryColor,
                 fontSize = 14.sp,
                 lineHeight = 20.sp,
                 modifier = Modifier.padding(bottom = 24.dp)
@@ -90,7 +92,7 @@ fun ContactScreen(
 
             Text(
                 text = "Signaler un bug",
-                color = Color.White,
+                color = SecondaryColor,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(bottom = 16.dp)
@@ -99,7 +101,7 @@ fun ContactScreen(
             Text(
                 text = "Pour signaler un bug, merci de nous envoyer un message via la page contact" +
                         " de notre site web [dotshell.eu].",
-                color = Color.White,
+                color = SecondaryColor,
                 fontSize = 14.sp,
                 lineHeight = 20.sp,
                 modifier = Modifier.padding(bottom = 24.dp)
@@ -115,7 +117,7 @@ fun ContactScreen(
             ) {
                 Text(
                     text = "Nous contacter",
-                    color = Color.White,
+                    color = SecondaryColor,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.padding(vertical = 8.dp)

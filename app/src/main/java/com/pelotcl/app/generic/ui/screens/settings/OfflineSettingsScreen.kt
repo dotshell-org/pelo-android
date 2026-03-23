@@ -49,6 +49,9 @@ import com.pelotcl.app.generic.data.offline.OfflineDownloadState
 import com.pelotcl.app.generic.data.offline.OfflineRepository
 import com.pelotcl.app.generic.data.repository.offline.MapStyleCompat
 import com.pelotcl.app.generic.service.TransportServiceProvider
+import com.pelotcl.app.generic.ui.theme.AccentColor
+import com.pelotcl.app.generic.ui.theme.PrimaryColor
+import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -73,7 +76,7 @@ fun OfflineSettingsScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(PrimaryColor)
     ) {
         Column(
             modifier = Modifier
@@ -96,7 +99,7 @@ fun OfflineSettingsScreen(
             Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = "Mode hors ligne",
-                color = Color.White,
+                color = SecondaryColor,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -167,7 +170,7 @@ fun OfflineSettingsScreen(
                             .fillMaxWidth()
                             .alpha(if (isOffline) 0.5f else 1f),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFE60000),
+                            containerColor = AccentColor,
                             disabledContainerColor = Color(0xFF3A3A3C)
                         ),
                         shape = RoundedCornerShape(12.dp)
@@ -176,13 +179,13 @@ fun OfflineSettingsScreen(
                             Icons.Filled.CloudDownload,
                             stringResource(R.string.download_data),
                             modifier = Modifier.size(20.dp),
-                            tint = Color.White
+                            tint = SecondaryColor
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = if (offlineDataInfo.isAvailable) "Mettre à jour" else "Télécharger les données",
                             fontSize = 16.sp,
-                            color = Color.White,
+                            color = SecondaryColor,
                             modifier = Modifier.padding(vertical = 4.dp)
                         )
                     }
@@ -190,7 +193,7 @@ fun OfflineSettingsScreen(
                     if (state is OfflineDownloadState.Error) {
                         Text(
                             state.message,
-                            color = Color(0xFFEF4444),
+                            color = AccentColor,
                             fontSize = 13.sp,
                             modifier = Modifier.padding(top = 12.dp)
                         )
@@ -213,7 +216,7 @@ fun OfflineSettingsScreen(
                 .padding(start = 4.dp, top = 8.dp)
                 .align(Alignment.TopStart)
         ) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour", tint = Color.White)
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour", tint = SecondaryColor)
         }
     }
 }
@@ -229,11 +232,11 @@ private fun CategoryHeader(icon: ImageVector, title: String) {
         Icon(
             icon,
             stringResource(R.string.category_header),
-            tint = Color.White,
+            tint = SecondaryColor,
             modifier = Modifier.size(20.dp)
         )
         Spacer(Modifier.width(8.dp))
-        Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        Text(title, color = SecondaryColor, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -258,7 +261,7 @@ private fun DownloadProgressCard(state: OfflineDownloadState.Downloading) {
 
             Text(
                 state.stepDescription,
-                color = Color.White,
+                color = SecondaryColor,
                 fontSize = 14.sp,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
@@ -322,13 +325,13 @@ private fun MapStyleSelectionCard(
                                 if (isSelected) Color.Transparent else Color(0xFF8E8E93),
                                 RoundedCornerShape(6.dp)
                             )
-                            .background(if (isSelected) Color(0xFFE60000) else Color.Transparent),
+                            .background(if (isSelected) AccentColor else Color.Transparent),
                         contentAlignment = Alignment.Center
                     ) {
                         if (isSelected) Icon(
                             Icons.Default.Check,
                             stringResource(R.string.selected),
-                            tint = Color.White,
+                            tint = SecondaryColor,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -336,7 +339,7 @@ private fun MapStyleSelectionCard(
                     Spacer(modifier = Modifier.width(16.dp))
                     Text(
                         style.displayName,
-                        color = Color.White,
+                        color = SecondaryColor,
                         fontSize = 15.sp,
                         modifier = Modifier.weight(1f)
                     )
@@ -409,7 +412,7 @@ private fun OfflineStatusCard(info: OfflineDataInfo, context: Context) {
 private fun StatusRow(label: String, value: String) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, color = Color.Gray, fontSize = 14.sp)
-        Text(value, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Text(value, color = SecondaryColor, fontSize = 14.sp, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -449,7 +452,7 @@ private fun FeatureRow(feature: String, available: Boolean) {
             fontWeight = FontWeight.Bold
         )
         Spacer(modifier = Modifier.width(12.dp))
-        Text(feature, color = if (available) Color.White else Color.Gray, fontSize = 14.sp)
+        Text(feature, color = if (available) SecondaryColor else Color.Gray, fontSize = 14.sp)
     }
 }
 

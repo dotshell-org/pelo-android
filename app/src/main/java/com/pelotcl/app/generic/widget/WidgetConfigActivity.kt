@@ -60,16 +60,18 @@ import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.state.updateAppWidgetState
 import com.pelotcl.app.generic.data.repository.offline.SchedulesRepository
 import com.pelotcl.app.generic.data.repository.offline.FavoritesRepository
+import com.pelotcl.app.generic.ui.theme.PrimaryColor
+import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.utils.transport.BusIconHelper
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 
 // -- App-consistent dark colors --
-private val DarkBackground = Color.Black
+private val DarkBackground = PrimaryColor
 private val DarkCard = Color(0xFF1C1C1E)
 private val DarkCardPressed = Color(0xFF2C2C2E)
 private val DarkDivider = Color(0xFF3A3A3C)
-private val TextPrimary = Color.White
+private val TextPrimary = SecondaryColor
 private val TextSecondary = Color(0xFF8E8E93)
 private val AccentRed = Color(0xFFE60000)
 private val AccentYellow = Color(0xFFFFC107)

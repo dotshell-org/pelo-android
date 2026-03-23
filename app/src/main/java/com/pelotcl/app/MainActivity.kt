@@ -72,12 +72,14 @@ import com.pelotcl.app.generic.ui.screens.settings.ItinerarySettingsScreen
 import com.pelotcl.app.generic.ui.screens.settings.OfflineSettingsScreen
 import com.pelotcl.app.generic.ui.screens.settings.SettingsScreen
 import com.pelotcl.app.generic.ui.theme.PeloTheme
-import com.pelotcl.app.generic.ui.theme.Red500
+import com.pelotcl.app.generic.ui.theme.AccentColor
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.generic.ui.viewmodel.TransportStopsUiState
 import com.pelotcl.app.generic.data.network.RetrofitInstance
 import com.pelotcl.app.generic.data.cache.TransportCache
 import com.pelotcl.app.generic.data.repository.offline.SchedulesRepository
+import com.pelotcl.app.generic.ui.theme.PrimaryColor
+import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.utils.transport.BusIconHelper
 import com.pelotcl.app.utils.LocationHelper
 import kotlinx.coroutines.CoroutineScope
@@ -375,7 +377,7 @@ fun NavBar(modifier: Modifier = Modifier) {
             bottomBar = {
                 NavigationBar(
                     windowInsets = NavigationBarDefaults.windowInsets,
-                    containerColor = Color.Black
+                    containerColor = PrimaryColor
                 ) {
                     Destination.entries.forEachIndexed { index, destination ->
                         NavigationBarItem(
@@ -429,11 +431,11 @@ fun NavBar(modifier: Modifier = Modifier) {
                             },
                             label = { Text(destination.label) },
                             colors = NavigationBarItemDefaults.colors(
-                                indicatorColor = Red500,
-                                selectedIconColor = Color.White,
-                                unselectedIconColor = Color.White,
-                                selectedTextColor = Color.White,
-                                unselectedTextColor = Color.White
+                                indicatorColor = AccentColor,
+                                selectedIconColor = SecondaryColor,
+                                unselectedIconColor = SecondaryColor,
+                                selectedTextColor = SecondaryColor,
+                                unselectedTextColor = SecondaryColor
                             )
                         )
                     }

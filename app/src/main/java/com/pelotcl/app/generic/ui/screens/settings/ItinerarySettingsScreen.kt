@@ -43,6 +43,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import com.pelotcl.app.generic.data.repository.itinerary.ItineraryPreferencesRepository
+import com.pelotcl.app.generic.ui.theme.AccentColor
+import com.pelotcl.app.generic.ui.theme.PrimaryColor
+import com.pelotcl.app.generic.ui.theme.SecondaryColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,7 +66,7 @@ fun ItinerarySettingsScreen(
                 title = {
                     Text(
                         text = "Itinéraire",
-                        color = Color.White,
+                        color = SecondaryColor,
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -72,16 +75,16 @@ fun ItinerarySettingsScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Retour",
-                            tint = Color.White,
+                            tint = SecondaryColor,
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Black
+                    containerColor = PrimaryColor
                 )
             )
         },
-        containerColor = Color.Black
+        containerColor = PrimaryColor
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -138,13 +141,13 @@ private fun ItineraryLineCategorySection(
             Icon(
                 imageVector = Icons.Default.Euro,
                 contentDescription = null,
-                tint = Color.White,
+                tint = SecondaryColor,
                 modifier = Modifier.size(20.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "Lignes à tarification spéciale",
-                color = Color.White,
+                color = SecondaryColor,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold
             )
@@ -208,7 +211,7 @@ private fun ItineraryLineItem(
                     shape = RoundedCornerShape(8.dp)
                 )
                 .background(
-                    if (isSelected) Color(0xFFE60000) else Color.Transparent,
+                    if (isSelected) AccentColor else Color.Transparent,
                     shape = RoundedCornerShape(8.dp)
                 ),
             contentAlignment = Alignment.Center
@@ -217,7 +220,7 @@ private fun ItineraryLineItem(
                 Icon(
                     imageVector = Icons.Default.Check,
                     contentDescription = "Sélectionné",
-                    tint = Color.White,
+                    tint = SecondaryColor,
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -229,7 +232,7 @@ private fun ItineraryLineItem(
         Column {
             Text(
                 text = title,
-                color = Color.White,
+                color = SecondaryColor,
                 fontSize = 16.sp,
                 fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal
             )

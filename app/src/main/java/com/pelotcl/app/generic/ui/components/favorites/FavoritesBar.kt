@@ -41,6 +41,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pelotcl.app.generic.data.model.Favorite
+import com.pelotcl.app.generic.ui.theme.PrimaryColor
+import com.pelotcl.app.generic.ui.theme.SecondaryColor
 
 /**
  * Horizontal scrollable bar showing user-created favorites
@@ -62,7 +64,7 @@ fun FavoritesBar(
     val chipTextStyle = TextStyle(
         fontSize = 14.sp,
         fontWeight = FontWeight.Bold,
-        color = Color.White
+        color = SecondaryColor
     )
 
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
@@ -187,7 +189,7 @@ private fun FavoriteItem(
         modifier = Modifier
             .shadow(4.dp, RoundedCornerShape(20.dp))
             .clip(RoundedCornerShape(20.dp))
-            .background(Color.Black)
+            .background(PrimaryColor)
             .then(if (isDarkMode) Modifier.border(1.dp, Color(0xFF9CA3AF), RoundedCornerShape(20.dp)) else Modifier)
             .combinedClickable(
                 onClick = onClick,
@@ -199,7 +201,7 @@ private fun FavoriteItem(
         Icon(
             imageVector = icon,
             contentDescription = favorite.name,
-            tint = Color.White,
+            tint = SecondaryColor,
             modifier = Modifier.size(16.dp)
         )
         Spacer(modifier = Modifier.width(4.dp))
@@ -222,7 +224,7 @@ private fun AddFavoriteItem(
         modifier = Modifier
             .shadow(4.dp, RoundedCornerShape(20.dp))
             .clip(RoundedCornerShape(20.dp))
-            .background(Color.Black)
+            .background(PrimaryColor)
             .then(if (isDarkMode) Modifier.border(1.dp, Color(0xFF9CA3AF), RoundedCornerShape(20.dp)) else Modifier)
             .combinedClickable(onClick = onClick)
             .padding(start = 15.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
@@ -231,7 +233,7 @@ private fun AddFavoriteItem(
         Icon(
             imageVector = Icons.Default.Add,
             contentDescription = "Ajouter un favori",
-            tint = Color.White,
+            tint = SecondaryColor,
             modifier = Modifier.size(16.dp)
         )
         Spacer(modifier = Modifier.width(4.dp))

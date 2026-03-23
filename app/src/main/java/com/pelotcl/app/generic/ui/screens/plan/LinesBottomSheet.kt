@@ -52,6 +52,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.text.isDigitsOnly
 import com.pelotcl.app.generic.data.model.AlertSeverity
+import com.pelotcl.app.generic.ui.theme.PrimaryColor
+import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.generic.data.model.AlertSeverity as TrafficAlertSeverity
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.utils.transport.LineColorHelper
@@ -171,7 +173,7 @@ fun LinesBottomSheet(
         modifier = modifier
             .fillMaxWidth()
             .fillMaxHeight(0.9f)
-            .background(Color.White, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+            .background(SecondaryColor, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
             .padding(16.dp)
     ) {
         // List of lines by category
@@ -209,7 +211,7 @@ fun LinesBottomSheet(
                                 text = item.category,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.Black,
+                                color = PrimaryColor,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(top = 8.dp, bottom = 8.dp)
@@ -309,7 +311,7 @@ private fun LineChip(
             } else {
                 // Fallback if icon doesn't exist
                 val backgroundColor = Color(LineColorHelper.getColorForLineString(lineName))
-                val textColor = if (lineName.uppercase() == "T3") Color.Black else Color.White
+                val textColor = if (lineName.uppercase() == "T3") PrimaryColor else SecondaryColor
 
                 Box(
                     modifier = Modifier
@@ -362,7 +364,7 @@ private fun AlertBadge(
             // Use a text-based "i" to avoid the double circle from Icons.Default.Info
             Text(
                 text = "i",
-                color = Color.White,
+                color = SecondaryColor,
                 style = MaterialTheme.typography.bodySmall.copy(
                     fontWeight = FontWeight.Bold,
                     fontSize = 11.sp,
@@ -375,7 +377,7 @@ private fun AlertBadge(
             Icon(
                 imageVector = Icons.Default.PriorityHigh,
                 contentDescription = null,
-                tint = Color.White,
+                tint = SecondaryColor,
                 modifier = Modifier.size(12.dp)
             )
         }

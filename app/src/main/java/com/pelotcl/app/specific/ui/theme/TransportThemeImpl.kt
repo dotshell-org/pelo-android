@@ -3,6 +3,9 @@ package com.pelotcl.app.specific.ui.theme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
+import com.pelotcl.app.generic.ui.theme.AccentColor
+import com.pelotcl.app.generic.ui.theme.PrimaryColor
+import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.generic.ui.theme.TransportTheme
 
 /**
@@ -11,13 +14,6 @@ import com.pelotcl.app.generic.ui.theme.TransportTheme
  */
 @Immutable
 class TransportThemeImpl : TransportTheme {
-    
-    // Couleurs officielles
-    override val primaryColor: Color = Color(0xFFE60000) // Couleur primaire
-    override val secondaryColor: Color = Color(0xFF000000) // Couleur secondaire
-    override val accentColor: Color = Color(0xFFFFFFFF) // Couleur d'accent
-    
-    // Couleurs par type de transport
     override val metroLineColor: Color = Color(0xFFE60000) // Couleur ligne métro
     override val tramLineColor: Color = Color(0xFF007AC3) // Couleur ligne tramway
     override val busLineColor: Color = Color(0xFF00A651) // Couleur ligne bus
@@ -32,34 +28,34 @@ class TransportThemeImpl : TransportTheme {
     override fun ApplyTheme(content: @Composable () -> Unit) {
         androidx.compose.material3.MaterialTheme(
             colorScheme = androidx.compose.material3.lightColorScheme(
-                primary = primaryColor,
-                secondary = secondaryColor,
-                tertiary = accentColor,
-                background = Color.White,
-                surface = Color.White,
-                onPrimary = Color.White,
-                onSecondary = Color.White,
-                onBackground = Color.Black,
-                onSurface = Color.Black,
+                primary = PrimaryColor,
+                secondary = SecondaryColor,
+                tertiary = AccentColor,
+                background = SecondaryColor,
+                surface = SecondaryColor,
+                onPrimary = SecondaryColor,
+                onSecondary = SecondaryColor,
+                onBackground = PrimaryColor,
+                onSurface = PrimaryColor,
                 error = errorColor,
-                onError = Color.White
+                onError = SecondaryColor
             ),
             typography = androidx.compose.material3.Typography(
-                displayLarge = androidx.compose.material3.Typography().displayLarge.copy(color = primaryColor),
-                displayMedium = androidx.compose.material3.Typography().displayMedium.copy(color = primaryColor),
-                displaySmall = androidx.compose.material3.Typography().displaySmall.copy(color = primaryColor),
-                headlineLarge = androidx.compose.material3.Typography().headlineLarge.copy(color = primaryColor),
-                headlineMedium = androidx.compose.material3.Typography().headlineMedium.copy(color = primaryColor),
-                headlineSmall = androidx.compose.material3.Typography().headlineSmall.copy(color = primaryColor),
-                titleLarge = androidx.compose.material3.Typography().titleLarge.copy(color = primaryColor),
-                titleMedium = androidx.compose.material3.Typography().titleMedium.copy(color = primaryColor),
-                titleSmall = androidx.compose.material3.Typography().titleSmall.copy(color = primaryColor),
-                bodyLarge = androidx.compose.material3.Typography().bodyLarge.copy(color = Color.Black),
-                bodyMedium = androidx.compose.material3.Typography().bodyMedium.copy(color = Color.Black),
-                bodySmall = androidx.compose.material3.Typography().bodySmall.copy(color = Color.Black),
-                labelLarge = androidx.compose.material3.Typography().labelLarge.copy(color = Color.Black),
-                labelMedium = androidx.compose.material3.Typography().labelMedium.copy(color = Color.Black),
-                labelSmall = androidx.compose.material3.Typography().labelSmall.copy(color = Color.Black)
+                displayLarge = androidx.compose.material3.Typography().displayLarge.copy(color = PrimaryColor),
+                displayMedium = androidx.compose.material3.Typography().displayMedium.copy(color = PrimaryColor),
+                displaySmall = androidx.compose.material3.Typography().displaySmall.copy(color = PrimaryColor),
+                headlineLarge = androidx.compose.material3.Typography().headlineLarge.copy(color = PrimaryColor),
+                headlineMedium = androidx.compose.material3.Typography().headlineMedium.copy(color = PrimaryColor),
+                headlineSmall = androidx.compose.material3.Typography().headlineSmall.copy(color = PrimaryColor),
+                titleLarge = androidx.compose.material3.Typography().titleLarge.copy(color = PrimaryColor),
+                titleMedium = androidx.compose.material3.Typography().titleMedium.copy(color = PrimaryColor),
+                titleSmall = androidx.compose.material3.Typography().titleSmall.copy(color = PrimaryColor),
+                bodyLarge = androidx.compose.material3.Typography().bodyLarge.copy(color = PrimaryColor),
+                bodyMedium = androidx.compose.material3.Typography().bodyMedium.copy(color = PrimaryColor),
+                bodySmall = androidx.compose.material3.Typography().bodySmall.copy(color = PrimaryColor),
+                labelLarge = androidx.compose.material3.Typography().labelLarge.copy(color = PrimaryColor),
+                labelMedium = androidx.compose.material3.Typography().labelMedium.copy(color = PrimaryColor),
+                labelSmall = androidx.compose.material3.Typography().labelSmall.copy(color = PrimaryColor)
             ),
             content = content
         )
@@ -74,7 +70,7 @@ class TransportThemeImpl : TransportTheme {
             "rhonexpress", "rx" -> Color(0xFF00A0B0) // Bleu Rhônexpress
             "navigone", "navi" -> Color(0xFF6B5B95) // Violet Navigone
             "trambus", "tb" -> Color(0xFFF57C00) // Orange Trambus
-            else -> primaryColor
+            else -> PrimaryColor
         }
     }
 

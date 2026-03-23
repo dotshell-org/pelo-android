@@ -27,6 +27,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pelotcl.app.generic.ui.theme.PrimaryColor
+import com.pelotcl.app.generic.ui.theme.SecondaryColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,7 +46,7 @@ fun AboutScreen(
                 title = {
                     Text(
                         text = "À propos",
-                        color = Color.White,
+                        color = SecondaryColor,
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -53,16 +55,16 @@ fun AboutScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Retour",
-                            tint = Color.White,
+                            tint = SecondaryColor,
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Black
+                    containerColor = PrimaryColor
                 )
             )
         },
-        containerColor = Color.Black
+        containerColor = PrimaryColor
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -121,7 +123,7 @@ private fun AboutMenuItem(
     Card(
         modifier = cardModifier,
         colors = CardDefaults.cardColors(
-            containerColor = Color.Black
+            containerColor = PrimaryColor
         )
     ) {
         Row {
@@ -132,7 +134,7 @@ private fun AboutMenuItem(
             ) {
                 Text(
                     text = title,
-                    color = Color.White,
+                    color = SecondaryColor,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -149,7 +151,7 @@ private fun AboutMenuItem(
                 Icon(
                     imageVector = Icons.Filled.ChevronRight,
                     contentDescription = "Next Arrow Icon",
-                    tint = Color.White,
+                    tint = SecondaryColor,
                     modifier = Modifier.padding(16.dp)
                 )
             }

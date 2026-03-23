@@ -30,6 +30,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pelotcl.app.generic.ui.screens.about.AboutScreenContract
+import com.pelotcl.app.generic.ui.theme.PrimaryColor
+import com.pelotcl.app.generic.ui.theme.SecondaryColor
 
 /**
  * Implémentation des écrans "À propos" pour le transport
@@ -49,16 +51,16 @@ class AboutScreenImpl : AboutScreenContract {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text(text = screenTitle, color = Color.White, fontWeight = FontWeight.Bold) },
+                    title = { Text(text = screenTitle, color = SecondaryColor, fontWeight = FontWeight.Bold) },
                     navigationIcon = {
                         IconButton(onClick = onBackClick) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour", tint = Color.White)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour", tint = SecondaryColor)
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black)
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = PrimaryColor)
                 )
             },
-            containerColor = Color.Black
+            containerColor = PrimaryColor
         ) { paddingValues ->
             Column(
                 modifier = Modifier
@@ -82,9 +84,9 @@ class AboutScreenImpl : AboutScreenContract {
                 .fillMaxSize(),
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
         ) {
-            Text(text = text, color = Color.White, fontSize = 18.sp)
+            Text(text = text, color = SecondaryColor, fontSize = 18.sp)
             Spacer(modifier = Modifier.weight(1f))
-            Icon(Icons.AutoMirrored.Filled.OpenInNew, "Ouvrir", tint = Color.White)
+            Icon(Icons.AutoMirrored.Filled.OpenInNew, "Ouvrir", tint = SecondaryColor)
         }
     }
     
@@ -100,16 +102,16 @@ class AboutScreenImpl : AboutScreenContract {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text(text = "Crédits", color = Color.White, fontWeight = FontWeight.Bold) },
+                    title = { Text(text = "Crédits", color = SecondaryColor, fontWeight = FontWeight.Bold) },
                     navigationIcon = {
                         IconButton(onClick = onBackClick) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour", tint = Color.White)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour", tint = SecondaryColor)
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black)
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = PrimaryColor)
                 )
             },
-            containerColor = Color.Black
+            containerColor = PrimaryColor
         ) { paddingValues ->
             val uriHandler = LocalUriHandler.current
             
@@ -123,7 +125,7 @@ class AboutScreenImpl : AboutScreenContract {
                 sections.forEach { section ->
                     Text(
                         text = section.title,
-                        color = Color.White,
+                        color = SecondaryColor,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(bottom = 8.dp)
@@ -131,7 +133,7 @@ class AboutScreenImpl : AboutScreenContract {
                     
                     Text(
                         text = section.content,
-                        color = Color.White,
+                        color = SecondaryColor,
                         fontSize = 14.sp,
                         lineHeight = 20.sp,
                         modifier = Modifier.padding(bottom = 8.dp)
@@ -169,16 +171,16 @@ class AboutScreenImpl : AboutScreenContract {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text(text = "Mentions légales / CGU", color = Color.White, fontWeight = FontWeight.Bold) },
+                    title = { Text(text = "Mentions légales / CGU", color = SecondaryColor, fontWeight = FontWeight.Bold) },
                     navigationIcon = {
                         IconButton(onClick = onBackClick) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour", tint = Color.White)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour", tint = SecondaryColor)
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black)
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = PrimaryColor)
                 )
             },
-            containerColor = Color.Black
+            containerColor = PrimaryColor
         ) { paddingValues ->
             Column(
                 modifier = Modifier
@@ -190,7 +192,7 @@ class AboutScreenImpl : AboutScreenContract {
                 sections.forEach { section ->
                     Text(
                         text = section.title,
-                        color = Color.White,
+                        color = SecondaryColor,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(bottom = 6.dp)
@@ -198,7 +200,7 @@ class AboutScreenImpl : AboutScreenContract {
                     
                     Text(
                         text = section.content,
-                        color = Color.White,
+                        color = SecondaryColor,
                         fontSize = 14.sp,
                         lineHeight = 20.sp,
                         modifier = Modifier.padding(bottom = 16.dp)
@@ -217,16 +219,16 @@ class AboutScreenImpl : AboutScreenContract {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text(text = "Contact", color = Color.White, fontWeight = FontWeight.Bold) },
+                    title = { Text(text = "Contact", color = SecondaryColor, fontWeight = FontWeight.Bold) },
                     navigationIcon = {
                         IconButton(onClick = onBackClick) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour", tint = Color.White)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour", tint = SecondaryColor)
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black)
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = PrimaryColor)
                 )
             },
-            containerColor = Color.Black
+            containerColor = PrimaryColor
         ) { paddingValues ->
             Column(
                 modifier = Modifier
@@ -245,7 +247,7 @@ class AboutScreenImpl : AboutScreenContract {
                 if (contactInfo.socialMedia.isNotEmpty()) {
                     Text(
                         text = "Réseaux sociaux",
-                        color = Color.White,
+                        color = SecondaryColor,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(top = 24.dp, bottom = 8.dp)
@@ -264,7 +266,7 @@ class AboutScreenImpl : AboutScreenContract {
         val uriHandler = LocalUriHandler.current
         
         Column(modifier = Modifier.padding(vertical = 8.dp)) {
-            Text(text = label, color = Color.White, fontSize = 14.sp)
+            Text(text = label, color = SecondaryColor, fontSize = 14.sp)
             Row(
                 modifier = Modifier
                     .clickable { uriHandler.openUri(url) }

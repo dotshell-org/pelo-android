@@ -54,7 +54,9 @@ import com.pelotcl.app.generic.ui.components.search.StationSearchResult
 import com.pelotcl.app.generic.ui.components.search.TransportSearchBar
 import com.pelotcl.app.generic.ui.components.search.TransportSearchContent
 import com.pelotcl.app.generic.ui.theme.Gray700
-import com.pelotcl.app.generic.ui.theme.Red500
+import com.pelotcl.app.generic.ui.theme.PrimaryColor
+import com.pelotcl.app.generic.ui.theme.AccentColor
+import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
 
 /**
@@ -114,7 +116,7 @@ fun AddFavoriteDialog(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color.White
+        containerColor = SecondaryColor
     ) {
         Column(
             modifier = Modifier
@@ -131,7 +133,7 @@ fun AddFavoriteDialog(
                     text = "Nouveau favori",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = Color.Black
+                    color = PrimaryColor
                 )
                 IconButton(onClick = onDismiss) {
                     Icon(
@@ -149,7 +151,7 @@ fun AddFavoriteDialog(
                 text = "Type de favori",
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
-                color = Color.Black
+                color = PrimaryColor
             )
             Spacer(modifier = Modifier.height(8.dp))
             FlowRow(
@@ -178,7 +180,7 @@ fun AddFavoriteDialog(
                     text = "Titre du favori",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
-                    color = Color.Black
+                    color = PrimaryColor
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 BasicTextField(
@@ -189,7 +191,7 @@ fun AddFavoriteDialog(
                         .clip(RoundedCornerShape(28.dp))
                         .background(Color(0xFFF5F5F5))
                         .padding(horizontal = 16.dp, vertical = 12.dp),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color.Black),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = PrimaryColor),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Text,
@@ -215,7 +217,7 @@ fun AddFavoriteDialog(
                 text = "Arrêt associé",
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
-                color = Color.Black
+                color = PrimaryColor
             )
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -223,7 +225,7 @@ fun AddFavoriteDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(28.dp))
-                    .background(Color.Black)
+                    .background(PrimaryColor)
                     .clickable { showStopSearchFullscreen = true }
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -231,14 +233,14 @@ fun AddFavoriteDialog(
                 Icon(
                     imageVector = Icons.Default.Search,
                     contentDescription = null,
-                    tint = Color.White,
+                    tint = SecondaryColor,
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = selectedStop?.stopName ?: "Rechercher un arrêt",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White
+                    color = SecondaryColor
                 )
             }
 
@@ -258,10 +260,10 @@ fun AddFavoriteDialog(
                     .fillMaxWidth()
                     .height(56.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.Black,
-                    contentColor = Color.White,
+                    containerColor = PrimaryColor,
+                    contentColor = SecondaryColor,
                     disabledContainerColor = Color.Gray,
-                    disabledContentColor = Color.White
+                    disabledContentColor = SecondaryColor
                 ),
                 shape = RoundedCornerShape(28.dp),
                 enabled = selectedPreset != null && selectedStop != null && finalFavoriteTitle.isNotBlank()
@@ -285,7 +287,7 @@ fun AddFavoriteDialog(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black)
+                    .background(PrimaryColor)
             ) {
                 TransportSearchBar(
                     viewModel = viewModel,
@@ -330,7 +332,7 @@ private fun IconSelectionButton(
             .clip(RoundedCornerShape(24.dp))
             .clickable(onClick = onClick)
             .background(if (isSelected) Color(0x1A000000) else Color.Transparent)
-            .border(1.dp, if (isSelected) Color.Black else Color.Gray, RoundedCornerShape(24.dp))
+            .border(1.dp, if (isSelected) PrimaryColor else Color.Gray, RoundedCornerShape(24.dp))
             .padding(horizontal = 10.dp, vertical = 8.dp),
         contentAlignment = Alignment.CenterStart
     ) {
@@ -339,13 +341,13 @@ private fun IconSelectionButton(
                 modifier = Modifier
                     .size(24.dp)
                     .clip(CircleShape)
-                    .background(Color.Black),
+                    .background(PrimaryColor),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = iconName,
-                    tint = Color.White,
+                    tint = SecondaryColor,
                     modifier = Modifier.size(14.dp)
                 )
             }
@@ -353,7 +355,7 @@ private fun IconSelectionButton(
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.Black,
+                color = PrimaryColor,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
             )
             if (isSelected) {
@@ -362,13 +364,13 @@ private fun IconSelectionButton(
                     modifier = Modifier
                         .size(16.dp)
                         .clip(CircleShape)
-                        .background(Red500),
+                        .background(AccentColor),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Check,
                         contentDescription = "Selected",
-                        tint = Color.White,
+                        tint = SecondaryColor,
                         modifier = Modifier.size(12.dp)
                     )
                 }

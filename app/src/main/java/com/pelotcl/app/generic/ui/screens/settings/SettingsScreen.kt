@@ -52,6 +52,8 @@ import androidx.compose.ui.unit.sp
 import androidx.activity.compose.BackHandler
 import android.os.Build
 import com.pelotcl.app.R
+import com.pelotcl.app.generic.ui.theme.PrimaryColor
+import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import kotlinx.coroutines.delay
 
 @Composable
@@ -115,7 +117,7 @@ fun SettingsScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(PrimaryColor)
     ) {
         Column(
             modifier = Modifier
@@ -207,7 +209,7 @@ fun SettingsScreen(
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "Retour",
-                tint = Color.White
+                tint = SecondaryColor
             )
         }
     }
@@ -224,7 +226,7 @@ private fun SettingsMenuRow(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val pressedBackgroundColor by animateColorAsState(
-        targetValue = if (onClick != null && isPressed) Color(0xFF1C1C1E) else Color.Black,
+        targetValue = if (onClick != null && isPressed) Color(0xFF1C1C1E) else PrimaryColor,
         animationSpec = tween(durationMillis = 120),
         label = "settings_menu_press"
     )
@@ -261,7 +263,7 @@ private fun SettingsMenuRow(
             ) {
                 Text(
                     text = title,
-                    color = Color.White,
+                    color = SecondaryColor,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -278,7 +280,7 @@ private fun SettingsMenuRow(
                 Icon(
                     imageVector = Icons.Filled.ChevronRight,
                     contentDescription = "Next Arrow Icon",
-                    tint = Color.White
+                    tint = SecondaryColor
                 )
             }
         }

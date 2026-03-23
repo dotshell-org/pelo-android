@@ -62,10 +62,12 @@ import androidx.compose.ui.unit.sp
 import com.pelotcl.app.generic.data.repository.itinerary.JourneyLeg
 import com.pelotcl.app.generic.data.repository.itinerary.JourneyResult
 import com.pelotcl.app.generic.ui.theme.Gray700
-import com.pelotcl.app.generic.ui.theme.Red500
+import com.pelotcl.app.generic.ui.theme.AccentColor
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.window.Dialog
+import com.pelotcl.app.generic.ui.theme.PrimaryColor
+import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.utils.transport.BusIconHelper
 import com.pelotcl.app.utils.transport.LineColorHelper
 import java.time.LocalDate
@@ -103,16 +105,16 @@ fun CompactJourneyCard(
     val context = LocalContext.current
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val primaryTextColor = if (useLightColors) Color.Black else Color.White
+    val primaryTextColor = if (useLightColors) PrimaryColor else SecondaryColor
     val secondaryTextColor =
-        if (useLightColors) Color(0xFF4B5563) else Color.White.copy(alpha = 0.7f)
+        if (useLightColors) Color(0xFF4B5563) else SecondaryColor.copy(alpha = 0.7f)
     val chipBackgroundColor =
-        if (useLightColors) Color(0xFFF3F4F6) else Color.White.copy(alpha = 0.15f)
+        if (useLightColors) Color(0xFFF3F4F6) else SecondaryColor.copy(alpha = 0.15f)
     val baseBackgroundColor =
-        if (useLightColors) Color(0xFFF9FAFB) else Color.White.copy(alpha = 0.1f)
+        if (useLightColors) Color(0xFFF9FAFB) else SecondaryColor.copy(alpha = 0.1f)
     val backgroundColor by animateColorAsState(
         targetValue = if (isPressed) {
-            if (useLightColors) Color(0xFFF3F4F6) else Color.White.copy(alpha = 0.16f)
+            if (useLightColors) Color(0xFFF3F4F6) else SecondaryColor.copy(alpha = 0.16f)
         } else {
             baseBackgroundColor
         },
@@ -223,7 +225,7 @@ fun CompactJourneyCard(
                                 text = (leg.routeName ?: "?").take(3),
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                color = SecondaryColor
                             )
                         }
                     }
@@ -232,7 +234,7 @@ fun CompactJourneyCard(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                             contentDescription = null,
-                            tint = if (useLightColors) Color(0xFF6B7280) else Color.White.copy(alpha = 0.5f),
+                            tint = if (useLightColors) Color(0xFF6B7280) else SecondaryColor.copy(alpha = 0.5f),
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -256,11 +258,11 @@ private fun JourneyLegItem(
             leg.routeName ?: ""
         )
     )
-    val primaryTextColor = if (useLightColors) Color.Black else Color.White
+    val primaryTextColor = if (useLightColors) PrimaryColor else SecondaryColor
     val secondaryTextColor =
-        if (useLightColors) Color(0xFF4B5563) else Color.White.copy(alpha = 0.7f)
+        if (useLightColors) Color(0xFF4B5563) else SecondaryColor.copy(alpha = 0.7f)
     val tertiaryTextColor =
-        if (useLightColors) Color(0xFF6B7280) else Color.White.copy(alpha = 0.6f)
+        if (useLightColors) Color(0xFF6B7280) else SecondaryColor.copy(alpha = 0.6f)
 
     // State for expanding intermediate stops
     var isExpanded by remember { mutableStateOf(false) }
@@ -319,7 +321,7 @@ private fun JourneyLegItem(
                                 text = leg.routeName ?: "?",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                color = SecondaryColor
                             )
                         }
                     }
@@ -337,7 +339,7 @@ private fun JourneyLegItem(
                         modifier = Modifier
                             .size(12.dp)
                             .border(3.dp, lineColor, CircleShape)
-                            .background(if (useLightColors) Color.White else Color.Black)
+                            .background(if (useLightColors) SecondaryColor else PrimaryColor)
                     )
                 }
             }
@@ -412,7 +414,7 @@ private fun JourneyLegItem(
                                 )
                                 Text(
                                     text = stop.formatArrivalTime(),
-                                    color = if (useLightColors) Color(0xFF9CA3AF) else Color.White.copy(
+                                    color = if (useLightColors) Color(0xFF9CA3AF) else SecondaryColor.copy(
                                         alpha = 0.5f
                                     ),
                                     style = MaterialTheme.typography.bodySmall
@@ -458,11 +460,11 @@ fun JourneyDetailsSheetContent(
     scrollAllContent: Boolean = false
 ) {
     val context = LocalContext.current
-    val primaryTextColor = if (useLightColors) Color.Black else Color.White
+    val primaryTextColor = if (useLightColors) PrimaryColor else SecondaryColor
     val secondaryTextColor =
-        if (useLightColors) Color(0xFF4B5563) else Color.White.copy(alpha = 0.7f)
+        if (useLightColors) Color(0xFF4B5563) else SecondaryColor.copy(alpha = 0.7f)
     val chipBackgroundColor =
-        if (useLightColors) Color(0xFFF3F4F6) else Color.White.copy(alpha = 0.15f)
+        if (useLightColors) Color(0xFFF3F4F6) else SecondaryColor.copy(alpha = 0.15f)
 
     // Memoize formatted duration to avoid recalculation on recomposition
     val formattedDuration by remember(journey.durationMinutes) {
@@ -580,7 +582,7 @@ fun JourneyDetailsSheetContent(
                                     text = leg.routeName ?: "?",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    color = SecondaryColor
                                 )
                             }
                         }
@@ -589,7 +591,7 @@ fun JourneyDetailsSheetContent(
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                                 contentDescription = null,
-                                tint = if (useLightColors) Color(0xFF6B7280) else Color.White.copy(
+                                tint = if (useLightColors) Color(0xFF6B7280) else SecondaryColor.copy(
                                     alpha = 0.5f
                                 ),
                                 modifier = Modifier.size(20.dp)
@@ -601,7 +603,7 @@ fun JourneyDetailsSheetContent(
 
             Spacer(modifier = Modifier.height(32.dp))
             HorizontalDivider(
-                color = if (useLightColors) Color(0xFFE5E7EB) else Color.White.copy(alpha = 0.2f),
+                color = if (useLightColors) Color(0xFFE5E7EB) else SecondaryColor.copy(alpha = 0.2f),
                 thickness = 1.dp
             )
             Spacer(modifier = Modifier.height(32.dp))
@@ -665,14 +667,14 @@ fun TimeSelectionRow(
     onClearDateTime: () -> Unit,
     useLightColors: Boolean = false
 ) {
-    val containerColor = if (useLightColors) Color(0xFFF9FAFB) else Color.White.copy(alpha = 0.1f)
+    val containerColor = if (useLightColors) Color(0xFFF9FAFB) else SecondaryColor.copy(alpha = 0.1f)
     val selectedModeBackground =
-        if (useLightColors) Color(0xFFE5E7EB) else Color.White.copy(alpha = 0.2f)
+        if (useLightColors) Color(0xFFE5E7EB) else SecondaryColor.copy(alpha = 0.2f)
     val pickerBackground =
-        if (useLightColors) Color(0xFFF3F4F6) else Color.White.copy(alpha = 0.15f)
-    val primaryTextColor = if (useLightColors) Color.Black else Color.White
+        if (useLightColors) Color(0xFFF3F4F6) else SecondaryColor.copy(alpha = 0.15f)
+    val primaryTextColor = if (useLightColors) PrimaryColor else SecondaryColor
     val secondaryTextColor =
-        if (useLightColors) Color(0xFF4B5563) else Color.White.copy(alpha = 0.6f)
+        if (useLightColors) Color(0xFF4B5563) else SecondaryColor.copy(alpha = 0.6f)
 
     Column(
         modifier = Modifier
@@ -853,12 +855,12 @@ fun TimePickerDialog(
                             Icon(
                                 imageVector = Icons.Default.KeyboardArrowUp,
                                 contentDescription = "Augmenter l'heure",
-                                tint = Color.White
+                                tint = SecondaryColor
                             )
                         }
                         Text(
                             text = String.format(Locale.ROOT, "%02d", selectedHour),
-                            color = Color.White,
+                            color = SecondaryColor,
                             fontSize = 48.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -868,14 +870,14 @@ fun TimePickerDialog(
                             Icon(
                                 imageVector = Icons.Default.KeyboardArrowDown,
                                 contentDescription = "Diminuer l'heure",
-                                tint = Color.White
+                                tint = SecondaryColor
                             )
                         }
                     }
 
                     Text(
                         text = ":",
-                        color = Color.White,
+                        color = SecondaryColor,
                         fontSize = 48.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 8.dp)
@@ -887,12 +889,12 @@ fun TimePickerDialog(
                             Icon(
                                 imageVector = Icons.Default.KeyboardArrowUp,
                                 contentDescription = "Augmenter les minutes",
-                                tint = Color.White
+                                tint = SecondaryColor
                             )
                         }
                         Text(
                             text = String.format(Locale.ROOT, "%02d", selectedMinute),
-                            color = Color.White,
+                            color = SecondaryColor,
                             fontSize = 48.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -902,7 +904,7 @@ fun TimePickerDialog(
                             Icon(
                                 imageVector = Icons.Default.KeyboardArrowDown,
                                 contentDescription = "Diminuer les minutes",
-                                tint = Color.White
+                                tint = SecondaryColor
                             )
                         }
                     }
@@ -917,7 +919,7 @@ fun TimePickerDialog(
                 ) {
                     Text(
                         text = "Annuler",
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = SecondaryColor.copy(alpha = 0.7f),
                         modifier = Modifier
                             .clickable { onDismiss() }
                             .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -926,7 +928,7 @@ fun TimePickerDialog(
                     Box(
                         modifier = Modifier
                             .background(
-                                color = Red500,
+                                color = AccentColor,
                                 shape = RoundedCornerShape(8.dp)
                             )
                             .clickable {
@@ -937,7 +939,7 @@ fun TimePickerDialog(
                     ) {
                         Text(
                             text = "Confirmer",
-                            color = Color.White
+                            color = SecondaryColor
                         )
                     }
                 }
@@ -1031,7 +1033,7 @@ fun DatePickerDialog(
                             tint = if (!displayedMonth.isBefore(today.withDayOfMonth(1)) &&
                                 !displayedMonth.isEqual(today.withDayOfMonth(1))
                             )
-                                Color.White else Color.White.copy(alpha = 0.3f),
+                                SecondaryColor else SecondaryColor.copy(alpha = 0.3f),
                             modifier = Modifier.rotate(-90f)
                         )
                     }
@@ -1039,7 +1041,7 @@ fun DatePickerDialog(
                     Text(
                         text = displayedMonth.format(monthFormatter)
                             .replaceFirstChar { it.uppercase() },
-                        color = Color.White,
+                        color = SecondaryColor,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium
                     )
@@ -1049,7 +1051,7 @@ fun DatePickerDialog(
                         Icon(
                             imageVector = Icons.Default.KeyboardArrowUp,
                             contentDescription = "Mois suivant",
-                            tint = Color.White,
+                            tint = SecondaryColor,
                             modifier = Modifier.rotate(90f)
                         )
                     }
@@ -1065,7 +1067,7 @@ fun DatePickerDialog(
                     listOf("L", "M", "M", "J", "V", "S", "D").forEach { day ->
                         Text(
                             text = day,
-                            color = Color.White.copy(alpha = 0.6f),
+                            color = SecondaryColor.copy(alpha = 0.6f),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier.width(36.dp),
@@ -1112,8 +1114,8 @@ fun DatePickerDialog(
                                         .size(36.dp)
                                         .background(
                                             color = when {
-                                                isSelected -> Red500
-                                                isToday -> Color.White.copy(alpha = 0.15f)
+                                                isSelected -> AccentColor
+                                                isToday -> SecondaryColor.copy(alpha = 0.15f)
                                                 else -> Color.Transparent
                                             },
                                             shape = CircleShape
@@ -1129,9 +1131,9 @@ fun DatePickerDialog(
                                     Text(
                                         text = date.dayOfMonth.toString(),
                                         color = when {
-                                            !isSelectable -> Color.White.copy(alpha = 0.3f)
-                                            isSelected -> Color.White
-                                            else -> Color.White.copy(alpha = 0.9f)
+                                            !isSelectable -> SecondaryColor.copy(alpha = 0.3f)
+                                            isSelected -> SecondaryColor
+                                            else -> SecondaryColor.copy(alpha = 0.9f)
                                         },
                                         fontSize = 14.sp,
                                         fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Normal
@@ -1155,7 +1157,7 @@ fun DatePickerDialog(
                 ) {
                     Text(
                         text = "Annuler",
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = SecondaryColor.copy(alpha = 0.7f),
                         modifier = Modifier
                             .clickable { onDismiss() }
                             .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -1164,7 +1166,7 @@ fun DatePickerDialog(
                     Box(
                         modifier = Modifier
                             .background(
-                                color = Red500,
+                                color = AccentColor,
                                 shape = RoundedCornerShape(8.dp)
                             )
                             .clickable {
@@ -1175,7 +1177,7 @@ fun DatePickerDialog(
                     ) {
                         Text(
                             text = "Confirmer",
-                            color = Color.White
+                            color = SecondaryColor
                         )
                     }
                 }

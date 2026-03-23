@@ -47,7 +47,9 @@ import com.pelotcl.app.generic.ui.theme.Gray200
 import com.pelotcl.app.generic.ui.theme.Gray700
 import com.pelotcl.app.generic.ui.theme.Green500
 import com.pelotcl.app.generic.ui.theme.Orange500
-import com.pelotcl.app.generic.ui.theme.Red500
+import com.pelotcl.app.generic.ui.theme.PrimaryColor
+import com.pelotcl.app.generic.ui.theme.AccentColor
+import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.utils.transport.BusIconHelper
 import java.util.Calendar
@@ -164,7 +166,7 @@ private fun getDepartureColor(departureTime: String): Color {
     if (diff < 0) return Green500
 
     return when (diff) {
-        in 0..1 -> Red500
+        in 0..1 -> AccentColor
         in 2..14 -> Orange500
         else -> Green500
     }
@@ -270,7 +272,7 @@ fun StationBottomSheet(
                         text = stationInfo.nom,
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
-                        color = Color.Black,
+                        color = PrimaryColor,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -289,8 +291,8 @@ fun StationBottomSheet(
                     Button(
                         onClick = onItineraryClick,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.Black,
-                            contentColor = Color.White
+                            containerColor = PrimaryColor,
+                            contentColor = SecondaryColor
                         )
                     ) {
                         Icon(
@@ -340,7 +342,7 @@ fun StationBottomSheet(
                                 .padding(vertical = 24.dp),
                             horizontalArrangement = Arrangement.Center
                         ) {
-                            CircularProgressIndicator(color = Color.Black)
+                            CircularProgressIndicator(color = PrimaryColor)
                         }
                     } else if (departures.isEmpty()) {
                         Text(
@@ -406,7 +408,7 @@ fun StationBottomSheet(
             ModalBottomSheet(
                 onDismissRequest = onDismiss,
                 sheetState = sheetState,
-                containerColor = Color.White
+                containerColor = SecondaryColor
             ) {
                 content()
             }
@@ -467,7 +469,7 @@ private fun DepartureListItem(
                 Text(
                     text = directionName,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.Black,
+                    color = PrimaryColor,
                     maxLines = 1
                 )
                 Text(

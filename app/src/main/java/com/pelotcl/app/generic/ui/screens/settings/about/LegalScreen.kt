@@ -22,6 +22,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pelotcl.app.generic.ui.theme.PrimaryColor
+import com.pelotcl.app.generic.ui.theme.SecondaryColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -104,7 +106,7 @@ fun LegalScreen(
                 title = {
                     Text(
                         text = "Mentions légales / CGU",
-                        color = Color.White,
+                        color = SecondaryColor,
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -113,16 +115,16 @@ fun LegalScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Retour",
-                            tint = Color.White
+                            tint = SecondaryColor
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Black
+                    containerColor = PrimaryColor
                 )
             )
         },
-        containerColor = Color.Black
+        containerColor = PrimaryColor
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -134,14 +136,14 @@ fun LegalScreen(
             sections.forEach { section ->
                 Text(
                     text = section.title,
-                    color = Color.White,
+                    color = SecondaryColor,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(bottom = 6.dp)
                 )
                 Text(
                     text = section.body,
-                    color = Color.White,
+                    color = SecondaryColor,
                     fontSize = 14.sp,
                     lineHeight = 20.sp,
                     modifier = Modifier.padding(bottom = 16.dp)

@@ -74,7 +74,9 @@ import com.pelotcl.app.generic.data.model.TrafficAlert
 import com.pelotcl.app.generic.ui.theme.Gray700
 import com.pelotcl.app.generic.ui.theme.Green500
 import com.pelotcl.app.generic.ui.theme.Orange500
-import com.pelotcl.app.generic.ui.theme.Red500
+import com.pelotcl.app.generic.ui.theme.PrimaryColor
+import com.pelotcl.app.generic.ui.theme.AccentColor
+import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.generic.ui.viewmodel.TransportLinesUiState
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.utils.transport.BusIconHelper
@@ -124,7 +126,7 @@ private fun getScheduleColorBasedOnTime(scheduleTime: String): Color {
         }
 
         return when (diffMinutes) {
-            in 0..<2 -> Red500
+            in 0..<2 -> AccentColor
             in 2..<15 -> Orange500
             else -> Green500
         }
@@ -353,7 +355,7 @@ fun LineDetailsBottomSheet(
                                         text = lineInfo.lineName,
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color.White
+                                        color = SecondaryColor
                                     )
                                 }
                             }
@@ -372,7 +374,7 @@ fun LineDetailsBottomSheet(
                             text = lineInfo.currentStationName,
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
-                            color = Color.Black,
+                            color = PrimaryColor,
                             modifier = Modifier.weight(1f),
                             onTextLayout = { result ->
                                 onHeaderLineCountChanged(result.lineCount)
@@ -471,7 +473,7 @@ fun LineDetailsBottomSheet(
             ModalBottomSheet(
                 onDismissRequest = onDismiss,
                 sheetState = sheetState,
-                containerColor = Color.White
+                containerColor = SecondaryColor
             ) {
                 content()
             }
@@ -542,7 +544,7 @@ private fun TrafficAlertsSection(
                         text = alert.title,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.Black,
+                        color = PrimaryColor,
                         modifier = Modifier.weight(1f)
                     )
 
@@ -644,7 +646,7 @@ private fun AlertBadge(
             // Use a text-based "i" to avoid the double circle from Icons.Default.Info
             Text(
                 text = "i",
-                color = Color.White,
+                color = SecondaryColor,
                 style = MaterialTheme.typography.bodySmall.copy(
                     fontWeight = FontWeight.Bold,
                     fontSize = 8.sp,
@@ -657,7 +659,7 @@ private fun AlertBadge(
             Icon(
                 imageVector = Icons.Filled.PriorityHigh,
                 contentDescription = null,
-                tint = Color.White,
+                tint = SecondaryColor,
                 modifier = Modifier.size(10.dp)
             )
         }
@@ -744,7 +746,7 @@ private fun NextSchedulesSection(
                 text = "Direction",
                 textAlign = TextAlign.Left,
                 fontSize = 22.sp,
-                color = Color.Black,
+                color = PrimaryColor,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -763,7 +765,7 @@ private fun NextSchedulesSection(
                         onClick = { onDirectionChange(directionId) },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (selectedDirection == directionId) lineColor else Color.LightGray,
-                            contentColor = if (selectedDirection == directionId) Color.White else Color.DarkGray
+                            contentColor = if (selectedDirection == directionId) SecondaryColor else Color.DarkGray
                         ),
                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
                         modifier = Modifier
@@ -794,7 +796,7 @@ private fun NextSchedulesSection(
                 text = "Prochains départs",
                 textAlign = TextAlign.Left,
                 fontSize = 22.sp,
-                color = Color.Black,
+                color = PrimaryColor,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -895,7 +897,7 @@ private fun StopItemWithLine(
                 modifier = Modifier
                     .size(16.dp)
                     .clip(CircleShape)
-                    .background(if (stop.isCurrentStop) lineColor else Color.White)
+                    .background(if (stop.isCurrentStop) lineColor else SecondaryColor)
                     .border(
                         width = if (stop.isCurrentStop) 0.dp else 3.dp,
                         color = lineColor,
@@ -924,7 +926,7 @@ private fun StopItemWithLine(
             Text(
                 text = stop.stopName,
                 style = MaterialTheme.typography.bodyLarge,
-                color = if (stop.isCurrentStop) lineColor else Color.Black,
+                color = if (stop.isCurrentStop) lineColor else PrimaryColor,
                 fontWeight = if (stop.isCurrentStop) FontWeight.Bold else FontWeight.Normal,
                 modifier = Modifier.weight(1f, fill = false)
             )
