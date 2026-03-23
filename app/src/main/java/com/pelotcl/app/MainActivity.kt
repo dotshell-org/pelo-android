@@ -68,7 +68,7 @@ import com.pelotcl.app.generic.ui.screens.settings.about.ContactScreen
 import com.pelotcl.app.generic.ui.screens.settings.about.CreditsScreen
 import com.pelotcl.app.generic.ui.screens.settings.about.LegalScreen
 import com.pelotcl.app.generic.ui.screens.plan.PlanScreen
-import com.pelotcl.app.generic.ui.screens.settings.ItinerarySettingsScreen
+import com.pelotcl.app.specific.ui.screens.settings.ItinerarySettingsScreen
 import com.pelotcl.app.generic.ui.screens.settings.OfflineSettingsScreen
 import com.pelotcl.app.generic.ui.screens.settings.SettingsScreen
 import com.pelotcl.app.generic.ui.theme.PeloTheme
@@ -544,7 +544,7 @@ fun NavBar(modifier: Modifier = Modifier) {
                     onRemoveFavoriteClick = { favorite ->
                         viewModel.removeUserFavorite(favorite.id)
                     },
-                    isDarkMode = isSystemInDarkTheme()
+                    isDarkMode = currentMapStyle == MapStyleCompat.DARK_MATTER
                 )
             }
         }

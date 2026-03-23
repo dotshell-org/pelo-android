@@ -15,7 +15,7 @@ import com.pelotcl.app.specific.TransportConfigImpl
 import com.pelotcl.app.specific.TransportLineServiceImpl
 import com.pelotcl.app.specific.TrafficAlertsServiceImpl
 import com.pelotcl.app.specific.VehiclePositionsServiceImpl
-import com.pelotcl.app.specific.ui.screens.about.AboutScreenImpl
+import com.pelotcl.app.specific.ui.screens.settings.AboutScreenImpl
 import com.pelotcl.app.specific.ui.theme.TransportThemeImpl
 
 /**

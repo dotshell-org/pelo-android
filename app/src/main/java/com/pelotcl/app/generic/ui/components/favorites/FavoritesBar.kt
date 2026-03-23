@@ -49,7 +49,7 @@ import com.pelotcl.app.generic.ui.theme.SecondaryColor
  * @param favorites List of user favorites to display
  * @param onFavoriteClick Callback when a favorite is clicked
  * @param modifier Modifier for the component
- * @param isDarkMode Whether dark mode is enabled
+ * @param isDarkMode Whether dark map theme is enabled (should use map theme, not system theme)
  */
 @Composable
 fun FavoritesBar(
