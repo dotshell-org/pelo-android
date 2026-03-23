@@ -1598,9 +1598,13 @@ fun PlanScreen(
             .coerceAtLeast(280.dp)
 
     // Handle back button press - close sheets/selections before exiting app
-    BackHandler(enabled = sheetContentState != null || selectedLine != null || selectedStation != null) {
-        when (sheetContentState) {
-            SheetContentState.ALL_SCHEDULES -> {
+    BackHandler(enabled = sheetContentState != null || selectedLine != null || selectedStation != null || itinerarySearchTarget != null) {
+        when {
+            itinerarySearchTarget != null -> {
+                // If search overlay is active, dismiss it first
+                itinerarySearchTarget = null
+            }
+            sheetContentState == SheetContentState.ALL_SCHEDULES -> {
                 requestedSheetValueForNextContent = if (isSheetExpandedOrExpanding) {
                     SheetValue.Expanded
                 } else {
@@ -1610,7 +1614,7 @@ fun PlanScreen(
                 sheetContentState = SheetContentState.LINE_DETAILS
             }
 
-            SheetContentState.ITINERARY -> {
+            sheetContentState == SheetContentState.ITINERARY -> {
                 sheetContentState = null
                 itineraryInitialStopName = null
                 itineraryDepartureStop = null
@@ -1619,7 +1623,7 @@ fun PlanScreen(
                 itineraryArrivalQuery = ""
             }
             // If viewing line details, go back to station (if came from station) or close
-            SheetContentState.LINE_DETAILS -> {
+            sheetContentState == SheetContentState.LINE_DETAILS -> {
                 // Clean up temporary bus lines
                 selectedLine?.let { lineInfo ->
                     val lineName = lineInfo.lineName
@@ -1639,7 +1643,7 @@ fun PlanScreen(
                 }
             }
             // If viewing station, close it
-            SheetContentState.STATION -> {
+            sheetContentState == SheetContentState.STATION -> {
                 selectedStation = null
                 sheetContentState = null
             }
@@ -2323,7 +2327,10 @@ fun PlanScreen(
             },
             focusNonce = itinerarySearchFocusNonce,
             onExpandedChange = { expanded ->
-
+                if (!expanded) {
+                    // When search bar is collapsed, reset the search target to dismiss the overlay
+                    itinerarySearchTarget = null
+                }
             },
             onStopPrimary = { result ->
                 scope.launch {
@@ -2338,6 +2345,8 @@ fun PlanScreen(
                         itineraryArrivalStop = selectedStop
                         itineraryArrivalQuery = ""
                     }
+                    // Reset search target after selection
+                    itinerarySearchTarget = null
                 }
             }
         )
