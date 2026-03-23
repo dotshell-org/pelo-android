@@ -31,10 +31,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.pelotcl.app.generic.data.repository.itinerary.ItineraryPreferencesRepository
 import com.pelotcl.app.generic.data.repository.itinerary.JourneyResult
 import com.pelotcl.app.generic.ui.theme.PrimaryColor
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
@@ -60,6 +61,27 @@ fun InlineItinerarySheetContent(
     onClose: () -> Unit
 ) {
     val raptorRepository = viewModel.raptorRepository
+    val context = LocalContext.current
+    
+    // Load user preferences for route filtering
+    val itineraryPrefsRepo = remember { ItineraryPreferencesRepository(context) }
+    val jdLinesEnabled = remember { itineraryPrefsRepo.isJdLinesEnabled() }
+    val rxLineEnabled = remember { itineraryPrefsRepo.isRxLineEnabled() }
+    
+    // Build set of blocked route names based on user preferences
+    // For JD lines, we need to block all possible JD line numbers (JD1-JD999)
+    // since the Raptor library does exact matching, not prefix matching
+    val blockedRouteNames = remember(jdLinesEnabled, rxLineEnabled) {
+        buildSet {
+            if (!jdLinesEnabled) {
+                // Add all possible JD line patterns
+                for (i in 1..999) {
+                    add("JD$i")
+                }
+            }
+            if (!rxLineEnabled) add("RX")
+        }
+    }
 
     var timeMode by remember { mutableStateOf(TimeMode.DEPARTURE) }
     var selectedTimeSeconds by remember { mutableStateOf<Int?>(null) }
@@ -97,7 +119,7 @@ fun InlineItinerarySheetContent(
                         arrivalTimeSeconds = selectedTimeSeconds ?: defaultArrivalSeconds(),
                         searchWindowMinutes = 120,
                         date = date,
-                        blockedRouteNames = emptySet()
+                        blockedRouteNames = blockedRouteNames
                     )
                 } else {
                     raptorRepository.getOptimizedPaths(
@@ -105,7 +127,7 @@ fun InlineItinerarySheetContent(
                         destinationStopIds = arrivalStopIds,
                         departureTimeSeconds = selectedTimeSeconds,
                         date = date,
-                        blockedRouteNames = emptySet()
+                        blockedRouteNames = blockedRouteNames
                     )
                 }
             }
@@ -125,7 +147,7 @@ fun InlineItinerarySheetContent(
                             destinationStopIds = arrivalStopIds,
                             departureTimeSeconds = selectedTimeSeconds,
                             date = date,
-                            blockedRouteNames = emptySet()
+                            blockedRouteNames = blockedRouteNames
                         )
                     }
 
@@ -149,7 +171,7 @@ fun InlineItinerarySheetContent(
                         destinationStopIds = arrivalStopIds,
                         departureTimeSeconds = 0,
                         date = today,
-                        blockedRouteNames = emptySet()
+                        blockedRouteNames = blockedRouteNames
                     ).isNotEmpty()
                 }
 
@@ -161,7 +183,7 @@ fun InlineItinerarySheetContent(
                             destinationStopIds = arrivalStopIds,
                             departureTimeSeconds = 0,
                             date = tomorrow,
-                            blockedRouteNames = emptySet()
+                            blockedRouteNames = blockedRouteNames
                         )
                     }
                     selectedDate = tomorrow
