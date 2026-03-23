@@ -835,8 +835,20 @@ fun PlanScreen(
 
             if (justBecameHidden) {
                 sheetContentState = null
+                selectedStation = null
+                selectedLine = null
             }
 
+            previousSheetValue = current
+        }
+    }
+
+    // Additional effect to handle sheet dismissal by swipe or other means
+    LaunchedEffect(scaffoldSheetState.bottomSheetState.isVisible) {
+        if (!scaffoldSheetState.bottomSheetState.isVisible && sheetContentState != null) {
+            sheetContentState = null
+            selectedStation = null
+            selectedLine = null
         }
     }
 

@@ -140,20 +140,21 @@ fun FavoritesBar(
 
         favoriteToDelete?.let { favorite ->
             AlertDialog(
-                onDismissRequest = { },
+                onDismissRequest = { favoriteToDelete = null },
                 title = { Text("Supprimer le favori") },
                 text = { Text("Voulez-vous supprimer \"${favorite.name}\" ?") },
                 confirmButton = {
                     TextButton(
                         onClick = {
                             onRemoveFavoriteClick(favorite)
+                            favoriteToDelete = null
                         }
                     ) {
                         Text("Supprimer")
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { }) {
+                    TextButton(onClick = { favoriteToDelete = null }) {
                         Text("Annuler")
                     }
                 }

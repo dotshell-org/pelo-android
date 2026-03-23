@@ -298,9 +298,6 @@ fun AddFavoriteDialog(
                     query = stopSearchOverlayQuery,
                     onQueryChange = { q ->
                         stopSearchOverlayQuery = q
-                        if (selectedStop?.stopName != q) {
-                            selectedStop = null
-                        }
                     },
                     onExpandedChange = { expanded ->
                         if (!expanded) showStopSearchFullscreen = false
