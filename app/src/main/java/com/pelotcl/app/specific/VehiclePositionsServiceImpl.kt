@@ -76,7 +76,6 @@ class VehiclePositionsServiceImpl : VehiclePositionsService {
 
             val listener = object : EventSourceListener() {
                 override fun onOpen(eventSource: EventSource, response: Response) {
-                    android.util.Log.d("VehiclePositionsService", "SSE connected to ${getVehiclePositionsStreamUrl()}")
                     android.util.Log.d(
                         "DotshellRequest",
                         "[SSE] Connection established to ${getVehiclePositionsStreamUrl()}"
@@ -138,15 +137,10 @@ class VehiclePositionsServiceImpl : VehiclePositionsService {
             awaitClose { eventSource.cancel() }
         }.retryWhen { cause, attempt ->
             if (attempt >= 10) {
-                android.util.Log.e("VehiclePositionsService", "Max retries reached, giving up")
                 return@retryWhen false
             }
 
             val backoff = (1_000L * (1L shl attempt.coerceAtMost(5).toInt())).coerceAtMost(30_000L)
-            android.util.Log.w(
-                "VehiclePositionsService",
-                "SSE disconnected (${cause.message}), reconnecting in ${backoff}ms (attempt $attempt/10)"
-            )
             delay(backoff)
             true
         }
@@ -191,7 +185,7 @@ class VehiclePositionsServiceImpl : VehiclePositionsService {
     }
     
     private fun mapActivitiesToPositions(activities: List<VehicleActivity>): List<SimpleVehiclePosition> {
-        return activities.mapNotNull { activity ->
+        val positions = activities.mapNotNull { activity ->
             val journey = activity.monitoredVehicleJourney ?: return@mapNotNull null
             val location = journey.vehicleLocation ?: return@mapNotNull null
             val lat = location.latitude ?: return@mapNotNull null
@@ -199,9 +193,11 @@ class VehiclePositionsServiceImpl : VehiclePositionsService {
             val lineRef = journey.lineRef?.value ?: return@mapNotNull null
             val vehicleId = activity.vehicleMonitoringRef?.value ?: return@mapNotNull null
 
+            val lineName = extractLineNameFromRef(lineRef)
+
             SimpleVehiclePosition(
                 vehicleId = vehicleId,
-                lineName = extractLineNameFromRef(lineRef),
+                lineName = lineName,
                 latitude = lat,
                 longitude = lon,
                 bearing = journey.bearing,
@@ -209,6 +205,8 @@ class VehiclePositionsServiceImpl : VehiclePositionsService {
                 direction = journey.directionRef?.value
             )
         }
+
+        return positions
     }
     
     /**

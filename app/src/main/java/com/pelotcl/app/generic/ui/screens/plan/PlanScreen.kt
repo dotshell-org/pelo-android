@@ -202,7 +202,8 @@ private fun isLiveTrackableLine(lineName: String): Boolean {
         upperName in setOf("F1", "F2") -> false // funicular
         isNavigoneLine(upperName) -> false // Navigone
         upperName == "RX" -> false
-        else -> true // bus + tram + trambus
+        upperName.startsWith("T") -> true // tram et trambus
+        else -> true // bus
     }
 }
 

@@ -45,7 +45,11 @@ fun TransportSearchBar(
     val isParentControlled = query != null && onQueryChange != null
     val effectiveQuery = if (isParentControlled) query else uncontrolledQuery
     val setEffectiveQuery: (String) -> Unit = { q ->
-
+        if (isParentControlled) {
+            onQueryChange?.invoke(q)
+        } else {
+            uncontrolledQuery = q
+        }
     }
 
     val resolvedMinLen = minQueryLengthForResults
