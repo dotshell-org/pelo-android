@@ -423,6 +423,7 @@ class RaptorRepository private constructor(private val context: Context) {
                         { it.first.name }
                     )
                 ).map { it.first }
+                .filter { stop -> hasLinesForStop(stop.name) }
 
                 results
             } catch (e: Exception) {
@@ -452,6 +453,15 @@ class RaptorRepository private constructor(private val context: Context) {
         }
 
     /**
+     * Check if a stop has any lines serving it
+     * @param stopName The name of the stop to check
+     * @return true if the stop has at least one line, false otherwise
+     */
+    private suspend fun hasLinesForStop(stopName: String): Boolean {
+        return getDesserteForStop(stopName)?.isNotEmpty() == true
+    }
+
+    /**
      * Find the N nearest stops to the given GPS coordinates, sorted by distance.
      * Uses Dispatchers.Default as this is CPU-bound distance calculation.
      *
@@ -479,6 +489,7 @@ class RaptorRepository private constructor(private val context: Context) {
                 // Group by stop name to get unique stop names (different platforms have same name)
                 .distinctBy { it.first.name }
                 .take(limit)
+                .filter { (stop, _) -> hasLinesForStop(stop.name) }
                 .map { (stop, _) ->
                     RaptorStop(
                         id = stop.id,

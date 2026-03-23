@@ -42,16 +42,20 @@ class SchedulesRepository private constructor(context: Context) {
         searchCache.get(cacheKey)?.let { return it }
 
         val results = raptorRepository.searchStopsByName(query)
-            .map { stop ->
+            .mapNotNull { stop ->
                 val desserte = raptorRepository.getDesserteForStop(stop.name).orEmpty()
-                val lines = desserte.split(',')
-                    .mapNotNull { part ->
-                        val token = part.trim()
-                        if (token.isEmpty()) null else token.substringBefore(':').trim()
-                    }
-                    .filter { it.isNotEmpty() }
-                    .distinct()
-                StationSearchResult(stop.name, lines)
+                if (desserte.isEmpty()) {
+                    null // Skip stops with no lines
+                } else {
+                    val lines = desserte.split(',')
+                        .mapNotNull { part ->
+                            val token = part.trim()
+                            if (token.isEmpty()) null else token.substringBefore(':').trim()
+                        }
+                        .filter { it.isNotEmpty() }
+                        .distinct()
+                    StationSearchResult(stop.name, lines)
+                }
             }
             .distinctBy { it.stopName.lowercase() }
             .take(50)

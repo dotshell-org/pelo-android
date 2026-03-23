@@ -2522,7 +2522,8 @@ private fun findNearestStopName(userLocation: LatLng, stops: List<StopFeature>):
                 lat2 = lat,
                 lon2 = lon
             )
-            if (distance < nearestDistance) {
+            // Only consider stops that have lines (desserte is not empty)
+            if (distance < nearestDistance && stop.properties.desserte.isNotEmpty()) {
                 nearestDistance = distance
                 nearestName = stop.properties.nom
             }
