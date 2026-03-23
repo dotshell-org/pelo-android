@@ -149,7 +149,7 @@ class OfflineRepository(private val context: Context) {
         writeCompressed(FILE_RX_LINES, lines.sanitizeForSerialization())
 
     suspend fun saveStops(stops: List<StopFeature>) =
-        writeCompressed(FILE_STOPS, stops)
+        writeCompressed(FILE_STOPS, stops.sanitizeStopsForSerialization())
 
     suspend fun saveTrafficAlerts(alerts: List<TrafficAlert>) =
         writeCompressed(FILE_TRAFFIC_ALERTS, alerts)
@@ -361,8 +361,65 @@ fun List<Feature>.sanitizeForSerialization(): List<Feature> {
             lastUpdate = (props.lastUpdate as String?) ?: "",
             lastUpdateFme = (props.lastUpdateFme as String?) ?: ""
         )
+        val safeGeometry = feature.geometry.copy(
+            type = (feature.geometry.type as String?) ?: "MultiLineString",
+            coordinates = sanitizeCoordinates(feature.geometry.coordinates)
+        )
         val safeId = (feature.id as String?) ?: ""
         val safeType = (feature.type as String?) ?: "Feature"
-        feature.copy(type = safeType, id = safeId, properties = safeProps)
+        feature.copy(
+            type = safeType,
+            id = safeId,
+            geometry = safeGeometry,
+            properties = safeProps,
+            bbox = sanitizeDoubleList(feature.bbox)
+        )
+    }
+}
+
+/**
+ * Sanitizes StopFeature list before kotlinx.serialization encoding.
+ * Same rationale as sanitizeForSerialization: Gson may inject null into non-null Kotlin fields.
+ */
+@Suppress("UNCHECKED_CAST")
+fun List<StopFeature>.sanitizeStopsForSerialization(): List<StopFeature> {
+    return map { stop ->
+        val safeType = (stop.type as String?) ?: "Feature"
+        val safeId = (stop.id as String?) ?: ""
+        val safeGeometry = stop.geometry.copy(
+            type = (stop.geometry.type as String?) ?: "Point",
+            coordinates = sanitizeDoubleList(stop.geometry.coordinates)
+        )
+        val props = stop.properties
+        val safeProps = props.copy(
+            nom = (props.nom as String?) ?: "",
+            desserte = (props.desserte as String?) ?: ""
+        )
+
+        stop.copy(
+            type = safeType,
+            id = safeId,
+            geometry = safeGeometry,
+            properties = safeProps,
+            bbox = sanitizeDoubleList(stop.bbox)
+        )
+    }
+}
+
+private fun sanitizeDoubleList(raw: Any?): List<Double> {
+    val values = raw as? List<*> ?: return emptyList()
+    return values.mapNotNull { (it as? Number)?.toDouble() }
+}
+
+private fun sanitizeCoordinates(raw: Any?): List<List<List<Double>>> {
+    val lines = raw as? List<*> ?: return emptyList()
+    return lines.mapNotNull { line ->
+        val points = line as? List<*> ?: return@mapNotNull null
+        val safePoints = points.mapNotNull { point ->
+            val pair = point as? List<*> ?: return@mapNotNull null
+            val safePair = pair.mapNotNull { (it as? Number)?.toDouble() }
+            safePair.takeIf { it.size >= 2 }
+        }
+        safePoints.takeIf { it.isNotEmpty() }
     }
 }

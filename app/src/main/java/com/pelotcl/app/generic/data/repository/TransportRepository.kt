@@ -73,8 +73,8 @@ class TransportRepository(context: Context? = null) {
                     }
 
                     // Save to cache
-                    cache?.saveMetroLines(metroFuniculaire.features)
-                    cache?.saveTramLines(trams.features)
+                    cache?.saveMetroLines(metroFuniculaire.features.orEmpty())
+                    cache?.saveTramLines(trams.features.orEmpty())
                 }
 
                 // Load Navigone (from cache or API with retry)
@@ -86,8 +86,8 @@ class TransportRepository(context: Context? = null) {
                         val navigone = withRetry(maxRetries = 2, initialDelayMs = 1000) {
                             transportApi.getNavigoneLines()
                         }
-                        cache?.saveNavigoneLines(navigone.features)
-                        navigone.features
+                        cache?.saveNavigoneLines(navigone.features.orEmpty())
+                        navigone.features.orEmpty()
                     } catch (e: Exception) {
                         Log.w(
                             "TransportRepository",
@@ -106,8 +106,8 @@ class TransportRepository(context: Context? = null) {
                         val trambus = withRetry(maxRetries = 2, initialDelayMs = 1000) {
                             transportApi.getTrambusLines()
                         }
-                        cache?.saveTrambusLines(trambus.features)
-                        trambus.features
+                        cache?.saveTrambusLines(trambus.features.orEmpty())
+                        trambus.features.orEmpty()
                     } catch (e: Exception) {
                         Log.w(
                             "TransportRepository",
@@ -131,7 +131,7 @@ class TransportRepository(context: Context? = null) {
 
                 // Merge metro/funicular, trams, navigone, trambus and RX (NOT buses)
                 val allFeatures =
-                    (metroFuniculaire.features + trams.features + navigoneFeatures + trambusFeatures + rxFeatures)
+                    (metroFuniculaire.features.orEmpty() + trams.features.orEmpty() + navigoneFeatures + trambusFeatures + rxFeatures)
 
                 // Group by code_trace and keep only the first of each group (outbound direction)
                 val uniqueLines = allFeatures
@@ -209,7 +209,7 @@ class TransportRepository(context: Context? = null) {
                         val features = transportApi.getBusLineByName(
                             typename = typename,
                             cqlFilter = cqlFilter
-                        ).features
+                        ).features.orEmpty()
                         collected += features
                     }
                 }
