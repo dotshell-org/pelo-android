@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -540,7 +541,8 @@ fun NavBar(modifier: Modifier = Modifier) {
                     },
                     onRemoveFavoriteClick = { favorite ->
                         viewModel.removeUserFavorite(favorite.id)
-                    }
+                    },
+                    isDarkMode = isSystemInDarkTheme()
                 )
             }
         }

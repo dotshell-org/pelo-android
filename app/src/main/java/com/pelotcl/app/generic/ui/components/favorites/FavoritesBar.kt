@@ -1,6 +1,7 @@
 package com.pelotcl.app.generic.ui.components.favorites
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -46,6 +47,7 @@ import com.pelotcl.app.generic.data.model.Favorite
  * @param favorites List of user favorites to display
  * @param onFavoriteClick Callback when a favorite is clicked
  * @param modifier Modifier for the component
+ * @param isDarkMode Whether dark mode is enabled
  */
 @Composable
 fun FavoritesBar(
@@ -53,7 +55,8 @@ fun FavoritesBar(
     onAddFavoriteClick: () -> Unit,
     onFavoriteClick: (Favorite) -> Unit,
     onRemoveFavoriteClick: (Favorite) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isDarkMode: Boolean = false
 ) {
     var favoriteToDelete by remember { mutableStateOf<Favorite?>(null) }
     val chipTextStyle = TextStyle(
@@ -100,13 +103,15 @@ fun FavoritesBar(
                         favorite = favorite,
                         onClick = { onFavoriteClick(favorite) },
                         onLongClick = { favoriteToDelete = favorite },
-                        textStyle = chipTextStyle
+                        textStyle = chipTextStyle,
+                        isDarkMode = isDarkMode
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                 }
                 AddFavoriteItem(
                     onClick = onAddFavoriteClick,
-                    textStyle = chipTextStyle
+                    textStyle = chipTextStyle,
+                    isDarkMode = isDarkMode
                 )
             }
         } else {
@@ -126,13 +131,15 @@ fun FavoritesBar(
                         favorite = favorite,
                         onClick = { onFavoriteClick(favorite) },
                         onLongClick = { favoriteToDelete = favorite },
-                        textStyle = chipTextStyle
+                        textStyle = chipTextStyle,
+                        isDarkMode = isDarkMode
                     )
                 }
                 item {
                     AddFavoriteItem(
                         onClick = onAddFavoriteClick,
-                        textStyle = chipTextStyle
+                        textStyle = chipTextStyle,
+                        isDarkMode = isDarkMode
                     )
                 }
             }
@@ -171,7 +178,8 @@ private fun FavoriteItem(
     favorite: Favorite,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
-    textStyle: TextStyle
+    textStyle: TextStyle,
+    isDarkMode: Boolean = false
 ) {
     val icon = favoriteIcon(favorite.iconName)
 
@@ -180,6 +188,7 @@ private fun FavoriteItem(
             .shadow(4.dp, RoundedCornerShape(20.dp))
             .clip(RoundedCornerShape(20.dp))
             .background(Color.Black)
+            .then(if (isDarkMode) Modifier.border(1.dp, Color(0xFF9CA3AF), RoundedCornerShape(20.dp)) else Modifier)
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
@@ -206,13 +215,15 @@ private fun FavoriteItem(
 @Composable
 private fun AddFavoriteItem(
     onClick: () -> Unit,
-    textStyle: TextStyle
+    textStyle: TextStyle,
+    isDarkMode: Boolean = false
 ) {
     Row(
         modifier = Modifier
             .shadow(4.dp, RoundedCornerShape(20.dp))
             .clip(RoundedCornerShape(20.dp))
             .background(Color.Black)
+            .then(if (isDarkMode) Modifier.border(1.dp, Color(0xFF9CA3AF), RoundedCornerShape(20.dp)) else Modifier)
             .combinedClickable(onClick = onClick)
             .padding(start = 15.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically

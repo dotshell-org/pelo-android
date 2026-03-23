@@ -446,8 +446,11 @@ private fun MapStyleSelectionSheet(
     onStyleSelected: (MapStyleData) -> Unit
 ) {
     val mapStyleConfig = TransportServiceProvider.getMapStyleConfig()
-    val firstRowStyles = remember { mapStyleConfig.getStandardMapStyles().take(4) }
-    val secondRowStyles = remember { mapStyleConfig.getStandardMapStyles().drop(4) }
+    val standardStyles = remember { mapStyleConfig.getStandardMapStyles() }
+    val satelliteStyle = remember { mapStyleConfig.getSatelliteMapStyle() }
+    val allStyles = remember { standardStyles + satelliteStyle }
+    val firstRowStyles = remember { allStyles.take(4) }
+    val secondRowStyles = remember { allStyles.drop(4) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
