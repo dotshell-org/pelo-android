@@ -23,16 +23,25 @@ class LyonTransportApi(private val baseUrl: String) : TransportApi {
         suspend fun getLyonTrafficAlerts(): LyonTrafficAlertsResponse
     }
 
-    private val retrofit: Retrofit = Retrofit.Builder()
+    /**
+     * WFS / GeoJSON lines and stops use the city data host (e.g. Grand Lyon).
+     * Traffic alerts are served from the Pelo API on api.dotshell.eu only.
+     */
+    private val linesRetrofit: Retrofit = Retrofit.Builder()
         .baseUrl(baseUrl)
         .addConverterFactory(GsonConverterFactory.create())
         .build()
 
+    private val trafficAlertsRetrofit: Retrofit = Retrofit.Builder()
+        .baseUrl(TRAFFIC_ALERTS_BASE_URL)
+        .addConverterFactory(GsonConverterFactory.create())
+        .build()
+
     private val lyonTrafficApi: LyonTrafficAlertsEndpoint =
-        retrofit.create(LyonTrafficAlertsEndpoint::class.java)
+        trafficAlertsRetrofit.create(LyonTrafficAlertsEndpoint::class.java)
 
     private val lyonLineApi: LyonTransportLineApi =
-        retrofit.create(LyonTransportLineApi::class.java)
+        linesRetrofit.create(LyonTransportLineApi::class.java)
 
     private val lineApiWrapper = LyonTransportLineApiWrapper(lyonLineApi)
 
@@ -171,5 +180,10 @@ class LyonTransportApi(private val baseUrl: String) : TransportApi {
         return lyonLineApi.getSpecialLineRaw(
             SERVICE, VERSION, request, typename, outputFormat, SRSNAME, startIndex, sortBy, count
         )
+    }
+
+    companion object {
+        /** Documented Pelo traffic alerts endpoint host; path is [LyonTrafficAlertsEndpoint]. */
+        private const val TRAFFIC_ALERTS_BASE_URL = "https://api.dotshell.eu/"
     }
 }

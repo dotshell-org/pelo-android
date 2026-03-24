@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import com.google.gson.annotations.SerializedName
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonNames
 
 /**
  * Represents a traffic alert for a line of transport
@@ -18,26 +19,32 @@ data class TrafficAlert(
 
     @SerializedName("startDate")
     @SerialName("startDate")
+    @JsonNames("debut")
     val startDate: String,
 
     @SerializedName("endDate")
     @SerialName("endDate")
+    @JsonNames("fin")
     val endDate: String,
 
     @SerializedName("lastUpdate")
     @SerialName("lastUpdate")
+    @JsonNames("last_update_fme")
     val lastUpdate: String,
 
     @SerializedName("lineCode")
     @SerialName("lineCode")
+    @JsonNames("ligne_cli")
     val lineCode: String,
 
     @SerializedName("lineName")
     @SerialName("lineName")
+    @JsonNames("ligne_com")
     val lineName: String,
 
     @SerializedName("objectList")
     @SerialName("objectList")
+    @JsonNames("listeobjet")
     val objectList: String,
 
     @SerializedName("message")
@@ -50,26 +57,32 @@ data class TrafficAlert(
 
     @SerializedName("alertNumber")
     @SerialName("alertNumber")
+    @JsonNames("n")
     val alertNumber: Int,
 
     @SerializedName("severityLevel")
     @SerialName("severityLevel")
+    @JsonNames("niveauseverite")
     val severityLevel: Int,
 
     @SerializedName("title")
     @SerialName("title")
+    @JsonNames("titre")
     val title: String,
 
     @SerializedName("alertType")
     @SerialName("alertType")
+    @JsonNames("type")
     val alertType: String,
 
     @SerializedName("objectType")
     @SerialName("objectType")
+    @JsonNames("typeobjet")
     val objectType: String,
 
     @SerializedName("severityType")
     @SerialName("severityType")
+    @JsonNames("typeseverite")
     val severityType: String
 )
 
