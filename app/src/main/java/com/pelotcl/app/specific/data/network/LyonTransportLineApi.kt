@@ -1,5 +1,6 @@
 package com.pelotcl.app.specific.data.network
 
+import com.google.gson.JsonObject
 import com.pelotcl.app.generic.data.model.FeatureCollection
 import com.pelotcl.app.generic.data.model.StopCollection
 import com.pelotcl.app.specific.data.mapper.TransportLineMapper
@@ -127,6 +128,22 @@ interface LyonTransportLineApi {
         @Query("sortby") sortBy: String,
         @Query("count") count: Int
     ): LyonStopCollection
+
+    /**
+     * Raw GeoJSON feature response (e.g. Rhônexpress) without Lyon model mapping.
+     */
+    @GET("geoserver/sytral/ows")
+    suspend fun getSpecialLineRaw(
+        @Query("SERVICE") service: String,
+        @Query("VERSION") version: String,
+        @Query("request") request: String,
+        @Query("typename") typename: String,
+        @Query("outputFormat") outputFormat: String,
+        @Query("SRSNAME") srsName: String,
+        @Query("startIndex") startIndex: Int,
+        @Query("sortby") sortBy: String,
+        @Query("count") count: Int
+    ): JsonObject
 }
 
 /**

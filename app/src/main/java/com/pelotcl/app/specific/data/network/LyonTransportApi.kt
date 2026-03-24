@@ -1,48 +1,46 @@
 package com.pelotcl.app.specific.data.network
 
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import com.google.gson.JsonObject
+import com.pelotcl.app.generic.data.model.FeatureCollection
+import com.pelotcl.app.generic.data.model.StopCollection
 import com.pelotcl.app.generic.data.model.TrafficAlertsResponse
 import com.pelotcl.app.generic.data.network.TransportApi
 import com.pelotcl.app.specific.data.mapper.TrafficAlertMapper
 import com.pelotcl.app.specific.data.model.LyonTrafficAlertsResponse
-import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
 
 /**
  * Lyon-specific implementation of TransportApi
- * Handles field name mapping between Lyon API and generic models
+ * Maps traffic alerts from Lyon payloads; WFS line/stop requests use [LyonTransportLineApi]
+ * + [LyonTransportLineApiWrapper] so GeoJSON properties match the Lyon field names.
  */
 class LyonTransportApi(private val baseUrl: String) : TransportApi {
 
-    // Lyon-specific API interface that matches the actual Lyon API response
-    interface LyonApi {
+    interface LyonTrafficAlertsEndpoint {
         @GET("pelo/v1/traffic/alerts")
         suspend fun getLyonTrafficAlerts(): LyonTrafficAlertsResponse
     }
 
-    private val retrofit: Retrofit
-    private val lyonApi: LyonApi
+    private val retrofit: Retrofit = Retrofit.Builder()
+        .baseUrl(baseUrl)
+        .addConverterFactory(GsonConverterFactory.create())
+        .build()
 
-    init {
-        retrofit = Retrofit.Builder()
-            .baseUrl(baseUrl)
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-        lyonApi = retrofit.create(LyonApi::class.java)
-    }
+    private val lyonTrafficApi: LyonTrafficAlertsEndpoint =
+        retrofit.create(LyonTrafficAlertsEndpoint::class.java)
 
-    // Implement all TransportApi methods, handling Lyon-specific mapping where needed
-    // For traffic alerts, we need to map from Lyon-specific to generic format
+    private val lyonLineApi: LyonTransportLineApi =
+        retrofit.create(LyonTransportLineApi::class.java)
+
+    private val lineApiWrapper = LyonTransportLineApiWrapper(lyonLineApi)
+
     override suspend fun getTrafficAlerts(): TrafficAlertsResponse {
-        val lyonResponse = lyonApi.getLyonTrafficAlerts()
+        val lyonResponse = lyonTrafficApi.getLyonTrafficAlerts()
         return TrafficAlertMapper.mapResponseToGeneric(lyonResponse)
     }
 
-    // TODO: Implement other TransportApi methods or delegate to another implementation
-    // For now, we'll throw UnsupportedOperationException for methods not needed by TrafficAlerts
     override suspend fun getMetroLines(
         SERVICE: String,
         VERSION: String,
@@ -53,8 +51,10 @@ class LyonTransportApi(private val baseUrl: String) : TransportApi {
         startIndex: Int,
         sortBy: String,
         count: Int
-    ): com.pelotcl.app.generic.data.model.FeatureCollection {
-        throw UnsupportedOperationException("Use TransportLineService for line data")
+    ): FeatureCollection {
+        return lineApiWrapper.getMetroLines(
+            SERVICE, VERSION, request, typename, outputFormat, SRSNAME, startIndex, sortBy, count
+        )
     }
 
     override suspend fun getTramLines(
@@ -67,8 +67,10 @@ class LyonTransportApi(private val baseUrl: String) : TransportApi {
         startIndex: Int,
         sortBy: String,
         count: Int
-    ): com.pelotcl.app.generic.data.model.FeatureCollection {
-        throw UnsupportedOperationException("Use TransportLineService for line data")
+    ): FeatureCollection {
+        return lineApiWrapper.getTramLines(
+            SERVICE, VERSION, request, typename, outputFormat, SRSNAME, startIndex, sortBy, count
+        )
     }
 
     override suspend fun getBusLines(
@@ -82,8 +84,11 @@ class LyonTransportApi(private val baseUrl: String) : TransportApi {
         sortBy: String,
         count: Int,
         cqlFilter: String?
-    ): com.pelotcl.app.generic.data.model.FeatureCollection {
-        throw UnsupportedOperationException("Use TransportLineService for line data")
+    ): FeatureCollection {
+        return lineApiWrapper.getBusLines(
+            SERVICE, VERSION, request, typename, outputFormat, SRSNAME, startIndex, sortBy, count,
+            cqlFilter
+        )
     }
 
     override suspend fun getBusLineByName(
@@ -96,8 +101,10 @@ class LyonTransportApi(private val baseUrl: String) : TransportApi {
         sortBy: String,
         count: Int,
         cqlFilter: String
-    ): com.pelotcl.app.generic.data.model.FeatureCollection {
-        throw UnsupportedOperationException("Use TransportLineService for line data")
+    ): FeatureCollection {
+        return lineApiWrapper.getBusLineByName(
+            SERVICE, VERSION, request, typename, outputFormat, SRSNAME, sortBy, count, cqlFilter
+        )
     }
 
     override suspend fun getNavigoneLines(
@@ -110,8 +117,10 @@ class LyonTransportApi(private val baseUrl: String) : TransportApi {
         startIndex: Int,
         sortBy: String,
         count: Int
-    ): com.pelotcl.app.generic.data.model.FeatureCollection {
-        throw UnsupportedOperationException("Use TransportLineService for line data")
+    ): FeatureCollection {
+        return lineApiWrapper.getNavigoneLines(
+            SERVICE, VERSION, request, typename, outputFormat, SRSNAME, startIndex, sortBy, count
+        )
     }
 
     override suspend fun getTrambusLines(
@@ -125,8 +134,11 @@ class LyonTransportApi(private val baseUrl: String) : TransportApi {
         sortBy: String,
         count: Int,
         cqlFilter: String
-    ): com.pelotcl.app.generic.data.model.FeatureCollection {
-        throw UnsupportedOperationException("Use TransportLineService for line data")
+    ): FeatureCollection {
+        return lineApiWrapper.getTrambusLines(
+            SERVICE, VERSION, request, typename, outputFormat, SRSNAME, startIndex, sortBy, count,
+            cqlFilter
+        )
     }
 
     override suspend fun getTransportStops(
@@ -139,8 +151,10 @@ class LyonTransportApi(private val baseUrl: String) : TransportApi {
         startIndex: Int,
         sortBy: String,
         count: Int
-    ): com.pelotcl.app.generic.data.model.StopCollection {
-        throw UnsupportedOperationException("Use TransportLineService for stop data")
+    ): StopCollection {
+        return lineApiWrapper.getTransportStops(
+            SERVICE, VERSION, request, typename, outputFormat, SRSNAME, startIndex, sortBy, count
+        )
     }
 
     override suspend fun getSpecialLineRaw(
@@ -153,7 +167,9 @@ class LyonTransportApi(private val baseUrl: String) : TransportApi {
         startIndex: Int,
         sortBy: String,
         count: Int
-    ): com.google.gson.JsonObject {
-        throw UnsupportedOperationException("Use TransportLineService for special line data")
+    ): JsonObject {
+        return lyonLineApi.getSpecialLineRaw(
+            SERVICE, VERSION, request, typename, outputFormat, SRSNAME, startIndex, sortBy, count
+        )
     }
 }

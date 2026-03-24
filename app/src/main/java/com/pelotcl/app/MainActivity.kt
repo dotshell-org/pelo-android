@@ -73,7 +73,6 @@ import com.pelotcl.app.generic.ui.theme.PeloTheme
 import com.pelotcl.app.generic.ui.theme.AccentColor
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.generic.ui.viewmodel.TransportStopsUiState
-import com.pelotcl.app.generic.data.network.RetrofitInstance
 import com.pelotcl.app.generic.data.repository.offline.SchedulesRepository
 import com.pelotcl.app.generic.ui.theme.PrimaryColor
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
@@ -141,11 +140,8 @@ class MainActivity : ComponentActivity() {
             // Avoids ~960 individual getIdentifier() calls during first map render
             BusIconHelper.preloadResourceIds(applicationContext)
 
-            // Initialize transport services with Lyon TCL configuration
-            com.pelotcl.app.generic.service.TransportServiceProvider.initialize(applicationContext)
-            
-            // Initialize HTTP cache for network requests (not needed for cached data display)
-            RetrofitInstance.initialize(applicationContext, com.pelotcl.app.generic.service.TransportServiceProvider.getTransportConfig())
+            // TransportServiceProvider + RetrofitInstance are initialized in PeloApplication.onCreate
+            // so background workers and repositories can run before the first activity starts.
 
             // Preload Raptor library in background (only needed for itinerary calculations)
             // yield() gives the UI thread priority without an arbitrary delay

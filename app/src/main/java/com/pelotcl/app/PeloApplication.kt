@@ -7,7 +7,9 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.pelotcl.app.generic.data.cache.JourneyCache
+import com.pelotcl.app.generic.data.network.RetrofitInstance
 import com.pelotcl.app.generic.data.repository.offline.SchedulesRepository
+import com.pelotcl.app.generic.service.TransportServiceProvider
 import com.pelotcl.app.utils.transport.BusIconHelper
 import com.pelotcl.app.generic.worker.TrafficAlertsWorker
 import java.util.concurrent.TimeUnit
@@ -29,6 +31,8 @@ class PeloApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "PeloApplication onCreate()")
+        TransportServiceProvider.initialize(this)
+        RetrofitInstance.initialize(this, TransportServiceProvider.getTransportConfig())
         scheduleTrafficAlertsWork()
     }
 

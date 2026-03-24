@@ -172,6 +172,27 @@ class TransportCacheImpl(context: Context) : TransportCache {
             }
         }
 
+    private suspend fun invalidateLineCache(fileName: String, timestampKey: String) {
+        withContext(Dispatchers.IO) {
+            runCatching {
+                File(cacheDir, fileName).delete()
+            }
+        }
+        prefs.edit { putLong(timestampKey, 0L) }
+    }
+
+    /**
+     * Detect legacy cache payloads from pre-refactor models where line identifiers were stored
+     * with old property names and now deserialize to empty strings.
+     */
+    private fun isInvalidLineCache(lines: List<Feature>): Boolean {
+        if (lines.isEmpty()) return false
+        val validEntries = lines.count {
+            it.properties.lineName.isNotBlank() && it.properties.traceCode.isNotBlank()
+        }
+        return validEntries == 0
+    }
+
     /**
      * Saves metro/funicular lines to cache
      */
@@ -192,6 +213,12 @@ class TransportCacheImpl(context: Context) : TransportCache {
     override suspend fun getMetroLines(): List<Feature>? = mutex.withLock {
         // Check memory cache first
         if (metroLinesCache != null && isTimestampValid(metroLinesTimestamp)) {
+            if (isInvalidLineCache(metroLinesCache.orEmpty())) {
+                metroLinesCache = null
+                metroLinesTimestamp = 0L
+                invalidateLineCache(FILE_METRO_LINES, KEY_METRO_LINES_TIMESTAMP)
+                return@withLock null
+            }
             return@withLock metroLinesCache
         }
 
@@ -200,6 +227,10 @@ class TransportCacheImpl(context: Context) : TransportCache {
         if (isTimestampValid(timestamp)) {
             val lines = readFromCompressedFile<List<Feature>>(FILE_METRO_LINES)
             if (lines != null) {
+                if (isInvalidLineCache(lines)) {
+                    invalidateLineCache(FILE_METRO_LINES, KEY_METRO_LINES_TIMESTAMP)
+                    return@withLock null
+                }
                 metroLinesCache = lines
                 metroLinesTimestamp = timestamp
                 return@withLock lines
@@ -229,6 +260,12 @@ class TransportCacheImpl(context: Context) : TransportCache {
     override suspend fun getTramLines(): List<Feature>? = mutex.withLock {
         // Check memory cache first
         if (tramLinesCache != null && isTimestampValid(tramLinesTimestamp)) {
+            if (isInvalidLineCache(tramLinesCache.orEmpty())) {
+                tramLinesCache = null
+                tramLinesTimestamp = 0L
+                invalidateLineCache(FILE_TRAM_LINES, KEY_TRAM_LINES_TIMESTAMP)
+                return@withLock null
+            }
             return@withLock tramLinesCache
         }
 
@@ -237,6 +274,10 @@ class TransportCacheImpl(context: Context) : TransportCache {
         if (isTimestampValid(timestamp)) {
             val lines = readFromCompressedFile<List<Feature>>(FILE_TRAM_LINES)
             if (lines != null) {
+                if (isInvalidLineCache(lines)) {
+                    invalidateLineCache(FILE_TRAM_LINES, KEY_TRAM_LINES_TIMESTAMP)
+                    return@withLock null
+                }
                 tramLinesCache = lines
                 tramLinesTimestamp = timestamp
                 return@withLock lines
@@ -279,6 +320,12 @@ class TransportCacheImpl(context: Context) : TransportCache {
     suspend fun getNavigoneLines(): List<Feature>? = mutex.withLock {
         // Check memory cache first
         if (navigoneLinesCache != null && isTimestampValid(navigoneLinesTimestamp)) {
+            if (isInvalidLineCache(navigoneLinesCache.orEmpty())) {
+                navigoneLinesCache = null
+                navigoneLinesTimestamp = 0L
+                invalidateLineCache(FILE_NAVIGONE_LINES, KEY_NAVIGONE_LINES_TIMESTAMP)
+                return@withLock null
+            }
             return@withLock navigoneLinesCache
         }
 
@@ -287,6 +334,10 @@ class TransportCacheImpl(context: Context) : TransportCache {
         if (isTimestampValid(timestamp)) {
             val lines = readFromCompressedFile<List<Feature>>(FILE_NAVIGONE_LINES)
             if (lines != null) {
+                if (isInvalidLineCache(lines)) {
+                    invalidateLineCache(FILE_NAVIGONE_LINES, KEY_NAVIGONE_LINES_TIMESTAMP)
+                    return@withLock null
+                }
                 navigoneLinesCache = lines
                 navigoneLinesTimestamp = timestamp
                 return@withLock lines
@@ -313,6 +364,12 @@ class TransportCacheImpl(context: Context) : TransportCache {
     suspend fun getTrambusLines(): List<Feature>? = mutex.withLock {
         // Check memory cache first
         if (trambusLinesCache != null && isTimestampValid(trambusLinesTimestamp)) {
+            if (isInvalidLineCache(trambusLinesCache.orEmpty())) {
+                trambusLinesCache = null
+                trambusLinesTimestamp = 0L
+                invalidateLineCache(FILE_TRAMBUS_LINES, KEY_TRAMBUS_LINES_TIMESTAMP)
+                return@withLock null
+            }
             return@withLock trambusLinesCache
         }
 
@@ -321,6 +378,10 @@ class TransportCacheImpl(context: Context) : TransportCache {
         if (isTimestampValid(timestamp)) {
             val lines = readFromCompressedFile<List<Feature>>(FILE_TRAMBUS_LINES)
             if (lines != null) {
+                if (isInvalidLineCache(lines)) {
+                    invalidateLineCache(FILE_TRAMBUS_LINES, KEY_TRAMBUS_LINES_TIMESTAMP)
+                    return@withLock null
+                }
                 trambusLinesCache = lines
                 trambusLinesTimestamp = timestamp
                 return@withLock lines
