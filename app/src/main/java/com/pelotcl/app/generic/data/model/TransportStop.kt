@@ -6,7 +6,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
- * Représente une collection GeoJSON d'arrêts de transport
+ * Represents a GeoJSON collection of transport stops
  */
 @Immutable
 @Serializable
@@ -22,7 +22,7 @@ data class StopCollection(
 )
 
 /**
- * Représente un arrêt de transport (Feature GeoJSON)
+ * Represents a transport stop (GeoJSON Feature)
  */
 @Immutable
 @Serializable
@@ -38,7 +38,7 @@ data class StopFeature(
 )
 
 /**
- * Géométrie d'un arrêt (Point)
+ * Geometry of a stop (Point)
  */
 @Immutable
 @Serializable
@@ -48,7 +48,7 @@ data class StopGeometry(
 )
 
 /**
- * Propriétés d'un arrêt TCL
+ * Properties of a TCL stop
  */
 @Immutable
 @Serializable

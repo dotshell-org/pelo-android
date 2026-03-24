@@ -1,69 +1,69 @@
 package com.pelotcl.app.generic.data.network
 
 /**
- * Configuration de base pour une implémentation de transport
- * Chaque ville doit fournir sa propre implémentation
+ * Base configuration for a transport implementation
+ * Each city must provide its own implementation
  */
 interface TransportConfig {
-    
+
     /**
-     * URL de base de l'API
+     * Base URL of the API
      */
     val baseUrl: String
-    
+
     /**
-     * Nom de la ville/réseau
+     * Name of the city/network
      */
     val networkName: String
-    
+
     /**
-     * Région/zone couverte
+     * Covered region/zone
      */
     val region: String
-    
+
     /**
-     * Autorité organisatrice (ex: SYTRAL pour Lyon)
+     * Organizing authority (e.g., SYTRAL for Lyon)
      */
     val organizingAuthority: String
-    
+
     /**
-     * Source des données
+     * Data source
      */
     val dataSource: String
-    
+
     /**
-     * URL de la source des données
+     * Data source URL
      */
     val dataSourceUrl: String
-    
+
     /**
-     * Licence des données
+     * Data license
      */
     val dataLicense: String
-    
+
     /**
-     * Bounding box de la région (minLat, minLon, maxLat, maxLon)
-     * Pour la carte hors ligne
+     * Bounding box of the region (minLat, minLon, maxLat, maxLon)
+     * For offline map
      */
     val regionBounds: DoubleArray
-    
+
     /**
-     * Niveaux de zoom pour la carte hors ligne
+     * Zoom levels for offline map
      */
     val offlineMapZoomRange: IntRange
-    
+
     /**
-     * Fichier de vacances scolaires
+     * School holidays file
      */
     val schoolHolidaysFile: String
-    
+
     /**
-     * Couleur principale du réseau (pour le thème)
+     * Primary color of the network (for theme)
      */
     val primaryColor: String
-    
+
     /**
-     * Couleur secondaire du réseau
+     * Secondary color of the network
      */
     val secondaryColor: String
 }

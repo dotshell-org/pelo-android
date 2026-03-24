@@ -8,13 +8,13 @@ import retrofit2.http.GET
 import retrofit2.http.Query
 
 /**
- * Interface abstraite pour les APIs de transport urbain
- * Doit être implémentée pour chaque ville/réseau
+ * Abstract interface for urban transport APIs
+ * Must be implemented for each city/network
  */
 interface TransportApi {
 
     /**
-     * Récupère les lignes de métro/funiculaire
+     * Fetches metro/funicular lines
      */
     @GET("geoserver/sytral/ows")
     suspend fun getMetroLines(
@@ -30,7 +30,7 @@ interface TransportApi {
     ): FeatureCollection
 
     /**
-     * Récupère les lignes de tramway
+     * Fetches tram lines
      */
     @GET("geoserver/sytral/ows")
     suspend fun getTramLines(
@@ -46,7 +46,7 @@ interface TransportApi {
     ): FeatureCollection
 
     /**
-     * Récupère les lignes de bus
+     * Fetches bus lines
      */
     @GET("geoserver/sytral/ows")
     suspend fun getBusLines(
@@ -63,7 +63,7 @@ interface TransportApi {
     ): FeatureCollection
 
     /**
-     * Récupère une ligne de bus par nom
+     * Fetches a bus line by name
      */
     @GET("geoserver/sytral/ows")
     suspend fun getBusLineByName(
@@ -79,7 +79,7 @@ interface TransportApi {
     ): FeatureCollection
 
     /**
-     * Récupère les lignes de Navigone (fluviales)
+     * Fetches Navigone (river) lines
      */
     @GET("geoserver/sytral/ows")
     suspend fun getNavigoneLines(
@@ -95,7 +95,7 @@ interface TransportApi {
     ): FeatureCollection
 
     /**
-     * Récupère les lignes de Trambus (lignes TB)
+     * Fetches Trambus (TB) lines
      */
     @GET("geoserver/sytral/ows")
     suspend fun getTrambusLines(
@@ -112,7 +112,7 @@ interface TransportApi {
     ): FeatureCollection
 
     /**
-     * Récupère les arrêts de transport
+     * Fetches transport stops
      */
     @GET("geoserver/sytral/ows")
     suspend fun getTransportStops(
@@ -128,13 +128,13 @@ interface TransportApi {
     ): StopCollection
 
     /**
-     * Récupère les alertes trafic
+     * Fetches traffic alerts
      */
     @GET("https://api.dotshell.eu/pelo/v1/traffic/alerts")
     suspend fun getTrafficAlerts(): TrafficAlertsResponse
 
     /**
-     * Récupère la géométrie brute pour les lignes spéciales
+     * Fetches raw geometry for special lines
      */
     @GET("geoserver/sytral/ows")
     suspend fun getSpecialLineRaw(

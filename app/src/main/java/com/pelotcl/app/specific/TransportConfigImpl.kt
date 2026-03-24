@@ -3,8 +3,8 @@ package com.pelotcl.app.specific
 import com.pelotcl.app.generic.data.network.TransportConfig
 
 /**
- * Configuration spécifique de transport
- * Implémente TransportConfig pour fournir les paramètres
+ * Specific transport configuration
+ * Implements TransportConfig for providing transport configuration parameters.
  */
 object TransportConfigImpl : TransportConfig {
     
@@ -22,7 +22,7 @@ object TransportConfigImpl : TransportConfig {
     
     override val dataLicense: String = "Licence de données"
     
-    // Bounding box de la région
+    // Bounding box
     override val regionBounds: DoubleArray = doubleArrayOf(
         45.55, 4.65,  // Southwest
         45.95, 5.10   // Northeast
@@ -32,7 +32,7 @@ object TransportConfigImpl : TransportConfig {
     
     override val schoolHolidaysFile: String = "holidays.json"
     
-    override val primaryColor: String = "#E60000" // Couleur primaire
+    override val primaryColor: String = "#E60000"
     
-    override val secondaryColor: String = "#000000" // Couleur secondaire
+    override val secondaryColor: String = "#000000"
 }

@@ -6,7 +6,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
- * Représente une alerte de trafic pour une ligne de transport
+ * Represents a traffic alert for a line of transport
  */
 @Immutable
 @Serializable
@@ -73,7 +73,7 @@ data class TrafficAlert(
 )
 
 /**
- * Représente la réponse API pour les alertes de trafic
+ * Represents the API response for traffic alerts
  */
 data class TrafficAlertsResponse(
     @SerializedName("success")
@@ -90,7 +90,7 @@ data class TrafficAlertsResponse(
 )
 
 /**
- * Enumération des types de sévérité des alertes
+ * Enumeration of alert severity types
  */
 enum class AlertSeverity(val level: Int, val color: Long) {
     SIGNIFICANT_DELAYS(20, 0xFFFF5722), // Orange

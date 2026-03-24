@@ -9,13 +9,13 @@ import retrofit2.http.GET
 import retrofit2.http.Query
 
 /**
- * Implémentation concrète de TransportApi
- * Utilise l'API de transport
+ * Concrete implementation of TransportApi
+ * Uses the transport API
  */
 interface TransportApiImpl : TransportApi {
 
     /**
-     * Récupère les lignes de métro/funiculaire
+     * Fetches metro/funicular lines
      */
     @GET("geoserver/sytral/ows")
     override suspend fun getMetroLines(
@@ -31,7 +31,7 @@ interface TransportApiImpl : TransportApi {
     ): FeatureCollection
 
     /**
-     * Récupère les lignes de tramway
+     * Fetches tram lines
      */
     @GET("geoserver/sytral/ows")
     override suspend fun getTramLines(
@@ -47,7 +47,7 @@ interface TransportApiImpl : TransportApi {
     ): FeatureCollection
 
     /**
-     * Récupère les lignes de bus
+     * Fetches bus lines
      */
     @GET("geoserver/sytral/ows")
     override suspend fun getBusLines(
@@ -64,7 +64,7 @@ interface TransportApiImpl : TransportApi {
     ): FeatureCollection
 
     /**
-     * Récupère une ligne de bus par nom
+     * Fetches a bus line by name
      */
     @GET("geoserver/sytral/ows")
     override suspend fun getBusLineByName(
@@ -80,7 +80,7 @@ interface TransportApiImpl : TransportApi {
     ): FeatureCollection
 
     /**
-     * Récupère les lignes de Navigone (fluviales)
+     * Fetches Navigone (river) lines
      */
     @GET("geoserver/sytral/ows")
     override suspend fun getNavigoneLines(
@@ -96,7 +96,7 @@ interface TransportApiImpl : TransportApi {
     ): FeatureCollection
 
     /**
-     * Récupère les lignes de Trambus (lignes TB)
+     * Fetches Trambus (TB) lines
      */
     @GET("geoserver/sytral/ows")
     override suspend fun getTrambusLines(
@@ -113,7 +113,7 @@ interface TransportApiImpl : TransportApi {
     ): FeatureCollection
 
     /**
-     * Récupère les arrêts de transport
+     * Fetches transport stops
      */
     @GET("geoserver/sytral/ows")
     override suspend fun getTransportStops(
@@ -129,13 +129,13 @@ interface TransportApiImpl : TransportApi {
     ): StopCollection
 
     /**
-     * Récupère les alertes trafic
+     * Fetches traffic alerts
      */
     @GET("pelo/v1/traffic/alerts")
     override suspend fun getTrafficAlerts(): TrafficAlertsResponse
 
     /**
-     * Récupère la géométrie Rhônexpress
+     * Fetches Rhônexpress geometry
      */
     @GET("geoserver/sytral/ows")
     override suspend fun getSpecialLineRaw(

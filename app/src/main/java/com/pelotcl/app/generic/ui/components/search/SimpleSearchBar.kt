@@ -725,7 +725,7 @@ fun PreviewLineSearchResultItem() {
     Column(modifier = Modifier.fillMaxWidth()) {
         LineSearchResultItem(
             lineResult = mockResult,
-            onClick = { /* Action de clic ici */ }
+            onClick = {  }
         )
     }
 }

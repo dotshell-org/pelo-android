@@ -22,6 +22,7 @@ import com.pelotcl.app.generic.data.model.AlertSeverity
 import com.pelotcl.app.generic.data.repository.itinerary.RaptorRepository
 import com.pelotcl.app.generic.ui.components.search.LineSearchResult
 import com.pelotcl.app.generic.ui.components.search.StationSearchResult
+import com.pelotcl.app.generic.ui.theme.AccentColor
 import com.pelotcl.app.utils.HolidayDetector
 import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
@@ -209,7 +210,6 @@ class TransportViewModel(private val context: Context) : ViewModel() {
             id = favoritesRepository.generateFavoriteId(),
             name = name,
             iconName = iconName,
-            iconColor = Favorite.DEFAULT_COLORS.first(),
             stopName = stopName
         )
         if (favoritesRepository.addFavorite(newFavorite)) {

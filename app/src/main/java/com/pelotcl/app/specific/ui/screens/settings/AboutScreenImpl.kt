@@ -36,7 +36,7 @@ import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import kotlin.collections.forEach
 
 /**
- * Implémentation des écrans "À propos" pour le transport
+ * Implementation of the "About" screens for transport
  */
 class AboutScreenImpl : AboutScreenContract {
 

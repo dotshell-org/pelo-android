@@ -19,12 +19,12 @@ import com.pelotcl.app.specific.ui.screens.settings.AboutScreenImpl
 import com.pelotcl.app.specific.ui.theme.TransportThemeImpl
 
 /**
- * Fournisseur de services pour l'application
- * Gère l'initialisation et fournit les implémentations concrètes
- * Remplace l'injection de dépendances pour une approche plus simple
+ * Service provider for the application
+ * Manages initialization and provides concrete implementations
+ * Replaces dependency injection for a simpler approach
  */
 object TransportServiceProvider {
-    
+
     private lateinit var transportConfig: TransportConfig
     private lateinit var transportApi: TransportApi
     private lateinit var transportTheme: TransportTheme
@@ -33,45 +33,45 @@ object TransportServiceProvider {
     private lateinit var vehiclePositionsService: VehiclePositionsService
     private lateinit var transportLineService: TransportLineService
     private lateinit var trafficAlertsService: TrafficAlertsService
-    
+
     /**
-     * Initialise le fournisseur avec la configuration Lyon TCL
+     * Initializes the provider with Lyon TCL configuration
      */
     fun initialize(context: Context) {
-        // Configuration Lyon TCL
+        // Lyon TCL configuration
         transportConfig = TransportConfigImpl
-        
-        // Configuration des styles de carte Lyon TCL
+
+        // Lyon TCL map style configuration
         mapStyleConfig = MapStyleConfigImpl()
-        
-        // Service de positions des véhicules Lyon TCL
+
+        // Lyon TCL vehicle positions service
         vehiclePositionsService = VehiclePositionsServiceImpl()
-        
-        // Service des lignes de transport Lyon TCL
+
+        // Lyon TCL transport line service
         transportLineService = TransportLineServiceImpl()
-        
-        // Service des alertes trafic Lyon TCL
+
+        // Lyon TCL traffic alerts service
         trafficAlertsService = TrafficAlertsServiceImpl()
-        
-        // Initialiser Retrofit avec la configuration
+
+        // Initialize Retrofit with the configuration
         RetrofitInstance.initialize(context, transportConfig)
-        
-        // Créer l'API
+
+        // Create the API
         transportApi = RetrofitInstance.getRetrofit(transportConfig)
             .create(TransportApi::class.java)
-        
-        // Thème Lyon TCL
+
+        // Lyon TCL theme
         transportTheme = TransportThemeImpl()
-        
-        // Écrans "À propos" Lyon TCL
+
+        // Lyon TCL "About" screens
         aboutScreen = AboutScreenImpl()
-        
-        // Appliquer le thème par défaut
+
+        // Apply the default theme
         com.pelotcl.app.generic.ui.theme.TransportThemeProvider.setTheme(transportTheme)
     }
-    
+
     /**
-     * Obtient la configuration de transport
+     * Gets the transport configuration
      */
     fun getTransportConfig(): TransportConfig {
         if (!::transportConfig.isInitialized) {
@@ -79,9 +79,9 @@ object TransportServiceProvider {
         }
         return transportConfig
     }
-    
+
     /**
-     * Obtient l'API de transport
+     * Gets the transport API
      */
     fun getTransportApi(): TransportApi {
         if (!::transportApi.isInitialized) {
@@ -91,7 +91,7 @@ object TransportServiceProvider {
     }
 
     /**
-     * Obtient la configuration des styles de carte
+     * Gets the map style configuration
      */
     fun getMapStyleConfig(): MapStyleConfig {
         if (!::mapStyleConfig.isInitialized) {
@@ -99,9 +99,9 @@ object TransportServiceProvider {
         }
         return mapStyleConfig
     }
-    
+
     /**
-     * Obtient le service de positions des véhicules
+     * Gets the vehicle positions service
      */
     fun getVehiclePositionsService(): VehiclePositionsService {
         if (!::vehiclePositionsService.isInitialized) {
@@ -109,5 +109,4 @@ object TransportServiceProvider {
         }
         return vehiclePositionsService
     }
-
 }

@@ -4,7 +4,7 @@ import com.pelotcl.app.generic.data.model.Feature
 import androidx.core.graphics.toColorInt
 
 /**
- * Utilitaire pour déterminer la couleur d'une ligne de transport selon son type
+ * Utilitary to determine the color of a transport line based on its type
  */
 object LineColorHelper {
 
@@ -21,66 +21,48 @@ object LineColorHelper {
     private const val TRAMBUS_TB12_COLOR = "#92400e"
 
     /**
-     * Retourne la couleur hexadécimale appropriée pour une ligne de transport
+     * Returns the hex color appropriated for a transport line
      *
-     * @param feature La feature contenant les informations de la ligne
-     * @return La couleur en format hexadécimal (#RRGGBB)
+     * @param feature The feature containing line information
+     * @return The color in hexadecimal format (#RRGGBB)
      */
     fun getColorForLine(feature: Feature): String {
-        val ligne = feature.properties.ligne
-        val familleTransport = feature.properties.familleTransport
-        val nomTypeLigne = feature.properties.nomTypeLigne.lowercase()
+        val line = feature.properties.ligne
 
-        return when {
-            // Rhône Express
-            ligne.equals("RX", ignoreCase = true) -> "#E30613"
-            // Trambus TB12 (marron)
-            ligne.equals("TB12", ignoreCase = true) -> TRAMBUS_TB12_COLOR
-            // Trambus (jaune)
-            ligne.uppercase().startsWith("TB") -> TRAMBUS_COLOR
-            // Metros (only if ligne and familleTransport are not null)
-            ligne == "A" && familleTransport == "MET" -> METRO_A_COLOR
-            ligne == "B" && familleTransport == "MET" -> METRO_B_COLOR
-            ligne == "C" && familleTransport == "MET" -> METRO_C_COLOR
-            ligne == "D" && familleTransport == "MET" -> METRO_D_COLOR
+        return getColorForLineStringAux(line)
+    }
 
-            // Funicular (detection by line name or type)
-            ligne == "F1" || ligne == "F2" || nomTypeLigne.contains("funiculaire") -> FUNICULAR_COLOR
+    fun getColorForLineStringAux(lineName: String): String {
+        val name = lineName.uppercase()
+        val hexColor = when {
+            name == "RX" -> "#E30613"
+            name in (1..7).map { "T$it" } -> TRAM_COLOR
+            name.uppercase().startsWith("TB") -> TRAMBUS_COLOR
+            name.equals("TB12", ignoreCase = true) -> TRAMBUS_TB12_COLOR
 
-            // Navigone (water shuttle) - famille_transport = "BAT" (bateau)
-            familleTransport == "BAT" || ligne.uppercase()
-                .startsWith("NAVI") || nomTypeLigne.contains("fluvial") -> NAVIGONE_COLOR
+            name == "A" -> METRO_A_COLOR
+            name == "B" -> METRO_B_COLOR
+            name == "C" -> METRO_C_COLOR
+            name == "D" -> METRO_D_COLOR
 
-            // Trams (famille TRA ou TRAM)
-            familleTransport == "TRA" || familleTransport == "TRAM" -> TRAM_COLOR
+            name in (1..2).map { "F$it" } -> FUNICULAR_COLOR
 
-            // Bus (tout le reste, famille BUS)
+            name == "NAV1" -> NAVIGONE_COLOR
+
             else -> BUS_COLOR
         }
+
+        return hexColor
     }
 
     /**
-     * Retourne la couleur appropriée pour une ligne à partir de son nom
+     * Returns the appropriate color for a line based on its name
      *
-     * @param lineName Le nom de la ligne (ex: "A", "B", "T1", "C3", etc.)
-     * @return La couleur en format android.graphics.Color
+     * @param lineName The name of the line (e.g., "A", "B", "T1", "C3", etc.)
+     * @return The color in hexadecimal format (#RRGGBB)
      */
     fun getColorForLineString(lineName: String): Int {
-        val upperLine = lineName.uppercase()
-        val hexColor = when {
-            upperLine == "RX" -> "#E30613"
-            upperLine == "TB12" -> TRAMBUS_TB12_COLOR
-            upperLine.startsWith("TB") -> TRAMBUS_COLOR
-            upperLine == "A" -> METRO_A_COLOR
-            upperLine == "B" -> METRO_B_COLOR
-            upperLine == "C" -> METRO_C_COLOR
-            upperLine == "D" -> METRO_D_COLOR
-            upperLine == "F1" || upperLine == "F2" -> FUNICULAR_COLOR
-            upperLine.startsWith("NAVI") -> NAVIGONE_COLOR
-            (upperLine.startsWith("T") && !upperLine.startsWith("TB")) -> TRAM_COLOR
-            else -> BUS_COLOR
-        }
-        return hexColor.toColorInt()
+        return getColorForLineStringAux(lineName).toColorInt()
     }
 
 }

@@ -6,7 +6,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
- * Représente une collection GeoJSON de features
+ * Represents a GeoJSON FeatureCollection
  */
 @Immutable
 @Serializable
@@ -22,7 +22,7 @@ data class FeatureCollection(
 )
 
 /**
- * Représente une feature GeoJSON avec géométrie et propriétés
+ * Represents a GeoJSON Feature with geometry and properties
  */
 @Immutable
 @Serializable
@@ -38,7 +38,7 @@ data class Feature(
 )
 
 /**
- * Représente une géométrie de type MultiLineString
+ * Represents a MultiLineString geometry
  */
 @Immutable
 @Serializable
@@ -48,7 +48,7 @@ data class Geometry(
 )
 
 /**
- * Propriétés d'une ligne de transport TCL
+ * Represents transport line properties
  */
 @Immutable
 @Serializable
