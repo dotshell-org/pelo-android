@@ -130,6 +130,7 @@ interface TransportApiImpl : TransportApi {
 
     /**
      * Fetches traffic alerts
+     * Uses custom Gson mapping to handle Lyon-specific field names
      */
     @GET("pelo/v1/traffic/alerts")
     override suspend fun getTrafficAlerts(): TrafficAlertsResponse

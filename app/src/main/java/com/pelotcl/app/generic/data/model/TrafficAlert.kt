@@ -7,6 +7,7 @@ import kotlinx.serialization.Serializable
 
 /**
  * Represents a traffic alert for a line of transport
+ * Generic model that can be used across different transport networks
  */
 @Immutable
 @Serializable
@@ -15,28 +16,28 @@ data class TrafficAlert(
     @SerialName("cause")
     val cause: String,
 
-    @SerializedName("debut")
-    @SerialName("debut")
+    @SerializedName("startDate")
+    @SerialName("startDate")
     val startDate: String,
 
-    @SerializedName("fin")
-    @SerialName("fin")
+    @SerializedName("endDate")
+    @SerialName("endDate")
     val endDate: String,
 
-    @SerializedName("last_update_fme")
-    @SerialName("last_update_fme")
+    @SerializedName("lastUpdate")
+    @SerialName("lastUpdate")
     val lastUpdate: String,
 
-    @SerializedName("ligne_cli")
-    @SerialName("ligne_cli")
+    @SerializedName("lineCode")
+    @SerialName("lineCode")
     val lineCode: String,
 
-    @SerializedName("ligne_com")
-    @SerialName("ligne_com")
+    @SerializedName("lineName")
+    @SerialName("lineName")
     val lineName: String,
 
-    @SerializedName("listeobjet")
-    @SerialName("listeobjet")
+    @SerializedName("objectList")
+    @SerialName("objectList")
     val objectList: String,
 
     @SerializedName("message")
@@ -47,28 +48,28 @@ data class TrafficAlert(
     @SerialName("mode")
     val mode: String,
 
-    @SerializedName("n")
-    @SerialName("n")
+    @SerializedName("alertNumber")
+    @SerialName("alertNumber")
     val alertNumber: Int,
 
-    @SerializedName("niveauseverite")
-    @SerialName("niveauseverite")
+    @SerializedName("severityLevel")
+    @SerialName("severityLevel")
     val severityLevel: Int,
 
-    @SerializedName("titre")
-    @SerialName("titre")
+    @SerializedName("title")
+    @SerialName("title")
     val title: String,
 
-    @SerializedName("type")
-    @SerialName("type")
+    @SerializedName("alertType")
+    @SerialName("alertType")
     val alertType: String,
 
-    @SerializedName("typeobjet")
-    @SerialName("typeobjet")
+    @SerializedName("objectType")
+    @SerialName("objectType")
     val objectType: String,
 
-    @SerializedName("typeseverite")
-    @SerialName("typeseverite")
+    @SerializedName("severityType")
+    @SerialName("severityType")
     val severityType: String
 )
 

@@ -53,61 +53,61 @@ data class Geometry(
 @Immutable
 @Serializable
 data class TransportLineProperties(
-    val ligne: String = "",
-    @SerializedName("code_trace")
-    @SerialName("code_trace")
-    val codeTrace: String = "",
-    @SerializedName("code_ligne")
-    @SerialName("code_ligne")
-    val codeLigne: String = "",
-    @SerializedName("type_trace")
-    @SerialName("type_trace")
-    val typeTrace: String = "",
-    @SerializedName("nom_trace")
-    @SerialName("nom_trace")
-    val nomTrace: String = "",
-    val sens: String? = null,
-    val origine: String = "",
+    val lineName: String = "",
+    @SerializedName("line_code")
+    @SerialName("line_code")
+    val traceCode: String = "",
+    @SerializedName("line_id")
+    @SerialName("line_id")
+    val lineId: String = "",
+    @SerializedName("trace_type")
+    @SerialName("trace_type")
+    val traceType: String = "",
+    @SerializedName("trace_name")
+    @SerialName("trace_name")
+    val traceName: String = "",
+    val direction: String? = null,
+    val origin: String = "",
     val destination: String = "",
-    @SerializedName("nom_origine")
-    @SerialName("nom_origine")
-    val nomOrigine: String = "",
-    @SerializedName("nom_destination")
-    @SerialName("nom_destination")
-    val nomDestination: String = "",
-    @SerializedName("famille_transport")
-    @SerialName("famille_transport")
-    val familleTransport: String = "",
-    @SerializedName("date_debut")
-    @SerialName("date_debut")
-    val dateDebut: String = "",
-    @SerializedName("date_fin")
-    @SerialName("date_fin")
-    val dateFin: String? = null,
-    @SerializedName("code_type_ligne")
-    @SerialName("code_type_ligne")
-    val codeTypeLigne: String = "",
-    @SerializedName("nom_type_ligne")
-    @SerialName("nom_type_ligne")
-    val nomTypeLigne: String = "",
-    @SerializedName("code_tri_ligne")
-    @SerialName("code_tri_ligne")
-    val codeTriLigne: String = "",
-    @SerializedName("nom_version")
-    @SerialName("nom_version")
-    val nomVersion: String = "",
-    @SerializedName("last_update")
-    @SerialName("last_update")
+    @SerializedName("origin_name")
+    @SerialName("origin_name")
+    val originName: String = "",
+    @SerializedName("destination_name")
+    @SerialName("destination_name")
+    val destinationName: String = "",
+    @SerializedName("transport_type")
+    @SerialName("transport_type")
+    val transportType: String = "",
+    @SerializedName("start_date")
+    @SerialName("start_date")
+    val startDate: String = "",
+    @SerializedName("end_date")
+    @SerialName("end_date")
+    val endDate: String? = null,
+    @SerializedName("line_type_code")
+    @SerialName("line_type_code")
+    val lineTypeCode: String = "",
+    @SerializedName("line_type_name")
+    @SerialName("line_type_name")
+    val lineTypeName: String = "",
+    @SerializedName("sort_code")
+    @SerialName("sort_code")
+    val sortCode: String = "",
+    @SerializedName("version_name")
+    @SerialName("version_name")
+    val versionName: String = "",
+    @SerializedName("last_updated")
+    @SerialName("last_updated")
     val lastUpdate: String = "",
-    @SerializedName("last_update_fme")
-    @SerialName("last_update_fme")
+    @SerializedName("last_updated_fme")
+    @SerialName("last_updated_fme")
     val lastUpdateFme: String = "",
     val gid: Int = 0,
-    val couleur: String? = null
+    val color: String? = null
 )
 
 /**
- * Système de coordonnées
+ * Coordinates System
  */
 @Immutable
 @Serializable

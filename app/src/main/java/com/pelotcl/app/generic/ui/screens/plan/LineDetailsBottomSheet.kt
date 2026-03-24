@@ -227,7 +227,7 @@ fun LineDetailsBottomSheet(
     val loadedLineNames = remember(linesState) {
         when (linesState) {
             is TransportLinesUiState.Success -> (linesState as TransportLinesUiState.Success).lines
-                .map { it.properties.ligne.uppercase() }
+                .map { it.properties.lineName.uppercase() }
                 .toSet()
 
             else -> emptySet()

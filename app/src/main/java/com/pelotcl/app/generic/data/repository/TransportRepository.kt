@@ -23,7 +23,7 @@ import kotlinx.coroutines.withContext
 class TransportRepository(context: Context? = null) {
 
     private val transportApi: TransportApi = TransportServiceProvider.getTransportApi()
-    private val cache = context?.let { TransportCache(it) }
+    private val cache = context?.let { com.pelotcl.app.specific.data.cache.TransportCacheImpl(it) }
     private val offlineRepo = context?.let { OfflineRepository(it) }
 
     /**
@@ -135,7 +135,7 @@ class TransportRepository(context: Context? = null) {
 
                 // Group by code_trace and keep only the first of each group (outbound direction)
                 val uniqueLines = allFeatures
-                    .groupBy { it.properties.codeTrace }
+                    .groupBy { it.properties.traceCode }
                     .map { (_, features) -> features.first() }
 
                 val filteredCollection = metroFuniculaire.copy(
@@ -153,7 +153,7 @@ class TransportRepository(context: Context? = null) {
                 val offlineLines = offlineRepo?.loadAllLines()
                 if (!offlineLines.isNullOrEmpty()) {
                     val uniqueLines = offlineLines
-                        .groupBy { it.properties.codeTrace }
+                        .groupBy { it.properties.traceCode }
                         .map { (_, features) -> features.first() }
 
                     Result.success(
@@ -190,7 +190,7 @@ class TransportRepository(context: Context? = null) {
                 // RX has its own dedicated endpoint.
                 if (aliases.size == 1 && aliases.first() == "RX") {
                     return@runCatching fetchRhonexpressFromWfs()
-                        .groupBy { it.properties.codeTrace }
+                        .groupBy { it.properties.traceCode }
                         .map { (_, features) -> features.first() }
                 }
 
@@ -215,7 +215,7 @@ class TransportRepository(context: Context? = null) {
                 }
 
                 collected
-                    .groupBy { it.properties.codeTrace }
+                    .groupBy { it.properties.traceCode }
                     .map { (_, features) -> features.first() }
             }
         }
@@ -265,25 +265,25 @@ class TransportRepository(context: Context? = null) {
                         ),
                         geometryName = null,
                         properties = TransportLineProperties(
-                            ligne = "RX",
-                            codeTrace = "RX-$gid",
-                            codeLigne = "RX",
-                            typeTrace = "",
-                            nomTrace = "Rhônexpress",
-                            sens = "ALLER",
-                            origine = "Gare Part-Dieu Villette",
+                            lineName = "RX",
+                            traceCode = "RX-$gid",
+                            lineId = "RX",
+                            traceType = "",
+                            traceName = "Rhônexpress",
+                            direction = "ALLER",
+                            origin = "Gare Part-Dieu Villette",
                             destination = "Aéroport St Exupéry -RX",
-                            nomOrigine = "Gare Part-Dieu Villette",
-                            nomDestination = "Aéroport St Exupéry -RX",
-                            familleTransport = "TRAM",
-                            dateDebut = "",
-                            dateFin = null,
-                            codeTypeLigne = "TRAM",
-                            nomTypeLigne = "Tramway",
+                            originName = "Gare Part-Dieu Villette",
+                            destinationName = "Aéroport St Exupéry -RX",
+                            transportType = "TRAM",
+                            startDate = "",
+                            endDate = null,
+                            lineTypeCode = "TRAM",
+                            lineTypeName = "Tramway",
                             lastUpdate = "",
                             lastUpdateFme = "",
                             gid = gid,
-                            couleur = "#E30613"
+                            color = "#E30613"
                         ),
                         bbox = null
                     )
