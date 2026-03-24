@@ -955,14 +955,14 @@ fun PlanScreen(
                     featObj.add("geometry", geomObj)
 
                     val propsObj = JsonObject()
-                    propsObj.addProperty("ligne", lineFeature.properties.ligne)
-                    propsObj.addProperty("nom_trace", lineFeature.properties.nomTrace)
+                    propsObj.addProperty("ligne", lineFeature.properties.lineName)
+                    propsObj.addProperty("nom_trace", lineFeature.properties.traceName)
                     propsObj.addProperty("couleur", LineColorHelper.getColorForLine(lineFeature))
                     // Determine line width property based on type
-                    val upperName = lineFeature.properties.ligne.uppercase()
+                    val upperName = lineFeature.properties.lineName.uppercase()
                     val width = when {
-                        lineFeature.properties.familleTransport == "BAT" || isNavigoneLine(upperName) -> 2f
-                        lineFeature.properties.familleTransport == "TRA" || lineFeature.properties.familleTransport == "TRAM" || upperName.startsWith(
+                        lineFeature.properties.transportType == "BAT" || isNavigoneLine(upperName) -> 2f
+                        lineFeature.properties.transportType == "TRA" || lineFeature.properties.transportType == "TRAM" || upperName.startsWith(
                             "TB"
                         ) -> 2f
 
@@ -985,8 +985,8 @@ fun PlanScreen(
 
             // Clean up individual layers if they exist (migration)
             lines.forEach { feature ->
-                val oldLayerId = "layer-${feature.properties.ligne}-${feature.properties.codeTrace}"
-                val oldSourceId = "line-${feature.properties.ligne}-${feature.properties.codeTrace}"
+                val oldLayerId = "layer-${feature.properties.lineName}-${feature.properties.traceCode}"
+                val oldSourceId = "line-${feature.properties.lineName}-${feature.properties.traceCode}"
                 style.getLayer(oldLayerId)?.let { style.removeLayer(it) }
                 style.getSource(oldSourceId)?.let { style.removeSource(it) }
             }
@@ -1545,7 +1545,7 @@ fun PlanScreen(
                 if ((currentSheetState == SheetContentState.LINE_DETAILS || currentSheetState == SheetContentState.ALL_SCHEDULES) && currentSelectedLine != null) {
                     val selectedName = currentSelectedLine.lineName
                     val hasSelectedInState =
-                        lines.any { areEquivalentLineNames(it.properties.ligne, selectedName) }
+                        lines.any { areEquivalentLineNames(it.properties.lineName, selectedName) }
 
                     if (!hasSelectedInState && isMetroTramOrFunicular(selectedName)) {
                         viewModel.reloadStrongLines()
@@ -2439,7 +2439,7 @@ fun PlanScreen(
                                 else -> emptyList()
                             }
                             val isLoaded = currentLines.any {
-                                areEquivalentLineNames(it.properties.ligne, lineName)
+                                areEquivalentLineNames(it.properties.lineName, lineName)
                             }
 
                             if (!isLoaded) {
@@ -2657,8 +2657,8 @@ private fun filterMapLines(
 
         // Also hide/show individual line layers (for lignes fortes)
         allLines.forEach { feature ->
-            val ligne = feature.properties.ligne
-            val codeTrace = feature.properties.codeTrace
+            val ligne = feature.properties.lineName
+            val codeTrace = feature.properties.traceCode
 
             val individualLayerId = "layer-${ligne}-${codeTrace}"
             style.getLayer(individualLayerId)?.let { layer ->
@@ -2670,7 +2670,7 @@ private fun filterMapLines(
         }
     }
     val visibleCandidates =
-        allLines.count { areEquivalentLineNames(it.properties.ligne, selectedLineName) }
+        allLines.count { areEquivalentLineNames(it.properties.lineName, selectedLineName) }
     return visibleCandidates
 }
 
@@ -2680,7 +2680,7 @@ private fun zoomToLine(
     selectedLineName: String
 ) {
     val lineFeatures = allLines.filter {
-        areEquivalentLineNames(it.properties.ligne, selectedLineName)
+        areEquivalentLineNames(it.properties.lineName, selectedLineName)
     }
 
     if (lineFeatures.isEmpty()) return
@@ -2890,7 +2890,7 @@ private fun addCircleLayerForLineStops(
     val normalizedSelectedStop = normalizeStopName(selectedStopName)
 
     val lineColor = allLines
-        .find { areEquivalentLineNames(it.properties.ligne, selectedLineName) }
+        .find { areEquivalentLineNames(it.properties.lineName, selectedLineName) }
         ?.let { LineColorHelper.getColorForLine(it) }
         ?: "#EF4444"
 
@@ -3120,8 +3120,8 @@ private fun showAllMapLines(
         }
 
         allLines.forEach { feature ->
-            val ligne = feature.properties.ligne
-            val codeTrace = feature.properties.codeTrace
+            val ligne = feature.properties.lineName
+            val codeTrace = feature.properties.traceCode
 
             val layerId = "layer-${ligne}-${codeTrace}"
             val sourceId = "line-${ligne}-${codeTrace}"
@@ -3191,8 +3191,8 @@ private fun addLineToMap(
     feature: Feature
 ) {
     map.getStyle { style ->
-        val ligne = feature.properties.ligne
-        val codeTrace = feature.properties.codeTrace
+        val ligne = feature.properties.lineName
+        val codeTrace = feature.properties.traceCode
 
         val sourceId = "line-${ligne}-${codeTrace}"
         val layerId = "layer-${ligne}-${codeTrace}"
@@ -3208,7 +3208,7 @@ private fun addLineToMap(
         val lineColor = LineColorHelper.getColorForLine(feature)
 
         val upperLineName = ligne.uppercase()
-        val familleTransport = feature.properties.familleTransport
+        val familleTransport = feature.properties.transportType
         val lineWidth = when {
             familleTransport == "BAT" || isNavigoneLine(upperLineName) -> 2f
             familleTransport == "TRA" || familleTransport == "TRAM" || upperLineName.startsWith("TB") -> 2f
@@ -3638,9 +3638,9 @@ private fun createGeoJsonFromFeature(feature: Feature): String {
         add("geometry", geometryObject)
 
         val propertiesObject = JsonObject().apply {
-            addProperty("ligne", feature.properties.ligne)
-            addProperty("nom_trace", feature.properties.nomTrace)
-            addProperty("couleur", feature.properties.couleur ?: "")
+            addProperty("ligne", feature.properties.lineName)
+            addProperty("nom_trace", feature.properties.traceName)
+            addProperty("couleur", feature.properties.color ?: "")
         }
         add("properties", propertiesObject)
     }

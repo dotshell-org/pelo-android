@@ -27,7 +27,7 @@ object LineColorHelper {
      * @return The color in hexadecimal format (#RRGGBB)
      */
     fun getColorForLine(feature: Feature): String {
-        val line = feature.properties.ligne
+        val line = feature.properties.lineName
 
         return getColorForLineStringAux(line)
     }

@@ -213,7 +213,7 @@ class OfflineDataManager(
                     Log.d(
                         TAG,
                         "Trambus API returned ${features.size} features: ${
-                            features.map { it.properties.ligne }.distinct()
+                            features.map { it.properties.lineName }.distinct()
                         }"
                     )
                     if (features.isNotEmpty()) {
@@ -274,9 +274,9 @@ class OfflineDataManager(
 
                         if (features.isNotEmpty()) {
                             val trambusInPage =
-                                features.filter { it.properties.ligne.uppercase().startsWith("TB") }
+                                features.filter { it.properties.lineName.uppercase().startsWith("TB") }
                             val busFeatures = features.filter {
-                                !it.properties.ligne.uppercase().startsWith("TB")
+                                !it.properties.lineName.uppercase().startsWith("TB")
                             }
 
                             if (trambusInPage.isNotEmpty()) {
@@ -548,18 +548,18 @@ class OfflineDataManager(
                         ),
                         geometryName = null,
                         properties = TransportLineProperties(
-                            ligne = "RX", codeTrace = "RX-$gid", codeLigne = "RX",
-                            typeTrace = "", nomTrace = "Rhônexpress",
-                            sens = "ALLER",
-                            origine = "Gare Part-Dieu Villette",
+                            lineName = "RX", traceCode = "RX-$gid", lineId = "RX",
+                            traceType = "", traceName = "Rhônexpress",
+                            direction = "ALLER",
+                            origin = "Gare Part-Dieu Villette",
                             destination = "Aéroport St Exupéry -RX",
-                            nomOrigine = "Gare Part-Dieu Villette",
-                            nomDestination = "Aéroport St Exupéry -RX",
-                            familleTransport = "TRAM",
-                            dateDebut = "", dateFin = null,
-                            codeTypeLigne = "TRAM", nomTypeLigne = "Tramway",
+                            originName = "Gare Part-Dieu Villette",
+                            destinationName = "Aéroport St Exupéry -RX",
+                            transportType = "TRAM",
+                            startDate = "", endDate = null,
+                            lineTypeCode = "TRAM", lineTypeName = "Tramway",
                             lastUpdate = "", lastUpdateFme = "",
-                            gid = gid, couleur = "#E30613"
+                            gid = gid, color = "#E30613"
                         ),
                         bbox = null
                     )

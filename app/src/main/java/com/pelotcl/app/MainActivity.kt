@@ -42,11 +42,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -76,10 +74,10 @@ import com.pelotcl.app.generic.ui.theme.AccentColor
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.generic.ui.viewmodel.TransportStopsUiState
 import com.pelotcl.app.generic.data.network.RetrofitInstance
-import com.pelotcl.app.generic.data.cache.TransportCache
 import com.pelotcl.app.generic.data.repository.offline.SchedulesRepository
 import com.pelotcl.app.generic.ui.theme.PrimaryColor
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
+import com.pelotcl.app.specific.data.cache.TransportCacheImpl
 import com.pelotcl.app.utils.transport.BusIconHelper
 import com.pelotcl.app.utils.LocationHelper
 import kotlinx.coroutines.CoroutineScope
@@ -104,7 +102,7 @@ class MainActivity : ComponentActivity() {
             try {
                 // Parallel cache and schedule-data warmup - these are needed for initial UI
                 val cacheJob = launch {
-                    val cache = TransportCache(applicationContext)
+                    val cache = TransportCacheImpl(applicationContext)
                     cache.preloadFromDisk()
                 }
                 val schedulesJob = launch {

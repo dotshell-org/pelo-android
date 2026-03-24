@@ -2,8 +2,7 @@ package com.pelotcl.app.specific
 
 import com.pelotcl.app.generic.data.model.TrafficAlertsResponse
 import com.pelotcl.app.generic.data.network.TrafficAlertsService
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
+import com.pelotcl.app.specific.data.network.LyonTransportApi
 
 /**
  * Lyon-specific implementation of TrafficAlertsService
@@ -11,19 +10,14 @@ import retrofit2.converter.gson.GsonConverterFactory
  */
 class TrafficAlertsServiceImpl : TrafficAlertsService {
     
-    private val retrofit = Retrofit.Builder()
-        .baseUrl("https://api.dotshell.eu/") // Different base URL for traffic alerts
-        .addConverterFactory(GsonConverterFactory.create())
-        .build()
-    
-    private val apiService = retrofit.create(TransportApiImpl::class.java)
+    private val lyonTransportApi = LyonTransportApi("https://api.dotshell.eu/")
     
     override fun getTrafficAlertsUrl(): String {
         return "https://api.dotshell.eu/pelo/v1/traffic/alerts"
     }
     
     override suspend fun getTrafficAlerts(): TrafficAlertsResponse {
-        return apiService.getTrafficAlerts()
+        return lyonTransportApi.getTrafficAlerts()
     }
     
     override suspend fun getTrafficAlertsByLine(lineName: String): TrafficAlertsResponse {

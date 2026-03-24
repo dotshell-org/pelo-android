@@ -102,7 +102,7 @@ class OfflineRepository(private val context: Context) {
             TAG,
             "saveBusLinesPage: ${lines.size} features, busDir=${busDir.absolutePath}, exists=${busDir.exists()}"
         )
-        val grouped = safeLines.groupBy { it.properties.ligne.uppercase() }
+        val grouped = safeLines.groupBy { it.properties.lineName.uppercase() }
         var savedCount = 0
         for ((lineName, features) in grouped) {
             val safeFileName = lineName.replace(Regex("[^A-Za-z0-9_-]"), "_") + ".json.gz"
@@ -343,21 +343,21 @@ fun List<Feature>.sanitizeForSerialization(): List<Feature> {
     return map { feature ->
         val props = feature.properties
         val safeProps = props.copy(
-            ligne = (props.ligne as String?) ?: "",
-            codeTrace = (props.codeTrace as String?) ?: "",
-            codeLigne = (props.codeLigne as String?) ?: "",
-            typeTrace = (props.typeTrace as String?) ?: "",
-            nomTrace = (props.nomTrace as String?) ?: "",
-            origine = (props.origine as String?) ?: "",
+            lineName = (props.lineName as String?) ?: "",
+            traceCode = (props.traceCode as String?) ?: "",
+            lineId = (props.lineId as String?) ?: "",
+            traceType = (props.traceType as String?) ?: "",
+            traceName = (props.traceName as String?) ?: "",
+            origin = (props.origin as String?) ?: "",
             destination = (props.destination as String?) ?: "",
-            nomOrigine = (props.nomOrigine as String?) ?: "",
-            nomDestination = (props.nomDestination as String?) ?: "",
-            familleTransport = (props.familleTransport as String?) ?: "",
-            dateDebut = (props.dateDebut as String?) ?: "",
-            codeTypeLigne = (props.codeTypeLigne as String?) ?: "",
-            nomTypeLigne = (props.nomTypeLigne as String?) ?: "",
-            codeTriLigne = (props.codeTriLigne as String?) ?: "",
-            nomVersion = (props.nomVersion as String?) ?: "",
+            originName = (props.originName as String?) ?: "",
+            destinationName = (props.destinationName as String?) ?: "",
+            transportType = (props.transportType as String?) ?: "",
+            startDate = (props.startDate as String?) ?: "",
+            lineTypeCode = (props.lineTypeCode as String?) ?: "",
+            lineTypeName = (props.lineTypeName as String?) ?: "",
+            sortCode = (props.sortCode as String?) ?: "",
+            versionName = (props.versionName as String?) ?: "",
             lastUpdate = (props.lastUpdate as String?) ?: "",
             lastUpdateFme = (props.lastUpdateFme as String?) ?: ""
         )

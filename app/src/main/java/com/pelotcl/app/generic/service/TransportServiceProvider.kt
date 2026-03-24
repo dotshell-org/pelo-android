@@ -8,6 +8,7 @@ import com.pelotcl.app.generic.data.network.RetrofitInstance
 import com.pelotcl.app.generic.data.network.TransportLineService
 import com.pelotcl.app.generic.data.network.TrafficAlertsService
 import com.pelotcl.app.generic.data.network.VehiclePositionsService
+import com.pelotcl.app.specific.data.network.LyonTransportApi
 import com.pelotcl.app.generic.ui.theme.TransportTheme
 import com.pelotcl.app.generic.ui.screens.about.AboutScreenContract
 import com.pelotcl.app.specific.MapStyleConfigImpl
@@ -56,9 +57,8 @@ object TransportServiceProvider {
         // Initialize Retrofit with the configuration
         RetrofitInstance.initialize(context, transportConfig)
 
-        // Create the API
-        transportApi = RetrofitInstance.getRetrofit(transportConfig)
-            .create(TransportApi::class.java)
+        // Create the API - use LyonTransportApi for Lyon-specific field mapping
+        transportApi = LyonTransportApi(transportConfig.baseUrl)
 
         // Lyon TCL theme
         transportTheme = TransportThemeImpl()

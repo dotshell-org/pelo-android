@@ -314,8 +314,8 @@ class TransportViewModel(private val context: Context) : ViewModel() {
         }
 
         val linesFromLoadedFeatures = when (currentUiState) {
-            is TransportLinesUiState.Success -> currentUiState.lines.map { it.properties.ligne }
-            is TransportLinesUiState.PartialSuccess -> currentUiState.lines.map { it.properties.ligne }
+            is TransportLinesUiState.Success -> currentUiState.lines.map { it.properties.lineName }
+            is TransportLinesUiState.PartialSuccess -> currentUiState.lines.map { it.properties.lineName }
             else -> emptyList()
         }
 
@@ -561,7 +561,7 @@ class TransportViewModel(private val context: Context) : ViewModel() {
                 else -> emptyList()
             }
 
-            if (currentLines.any { areEquivalentRouteNames(it.properties.ligne, requestedLine) }) {
+            if (currentLines.any { areEquivalentRouteNames(it.properties.lineName, requestedLine) }) {
                 return@launch
             }
 
@@ -573,7 +573,7 @@ class TransportViewModel(private val context: Context) : ViewModel() {
                     }
 
                     val merged = (currentLines + loadedFeatures)
-                        .groupBy { it.properties.codeTrace }
+                        .groupBy { it.properties.traceCode }
                         .map { (_, features) -> features.first() }
 
                     _uiState.value = TransportLinesUiState.Success(merged)
@@ -599,7 +599,7 @@ class TransportViewModel(private val context: Context) : ViewModel() {
         }
 
         val filtered = currentLines.filterNot {
-            areEquivalentRouteNames(it.properties.ligne, requestedLine)
+            areEquivalentRouteNames(it.properties.lineName, requestedLine)
         }
 
         if (filtered.size != currentLines.size) {

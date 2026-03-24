@@ -3,6 +3,8 @@ package com.pelotcl.app.specific
 import com.pelotcl.app.generic.data.model.FeatureCollection
 import com.pelotcl.app.generic.data.model.StopCollection
 import com.pelotcl.app.generic.data.network.TransportLineService
+import com.pelotcl.app.specific.data.network.LyonTransportLineApi
+import com.pelotcl.app.specific.data.network.LyonTransportLineApiWrapper
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
@@ -18,106 +20,56 @@ class TransportLineServiceImpl : TransportLineService {
         .addConverterFactory(GsonConverterFactory.create())
         .build()
     
-    private val apiService = retrofit.create(TransportApiImpl::class.java)
+    private val lyonApi = retrofit.create(LyonTransportLineApi::class.java)
+    private val apiService = LyonTransportLineApiWrapper(lyonApi)
     
     override suspend fun getMetroLines(): FeatureCollection {
         return apiService.getMetroLines(
-            service = "WFS",
-            version = "2.0.0",
-            request = "GetFeature",
-            typename = "sytral:tcl_sytral.tcllignemf_2_0_0",
-            outputFormat = "application/json",
-            srsName = "EPSG:4171",
-            startIndex = 0,
-            sortBy = "gid",
-            count = 1000
+            "WFS", "2.0.0", "GetFeature", "sytral:tcl_sytral.tcllignemf_2_0_0",
+            "application/json", "EPSG:4171", 0, "gid", 1000
         )
     }
     
     override suspend fun getTramLines(): FeatureCollection {
         return apiService.getTramLines(
-            service = "WFS",
-            version = "2.0.0",
-            request = "GetFeature",
-            typename = "sytral:tcl_sytral.tcllignetram_2_0_0",
-            outputFormat = "application/json",
-            srsName = "EPSG:4171",
-            startIndex = 0,
-            sortBy = "gid",
-            count = 1000
+            "WFS", "2.0.0", "GetFeature", "sytral:tcl_sytral.tcllignetram_2_0_0",
+            "application/json", "EPSG:4171", 0, "gid", 1000
         )
     }
     
     override suspend fun getBusLines(): FeatureCollection {
         return apiService.getBusLines(
-            service = "WFS",
-            version = "2.0.0",
-            request = "GetFeature",
-            typename = "sytral:tcl_sytral.tcllignebus_2_0_0",
-            outputFormat = "application/json",
-            srsName = "EPSG:4171",
-            startIndex = 0,
-            sortBy = "gid",
-            count = 10000,
-            cqlFilter = null
+            "WFS", "2.0.0", "GetFeature", "sytral:tcl_sytral.tcllignebus_2_0_0",
+            "application/json", "EPSG:4171", 0, "gid", 10000, null
         )
     }
     
     override suspend fun getBusLineByName(lineName: String): FeatureCollection {
         val cqlFilter = "nomligne = '$lineName'"
         return apiService.getBusLineByName(
-            service = "WFS",
-            version = "2.0.0",
-            request = "GetFeature",
-            typename = "sytral:tcl_sytral.tcllignebus_2_0_0",
-            outputFormat = "application/json",
-            srsName = "EPSG:4171",
-            sortBy = "gid",
-            count = 10,
-            cqlFilter = cqlFilter
+            "WFS", "2.0.0", "GetFeature", "sytral:tcl_sytral.tcllignebus_2_0_0",
+            "application/json", "EPSG:4171", "gid", 10, cqlFilter
         )
     }
     
     override suspend fun getNavigoneLines(): FeatureCollection {
         return apiService.getNavigoneLines(
-            service = "WFS",
-            version = "2.0.0",
-            request = "GetFeature",
-            typename = "sytral:tcl_sytral.tcllignefluv",
-            outputFormat = "application/json",
-            srsName = "EPSG:4171",
-            startIndex = 0,
-            sortBy = "gid",
-            count = 1000
+            "WFS", "2.0.0", "GetFeature", "sytral:tcl_sytral.tcllignefluv",
+            "application/json", "EPSG:4171", 0, "gid", 1000
         )
     }
     
     override suspend fun getTrambusLines(): FeatureCollection {
         return apiService.getTrambusLines(
-            service = "WFS",
-            version = "2.0.0",
-            request = "GetFeature",
-            typename = "sytral:tcl_sytral.tcllignebus_2_0_0",
-            outputFormat = "application/json",
-            srsName = "EPSG:4171",
-            startIndex = 0,
-            sortBy = "gid",
-            count = 1000,
-            cqlFilter = "ligne LIKE 'TB%'"
+            "WFS", "2.0.0", "GetFeature", "sytral:tcl_sytral.tcllignebus_2_0_0",
+            "application/json", "EPSG:4171", 0, "gid", 1000, "ligne LIKE 'TB%'"
         )
     }
     
     override suspend fun getTransportStops(): StopCollection {
         return apiService.getTransportStops(
-            service = "WFS",
-            version = "2.0.0",
-            request = "GetFeature",
-            typename = "sytral:tcl_sytral.tclarret",
-            outputFormat = "application/json",
-            srsName = "EPSG:4171",
-            startIndex = 0,
-            sortBy = "gid",
-            count = 10000
+            "WFS", "2.0.0", "GetFeature", "sytral:tcl_sytral.tclarret",
+            "application/json", "EPSG:4171", 0, "gid", 10000
         )
     }
     
