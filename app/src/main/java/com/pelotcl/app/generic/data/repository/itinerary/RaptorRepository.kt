@@ -147,6 +147,29 @@ class RaptorRepository private constructor(private val context: Context) {
             try {
                 val startTime = System.currentTimeMillis()
 
+                // Verify all required assets exist before attempting to load them
+                val requiredAssets = listOf(
+                    "holidays.json",
+                    "stops_saturday.bin", "routes_saturday.bin",
+                    "stops_sunday.bin", "routes_sunday.bin",
+                    "stops_school_on_weekdays.bin", "routes_school_on_weekdays.bin",
+                    "stops_school_off_weekdays.bin", "routes_school_off_weekdays.bin"
+                )
+
+                val missingAssets = requiredAssets.filter { assetName ->
+                    runCatching { context.assets.open(assetName).close() }.isFailure
+                }
+
+                if (missingAssets.isNotEmpty()) {
+                    val errorMsg = "CRITICAL: Missing required assets: ${missingAssets.joinToString(", ")}"
+                    Log.e("RaptorRepository", errorMsg)
+                    Log.e("RaptorRepository", "This will cause bus stops to disappear from search and map!")
+                    Log.e("RaptorRepository", "Please clean build and check asset packaging in Android Studio")
+                    return@withContext Result.failure(IllegalStateException(errorMsg))
+                }
+
+                Log.d("RaptorRepository", "All required assets verified successfully")
+
                 // Load school holidays from assets
                 loadSchoolHolidays()
 
@@ -423,7 +446,20 @@ class RaptorRepository private constructor(private val context: Context) {
                         { it.first.name }
                     )
                 ).map { it.first }
-                .filter { stop -> hasLinesForStop(stop.name) }
+                .filter { stop ->
+                    // Only filter out stops with no lines if Raptor assets are available
+                    // If assets are missing, include all stops to avoid hiding valid bus stops
+                    val assetsAvailable = checkAssetsAvailable()
+                    if (assetsAvailable) {
+                        hasLinesForStop(stop.name)
+                    } else {
+                        // Assets missing - include all stops but log warning
+                        if (!hasLinesForStop(stop.name)) {
+                            Log.w("RaptorRepository", "Stop ${stop.name} has no desserte - Raptor assets may be missing")
+                        }
+                        true // Include all stops when assets are missing
+                    }
+                }
 
                 results
             } catch (e: Exception) {
@@ -451,6 +487,26 @@ class RaptorRepository private constructor(private val context: Context) {
 
             searchStopsByName(stopName).map { it.id }.take(maxIds)
         }
+
+    /**
+     * Check if all required Raptor assets are available
+     * @return true if all assets are present, false otherwise
+     */
+    fun checkAssetsAvailable(): Boolean {
+        return runCatching {
+            val requiredAssets = listOf(
+                "holidays.json",
+                "stops_saturday.bin", "routes_saturday.bin",
+                "stops_sunday.bin", "routes_sunday.bin",
+                "stops_school_on_weekdays.bin", "routes_school_on_weekdays.bin",
+                "stops_school_off_weekdays.bin", "routes_school_off_weekdays.bin"
+            )
+
+            requiredAssets.all { assetName ->
+                runCatching { context.assets.open(assetName).close() }.isSuccess
+            }
+        }.getOrDefault(false)
+    }
 
     /**
      * Check if a stop has any lines serving it
@@ -962,6 +1018,12 @@ class RaptorRepository private constructor(private val context: Context) {
     }
 
     fun getDesserteForStop(stopName: String): String? {
+        // Check if Raptor library failed to initialize (assets missing)
+        if (raptorLibrary == null) {
+            Log.w("RaptorRepository", "getDesserteForStop called but Raptor library not initialized. Check logcat for asset errors.")
+            return null
+        }
+
         val period = raptorLibrary?.getCurrentPeriod() ?: PERIOD_SCHOOL_ON_WEEKDAYS
         val stops = stopsByPeriod[period] ?: return null
         val routes = routesByPeriod[period] ?: return null

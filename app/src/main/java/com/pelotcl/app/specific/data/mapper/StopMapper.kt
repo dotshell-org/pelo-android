@@ -1,5 +1,6 @@
 package com.pelotcl.app.specific.data.mapper
 
+import android.util.Log
 import com.pelotcl.app.generic.data.model.StopCollection
 import com.pelotcl.app.generic.data.model.StopFeature
 import com.pelotcl.app.generic.data.model.StopGeometry
@@ -16,12 +17,22 @@ object StopMapper {
      * Convert Lyon-specific stop properties to generic properties
      */
     fun mapToGeneric(properties: com.pelotcl.app.specific.data.model.LyonStopProperties): StopProperties {
+        // Debug logging to understand what the WFS API is returning
+        val desserteRaw = properties.desserte
+        val desserteArretRaw = properties.desserteArret
+        
+        Log.d("StopMapper", "Stop ${properties.stopName} (gid=${properties.gid}): desserte='${desserteRaw}', desserteArret='${desserteArretRaw}'")
+
         // Ensure desserte is never empty by using a fallback value
-        val desserteValue = (properties.desserte ?: properties.desserteArret).orEmpty()
+        val desserteValue = (desserteRaw ?: desserteArretRaw).orEmpty()
+        val finalDesserte = if (desserteValue.isNotBlank()) desserteValue else "UNKNOWN"
+        
+        Log.d("StopMapper", "  -> final desserte: '$finalDesserte'")
+
         return StopProperties(
             id = properties.gid,
             nom = properties.stopName,
-            desserte = if (desserteValue.isNotBlank()) desserteValue else "UNKNOWN",
+            desserte = finalDesserte,
             ascenseur = false, // Default value
             escalator = false, // Default value
             gid = properties.gid,

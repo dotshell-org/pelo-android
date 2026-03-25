@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * ViewModel principal pour la gestion des données de transport
@@ -175,10 +176,35 @@ class TransportViewModel(private val context: Context) : ViewModel() {
                 withContext(Dispatchers.IO) { offlineRepository.loadStops() }
             }.getOrNull().orEmpty()
 
+            Log.d("TransportViewModel", "Loaded ${offlineStops.size} stops from offline cache")
+            if (offlineStops.isNotEmpty()) {
+                val sampleSize = minOf(10, offlineStops.size)
+                val emptyDesserteCount = offlineStops.take(sampleSize).count { it.properties.desserte.isBlank() }
+                val unknownCount = offlineStops.take(sampleSize).count { it.properties.desserte.equals("UNKNOWN", ignoreCase = true) }
+                Log.d("TransportViewModel", "Offline cache analysis (sample=$sampleSize): ${emptyDesserteCount} empty, ${unknownCount} UNKNOWN")
+                
+                // If most stops have empty desserte, force refresh from WFS
+                if (emptyDesserteCount > sampleSize * 0.8) {
+                    Log.w("TransportViewModel", "Offline cache has mostly empty desserte - forcing refresh from WFS")
+                    // Clear the cache and force fresh data load
+                    withContext(Dispatchers.IO) {
+                        try {
+                            File(context.filesDir, "offline_data/stops.json.gz").delete()
+                            Log.d("TransportViewModel", "Cleared stale stops cache")
+                        } catch (e: Exception) {
+                            Log.e("TransportViewModel", "Failed to clear cache: ${e.message}")
+                        }
+                    }
+                    // Now load fresh data
+                    return@launch loadStops()
+                }
+            }
+
             val baseStops = offlineStops.ifEmpty {
                 runCatching {
                     withContext(Dispatchers.IO) { transportApi.getTransportStops().features.orEmpty() }
                 }.getOrElse { error ->
+                    Log.e("TransportViewModel", "Failed to load transport stops from WFS API: ${error.message}", error)
                     _stopsUiState.value =
                         TransportStopsUiState.Error(
                             error.message ?: "Unable to load transport stops"
@@ -218,8 +244,23 @@ class TransportViewModel(private val context: Context) : ViewModel() {
                 val ratioNonBlank = nonBlankCount.toDouble() / sampleSize.toDouble()
                 val strongStopCount = sampleStops.count { it.properties.desserte.isNotBlank() && hasStrongToken(it.properties.desserte) }
                 
-                // Only enrich if absolutely necessary (very few stops have desserte data)
-                val shouldEnrich = strongStopCount == 0 && ratioNonBlank < 0.1
+                // Debug logging to understand desserte data quality
+                val unknownCount = sampleStops.count { it.properties.desserte.equals("UNKNOWN", ignoreCase = true) }
+                val emptyCount = sampleStops.count { it.properties.desserte.isBlank() }
+                
+                Log.d("TransportViewModel", "Stop desserte analysis (sample=$sampleSize):")
+                Log.d("TransportViewModel", "  Non-blank: $nonBlankCount (${ratioNonBlank * 100}%)")
+                Log.d("TransportViewModel", "  Strong stops: $strongStopCount")
+                Log.d("TransportViewModel", "  UNKNOWN: $unknownCount")
+                Log.d("TransportViewModel", "  Empty: $emptyCount")
+                
+                // Enrichment conditions:
+                // 1. Original condition: very few stops have desserte (legacy case)
+                // 2. Many stops have "UNKNOWN" desserte (WFS data quality issue)
+                // 3. Few strong stops relative to total (indicates missing bus data)
+                val shouldEnrich = strongStopCount == 0 && ratioNonBlank < 0.1 || 
+                                 unknownCount > sampleSize * 0.3 ||
+                                 (strongStopCount < sampleSize * 0.2 && unknownCount > sampleSize * 0.2)
 
                 if (!shouldEnrich) {
                     baseStops to false

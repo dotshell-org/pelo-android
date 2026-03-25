@@ -31,9 +31,36 @@ class PeloApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "PeloApplication onCreate()")
+        
+        // Verify Raptor assets are available at startup
+        verifyRaptorAssets()
+        
         TransportServiceProvider.initialize(this)
         RetrofitInstance.initialize(this, TransportServiceProvider.getTransportConfig())
         scheduleTrafficAlertsWork()
+    }
+
+    /**
+     * Verify that all required Raptor assets are present
+     * Logs critical errors if assets are missing
+     */
+    private fun verifyRaptorAssets() {
+        try {
+            val raptorRepository = com.pelotcl.app.generic.data.repository.itinerary.RaptorRepository.getInstance(this)
+            val assetsAvailable = raptorRepository.checkAssetsAvailable()
+            
+            if (!assetsAvailable) {
+                Log.e(TAG, "CRITICAL: Raptor assets are missing!")
+                Log.e(TAG, "This will cause bus stops to disappear from search and map functionality.")
+                Log.e(TAG, "Required assets: holidays.json, stops_*.bin, routes_*.bin")
+                Log.e(TAG, "Please try: File > Invalidate Caches / Restart in Android Studio")
+                Log.e(TAG, "Then clean build: ./gradlew clean assembleDebug")
+            } else {
+                Log.d(TAG, "All Raptor assets verified successfully")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking Raptor assets: ${e.message}", e)
+        }
     }
 
     override fun onTrimMemory(level: Int) {

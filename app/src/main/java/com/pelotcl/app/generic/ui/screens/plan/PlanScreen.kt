@@ -2548,8 +2548,9 @@ private fun findNearestStopName(userLocation: LatLng, stops: List<StopFeature>):
                 lat2 = lat,
                 lon2 = lon
             )
-            // Only consider stops that have lines (desserte is not empty)
-            if (distance < nearestDistance && stop.properties.desserte.isNotEmpty()) {
+            // Consider all stops, not just those with desserte
+            // This prevents bus stops from disappearing when Raptor assets are missing
+            if (distance < nearestDistance) {
                 nearestDistance = distance
                 nearestName = stop.properties.nom
             }

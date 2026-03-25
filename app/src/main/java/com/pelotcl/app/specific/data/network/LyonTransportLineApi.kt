@@ -1,5 +1,6 @@
 package com.pelotcl.app.specific.data.network
 
+import android.util.Log
 import com.google.gson.JsonObject
 import com.pelotcl.app.generic.data.model.FeatureCollection
 import com.pelotcl.app.generic.data.model.StopCollection
@@ -204,6 +205,14 @@ class LyonTransportLineApiWrapper(private val lyonApi: LyonTransportLineApi) {
         outputFormat: String, srsName: String, startIndex: Int, sortBy: String, count: Int
     ): StopCollection {
         val lyonResponse = lyonApi.getTransportStopsRaw(service, version, request, typename, outputFormat, srsName, startIndex, sortBy, count)
+        
+        // Debug logging to understand WFS response structure
+        Log.d("LyonTransportLineApi", "WFS stops response: ${lyonResponse.features.size} features")
+        if (lyonResponse.features.isNotEmpty()) {
+            val firstFeature = lyonResponse.features.first()
+            Log.d("LyonTransportLineApi", "First stop properties: ${firstFeature.properties}")
+        }
+        
         return com.pelotcl.app.specific.data.mapper.StopMapper.mapToGeneric(lyonResponse)
     }
 }
