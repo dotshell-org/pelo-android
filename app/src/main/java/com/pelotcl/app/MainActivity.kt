@@ -42,7 +42,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -54,30 +53,31 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.google.android.gms.location.LocationServices
-import com.pelotcl.app.ui.components.AddFavoriteDialog
-import com.pelotcl.app.ui.components.FavoritesBar
-import com.pelotcl.app.ui.components.LineSearchResult
-import com.pelotcl.app.ui.components.SimpleSearchBar
-import com.pelotcl.app.ui.components.StationSearchResult
-import com.pelotcl.app.data.repository.SearchHistoryRepository
-import com.pelotcl.app.data.repository.SearchHistoryItem
-import com.pelotcl.app.data.repository.SearchType
-import com.pelotcl.app.data.repository.MapStyle
-import com.pelotcl.app.ui.screens.AboutScreen
-import com.pelotcl.app.ui.screens.ContactScreen
-import com.pelotcl.app.ui.screens.CreditsScreen
-import com.pelotcl.app.ui.screens.LegalScreen
-import com.pelotcl.app.ui.screens.PlanScreen
-import com.pelotcl.app.ui.screens.ItinerarySettingsScreen
-import com.pelotcl.app.ui.screens.OfflineSettingsScreen
-import com.pelotcl.app.ui.screens.SettingsScreen
-import com.pelotcl.app.ui.theme.PeloTheme
-import com.pelotcl.app.ui.theme.Red500
-import com.pelotcl.app.ui.viewmodel.TransportViewModel
-import com.pelotcl.app.ui.viewmodel.TransportStopsUiState
-import com.pelotcl.app.data.api.RetrofitInstance
-import com.pelotcl.app.data.cache.TransportCache
-import com.pelotcl.app.utils.BusIconHelper
+import com.pelotcl.app.generic.ui.components.favorites.AddFavoriteDialog
+import com.pelotcl.app.generic.ui.components.favorites.FavoritesBar
+import com.pelotcl.app.generic.ui.components.search.TransportSearchBar
+import com.pelotcl.app.generic.ui.components.search.TransportSearchContent
+import com.pelotcl.app.generic.ui.components.search.StationSearchResult
+import com.pelotcl.app.generic.data.repository.offline.SearchHistoryItem
+import com.pelotcl.app.generic.data.repository.offline.SearchType
+import com.pelotcl.app.generic.data.repository.offline.MapStyleCompat
+import com.pelotcl.app.generic.ui.screens.settings.about.AboutScreen
+import com.pelotcl.app.generic.ui.screens.settings.about.ContactScreen
+import com.pelotcl.app.generic.ui.screens.settings.about.CreditsScreen
+import com.pelotcl.app.generic.ui.screens.settings.about.LegalScreen
+import com.pelotcl.app.generic.ui.screens.plan.PlanScreen
+import com.pelotcl.app.specific.ui.screens.settings.ItinerarySettingsScreen
+import com.pelotcl.app.generic.ui.screens.settings.OfflineSettingsScreen
+import com.pelotcl.app.generic.ui.screens.settings.SettingsScreen
+import com.pelotcl.app.generic.ui.theme.PeloTheme
+import com.pelotcl.app.generic.ui.theme.AccentColor
+import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
+import com.pelotcl.app.generic.ui.viewmodel.TransportStopsUiState
+import com.pelotcl.app.generic.data.repository.offline.SchedulesRepository
+import com.pelotcl.app.generic.ui.theme.PrimaryColor
+import com.pelotcl.app.generic.ui.theme.SecondaryColor
+import com.pelotcl.app.specific.data.cache.TransportCacheImpl
+import com.pelotcl.app.utils.transport.BusIconHelper
 import com.pelotcl.app.utils.LocationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -95,22 +95,23 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Preload disk cache and SQLite in parallel BEFORE UI (critical for first render)
+        // Preload disk cache and binary schedule data in parallel BEFORE UI (critical for first render)
         // Retrofit initialization is deferred to after setContent
         appScope.launch {
             try {
-                // Parallel cache and SQLite warmup - these are needed for initial UI
+                // Parallel cache and schedule-data warmup - these are needed for initial UI
                 val cacheJob = launch {
-                    val cache = TransportCache(applicationContext)
+                    val cache = TransportCacheImpl(applicationContext)
                     cache.preloadFromDisk()
                 }
-                val sqliteJob = launch {
-                    val schedulesRepo = com.pelotcl.app.data.gtfs.SchedulesRepository.getInstance(applicationContext)
+                val schedulesJob = launch {
+                    val schedulesRepo =
+                        SchedulesRepository.getInstance(applicationContext)
                     schedulesRepo.warmupDatabase()
                 }
-                // Wait for cache and SQLite (critical for UI)
+                // Wait for cache and schedule data warmup (critical for UI)
                 cacheJob.join()
-                sqliteJob.join()
+                schedulesJob.join()
             } catch (e: Exception) {
                 android.util.Log.w("MainActivity", "Startup preload failed: ${e.message}")
             }
@@ -139,14 +140,17 @@ class MainActivity : ComponentActivity() {
             // Avoids ~960 individual getIdentifier() calls during first map render
             BusIconHelper.preloadResourceIds(applicationContext)
 
-            // Initialize HTTP cache for network requests (not needed for cached data display)
-            RetrofitInstance.initialize(applicationContext)
+            // TransportServiceProvider + RetrofitInstance are initialized in PeloApplication.onCreate
+            // so background workers and repositories can run before the first activity starts.
 
             // Preload Raptor library in background (only needed for itinerary calculations)
             // yield() gives the UI thread priority without an arbitrary delay
             kotlinx.coroutines.yield()
             try {
-                val raptorRepo = com.pelotcl.app.data.repository.RaptorRepository.getInstance(applicationContext)
+                val raptorRepo =
+                    com.pelotcl.app.generic.data.repository.itinerary.RaptorRepository.getInstance(
+                        applicationContext
+                    )
                 raptorRepo.initialize()
                 raptorRepo.preloadJourneyCache()
             } catch (e: Exception) {
@@ -156,7 +160,7 @@ class MainActivity : ComponentActivity() {
             // Refresh home screen widgets with fresh schedule data
             delay(3000)
             try {
-                val widget = com.pelotcl.app.widget.PeloWidget()
+                val widget = com.pelotcl.app.generic.widget.PeloWidget()
                 val manager = androidx.glance.appwidget.GlanceAppWidgetManager(applicationContext)
                 val glanceIds = manager.getGlanceIds(widget.javaClass)
                 for (glanceId in glanceIds) {
@@ -227,33 +231,19 @@ fun NavBar(modifier: Modifier = Modifier) {
         }
     }
     val viewModel: TransportViewModel = viewModel(factory = viewModelFactory)
-    
-    // Search history repository
-    val searchHistoryRepository = remember { SearchHistoryRepository(context) }
 
-    var searchQuery by remember { mutableStateOf("") }
-    var stationSearchResults by remember { mutableStateOf<List<StationSearchResult>>(emptyList()) }
-    var lineSearchResults by remember { mutableStateOf<List<LineSearchResult>>(emptyList()) }
-    var searchHistory by remember { mutableStateOf<List<SearchHistoryItem>>(emptyList()) }
-    var selectedStationFromSearch by remember { mutableStateOf<StationSearchResult?>(null) }
-    var currentMapStyle by remember { mutableStateOf(MapStyle.POSITRON) }
+    var currentMapStyle by remember { mutableStateOf(MapStyleCompat.POSITRON) }
     var isSearchExpanded by remember { mutableStateOf(false) }
     var stopOptionsSelectedStop by remember { mutableStateOf<StationSearchResult?>(null) }
-    val favoriteStops by viewModel.favoriteStops.collectAsState()
-    var favoriteStopItems by remember { mutableStateOf<List<SearchHistoryItem>>(emptyList()) }
-    val stopsUiState by viewModel.stopsUiState.collectAsState()
-    val userFavorites by viewModel.userFavorites.collectAsState()
+    val favoriteStops by viewModel.favoriteStops.collectAsState(initial = emptySet())
+    val stopsUiState by viewModel.stopsUiState.collectAsState(initial = TransportStopsUiState.Loading)
+    val userFavorites by viewModel.userFavorites.collectAsState(initial = emptyList())
     var showAddFavoriteDialog by remember { mutableStateOf(false) }
-    
-    // Load search history on startup
-    LaunchedEffect(Unit) {
-        searchHistory = searchHistoryRepository.getSearchHistory()
-    }
 
     LaunchedEffect(favoriteStops, stopsUiState) {
         val stops = (stopsUiState as? TransportStopsUiState.Success)?.stops
-        favoriteStopItems = favoriteStops.map { stopName ->
-            val stop = stops?.find { it.properties.nom.equals(stopName, ignoreCase = true) }
+        favoriteStops.map { stopName ->
+            val stop = stops?.find { (it as com.pelotcl.app.generic.data.model.StopFeature).properties.nom.equals(stopName, ignoreCase = true) }
             val lines = stop?.let { BusIconHelper.getAllLinesForStop(it) } ?: emptyList()
             SearchHistoryItem(
                 query = stopName,
@@ -262,19 +252,19 @@ fun NavBar(modifier: Modifier = Modifier) {
             )
         }
     }
-    
+
     // User location for itinerary (continuously updated)
     var userLocation by remember { mutableStateOf<LatLng?>(null) }
-    
+
     // Fused location client for continuous updates
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
     // Itinerary destination stop
     var itineraryDestinationStop by remember { mutableStateOf<String?>(null) }
     var isItineraryModeActive by remember { mutableStateOf(false) }
-    
+
     val scope = rememberCoroutineScope()
-    
+
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -332,26 +322,6 @@ fun NavBar(modifier: Modifier = Modifier) {
         }
     }
 
-    LaunchedEffect(searchQuery) {
-        val current = searchQuery.trim()
-        if (current.isNotEmpty()) {
-            // Debounce to avoid querying on every keystroke
-            delay(300)
-            if (current == searchQuery.trim()) {
-                // Search for stops
-                val stopResults = viewModel.searchStops(current)
-                stationSearchResults = stopResults
-                
-                // Search for lines
-                val lineResults = viewModel.searchLines(current)
-                lineSearchResults = lineResults
-            }
-        } else {
-            stationSearchResults = emptyList()
-            lineSearchResults = emptyList()
-        }
-    }
-
     // Observer la route courante pour gérer la barre de statut
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -401,7 +371,7 @@ fun NavBar(modifier: Modifier = Modifier) {
             bottomBar = {
                 NavigationBar(
                     windowInsets = NavigationBarDefaults.windowInsets,
-                    containerColor = Color.Black
+                    containerColor = PrimaryColor
                 ) {
                     Destination.entries.forEachIndexed { index, destination ->
                         NavigationBarItem(
@@ -428,7 +398,10 @@ fun NavBar(modifier: Modifier = Modifier) {
                                     )
                                     if (currentRoute in settingsSubRoutes) {
                                         // Pop back to Settings root
-                                        navController.popBackStack(Destination.PARAMETRES.route, false)
+                                        navController.popBackStack(
+                                            Destination.PARAMETRES.route,
+                                            false
+                                        )
                                     } else if (selectedDestination != index) {
                                         selectedDestination = index
                                         showLinesSheet = false
@@ -452,11 +425,11 @@ fun NavBar(modifier: Modifier = Modifier) {
                             },
                             label = { Text(destination.label) },
                             colors = NavigationBarItemDefaults.colors(
-                                indicatorColor = Red500,
-                                selectedIconColor = Color.White,
-                                unselectedIconColor = Color.White,
-                                selectedTextColor = Color.White,
-                                unselectedTextColor = Color.White
+                                indicatorColor = AccentColor,
+                                selectedIconColor = SecondaryColor,
+                                unselectedIconColor = SecondaryColor,
+                                selectedTextColor = SecondaryColor,
+                                unselectedTextColor = SecondaryColor
                             )
                         )
                     }
@@ -477,8 +450,6 @@ fun NavBar(modifier: Modifier = Modifier) {
                     },
                     itinerarySelectedStopName = itineraryDestinationStop,
                     onItinerarySelectionHandled = { itineraryDestinationStop = null },
-                    searchSelectedStop = selectedStationFromSearch,
-                    onSearchSelectionHandled = { selectedStationFromSearch = null },
                     optionsSelectedStop = stopOptionsSelectedStop,
                     onOptionsSelectionHandled = { stopOptionsSelectedStop = null },
                     viewModel = viewModel,
@@ -492,7 +463,7 @@ fun NavBar(modifier: Modifier = Modifier) {
                         isItineraryModeActive = active
                     }
                 )
-                
+
                 // Settings screens - displayed on top when on settings tab
                 if (selectedDestination == Destination.PARAMETRES.ordinal) {
                     AppNavHost(
@@ -505,21 +476,21 @@ fun NavBar(modifier: Modifier = Modifier) {
                     )
                 }
             }
-            
+
         }
 
         // UI Overlays - Search Bar at top, favorites row (with create button) below it
         // LIVE button remains in PlanScreen for proper integration with map controls
-        
+
         // Calculate UI element positions - declared outside if blocks for shared access
         val searchBarHeight = 56.dp // Standard Material 3 search bar height
-        val addFavoriteButtonHeight = 40.dp // Favorites row height approximation
-        val spacingBetweenElements = 4.dp // Spacing between UI elements
-        
+        40.dp // Favorites row height approximation
+        4.dp // Spacing between UI elements
+
         // Position calculations:
         // Favorites row sits below search bar and contains the create button + favorites chips
         val favoritesBarTopPosition = searchBarHeight + 38.dp
-        
+
         // Search Bar - keep visible on Plan, including when station/line detail sheets are open.
         if (selectedDestination == Destination.PLAN.ordinal && !showLinesSheet && itineraryDestinationStop == null && !isItineraryModeActive) {
             Box(
@@ -527,77 +498,20 @@ fun NavBar(modifier: Modifier = Modifier) {
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
             ) {
-                SimpleSearchBar(
-                    searchResults = stationSearchResults,
-                    lineSearchResults = lineSearchResults,
-                    searchHistory = searchHistory,
-                    onQueryChange = { query ->
-                        searchQuery = query
-                    },
-                    onSearch = { result ->
-                        // Save to search history
-                        searchHistoryRepository.addToHistory(
-                            SearchHistoryItem(
-                                query = result.stopName,
-                                type = SearchType.STOP,
-                                lines = result.lines
-                            )
-                        )
-                        searchHistory = searchHistoryRepository.getSearchHistory()
-                        
-                        // onSearch launches itinerary (main click behavior)
-                        itineraryDestinationStop = result.stopName
-                        searchQuery = ""
-                    },
-                    onLineSearch = { lineResult ->
-                        // Save to search history
-                        searchHistoryRepository.addToHistory(
-                            SearchHistoryItem(
-                                query = lineResult.lineName,
-                                type = SearchType.LINE
-                            )
-                        )
-                        searchHistory = searchHistoryRepository.getSearchHistory()
-                        
-                        // Select the line to show its details (via PlanScreen's LaunchedEffect)
-                        viewModel.selectLine(lineResult.lineName)
-                        searchQuery = ""
-                    },
-                    onHistoryItemClick = { historyItem ->
-                        if (historyItem.type == SearchType.LINE) {
-                            // Open line details (via PlanScreen's LaunchedEffect)
-                            viewModel.selectLine(historyItem.query)
-                        } else {
-                            // Main click on history item launches itinerary
-                            itineraryDestinationStop = historyItem.query
-                        }
-                    },
-                    onHistoryItemRemove = { historyItem ->
-                        searchHistoryRepository.removeFromHistory(historyItem.query, historyItem.type)
-                        searchHistory = searchHistoryRepository.getSearchHistory()
-                    },
-                    showDarkOutline = currentMapStyle == MapStyle.DARK_MATTER,
+                TransportSearchBar(
+                    viewModel = viewModel,
+                    currentMapStyle = currentMapStyle,
+                    content = TransportSearchContent.STOPS_AND_LINES,
+                    showHistory = true,
                     onExpandedChange = { expanded -> isSearchExpanded = expanded },
-                    onStopOptionsClick = { stopResult ->
-                        searchHistoryRepository.addToHistory(
-                            SearchHistoryItem(
-                                query = stopResult.stopName,
-                                type = SearchType.STOP,
-                                lines = stopResult.lines
-                            )
-                        )
-                        searchHistory = searchHistoryRepository.getSearchHistory()
-                        // onStopOptionsClick shows stop details (button click behavior)
+                    onStopPrimary = { stop ->
+                        itineraryDestinationStop = stop.stopName
+                    },
+                    onStopSecondary = { stopResult ->
                         stopOptionsSelectedStop = stopResult
                     },
-                    onHistoryItemOptionsClick = { historyItem ->
-                        if (historyItem.type == SearchType.STOP) {
-                            // Button click on history item shows stop details
-                            stopOptionsSelectedStop = StationSearchResult(
-                                stopName = historyItem.query,
-                                lines = historyItem.lines
-                            )
-                        }
+                    onLineSelected = { line ->
+                        viewModel.selectLine(line.lineName)
                     }
                 )
             }
@@ -623,7 +537,8 @@ fun NavBar(modifier: Modifier = Modifier) {
                     },
                     onRemoveFavoriteClick = { favorite ->
                         viewModel.removeUserFavorite(favorite.id)
-                    }
+                    },
+                    isDarkMode = currentMapStyle == MapStyleCompat.DARK_MATTER
                 )
             }
         }

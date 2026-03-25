@@ -81,7 +81,7 @@
 -dontwarn sun.misc.**
 
 # Application classes that will be serialized/deserialized over Gson
--keep class com.pelotcl.app.data.model.TrafficAlert { *; }
+-keep class com.pelotcl.app.generic.data.model.TrafficAlert { *; }
 
 # Prevent proguard from stripping interface information from TypeAdapter, TypeAdapterFactory,
 # JsonSerializer, JsonDeserializer instances (so they can be used in @JsonAdapter)

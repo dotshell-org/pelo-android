@@ -6,10 +6,12 @@ import androidx.work.Configuration
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import com.pelotcl.app.data.cache.JourneyCache
-import com.pelotcl.app.data.gtfs.SchedulesRepository
-import com.pelotcl.app.utils.BusIconHelper
-import com.pelotcl.app.worker.TrafficAlertsWorker
+import com.pelotcl.app.generic.data.cache.JourneyCache
+import com.pelotcl.app.generic.data.network.RetrofitInstance
+import com.pelotcl.app.generic.data.repository.offline.SchedulesRepository
+import com.pelotcl.app.generic.service.TransportServiceProvider
+import com.pelotcl.app.utils.transport.BusIconHelper
+import com.pelotcl.app.generic.worker.TrafficAlertsWorker
 import java.util.concurrent.TimeUnit
 
 class PeloApplication : Application(), Configuration.Provider {
@@ -20,7 +22,7 @@ class PeloApplication : Application(), Configuration.Provider {
     }
 
     // On-demand WorkManager initialization (replaces automatic ContentProvider init)
-    // This defers SQLite init until WorkManager is first accessed, saving ~50-100ms on cold start
+    // This defers non-critical startup work until WorkManager is first accessed.
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setMinimumLoggingLevel(Log.INFO)
@@ -29,7 +31,36 @@ class PeloApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "PeloApplication onCreate()")
+        
+        // Verify Raptor assets are available at startup
+        verifyRaptorAssets()
+        
+        TransportServiceProvider.initialize(this)
+        RetrofitInstance.initialize(this, TransportServiceProvider.getTransportConfig())
         scheduleTrafficAlertsWork()
+    }
+
+    /**
+     * Verify that all required Raptor assets are present
+     * Logs critical errors if assets are missing
+     */
+    private fun verifyRaptorAssets() {
+        try {
+            val raptorRepository = com.pelotcl.app.generic.data.repository.itinerary.RaptorRepository.getInstance(this)
+            val assetsAvailable = raptorRepository.checkAssetsAvailable()
+            
+            if (!assetsAvailable) {
+                Log.e(TAG, "CRITICAL: Raptor assets are missing!")
+                Log.e(TAG, "This will cause bus stops to disappear from search and map functionality.")
+                Log.e(TAG, "Required assets: holidays.json, stops_*.bin, routes_*.bin")
+                Log.e(TAG, "Please try: File > Invalidate Caches / Restart in Android Studio")
+                Log.e(TAG, "Then clean build: ./gradlew clean assembleDebug")
+            } else {
+                Log.d(TAG, "All Raptor assets verified successfully")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking Raptor assets: ${e.message}", e)
+        }
     }
 
     override fun onTrimMemory(level: Int) {

@@ -1,0 +1,360 @@
+package com.pelotcl.app.specific.data.network
+
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
+import com.google.gson.JsonElement
+import com.pelotcl.app.generic.data.model.FeatureCollection
+import com.pelotcl.app.generic.data.model.Feature
+import com.pelotcl.app.generic.data.model.StopCollection
+import com.pelotcl.app.generic.data.model.TrafficAlertsResponse
+import com.pelotcl.app.generic.data.model.Geometry
+import com.pelotcl.app.generic.data.model.TransportLineProperties
+import com.pelotcl.app.generic.data.network.TransportApi
+import com.pelotcl.app.generic.data.network.TransportLinesQuery
+import com.pelotcl.app.specific.data.mapper.TrafficAlertMapper
+import com.pelotcl.app.specific.data.model.LyonTrafficAlertsResponse
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.http.GET
+import java.text.Normalizer
+
+/**
+ * Lyon-specific implementation of TransportApi
+ * Maps traffic alerts from Lyon payloads; WFS line/stop requests use [LyonTransportLineApi]
+ * + [LyonTransportLineApiWrapper] so GeoJSON properties match the Lyon field names.
+ */
+class LyonTransportApi(private val baseUrl: String) : TransportApi {
+
+    interface LyonTrafficAlertsEndpoint {
+        @GET("pelo/v1/traffic/alerts")
+        suspend fun getLyonTrafficAlerts(): LyonTrafficAlertsResponse
+    }
+
+    /**
+     * WFS / GeoJSON lines and stops use the city data host (e.g. Grand Lyon).
+     * Traffic alerts are served from the Pelo API on api.dotshell.eu only.
+     */
+    private val linesRetrofit: Retrofit = Retrofit.Builder()
+        .baseUrl(baseUrl)
+        .addConverterFactory(GsonConverterFactory.create())
+        .build()
+
+    private val trafficAlertsRetrofit: Retrofit = Retrofit.Builder()
+        .baseUrl(TRAFFIC_ALERTS_BASE_URL)
+        .addConverterFactory(GsonConverterFactory.create())
+        .build()
+
+    private val lyonTrafficApi: LyonTrafficAlertsEndpoint =
+        trafficAlertsRetrofit.create(LyonTrafficAlertsEndpoint::class.java)
+
+    private val lyonLineApi: LyonTransportLineApi =
+        linesRetrofit.create(LyonTransportLineApi::class.java)
+
+    private val lineApiWrapper = LyonTransportLineApiWrapper(lyonLineApi)
+
+    override suspend fun getTrafficAlerts(): TrafficAlertsResponse {
+        val lyonResponse = lyonTrafficApi.getLyonTrafficAlerts()
+        return TrafficAlertMapper.mapResponseToGeneric(lyonResponse)
+    }
+
+    override suspend fun getLines(query: TransportLinesQuery): FeatureCollection {
+        return when (query) {
+            TransportLinesQuery.StrongLines -> fetchStrongLines()
+            is TransportLinesQuery.LineByName -> fetchLineByName(query.lineName)
+            is TransportLinesQuery.BusPage -> {
+                lineApiWrapper.getBusLines(
+                    SERVICE,
+                    VERSION,
+                    REQUEST,
+                    TYPENAME_BUS,
+                    OUTPUT_FORMAT,
+                    SRSNAME_4171,
+                    query.startIndex,
+                    SORT_BY,
+                    query.count,
+                    null
+                )
+            }
+        }
+    }
+
+    override suspend fun getTransportStops(): StopCollection {
+        return lineApiWrapper.getTransportStops(
+            SERVICE,
+            VERSION,
+            REQUEST,
+            TYPENAME_STOPS,
+            OUTPUT_FORMAT,
+            SRSNAME_4171,
+            START_INDEX,
+            SORT_BY,
+            COUNT_STOPS
+        )
+    }
+
+    private suspend fun fetchStrongLines(): FeatureCollection {
+        val metro = lineApiWrapper.getMetroLines(
+            SERVICE,
+            VERSION,
+            REQUEST,
+            TYPENAME_METRO,
+            OUTPUT_FORMAT,
+            SRSNAME_4171,
+            START_INDEX,
+            SORT_BY,
+            COUNT_METRO_TRAM_NAVIGONE
+        ).features
+
+        val tram = lineApiWrapper.getTramLines(
+            SERVICE,
+            VERSION,
+            REQUEST,
+            TYPENAME_TRAM,
+            OUTPUT_FORMAT,
+            SRSNAME_4171,
+            START_INDEX,
+            SORT_BY,
+            COUNT_METRO_TRAM_NAVIGONE
+        ).features
+
+        val navigone = lineApiWrapper.getNavigoneLines(
+            SERVICE,
+            VERSION,
+            REQUEST,
+            TYPENAME_NAVIGONE,
+            OUTPUT_FORMAT,
+            SRSNAME_4171,
+            START_INDEX,
+            SORT_BY,
+            COUNT_METRO_TRAM_NAVIGONE
+        ).features
+
+        val trambus = lineApiWrapper.getTrambusLines(
+            SERVICE,
+            VERSION,
+            REQUEST,
+            TYPENAME_BUS,
+            OUTPUT_FORMAT,
+            SRSNAME_4171,
+            START_INDEX,
+            SORT_BY,
+            COUNT_TRAMBUS_LINES,
+            TRAMBUS_CQL_FILTER
+        ).features
+
+        val rx = fetchRhonexpressFeatures()
+
+        val allFeatures = metro + tram + navigone + trambus + rx
+        val uniqueLines = allFeatures
+            .groupBy { it.properties.traceCode }
+            .map { (_, features) -> features.first() }
+
+        return FeatureCollection(
+            type = "FeatureCollection",
+            features = uniqueLines,
+            totalFeatures = uniqueLines.size,
+            numberMatched = uniqueLines.size,
+            numberReturned = uniqueLines.size
+        )
+    }
+
+    private suspend fun fetchLineByName(lineName: String): FeatureCollection {
+        val requested = lineName.trim()
+        if (requested.isEmpty()) return FeatureCollection(features = emptyList())
+
+        val normalized = Normalizer.normalize(requested, Normalizer.Form.NFD)
+            .replace("\\p{Mn}+".toRegex(), "")
+            .uppercase()
+
+        // Alias handling (Rhônexpress).
+        val isRxRequest = normalized == "RX" ||
+            normalized.contains("RHONEXPRESS") ||
+            normalized.contains("RHONEXPRES")
+
+        val features = if (isRxRequest) {
+            fetchRhonexpressFeatures()
+        } else {
+            val escapedAlias = normalized.replace("'", "''")
+            val cqlFilter = "ligne = '$escapedAlias'"
+
+            val response = lineApiWrapper.getBusLineByName(
+                SERVICE,
+                VERSION,
+                REQUEST,
+                TYPENAME_BUS,
+                OUTPUT_FORMAT,
+                SRSNAME_4171,
+                SORT_BY,
+                BUS_LINE_BY_NAME_COUNT,
+                cqlFilter
+            )
+            response.features
+        }
+
+        val unique = features
+            .groupBy { it.properties.traceCode }
+            .map { (_, group) -> group.first() }
+
+        return FeatureCollection(
+            type = "FeatureCollection",
+            features = unique,
+            totalFeatures = unique.size,
+            numberMatched = unique.size,
+            numberReturned = unique.size
+        )
+    }
+
+    private suspend fun fetchRhonexpressFeatures(): List<Feature> {
+        val raw = lyonLineApi.getSpecialLineRaw(
+            SERVICE,
+            VERSION,
+            REQUEST,
+            TYPENAME_RX_LINES,
+            OUTPUT_FORMAT,
+            SRSNAME_4326,
+            START_INDEX,
+            SORT_BY,
+            COUNT_RX_LINES
+        )
+        return mapJsonToFeatures(raw)
+    }
+
+    private fun mapJsonToFeatures(json: JsonObject): List<Feature> {
+        val featuresArray: JsonArray = when {
+            json.has("features") -> json.getAsJsonArray("features")
+            json.has("featureMember") -> json.getAsJsonArray("featureMember")
+            json.has("featureMembers") -> json.getAsJsonArray("featureMembers")
+            else -> return emptyList()
+        }
+
+        fun parsePosition(pos: JsonElement): List<Double>? {
+            if (!pos.isJsonArray) return null
+            val arr = pos.asJsonArray
+            if (arr.size() < 2) return null
+            return listOf(arr[0].asDouble, arr[1].asDouble)
+        }
+
+        fun parseCoordinatesAsMultiLines(coords: JsonElement): List<List<List<Double>>>? {
+            if (!coords.isJsonArray) return null
+            val outer = coords.asJsonArray
+            if (outer.size() == 0) return null
+
+            val first = outer[0]
+            if (!first.isJsonArray) return null
+            val firstArr = first.asJsonArray
+            if (firstArr.size() == 0) return null
+            val firstInner = firstArr[0]
+
+            val isMultiLine = firstInner != null && firstInner.isJsonArray
+
+            return if (isMultiLine) {
+                val lines = outer.mapNotNull { lineEl ->
+                    if (!lineEl.isJsonArray) return@mapNotNull null
+                    val lineArr = lineEl.asJsonArray
+                    val points = lineArr.mapNotNull { parsePosition(it) }
+                    if (points.isEmpty()) null else points
+                }
+                if (lines.isEmpty()) null else lines
+            } else {
+                val points = outer.mapNotNull { parsePosition(it) }
+                if (points.isEmpty()) null else listOf(points)
+            }
+        }
+
+        val result = mutableListOf<Feature>()
+
+        for (featureElement in featuresArray) {
+            val featureObject = featureElement.asJsonObject
+            val id = featureObject.get("id")?.asString ?: "rx-${System.nanoTime()}"
+
+            val properties = featureObject.getAsJsonObject("properties") ?: featureObject
+            val gid =
+                properties.get("gid")?.asInt
+                    ?: properties.get("GID")?.asInt
+                    ?: kotlin.math.abs(id.hashCode())
+
+            val geometryObject = featureObject
+                .getAsJsonObject("geometry")
+                ?: featureObject.getAsJsonObject("the_geom")
+                ?: featureObject.getAsJsonObject("geom")
+                ?: continue
+
+            val coordinatesElement = geometryObject.get("coordinates") ?: continue
+            val coordinates = parseCoordinatesAsMultiLines(coordinatesElement) ?: continue
+
+            result.add(
+                Feature(
+                    type = "Feature",
+                    id = "rx_$id",
+                    geometry = Geometry(
+                        type = "MultiLineString",
+                        coordinates = coordinates
+                    ),
+                    geometryName = null,
+                    properties = TransportLineProperties(
+                        lineName = "RX",
+                        traceCode = "RX-$gid",
+                        lineId = "RX",
+                        traceType = "",
+                        traceName = "Rhônexpress",
+                        direction = "ALLER",
+                        origin = "Gare Part-Dieu Villette",
+                        destination = "Aéroport St Exupéry -RX",
+                        originName = "Gare Part-Dieu Villette",
+                        destinationName = "Aéroport St Exupéry -RX",
+                        transportType = "TRAM",
+                        startDate = "",
+                        endDate = null,
+                        lineTypeCode = "TRAM",
+                        lineTypeName = "Tramway",
+                        lastUpdate = "",
+                        lastUpdateFme = "",
+                        gid = gid,
+                        color = "#E30613"
+                    ),
+                    bbox = null
+                )
+            )
+        }
+
+        return result
+    }
+
+    companion object {
+        /** Documented Pelo traffic alerts endpoint host; path is [LyonTrafficAlertsEndpoint]. */
+        private const val TRAFFIC_ALERTS_BASE_URL = "https://api.dotshell.eu/"
+
+        // Shared WFS request defaults for Lyon's Sytral GeoServer.
+        private const val SERVICE = "WFS"
+        private const val VERSION = "2.0.0"
+        private const val REQUEST = "GetFeature"
+        private const val OUTPUT_FORMAT = "application/json"
+        private const val SORT_BY = "gid"
+        private const val START_INDEX = 0
+
+        private const val SRSNAME_4171 = "EPSG:4171"
+        private const val SRSNAME_4326 = "EPSG:4326"
+
+        private const val COUNT_METRO_TRAM_NAVIGONE = 1000
+        private const val COUNT_TRAMBUS_LINES = 1000
+        private const val COUNT_STOPS = 10000
+        // Bus line pagination uses interface-provided `count` / `startIndex`.
+
+        // Lyon specific layer typenames.
+        private const val TYPENAME_METRO = "sytral:tcl_sytral.tcllignemf_2_0_0"
+        private const val TYPENAME_TRAM = "sytral:tcl_sytral.tcllignetram_2_0_0"
+        private const val TYPENAME_BUS = "sytral:tcl_sytral.tcllignebus_2_0_0"
+        private const val TYPENAME_NAVIGONE = "sytral:tcl_sytral.tcllignefluv"
+        private const val TYPENAME_STOPS = "sytral:tcl_sytral.tclarret"
+
+        // Trambus subset filter.
+        private const val TRAMBUS_CQL_FILTER = "ligne LIKE 'TB%'"
+
+        // Rhônexpress (RX) typname and limits.
+        private const val TYPENAME_RX_LINES = "sytral:rx_rhonexpress.rxligne_2_0_0"
+        private const val COUNT_RX_LINES = 1000
+
+        // Bus line lookup count for `LineByName`.
+        private const val BUS_LINE_BY_NAME_COUNT = 200
+    }
+}

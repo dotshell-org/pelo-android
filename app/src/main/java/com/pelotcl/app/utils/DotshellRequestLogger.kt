@@ -21,7 +21,10 @@ object DotshellRequestLogger {
 
     fun logResponse(response: Response, channel: String) {
         if (!isDotshell(response.request.url)) return
-        Log.d(TAG, "[$channel] Response: ${response.code} ${response.message} from ${response.request.url}")
+        Log.d(
+            TAG,
+            "[$channel] Response: ${response.code} ${response.message} from ${response.request.url}"
+        )
     }
 
     fun interceptor(channel: String): Interceptor {
