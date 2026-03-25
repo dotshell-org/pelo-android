@@ -16,10 +16,12 @@ object StopMapper {
      * Convert Lyon-specific stop properties to generic properties
      */
     fun mapToGeneric(properties: com.pelotcl.app.specific.data.model.LyonStopProperties): StopProperties {
+        // Ensure desserte is never empty by using a fallback value
+        val desserteValue = (properties.desserte ?: properties.desserteArret).orEmpty()
         return StopProperties(
             id = properties.gid,
             nom = properties.stopName,
-            desserte = "", // Will be populated later if needed
+            desserte = if (desserteValue.isNotBlank()) desserteValue else "UNKNOWN",
             ascenseur = false, // Default value
             escalator = false, // Default value
             gid = properties.gid,

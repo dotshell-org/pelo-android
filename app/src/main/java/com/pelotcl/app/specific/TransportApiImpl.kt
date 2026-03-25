@@ -4,7 +4,6 @@ import com.google.gson.JsonObject
 import com.pelotcl.app.generic.data.model.FeatureCollection
 import com.pelotcl.app.generic.data.model.StopCollection
 import com.pelotcl.app.generic.data.model.TrafficAlertsResponse
-import com.pelotcl.app.generic.data.network.TransportApi
 import retrofit2.http.GET
 import retrofit2.http.Query
 
@@ -12,13 +11,13 @@ import retrofit2.http.Query
  * Concrete implementation of TransportApi
  * Uses the transport API
  */
-interface TransportApiImpl : TransportApi {
+interface TransportApiImpl {
 
     /**
      * Fetches metro/funicular lines
      */
     @GET("geoserver/sytral/ows")
-    override suspend fun getMetroLines(
+    suspend fun getMetroLines(
         @Query("SERVICE") service: String,
         @Query("VERSION") version: String,
         @Query("request") request: String,
@@ -34,7 +33,7 @@ interface TransportApiImpl : TransportApi {
      * Fetches tram lines
      */
     @GET("geoserver/sytral/ows")
-    override suspend fun getTramLines(
+    suspend fun getTramLines(
         @Query("SERVICE") service: String,
         @Query("VERSION") version: String,
         @Query("request") request: String,
@@ -50,7 +49,7 @@ interface TransportApiImpl : TransportApi {
      * Fetches bus lines
      */
     @GET("geoserver/sytral/ows")
-    override suspend fun getBusLines(
+    suspend fun getBusLines(
         @Query("SERVICE") service: String,
         @Query("VERSION") version: String,
         @Query("request") request: String,
@@ -67,7 +66,7 @@ interface TransportApiImpl : TransportApi {
      * Fetches a bus line by name
      */
     @GET("geoserver/sytral/ows")
-    override suspend fun getBusLineByName(
+    suspend fun getBusLineByName(
         @Query("SERVICE") service: String,
         @Query("VERSION") version: String,
         @Query("request") request: String,
@@ -83,7 +82,7 @@ interface TransportApiImpl : TransportApi {
      * Fetches Navigone (river) lines
      */
     @GET("geoserver/sytral/ows")
-    override suspend fun getNavigoneLines(
+    suspend fun getNavigoneLines(
         @Query("SERVICE") service: String,
         @Query("VERSION") version: String,
         @Query("request") request: String,
@@ -99,7 +98,7 @@ interface TransportApiImpl : TransportApi {
      * Fetches Trambus (TB) lines
      */
     @GET("geoserver/sytral/ows")
-    override suspend fun getTrambusLines(
+    suspend fun getTrambusLines(
         @Query("SERVICE") service: String,
         @Query("VERSION") version: String,
         @Query("request") request: String,
@@ -116,7 +115,7 @@ interface TransportApiImpl : TransportApi {
      * Fetches transport stops
      */
     @GET("geoserver/sytral/ows")
-    override suspend fun getTransportStops(
+    suspend fun getTransportStops(
         @Query("SERVICE") service: String,
         @Query("VERSION") version: String,
         @Query("request") request: String,
@@ -133,13 +132,13 @@ interface TransportApiImpl : TransportApi {
      * Uses custom Gson mapping to handle Lyon-specific field names
      */
     @GET("pelo/v1/traffic/alerts")
-    override suspend fun getTrafficAlerts(): TrafficAlertsResponse
+    suspend fun getTrafficAlerts(): TrafficAlertsResponse
 
     /**
      * Fetches Rhônexpress geometry
      */
     @GET("geoserver/sytral/ows")
-    override suspend fun getSpecialLineRaw(
+    suspend fun getSpecialLineRaw(
         @Query("SERVICE") service: String,
         @Query("VERSION") version: String,
         @Query("request") request: String,

@@ -4,10 +4,12 @@ import android.content.Context
 import com.pelotcl.app.generic.data.network.MapStyleConfig
 import com.pelotcl.app.generic.data.network.TransportApi
 import com.pelotcl.app.generic.data.network.TransportConfig
+import com.pelotcl.app.generic.data.network.TransportLineRules
 import com.pelotcl.app.generic.data.network.RetrofitInstance
 import com.pelotcl.app.generic.data.network.TransportLineService
 import com.pelotcl.app.generic.data.network.TrafficAlertsService
 import com.pelotcl.app.generic.data.network.VehiclePositionsService
+import com.pelotcl.app.specific.data.rules.LyonTransportLineRules
 import com.pelotcl.app.specific.data.network.LyonTransportApi
 import com.pelotcl.app.generic.ui.theme.TransportTheme
 import com.pelotcl.app.generic.ui.screens.about.AboutScreenContract
@@ -34,6 +36,7 @@ object TransportServiceProvider {
     private lateinit var vehiclePositionsService: VehiclePositionsService
     private lateinit var transportLineService: TransportLineService
     private lateinit var trafficAlertsService: TrafficAlertsService
+    private lateinit var transportLineRules: TransportLineRules
 
     /**
      * Initializes the provider with Lyon TCL configuration
@@ -50,6 +53,9 @@ object TransportServiceProvider {
 
         // Lyon TCL transport line service
         transportLineService = TransportLineServiceImpl()
+
+        // Lyon-specific rules for matching/normalizing line names
+        transportLineRules = LyonTransportLineRules()
 
         // Lyon TCL traffic alerts service
         trafficAlertsService = TrafficAlertsServiceImpl()
@@ -98,6 +104,13 @@ object TransportServiceProvider {
             error("TransportServiceProvider not initialized. Call initialize() first.")
         }
         return mapStyleConfig
+    }
+
+    fun getTransportLineRules(): TransportLineRules {
+        if (!::transportLineRules.isInitialized) {
+            error("TransportServiceProvider not initialized. Call initialize() first.")
+        }
+        return transportLineRules
     }
 
     /**

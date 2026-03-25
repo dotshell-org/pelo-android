@@ -43,6 +43,7 @@ class TransportViewModel(private val context: Context) : ViewModel() {
 
     private val transportApi: TransportApi = TransportServiceProvider.getTransportApi()
     private val vehiclePositionsService = TransportServiceProvider.getVehiclePositionsService()
+    private val lineRules = TransportServiceProvider.getTransportLineRules()
     private val transportRepository: TransportRepository = TransportRepository(context)
     private val trafficAlertsRepository = TrafficAlertsRepository(transportApi, context)
     private val vehiclePositionsRepository = VehiclePositionsRepository(vehiclePositionsService)
@@ -126,10 +127,17 @@ class TransportViewModel(private val context: Context) : ViewModel() {
     private var cachedAlertSeverityByLine: Map<String, AlertSeverity> = emptyMap()
     
     init {
-        loadTransportLines()
-        loadTrafficAlerts()
-        loadStops()
-        loadFavorites()
+        // Load data sequentially to avoid overwhelming the system
+        viewModelScope.launch {
+            loadTransportLines()
+            // Small delay to let lines load first
+            loadStops()
+            // Load other data in parallel but with lower priority
+            launch(Dispatchers.Default) {
+                loadTrafficAlerts()
+                loadFavorites()
+            }
+        }
     }
     
     /**
@@ -167,32 +175,94 @@ class TransportViewModel(private val context: Context) : ViewModel() {
                 withContext(Dispatchers.IO) { offlineRepository.loadStops() }
             }.getOrNull().orEmpty()
 
-            if (offlineStops.isNotEmpty()) {
-                _stopsUiState.value = TransportStopsUiState.Success(offlineStops)
+            val baseStops = offlineStops.ifEmpty {
+                runCatching {
+                    withContext(Dispatchers.IO) { transportApi.getTransportStops().features.orEmpty() }
+                }.getOrElse { error ->
+                    _stopsUiState.value =
+                        TransportStopsUiState.Error(
+                            error.message ?: "Unable to load transport stops"
+                        )
+                    return@launch
+                }
+            }
+
+            if (baseStops.isEmpty()) {
+                _stopsUiState.value = TransportStopsUiState.Error("No transport stops available")
                 return@launch
             }
 
-            val onlineStops = runCatching {
-                withContext(Dispatchers.IO) { transportApi.getTransportStops().features.orEmpty() }
-            }.getOrElse { error ->
-                _stopsUiState.value =
-                    TransportStopsUiState.Error(error.message ?: "Unable to load transport stops")
-                return@launch
+            // WFS "desserte" is not guaranteed to be present/accurate across versions.
+            // To keep line/stop matching working (map + bottom sheets), we enrich stops
+            // using the local Raptor/GTFS dataset when most stops have empty desserte.
+            val (enrichedStops, didEnrich) = withContext(Dispatchers.Default) {
+                fun hasStrongToken(desserte: String): Boolean {
+                    if (desserte.isBlank()) return false
+                    val strongTokens = setOf("A", "B", "C", "D", "F1", "F2", "RX")
+                    val entries = desserte.split(",")
+                    for (entry in entries) {
+                        val token = entry.trim().substringBefore(":").trim()
+                        if (token.isEmpty()) continue
+                        val up = token.uppercase()
+                        if (up in strongTokens) return true
+                        if (up.startsWith("T")) return true // includes TBxx
+                        if (up.startsWith("NAV")) return true // NAV1 / NAVI1
+                    }
+                    return false
+                }
+
+                // Only check a small sample of stops to determine if enrichment is needed
+                val sampleSize = minOf(50, baseStops.size)
+                val sampleStops = baseStops.take(sampleSize) // Take first stops for consistency
+                val nonBlankCount = sampleStops.count { it.properties.desserte.isNotBlank() }
+                val ratioNonBlank = nonBlankCount.toDouble() / sampleSize.toDouble()
+                val strongStopCount = sampleStops.count { it.properties.desserte.isNotBlank() && hasStrongToken(it.properties.desserte) }
+                
+                // Only enrich if absolutely necessary (very few stops have desserte data)
+                val shouldEnrich = strongStopCount == 0 && ratioNonBlank < 0.1
+
+                if (!shouldEnrich) {
+                    baseStops to false
+                } else {
+                    // Limit enrichment to only stops that actually need it
+                    val desserteCache = HashMap<String, String>(512)
+                    val stopsNeedingEnrichment = baseStops.filter { it.properties.desserte.isBlank() }
+                    
+                    if (stopsNeedingEnrichment.size > 500) {
+                        // If too many stops need enrichment, just use the base stops
+                        // to avoid performance issues
+                        baseStops to false
+                    } else {
+                        val enriched = stopsNeedingEnrichment.map { stop ->
+                            val name = stop.properties.nom
+                            val desserte = desserteCache.getOrPut(name) {
+                                schedulesRepository.getDesserteForStop(name).orEmpty()
+                            }
+                            if (desserte.isBlank()) stop else
+                                stop.copy(properties = stop.properties.copy(desserte = desserte))
+                        }
+                        
+                        // Merge enriched stops back with original stops
+                        val stopMap = baseStops.associateBy { it.properties.nom }.toMutableMap()
+                        enriched.forEach { enrichedStop ->
+                            stopMap[enrichedStop.properties.nom] = enrichedStop
+                        }
+                        
+                        stopMap.values.toList() to true
+                    }
+                }
             }
 
-            if (onlineStops.isEmpty()) {
-                _stopsUiState.value =
-                    TransportStopsUiState.Error("No transport stops available")
-                return@launch
-            }
+            _stopsUiState.value = TransportStopsUiState.Success(enrichedStops)
 
-            _stopsUiState.value = TransportStopsUiState.Success(onlineStops)
-
-            // Warm offline storage for next launches. Failure here should not break UI.
-            runCatching {
-                withContext(Dispatchers.IO) { offlineRepository.saveStops(onlineStops) }
-            }.onFailure { e ->
-                Log.w("TransportViewModel", "Failed to cache stops offline: ${e.message}")
+            // Warm offline storage for next launches when we fetched online or enriched.
+            // Failure here should not break UI.
+            if (offlineStops.isEmpty() || didEnrich) {
+                runCatching {
+                    withContext(Dispatchers.IO) { offlineRepository.saveStops(enrichedStops) }
+                }.onFailure { e ->
+                    Log.w("TransportViewModel", "Failed to cache enriched stops offline: ${e.message}")
+                }
             }
         }
     }
@@ -631,8 +701,11 @@ class TransportViewModel(private val context: Context) : ViewModel() {
         vehiclePositionsJob = viewModelScope.launch {
             vehiclePositionsRepository.streamAllVehiclePositions().collect { result ->
                 result.onSuccess { allPositions ->
+                    val requested = lineName.trim()
+                    val requestedNormalized = lineRules.normalizeForComparison(requested)
+
                     _vehiclePositions.value = allPositions.filter {
-                        it.lineName.equals(lineName, ignoreCase = true)
+                        lineRules.normalizeForComparison(it.lineName) == requestedNormalized
                     }
                 }.onFailure {
                     Log.w("TransportViewModel", "Vehicle live stream error: ${it.message}")
@@ -753,26 +826,11 @@ class TransportViewModel(private val context: Context) : ViewModel() {
     }
 
     private fun normalizeLineToken(raw: String): String {
-        val token = raw.uppercase()
-            .replace(" ", "")
-            .replace("-", "")
-            .replace("_", "")
-            .replace("LIGNES", "")
-            .replace("LIGNE", "")
-            .replace("TRAM", "")
-            .replace("METRO", "")
-            .trim()
-        return when {
-            token.contains("RHONEXPRESS") -> "RX"
-            else -> token
-        }
+        return lineRules.normalizeAlertToken(raw)
     }
 
     private fun canonicalRouteName(raw: String): String {
-        return when (val token = raw.trim().uppercase()) {
-            "NAVI1" -> "NAV1"
-            else -> token
-        }
+        return lineRules.canonicalRouteName(raw)
     }
 
     private fun invalidateAvailableLinesCache() {
@@ -782,10 +840,7 @@ class TransportViewModel(private val context: Context) : ViewModel() {
     }
 
     private fun resolveScheduleRouteName(raw: String): String {
-        val candidates = when (val normalized = raw.trim().uppercase()) {
-            "NAVI1", "NAV1" -> listOf("NAVI1", "NAV1")
-            else -> listOf(normalized)
-        }
+        val candidates = lineRules.equivalentRouteNames(raw)
 
         val routeNames = schedulesRepository.getAllRouteNames()
         val routeNamesUpper = routeNames.map { it.uppercase() }.toSet()
@@ -798,19 +853,7 @@ class TransportViewModel(private val context: Context) : ViewModel() {
     }
 
     private fun isLikelyLineToken(token: String): Boolean {
-        if (token.isBlank()) return false
-        return token in setOf("A", "B", "C", "D", "F1", "F2", "RX") ||
-                token.matches(Regex("^TB\\d{1,2}[A-Z]?$")) ||
-                token.matches(Regex("^T\\d{1,2}[A-Z]?$")) ||
-                token.matches(Regex("^C\\d{1,2}[A-Z]?$")) ||
-                token.matches(Regex("^NAVI\\d{1,2}$")) ||
-                token.matches(Regex("^JD\\d{1,3}$")) ||
-                token.matches(Regex("^GE\\d{1,2}$")) ||
-                token.matches(Regex("^PL\\d{1,2}$")) ||
-                token.matches(Regex("^ZI\\d{1,2}$")) ||
-                token.matches(Regex("^S\\d{1,2}$")) ||
-                token.matches(Regex("^N\\d{1,2}$")) ||
-                token.matches(Regex("^\\d{1,3}[A-Z]?$"))
+        return lineRules.isLikelyLineToken(token)
     }
 
     private fun parseLineMentionsFromText(raw: String): Set<String> {

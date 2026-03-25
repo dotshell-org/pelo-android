@@ -42,7 +42,16 @@ data class LyonStopProperties(
     val city: String = "",
     
     @SerializedName("code_insee")
-    val inseeCode: String = ""
+    val inseeCode: String = "",
+
+    // Field returned by Lyon's WFS stops layer (used to know which line(s) serve each stop).
+    // Format example: "C:A", "M:A:B", etc.
+    @SerializedName("desserte")
+    val desserte: String? = null,
+
+    // Some WFS layers expose the same data under a slightly different key.
+    @SerializedName("desserte_arret")
+    val desserteArret: String? = null
 )
 
 /**
