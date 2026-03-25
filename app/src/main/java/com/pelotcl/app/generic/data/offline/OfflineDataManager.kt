@@ -3,6 +3,7 @@ package com.pelotcl.app.generic.data.offline
 import android.content.Context
 import android.util.Log
 import com.pelotcl.app.generic.data.network.TransportApi
+import com.pelotcl.app.generic.data.network.TransportLinesQuery
 import com.pelotcl.app.generic.data.model.Feature
 import com.pelotcl.app.generic.data.model.Geometry
 import com.pelotcl.app.generic.data.model.TransportLineProperties
@@ -10,6 +11,7 @@ import com.pelotcl.app.generic.service.TransportServiceProvider
 import com.pelotcl.app.utils.withRetry
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import com.google.gson.JsonElement
 import com.pelotcl.app.generic.data.repository.offline.SchedulesRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -114,78 +116,47 @@ class OfflineDataManager(
                 val batchResults: BatchResults
                 try {
                     batchResults = coroutineScope {
-                        val metroDeferred = async {
-                            withRetry(
-                                maxRetries = 2,
-                                initialDelayMs = 1000
-                            ) { transportApi.getMetroLines() }
-                        }
-                        val tramDeferred = async {
-                            withRetry(maxRetries = 2, initialDelayMs = 1000) { transportApi.getTramLines() }
-                        }
-                        val navigoneDeferred = async {
-                            try {
-                                withRetry(
-                                    maxRetries = 2,
-                                    initialDelayMs = 1000
-                                ) { transportApi.getNavigoneLines() }
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Failed to download navigone (non-critical)", e)
-                                null as com.pelotcl.app.generic.data.model.FeatureCollection?
-                            }
-                        }
-                        val trambusDeferred = async {
-                            try {
-                                withRetry(
-                                    maxRetries = 2,
-                                    initialDelayMs = 1000
-                                ) { transportApi.getTrambusLines() }
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Failed to download trambus (non-critical)", e)
-                                null as com.pelotcl.app.generic.data.model.FeatureCollection?
-                            }
-                        }
-                        val rxDeferred = async {
-                            try {
-                                fetchRhonexpressFeatures()
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Failed to download RX (non-critical)", e)
-                                null as List<Feature>?
-                            }
-                        }
-                        val stopsDeferred = async {
-                            withRetry(
-                                maxRetries = 2,
-                                initialDelayMs = 1000
-                            ) { transportApi.getTransportStops() }
-                        }
-                        val alertsDeferred = async {
-                            try {
-                                withRetry(
-                                    maxRetries = 2,
-                                    initialDelayMs = 500
-                                ) { transportApi.getTrafficAlerts() }
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Failed to download alerts (non-critical)", e)
-                                null as com.pelotcl.app.generic.data.model.TrafficAlertsResponse?
-                            }
-                        }
+                        // Strong lines are provided in a single call.
+                        val strongLines = withRetry(
+                            maxRetries = 2,
+                            initialDelayMs = 1000
+                        ) { transportApi.getLines(TransportLinesQuery.StrongLines) }
 
-                        // Await all — critical calls (metro, tram, stops) will throw on failure
-                        val metro = metroDeferred.await()
-                        val tram = tramDeferred.await()
-                        val navigone = navigoneDeferred.await()
-                        val trambus = trambusDeferred.await()
-                        val rx = rxDeferred.await()
-                        val stops = stopsDeferred.await()
-                        val alerts = alertsDeferred.await()
+                        val stops = withRetry(
+                            maxRetries = 2,
+                            initialDelayMs = 1000
+                        ) { transportApi.getTransportStops() }
+
+                        // Traffic alerts are non-critical.
+                        val alerts = runCatching {
+                            withRetry(
+                                maxRetries = 2,
+                                initialDelayMs = 500
+                            ) { transportApi.getTrafficAlerts() }
+                        }.getOrNull()
+
+                        fun isMetroFunicular(upper: String): Boolean =
+                            upper in setOf("A", "B", "C", "D", "F1", "F2")
+
+                        fun isTram(upper: String): Boolean =
+                            upper.startsWith("T") && !upper.startsWith("TB")
+
+                        fun isTrambus(upper: String): Boolean = upper.startsWith("TB")
+                        fun isNavigone(upper: String): Boolean = upper.startsWith("NAV")
+                        fun isRx(upper: String): Boolean = upper == "RX"
+
+                        val metroFeatures = strongLines.features.filter { isMetroFunicular(it.properties.lineName.uppercase()) }
+                        val tramFeatures = strongLines.features.filter { isTram(it.properties.lineName.uppercase()) }
+                        val navigoneFeatures = strongLines.features.filter { isNavigone(it.properties.lineName.uppercase()) }
+                        val trambusFeatures = strongLines.features.filter { isTrambus(it.properties.lineName.uppercase()) }
+                        val rxFeatures = strongLines.features.filter { isRx(it.properties.lineName.uppercase()) }
 
                         BatchResults(
-                            metroFeatures = metro.features,
-                            tramFeatures = tram.features,
-                            navigoneFeatures = navigone?.features,
-                            trambusFeatures = trambus?.features,
-                            rxFeatures = rx,
+                            metroFeatures = metroFeatures,
+                            tramFeatures = tramFeatures,
+                            navigoneFeatures = navigoneFeatures,
+                            trambusFeatures = trambusFeatures,
+                            rxFeatures = rxFeatures,
                             stopsFeatures = stops.features,
                             alertsResponse = alerts
                         )
@@ -264,7 +235,12 @@ class OfflineDataManager(
                         System.gc()
                         Log.d(TAG, "Fetching bus page: startIndex=$startIndex, count=$pageSize")
                         val page = withRetry(maxRetries = 2, initialDelayMs = 1000) {
-                            transportApi.getBusLines(startIndex = startIndex, count = pageSize)
+                            transportApi.getLines(
+                                TransportLinesQuery.BusPage(
+                                    startIndex = startIndex,
+                                    count = pageSize
+                                )
+                            )
                         }
                         val features = page.features
                         Log.d(
@@ -357,20 +333,18 @@ class OfflineDataManager(
                                         async {
                                             val lineName = busNameBySafe[safeName] ?: return@async
                                             try {
-                                                val cqlFilter =
-                                                    "ligne='${lineName.replace("'", "''")}'"
-                                                val page = withRetry(
+                                                val pageFeatures = withRetry(
                                                     maxRetries = 2,
                                                     initialDelayMs = 1000
                                                 ) {
-                                                    transportApi.getBusLineByName(
-                                                        typename = "sytral:tcl_sytral.tcllignebus_2_0_0",
-                                                        cqlFilter = cqlFilter,
-                                                        count = 200
-                                                    )
+                                                    transportApi
+                                                        .getLines(
+                                                            TransportLinesQuery.LineByName(lineName)
+                                                        )
+                                                        .features
                                                 }
-                                                if (page.features.isNotEmpty()) {
-                                                    offlineRepository.saveBusLinesPage(page.features)
+                                                if (pageFeatures.isNotEmpty()) {
+                                                    offlineRepository.saveBusLinesPage(pageFeatures)
                                                 }
                                             } catch (e: Exception) {
                                                 Log.w(
@@ -505,38 +479,67 @@ class OfflineDataManager(
      */
     private suspend fun fetchRhonexpressFeatures(): List<Feature> {
         fun mapJsonToFeatures(json: JsonObject): List<Feature> {
-            val featuresArray: JsonArray = json.getAsJsonArray("features") ?: return emptyList()
+            val featuresArray: JsonArray? = when {
+                json.has("features") -> json.getAsJsonArray("features")
+                json.has("featureMember") -> json.getAsJsonArray("featureMember")
+                json.has("featureMembers") -> json.getAsJsonArray("featureMembers")
+                else -> null
+            }
+            val array = featuresArray ?: return emptyList()
             val result = mutableListOf<Feature>()
 
-            for (elem in featuresArray) {
+            fun parsePosition(pos: JsonElement): List<Double>? {
+                if (!pos.isJsonArray) return null
+                val arr = pos.asJsonArray
+                if (arr.size() < 2) return null
+                return listOf(arr[0].asDouble, arr[1].asDouble)
+            }
+
+            fun parseCoordinatesAsMultiLines(coords: JsonElement): List<List<List<Double>>>? {
+                if (!coords.isJsonArray) return null
+                val outer = coords.asJsonArray
+                if (outer.size() == 0) return null
+
+                val first = outer[0]
+                if (!first.isJsonArray) return null
+                val firstArr = first.asJsonArray
+                if (firstArr.size() == 0) return null
+                val firstInner = firstArr[0]
+
+                val isMultiLine =
+                    firstInner != null && firstInner.isJsonArray
+
+                if (isMultiLine) {
+                    val lines = outer.mapNotNull { lineEl ->
+                        if (!lineEl.isJsonArray) return@mapNotNull null
+                        val lineArr = lineEl.asJsonArray
+                        val points = lineArr.mapNotNull { parsePosition(it) }
+                        if (points.isEmpty()) null else points
+                    }
+                    return if (lines.isEmpty()) null else lines
+                } else {
+                    val points = outer.mapNotNull { parsePosition(it) }
+                    return if (points.isEmpty()) null else listOf(points)
+                }
+            }
+
+            for (elem in array) {
                 val featObj = elem.asJsonObject
                 val id = featObj.get("id")?.asString ?: "rx-${System.nanoTime()}"
-                val properties = featObj.getAsJsonObject("properties") ?: JsonObject()
-                val gid = properties.get("gid")?.asInt ?: kotlin.math.abs(id.hashCode())
+                val properties = featObj.getAsJsonObject("properties") ?: featObj
+                val gid =
+                    properties.get("gid")?.asInt
+                        ?: properties.get("GID")?.asInt
+                        ?: kotlin.math.abs(id.hashCode())
 
-                val geomObj = featObj.getAsJsonObject("geometry") ?: continue
-                val geomType = geomObj.get("type")?.asString ?: "LineString"
-                val coordinatesElement = geomObj.get("coordinates")
-
-                val multiLineCoordinates: List<List<List<Double>>> = when (geomType) {
-                    "MultiLineString" -> {
-                        coordinatesElement.asJsonArray.map { lineArr ->
-                            lineArr.asJsonArray.map { coord ->
-                                val pair = coord.asJsonArray
-                                listOf(pair[0].asDouble, pair[1].asDouble)
-                            }
-                        }
-                    }
-
-                    "LineString" -> {
-                        listOf(coordinatesElement.asJsonArray.map { coord ->
-                            val pair = coord.asJsonArray
-                            listOf(pair[0].asDouble, pair[1].asDouble)
-                        })
-                    }
-
-                    else -> continue
-                }
+                val geomObj = featObj
+                    .getAsJsonObject("geometry")
+                    ?: featObj.getAsJsonObject("the_geom")
+                    ?: featObj.getAsJsonObject("geom")
+                    ?: continue
+                val coordinatesElement = geomObj.get("coordinates") ?: continue
+                val multiLineCoordinates =
+                    parseCoordinatesAsMultiLines(coordinatesElement) ?: continue
 
                 result.add(
                     Feature(
@@ -569,10 +572,11 @@ class OfflineDataManager(
         }
 
         return try {
-            val primary = mapJsonToFeatures(transportApi.getSpecialLineRaw(typename = "sytral:tcl_sytral.tclrhonexpress"))
-            primary.ifEmpty { mapJsonToFeatures(transportApi.getSpecialLineRaw(typename = "sytral:tcl_sytral.tclrhonexpress")) }
+            transportApi
+                .getLines(TransportLinesQuery.LineByName("RX"))
+                .features
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to fetch Rhônexpress: ${e.message}")
+            Log.w(TAG, "Failed to fetch Rhônexpress via TransportApi: ${e.message}")
             emptyList()
         }
     }

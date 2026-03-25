@@ -2,6 +2,8 @@ package com.pelotcl.app.generic.data.repository
 
 import android.content.Context
 import android.util.Log
+import com.google.gson.JsonArray
+import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.pelotcl.app.generic.data.network.TransportApi
 import com.pelotcl.app.generic.service.TransportServiceProvider
@@ -27,145 +29,33 @@ class TransportRepository(context: Context? = null) {
     private val offlineRepo = context?.let { OfflineRepository(it) }
 
     /**
-     * Fetches all transport lines (metro, funicular, tram, and navigone ONLY)
-     * Bus lines are NOT loaded by default to avoid overloading the phone
-     * To load a specific bus line, use getLineByName()
-     * Uses cache to improve performance and parallel loading for faster startup
+     * Fetches all default (non-bus-by-pagination) strong transport line geometries.
      */
     suspend fun getAllLines(): Result<FeatureCollection> {
         return withContext(Dispatchers.IO) {
-            try {
-                val cacheNeedsRefresh = cache?.needsCacheRefresh() ?: true
-
-                // Try to load all line types from cache first
-                val cachedMetro = cache?.getMetroLines()
-                val cachedTram = cache?.getTramLines()
-                val cachedNavigone = cache?.getNavigoneLines()
-                val cachedTrambus = cache?.getTrambusLines()
-
-                val metroFuniculaire: FeatureCollection
-                val trams: FeatureCollection
-
-                // Load metro and tram (from cache or API)
-                if (cachedMetro != null && cachedTram != null && !cacheNeedsRefresh) {
-                    // Cache hit with fresh data: use cached data
-                    metroFuniculaire = FeatureCollection(
-                        type = "FeatureCollection",
-                        features = cachedMetro,
-                        totalFeatures = cachedMetro.size,
-                        numberMatched = cachedMetro.size,
-                        numberReturned = cachedMetro.size
-                    )
-                    trams = FeatureCollection(
-                        type = "FeatureCollection",
-                        features = cachedTram,
-                        totalFeatures = cachedTram.size,
-                        numberMatched = cachedTram.size,
-                        numberReturned = cachedTram.size
-                    )
-                } else {
-                    // Cache miss or expired: load from API with retry on transient failures
-                    metroFuniculaire = withRetry(maxRetries = 2, initialDelayMs = 1000) {
-                        transportApi.getMetroLines()
-                    }
-                    trams = withRetry(maxRetries = 2, initialDelayMs = 1000) {
-                        transportApi.getTramLines()
-                    }
-
-                    // Save to cache
-                    cache?.saveMetroLines(metroFuniculaire.features.orEmpty())
-                    cache?.saveTramLines(trams.features.orEmpty())
+            runCatching {
+                withRetry(maxRetries = 2, initialDelayMs = 1000) {
+                    transportApi.getLines(com.pelotcl.app.generic.data.network.TransportLinesQuery.StrongLines)
                 }
-
-                // Load Navigone (from cache or API with retry)
-                val navigoneFeatures: List<Feature> =
-                    if (cachedNavigone != null && cachedNavigone.isNotEmpty() && !cacheNeedsRefresh) {
-                        cachedNavigone
-                    } else run {
-                    try {
-                        val navigone = withRetry(maxRetries = 2, initialDelayMs = 1000) {
-                            transportApi.getNavigoneLines()
-                        }
-                        cache?.saveNavigoneLines(navigone.features.orEmpty())
-                        navigone.features.orEmpty()
-                    } catch (e: Exception) {
-                        Log.w(
-                            "TransportRepository",
-                            "Failed to load navigone lines: ${e.message}"
+            }.fold(
+                onSuccess = { Result.success(it) },
+                onFailure = { e ->
+                    val offlineLines = offlineRepo?.loadAllLines().orEmpty()
+                    if (offlineLines.isNotEmpty()) {
+                        val uniqueLines = offlineLines
+                            .groupBy { it.properties.traceCode }
+                            .map { (_, features) -> features.first() }
+                        Result.success(
+                            FeatureCollection(
+                                type = "FeatureCollection",
+                                features = uniqueLines
+                            )
                         )
-                        emptyList()
+                    } else {
+                        Result.failure(e)
                     }
                 }
-
-                // Load Trambus (from cache or API with retry)
-                val trambusFeatures: List<Feature> =
-                    if (cachedTrambus != null && cachedTrambus.isNotEmpty() && !cacheNeedsRefresh) {
-                        cachedTrambus
-                    } else run {
-                    try {
-                        val trambus = withRetry(maxRetries = 2, initialDelayMs = 1000) {
-                            transportApi.getTrambusLines()
-                        }
-                        cache?.saveTrambusLines(trambus.features.orEmpty())
-                        trambus.features.orEmpty()
-                    } catch (e: Exception) {
-                        Log.w(
-                            "TransportRepository",
-                            "Failed to load trambus lines: ${e.message}"
-                        )
-                        emptyList()
-                    }
-                }
-
-                // Fetch Rhônexpress (RX) - small data, always from API
-                // Run in parallel with any remaining API calls using async
-                val rxFeatures: List<Feature> = try {
-                    fetchRhonexpressFromWfs()
-                } catch (e: Exception) {
-                    Log.w(
-                        "TransportRepository",
-                        "Failed to load Rhônexpress from WFS: ${e.message}"
-                    )
-                    emptyList()
-                }
-
-                // Merge metro/funicular, trams, navigone, trambus and RX (NOT buses)
-                val allFeatures =
-                    (metroFuniculaire.features.orEmpty() + trams.features.orEmpty() + navigoneFeatures + trambusFeatures + rxFeatures)
-
-                // Group by code_trace and keep only the first of each group (outbound direction)
-                val uniqueLines = allFeatures
-                    .groupBy { it.properties.traceCode }
-                    .map { (_, features) -> features.first() }
-
-                val filteredCollection = metroFuniculaire.copy(
-                    features = uniqueLines,
-                    numberReturned = uniqueLines.size,
-                    totalFeatures = (metroFuniculaire.totalFeatures ?: 0) + (trams.totalFeatures
-                        ?: 0) + navigoneFeatures.size + trambusFeatures.size + rxFeatures.size,
-                    numberMatched = (metroFuniculaire.numberMatched ?: 0) + (trams.numberMatched
-                        ?: 0) + navigoneFeatures.size + trambusFeatures.size + rxFeatures.size
-                )
-
-                Result.success(filteredCollection)
-            } catch (e: Exception) {
-                // Fallback to offline repository if available
-                val offlineLines = offlineRepo?.loadAllLines()
-                if (!offlineLines.isNullOrEmpty()) {
-                    val uniqueLines = offlineLines
-                        .groupBy { it.properties.traceCode }
-                        .map { (_, features) -> features.first() }
-
-                    Result.success(
-                        FeatureCollection(
-                            type = "FeatureCollection",
-                            features = uniqueLines
-                        )
-                    )
-                } else {
-                    Result.failure(e)
-                }
-            }
+            )
         }
     }
 
@@ -176,83 +66,111 @@ class TransportRepository(context: Context? = null) {
     suspend fun getLineByName(lineName: String): Result<List<Feature>> {
         return withContext(Dispatchers.IO) {
             runCatching {
-                val normalized = Normalizer.normalize(lineName.trim(), Normalizer.Form.NFD)
-                    .replace("\\p{Mn}+".toRegex(), "")
-                    .uppercase()
-                val aliases = when (normalized) {
-                    "NAV1", "NAVI1" -> listOf("NAV1", "NAVI1")
-                    "RHONEXPRESS", "RHONEXPRES", "RX" -> listOf("RX")
-                    else -> listOf(normalized)
-                }
-
-                val collected = mutableListOf<Feature>()
-
-                // RX has its own dedicated endpoint.
-                if (aliases.size == 1 && aliases.first() == "RX") {
-                    return@runCatching fetchRhonexpressFromWfs()
-                        .groupBy { it.properties.traceCode }
-                        .map { (_, features) -> features.first() }
-                }
-
-                val typeNames = listOf(
-                    "sytral:tcl_sytral.tcllignebus_2_0_0",
-                    "sytral:tcl_sytral.tcllignemf_2_0_0",
-                    "sytral:tcl_sytral.tcllignetram_2_0_0",
-                    "sytral:tcl_sytral.tcllignefluv"
-                )
-
-                aliases.forEach { alias ->
-                    if (alias == "RX") return@forEach
-                    val escapedAlias = alias.replace("'", "''")
-                    val cqlFilter = "ligne = '$escapedAlias'"
-                    typeNames.forEach { typename ->
-                        val features = transportApi.getBusLineByName(
-                            typename = typename,
-                            cqlFilter = cqlFilter
-                        ).features.orEmpty()
-                        collected += features
-                    }
-                }
-
-                collected
-                    .groupBy { it.properties.traceCode }
-                    .map { (_, features) -> features.first() }
+                transportApi
+                    .getLines(
+                        com.pelotcl.app.generic.data.network.TransportLinesQuery.LineByName(lineName)
+                    )
+                    .features
             }
         }
     }
 
     private suspend fun fetchRhonexpressFromWfs(): List<Feature> {
         fun mapJsonToFeatures(json: JsonObject): List<Feature> {
-            val featuresArray = json.getAsJsonArray("features") ?: return emptyList()
+            // GeoServer can return either GeoJSON FeatureCollection (`features`)
+            // or a WFS structure (`featureMember`) depending on configuration.
+            val featuresArray: JsonArray = when {
+                json.has("features") -> json.getAsJsonArray("features")
+                json.has("featureMember") -> json.getAsJsonArray("featureMember")
+                json.has("featureMembers") -> json.getAsJsonArray("featureMembers")
+                else -> {
+                    val keys = json.entrySet().joinToString(", ") { it.key }
+                    Log.w("TransportRepository", "RX WFS response has no known features array keys. keys=[$keys]")
+                    return emptyList()
+                }
+            }
+
             val result = mutableListOf<Feature>()
+
+            var skippedNoGeometry = 0
+            var skippedNoCoordinates = 0
+            var skippedUnknownCoordinateStructure = 0
+            var firstGeometryType: String? = null
+
+            fun parsePosition(pos: JsonElement): List<Double>? {
+                if (!pos.isJsonArray) return null
+                val arr = pos.asJsonArray
+                if (arr.size() < 2) return null
+                return listOf(arr[0].asDouble, arr[1].asDouble)
+            }
+
+            /**
+             * Returns coordinates in the app's expected shape:
+             * `MultiLineString` => List<Line> (List<Point>) => Point is [lon, lat]
+             */
+            fun parseCoordinatesAsMultiLines(coords: JsonElement): List<List<List<Double>>>? {
+                if (!coords.isJsonArray) return null
+                val outer = coords.asJsonArray
+                if (outer.size() == 0) return null
+
+                val first = outer[0]
+                if (!first.isJsonArray) return null
+
+                // Distinguish:
+                // - LineString: [ [x,y], [x,y], ... ] => first element is a position-array of numbers
+                // - MultiLineString: [ [ [x,y], ... ], [ [x,y], ... ] ] => first element is an array-of-positions
+                val firstArr = first.asJsonArray
+                if (firstArr.size() == 0) return null
+                val firstInner = firstArr[0]
+
+                val isMultiLine =
+                    firstInner != null && firstInner.isJsonArray // lineArray[0] is position array
+
+                if (isMultiLine) {
+                    val lines = outer.mapNotNull { lineEl ->
+                        if (!lineEl.isJsonArray) return@mapNotNull null
+                        val lineArr = lineEl.asJsonArray
+                        val points = lineArr.mapNotNull { parsePosition(it) }
+                        if (points.isEmpty()) null else points
+                    }
+                    return if (lines.isEmpty()) null else lines
+                } else {
+                    // Treat as LineString
+                    val points = outer.mapNotNull { parsePosition(it) }
+                    return if (points.isEmpty()) null else listOf(points)
+                }
+            }
 
             for (featureElement in featuresArray) {
                 val featureObject = featureElement.asJsonObject
                 val id = featureObject.get("id")?.asString ?: "rx-${System.nanoTime()}"
-                val properties = featureObject.getAsJsonObject("properties") ?: JsonObject()
-                val gid = properties.get("gid")?.asInt ?: 0
-                val geometryObject = featureObject.getAsJsonObject("geometry") ?: continue
-                val geometryType = geometryObject.get("type")?.asString ?: "LineString"
-                val coordinatesElement = geometryObject.get("coordinates")
 
-                val coordinates: List<List<List<Double>>> = when (geometryType) {
-                    "MultiLineString" -> {
-                        coordinatesElement.asJsonArray.map { lineArray ->
-                            lineArray.asJsonArray.map { coordinate ->
-                                val pair = coordinate.asJsonArray
-                                listOf(pair[0].asDouble, pair[1].asDouble)
-                            }
-                        }
+                // Some formats put properties directly under the feature member.
+                val properties = featureObject.getAsJsonObject("properties") ?: featureObject
+                val gid =
+                    properties.get("gid")?.asInt
+                        ?: properties.get("GID")?.asInt
+                        ?: 0
+
+                val geometryObject = featureObject
+                    .getAsJsonObject("geometry")
+                    ?: featureObject.getAsJsonObject("the_geom")
+                    ?: featureObject.getAsJsonObject("geom")
+                    ?: run {
+                        skippedNoGeometry++
+                        continue
                     }
 
-                    "LineString" -> {
-                        listOf(coordinatesElement.asJsonArray.map { coordinate ->
-                            val pair = coordinate.asJsonArray
-                            listOf(pair[0].asDouble, pair[1].asDouble)
-                        })
-                    }
+                firstGeometryType = firstGeometryType ?: geometryObject.get("type")?.asString
 
-                    else -> continue
+                val coordinatesElement = geometryObject.get("coordinates") ?: run {
+                    skippedNoCoordinates++
+                    continue
+                }
+
+                val coordinates = parseCoordinatesAsMultiLines(coordinatesElement) ?: run {
+                    skippedUnknownCoordinateStructure++
+                    continue
                 }
 
                 result.add(
@@ -290,17 +208,22 @@ class TransportRepository(context: Context? = null) {
                 )
             }
 
+            if (result.isEmpty()) {
+                Log.w(
+                    "TransportRepository",
+                    "RX WFS parsed empty: features=${featuresArray.size()}, skippedNoGeometry=$skippedNoGeometry, skippedNoCoordinates=$skippedNoCoordinates, skippedUnknownCoordinateStructure=$skippedUnknownCoordinateStructure, firstGeometryType=$firstGeometryType"
+                )
+            }
+
             return result
         }
 
         return try {
-            mapJsonToFeatures(
-                transportApi.getSpecialLineRaw(
-                    typename = "sytral:tcl_sytral.tclrhonexpress"
-                )
-            )
+            transportApi
+                .getLines(com.pelotcl.app.generic.data.network.TransportLinesQuery.LineByName("RX"))
+                .features
         } catch (e: Exception) {
-            Log.w("TransportRepository", "Failed to fetch Rhônexpress: ${e.message}")
+            Log.w("TransportRepository", "Failed to fetch Rhônexpress (via TransportApi): ${e.message}")
             emptyList()
         }
     }

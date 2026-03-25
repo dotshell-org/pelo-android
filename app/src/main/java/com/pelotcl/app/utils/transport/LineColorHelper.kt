@@ -37,8 +37,8 @@ object LineColorHelper {
         val hexColor = when {
             name == "RX" -> "#E30613"
             name in (1..7).map { "T$it" } -> TRAM_COLOR
-            name.uppercase().startsWith("TB") -> TRAMBUS_COLOR
             name.equals("TB12", ignoreCase = true) -> TRAMBUS_TB12_COLOR
+            name.startsWith("TB") -> TRAMBUS_COLOR
 
             name == "A" -> METRO_A_COLOR
             name == "B" -> METRO_B_COLOR
