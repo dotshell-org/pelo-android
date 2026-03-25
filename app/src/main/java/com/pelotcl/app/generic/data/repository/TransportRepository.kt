@@ -40,6 +40,7 @@ class TransportRepository(context: Context? = null) {
             }.fold(
                 onSuccess = { Result.success(it) },
                 onFailure = { e ->
+                    // Try offline repository first
                     val offlineLines = offlineRepo?.loadAllLines().orEmpty()
                     if (offlineLines.isNotEmpty()) {
                         val uniqueLines = offlineLines
@@ -52,7 +53,21 @@ class TransportRepository(context: Context? = null) {
                             )
                         )
                     } else {
-                        Result.failure(e)
+                        // Try cache as last resort
+                        val cachedMetroLines = cache?.getMetroLines().orEmpty()
+                        val cachedTramLines = cache?.getTramLines().orEmpty()
+                        val allCachedLines = cachedMetroLines + cachedTramLines
+                        
+                        if (allCachedLines.isNotEmpty()) {
+                            Result.success(
+                                FeatureCollection(
+                                    type = "FeatureCollection",
+                                    features = allCachedLines
+                                )
+                            )
+                        } else {
+                            Result.failure(e)
+                        }
                     }
                 }
             )

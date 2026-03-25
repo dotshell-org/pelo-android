@@ -489,6 +489,37 @@ class RaptorRepository private constructor(private val context: Context) {
         }
 
     /**
+     * Get stop name by its ID.
+     * Useful for matching WFS stops (which have gid) to Raptor stops.
+     */
+    fun getStopNameById(stopId: Int): String? {
+        return stopsCache.find { it.id == stopId }?.name
+    }
+
+    /**
+     * Get all stops as a map of id to name.
+     * Useful for bulk enrichment of stop names.
+     */
+    fun getAllStopNamesById(): Map<Int, String> {
+        return stopsCache.associate { it.id to it.name }
+    }
+
+    /**
+     * Get all stops with their coordinates.
+     * Useful for coordinate-based matching with WFS stops.
+     */
+    fun getAllStopsWithCoords(): List<RaptorStopWithCoords> {
+        return stopsCache.map { stop ->
+            RaptorStopWithCoords(
+                id = stop.id,
+                name = stop.name,
+                lat = stop.lat,
+                lon = stop.lon
+            )
+        }
+    }
+
+    /**
      * Check if all required Raptor assets are available
      * @return true if all assets are present, false otherwise
      */
@@ -1054,6 +1085,16 @@ data class RaptorStop(
     val name: String,
     val lat: Double = 0.0,
     val lon: Double = 0.0
+)
+
+/**
+ * Data class for stop with coordinates (used for coordinate-based matching)
+ */
+data class RaptorStopWithCoords(
+    val id: Int,
+    val name: String,
+    val lat: Double,
+    val lon: Double
 )
 
 /**

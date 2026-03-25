@@ -142,11 +142,20 @@ class TransportCacheImpl(context: Context) : TransportCache {
     private suspend inline fun <reified T> writeToCompressedFile(fileName: String, data: T) =
         withContext(Dispatchers.IO) {
             try {
+                if ((data as? List<*>)?.isEmpty() == true) {
+                    Log.w("LyonTransportCache", "Attempted to write empty data to $fileName, skipping")
+                    return@withContext
+                }
                 val file = File(cacheDir, fileName)
                 val jsonString = json.encodeToString(data)
+                if (jsonString.isBlank()) {
+                    Log.e("LyonTransportCache", "Serialization produced blank JSON for $fileName")
+                    return@withContext
+                }
                 GZIPOutputStream(FileOutputStream(file).buffered()).use { gzip ->
                     gzip.write(jsonString.toByteArray(Charsets.UTF_8))
                 }
+                Log.d("LyonTransportCache", "Successfully wrote $fileName: ${(data as? List<*>)?.size ?: "unknown"} items")
             } catch (e: Exception) {
                 Log.e("LyonTransportCache", "Error writing to $fileName", e)
             }
@@ -164,10 +173,22 @@ class TransportCacheImpl(context: Context) : TransportCache {
                     val jsonString = GZIPInputStream(FileInputStream(file).buffered()).use { gzip ->
                         gzip.bufferedReader(Charsets.UTF_8).readText()
                     }
-                    json.decodeFromString<T>(jsonString)
+                    if (jsonString.isBlank()) {
+                        Log.w("LyonTransportCache", "Cache file $fileName is blank, deleting")
+                        file.delete()
+                        return@withContext null
+                    }
+                    val result = json.decodeFromString<T>(jsonString)
+                    Log.d("LyonTransportCache", "Successfully read $fileName: ${(result as? List<*>)?.size ?: "unknown"} items")
+                    result
                 } else null
             } catch (e: Exception) {
                 Log.e("LyonTransportCache", "Error reading from $fileName", e)
+                try {
+                    File(cacheDir, fileName).delete()
+                } catch (deleteErr: Exception) {
+                    Log.e("LyonTransportCache", "Failed to delete corrupted cache $fileName", deleteErr)
+                }
                 null
             }
         }

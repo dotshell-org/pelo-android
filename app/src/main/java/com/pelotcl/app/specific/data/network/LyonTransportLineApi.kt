@@ -210,6 +210,7 @@ class LyonTransportLineApiWrapper(private val lyonApi: LyonTransportLineApi) {
         Log.d("LyonTransportLineApi", "WFS stops response: ${lyonResponse.features.size} features")
         if (lyonResponse.features.isNotEmpty()) {
             val firstFeature = lyonResponse.features.first()
+            Log.d("LyonTransportLineApi", "First stop geometry: type=${firstFeature.geometry.type}, coords=${firstFeature.geometry.coordinates}")
             Log.d("LyonTransportLineApi", "First stop properties: ${firstFeature.properties}")
         }
         

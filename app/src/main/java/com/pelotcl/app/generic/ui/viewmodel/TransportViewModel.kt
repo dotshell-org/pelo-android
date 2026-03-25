@@ -20,6 +20,7 @@ import com.pelotcl.app.generic.data.model.LineStopInfo
 import com.pelotcl.app.generic.data.model.TrafficAlert
 import com.pelotcl.app.generic.data.model.AlertSeverity
 import com.pelotcl.app.generic.data.repository.itinerary.RaptorRepository
+import com.pelotcl.app.specific.data.mapper.StopMapper
 import com.pelotcl.app.generic.ui.components.search.LineSearchResult
 import com.pelotcl.app.generic.ui.components.search.StationSearchResult
 import com.pelotcl.app.generic.ui.theme.AccentColor
@@ -153,6 +154,23 @@ class TransportViewModel(private val context: Context) : ViewModel() {
                 result.onSuccess { lines ->
                     _linesState.value = TransportLinesState.Success(lines)
                     _uiState.value = TransportLinesUiState.Success(lines.features.orEmpty())
+                    
+                    // Save lines to cache for future use
+                    val cache = com.pelotcl.app.specific.data.cache.TransportCacheImpl(context)
+                    val metroLines = lines.features.filter { 
+                        it.properties.transportType == "METRO" || 
+                        it.properties.transportType == "FUNICULAR"
+                    }
+                    val tramLines = lines.features.filter { 
+                        it.properties.transportType == "TRAM"
+                    }
+                    
+                    if (metroLines.isNotEmpty()) {
+                        cache.saveMetroLines(metroLines)
+                    }
+                    if (tramLines.isNotEmpty()) {
+                        cache.saveTramLines(tramLines)
+                    }
                 }.onFailure { error ->
                     _linesState.value = TransportLinesState.Error(error.message ?: "Unknown error")
                     _uiState.value = TransportLinesUiState.Error(error.message ?: "Unknown error")
@@ -171,7 +189,9 @@ class TransportViewModel(private val context: Context) : ViewModel() {
         viewModelScope.launch {
             _stopsUiState.value = TransportStopsUiState.Loading
             val offlineRepository = com.pelotcl.app.generic.data.offline.OfflineRepository(context)
+            val cache = com.pelotcl.app.specific.data.cache.TransportCacheImpl(context)
 
+            // Try to load from offline cache first
             val offlineStops = runCatching {
                 withContext(Dispatchers.IO) { offlineRepository.loadStops() }
             }.getOrNull().orEmpty()
@@ -200,16 +220,46 @@ class TransportViewModel(private val context: Context) : ViewModel() {
                 }
             }
 
-            val baseStops = offlineStops.ifEmpty {
-                runCatching {
-                    withContext(Dispatchers.IO) { transportApi.getTransportStops().features.orEmpty() }
-                }.getOrElse { error ->
-                    Log.e("TransportViewModel", "Failed to load transport stops from WFS API: ${error.message}", error)
-                    _stopsUiState.value =
-                        TransportStopsUiState.Error(
+            // If offline data is empty, try to get stops from cache
+            val cachedStops = runCatching {
+                withContext(Dispatchers.IO) { cache.getStops() }
+            }.getOrNull().orEmpty()
+            
+            Log.d("TransportViewModel", "Loaded ${cachedStops.size} stops from TransportCache")
+            
+            // Determine base stops with clear priority: offline > cache > WFS
+            val baseStops: List<StopFeature> = when {
+                offlineStops.isNotEmpty() -> {
+                    Log.d("TransportViewModel", "Using offline cache (${offlineStops.size} stops)")
+                    offlineStops
+                }
+                cachedStops.isNotEmpty() -> {
+                    Log.d("TransportViewModel", "Using TransportCache (${cachedStops.size} stops)")
+                    cachedStops
+                }
+                else -> {
+                    // Both caches empty - load from WFS API
+                    Log.d("TransportViewModel", "Both offline cache and TransportCache are empty, loading from WFS API")
+                    val wfsResult = runCatching {
+                        withContext(Dispatchers.IO) { transportApi.getTransportStops() }
+                    }
+                    wfsResult.onFailure { error ->
+                        Log.e("TransportViewModel", "Failed to load transport stops from WFS API: ${error.message}", error)
+                        _stopsUiState.value = TransportStopsUiState.Error(
                             error.message ?: "Unable to load transport stops"
                         )
-                    return@launch
+                        return@launch
+                    }
+                    val features = wfsResult.getOrNull()?.features
+                    if (features.isNullOrEmpty()) {
+                        Log.e("TransportViewModel", "WFS API returned empty or null features")
+                        _stopsUiState.value = TransportStopsUiState.Error(
+                            "No transport stops available from server"
+                        )
+                        return@launch
+                    }
+                    Log.d("TransportViewModel", "WFS API returned ${features.size} stop features")
+                    features
                 }
             }
 
@@ -265,45 +315,127 @@ class TransportViewModel(private val context: Context) : ViewModel() {
                 if (!shouldEnrich) {
                     baseStops to false
                 } else {
-                    // Limit enrichment to only stops that actually need it
+                    // Enrich ALL stops that need it, regardless of count
+                    // This ensures metro/tram/funicular stops are properly enriched
                     val desserteCache = HashMap<String, String>(512)
                     val stopsNeedingEnrichment = baseStops.filter { it.properties.desserte.isBlank() }
                     
-                    if (stopsNeedingEnrichment.size > 500) {
-                        // If too many stops need enrichment, just use the base stops
-                        // to avoid performance issues
-                        baseStops to false
-                    } else {
-                        val enriched = stopsNeedingEnrichment.map { stop ->
-                            val name = stop.properties.nom
+                    Log.d("TransportViewModel", "Enriching ${stopsNeedingEnrichment.size} stops that have empty desserte")
+                    
+                    val enriched = stopsNeedingEnrichment.mapNotNull { stop ->
+                        val name = stop.properties.nom
+                        if (name.isBlank()) {
+                            stop
+                        } else {
                             val desserte = desserteCache.getOrPut(name) {
                                 schedulesRepository.getDesserteForStop(name).orEmpty()
                             }
-                            if (desserte.isBlank()) stop else
+                            Log.d("TransportViewModel", "Enriching stop '$name': WFS desserte='' -> Raptor desserte='$desserte'")
+                            if (desserte.isBlank()) {
+                                null // Skip stops with no desserte from Raptor
+                            } else {
                                 stop.copy(properties = stop.properties.copy(desserte = desserte))
+                            }
                         }
-                        
-                        // Merge enriched stops back with original stops
-                        val stopMap = baseStops.associateBy { it.properties.nom }.toMutableMap()
-                        enriched.forEach { enrichedStop ->
-                            stopMap[enrichedStop.properties.nom] = enrichedStop
-                        }
-                        
-                        stopMap.values.toList() to true
                     }
+                    
+                    Log.d("TransportViewModel", "Successfully enriched ${enriched.size} stops, ${stopsNeedingEnrichment.size - enriched.size} stops have no Raptor data")
+                    
+                    // Merge enriched stops back with original stops (keep original if not enriched)
+                    val stopMap = baseStops.associateBy { it.properties.nom }.toMutableMap()
+                    enriched.forEach { enrichedStop ->
+                        stopMap[enrichedStop.properties.nom] = enrichedStop
+                    }
+                    
+                    stopMap.values.toList() to (enriched.isNotEmpty())
                 }
             }
 
-            _stopsUiState.value = TransportStopsUiState.Success(enrichedStops)
-
-            // Warm offline storage for next launches when we fetched online or enriched.
-            // Failure here should not break UI.
-            if (offlineStops.isEmpty() || didEnrich) {
-                runCatching {
-                    withContext(Dispatchers.IO) { offlineRepository.saveStops(enrichedStops) }
-                }.onFailure { e ->
-                    Log.w("TransportViewModel", "Failed to cache enriched stops offline: ${e.message}")
+            // Enrich stop names from Raptor/GTFS by matching coordinates
+            val stopsWithNames = withContext(Dispatchers.Default) {
+                val stopsNeedingNameEnrichment = enrichedStops.filter { 
+                    it.properties.nom.startsWith("Arret ") || 
+                    it.properties.nom.contains("Arrondissement")
                 }
+                
+                if (stopsNeedingNameEnrichment.isNotEmpty()) {
+                    // Get all Raptor stops with their coordinates for matching
+                    val allRaptorStops = raptorRepository.getAllStopNamesById()
+                    Log.d("TransportViewModel", "Raptor has ${allRaptorStops.size} stops")
+                    
+                    // Build a list of (lat, lon, name) for coordinate matching
+                    val raptorStopsWithCoords = raptorRepository.getAllStopsWithCoords()
+                    Log.d("TransportViewModel", "Raptor stops with coords: ${raptorStopsWithCoords.size}")
+                    
+                    var enrichedCount = 0
+                    val result = enrichedStops.map { stop ->
+                        if (stop.properties.nom.startsWith("Arret ") || stop.properties.nom.contains("Arrondissement")) {
+                            val coords = stop.geometry.coordinates
+                            if (coords.size >= 2) {
+                                val wfsLon = coords[0]
+                                val wfsLat = coords[1]
+                                
+                                // Find closest Raptor stop by coordinates
+                                val closestStop = raptorStopsWithCoords.minByOrNull { raptorStop ->
+                                    val dLat = wfsLat - raptorStop.lat
+                                    val dLon = wfsLon - raptorStop.lon
+                                    dLat * dLat + dLon * dLon
+                                }
+                                
+                                if (closestStop != null) {
+                                    val distance = kotlin.math.sqrt(
+                                        (wfsLat - closestStop.lat).let { it * it } +
+                                        (wfsLon - closestStop.lon).let { it * it }
+                                    )
+                                    // Only use match if within ~50 meters (rough threshold)
+                                    if (distance < 0.0005) { // ~50m in degrees
+                                        enrichedCount++
+                                        stop.copy(properties = stop.properties.copy(nom = closestStop.name))
+                                    } else {
+                                        stop
+                                    }
+                                } else {
+                                    stop
+                                }
+                            } else {
+                                stop
+                            }
+                        } else {
+                            stop
+                        }
+                    }
+                    Log.d("TransportViewModel", "Enriched $enrichedCount stop names by coordinates")
+                    result
+                } else {
+                    enrichedStops
+                }
+            }
+
+            _stopsUiState.value = TransportStopsUiState.Success(stopsWithNames)
+
+            // Analyze loaded stops to understand data quality
+            analyzeLoadedStops(stopsWithNames)
+
+            // Warm offline storage and cache for next launches.
+            // Always save to both stores when we have valid data, regardless of source.
+            // Failures are logged but do not break the UI.
+            if (stopsWithNames.isNotEmpty()) {
+                withContext(Dispatchers.IO) {
+                    try {
+                        offlineRepository.saveStops(stopsWithNames)
+                        Log.d("TransportViewModel", "Saved ${stopsWithNames.size} stops to offline storage")
+                    } catch (e: Exception) {
+                        Log.e("TransportViewModel", "Failed to save to offline storage: ${e.message}", e)
+                    }
+                    try {
+                        cache.saveStops(stopsWithNames)
+                        Log.d("TransportViewModel", "Saved ${stopsWithNames.size} stops to TransportCache")
+                    } catch (e: Exception) {
+                        Log.e("TransportViewModel", "Failed to save to TransportCache: ${e.message}", e)
+                    }
+                }
+            } else {
+                Log.e("TransportViewModel", "No stops to cache (stopsWithNames is empty)")
             }
         }
     }
@@ -341,14 +473,36 @@ class TransportViewModel(private val context: Context) : ViewModel() {
 
     fun getConnectionsForStop(stopName: String, lineName: String): Flow<List<LineSearchResult>> {
         return flow {
-            val lines = schedulesRepository.getDesserteForStop(stopName).orEmpty()
+            val rawDesserte = schedulesRepository.getDesserteForStop(stopName)
+            Log.d("TransportViewModel", "getConnectionsForStop($stopName): raw desserte = '$rawDesserte'")
+            val lines = rawDesserte.orEmpty()
                 .split(",")
                 .mapNotNull { token ->
                     val line = token.trim().substringBefore(":").trim()
                     line.takeIf { it.isNotEmpty() && !it.equals(lineName, ignoreCase = true) }
                 }
                 .distinctBy { it.uppercase() }
+            Log.d("TransportViewModel", "getConnectionsForStop($stopName): parsed ${lines.size} lines: $lines")
             emit(lines.map { LineSearchResult(it) })
+        }
+    }
+
+    private fun analyzeLoadedStops(stops: List<StopFeature>) {
+        if (stops.isEmpty()) {
+            Log.w("TransportViewModel", "analyzeLoadedStops: no stops to analyze")
+            return
+        }
+        val sample = stops.take(100)
+        val withName = sample.count { it.properties.nom.isNotBlank() }
+        val emptyName = sample.count { it.properties.nom.isBlank() }
+        val withDesserte = sample.count { it.properties.desserte.isNotBlank() }
+        val emptyDesserte = sample.count { it.properties.desserte.isBlank() }
+        val sampleStops = sample.filter { it.properties.nom.isNotBlank() }.take(5)
+        Log.d("TransportViewModel", "Loaded stops analysis (first 100):")
+        Log.d("TransportViewModel", "  With name: $withName, empty name: $emptyName")
+        Log.d("TransportViewModel", "  With desserte: $withDesserte, empty desserte: $emptyDesserte")
+        sampleStops.forEach { stop ->
+            Log.d("TransportViewModel", "  Sample stop: nom='${stop.properties.nom}', desserte='${stop.properties.desserte}'")
         }
     }
 
@@ -356,7 +510,11 @@ class TransportViewModel(private val context: Context) : ViewModel() {
         stopName: String,
         lines: List<String>
     ): List<StopDeparturePreview> = withContext(Dispatchers.Default) {
-        if (stopName.isBlank() || lines.isEmpty()) return@withContext emptyList()
+        Log.d("TransportViewModel", "getNextDeparturesForStop($stopName, $lines)")
+        if (stopName.isBlank() || lines.isEmpty()) {
+            Log.d("TransportViewModel", "getNextDeparturesForStop: early return - blank stopName or empty lines")
+            return@withContext emptyList()
+        }
 
         val today = LocalDate.now()
         val isSchoolHoliday = holidayDetector.isSchoolHoliday(today)
@@ -396,6 +554,13 @@ class TransportViewModel(private val context: Context) : ViewModel() {
                 )
             )
             .toList()
+            .also { result ->
+                Log.d("TransportViewModel", "getNextDeparturesForStop($stopName): returning ${result.size} departures")
+                if (result.isEmpty()) {
+                    Log.w("TransportViewModel", "No departures found for stop '$stopName' with lines $lines")
+                    Log.d("TransportViewModel", "Raptor assets available: ${schedulesRepository.javaClass.kotlin}")
+                }
+            }
     }
 
     suspend fun searchStops(query: String): List<StationSearchResult> =
