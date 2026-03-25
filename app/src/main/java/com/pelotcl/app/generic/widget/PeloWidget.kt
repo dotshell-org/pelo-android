@@ -2,7 +2,9 @@ package com.pelotcl.app.generic.widget
 
 import android.content.Context
 import android.os.Build
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.datastore.preferences.core.Preferences
@@ -36,6 +38,7 @@ import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
 import androidx.glance.layout.width
+import androidx.glance.material3.ColorProviders
 import androidx.glance.state.GlanceStateDefinition
 import androidx.glance.state.PreferencesGlanceStateDefinition
 import androidx.glance.text.FontWeight
@@ -53,7 +56,20 @@ class PeloWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         provideContent {
-            GlanceTheme {
+            GlanceTheme(colors = ColorProviders(
+                light = MaterialTheme.colorScheme.copy(
+                    surface = Color.Black,
+                    onSurface = Color.White,
+                    surfaceVariant = Color.Black,
+                    onSurfaceVariant = Color.White.copy(alpha = 0.7f)
+                ),
+                dark = MaterialTheme.colorScheme.copy(
+                    surface = Color.Black,
+                    onSurface = Color.White,
+                    surfaceVariant = Color.Black,
+                    onSurfaceVariant = Color.White.copy(alpha = 0.7f)
+                )
+            )) {
                 WidgetContent(context)
             }
         }
@@ -91,7 +107,7 @@ private fun WidgetContent(context: Context) {
         Box(
             modifier = GlanceModifier
                 .fillMaxSize()
-                .background(GlanceTheme.colors.surface)
+                .background(Color.Black)
                 .cornerRadius(16.dp)
                 .clickable(actionStartActivity<MainActivity>()),
             contentAlignment = Alignment.Center
@@ -124,7 +140,7 @@ private fun WidgetContent(context: Context) {
     Box(
         modifier = GlanceModifier
             .fillMaxSize()
-            .background(GlanceTheme.colors.surface) // Utilisez la couleur de surface du thème
+            .background(Color.Black)
             .cornerRadius(16.dp)
             .padding(horizontal = 20.dp, vertical = 16.dp)
             .clickable(actionStartActivity<MainActivity>())
@@ -152,7 +168,7 @@ private fun WidgetContent(context: Context) {
                     Text(
                         text = stopName,
                         style = TextStyle(
-                            color = GlanceTheme.colors.onSurface, // Utilisez la couleur onSurface du thème
+                            color = GlanceTheme.colors.onSurface,
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold
                         ),
@@ -169,7 +185,7 @@ private fun WidgetContent(context: Context) {
                             provider = ImageProvider(R.drawable.ic_refresh),
                             contentDescription = "Rafraîchir",
                             modifier = GlanceModifier.size(18.dp),
-                            colorFilter = ColorFilter.tint(GlanceTheme.colors.onSurfaceVariant) // Utilisez la couleur onSurfaceVariant du thème
+                            colorFilter = ColorFilter.tint(GlanceTheme.colors.onSurface)
                         )
                     }
                 }
@@ -184,7 +200,7 @@ private fun WidgetContent(context: Context) {
                         Text(
                             text = "Aucun départ à venir",
                             style = TextStyle(
-                                color = GlanceTheme.colors.onSurfaceVariant, // Utilisez la couleur onSurfaceVariant du thème
+                                color = GlanceTheme.colors.onSurfaceVariant,
                                 fontSize = 16.sp
                             )
                         )
@@ -246,7 +262,7 @@ private fun DepartureRow(
         Text(
             text = departure.directionName,
             style = TextStyle(
-                color = GlanceTheme.colors.onSurface, // Utilisez la couleur onSurface du thème
+                color = GlanceTheme.colors.onSurface,
                 fontSize = 16.sp
             ),
             modifier = GlanceModifier.defaultWeight(),

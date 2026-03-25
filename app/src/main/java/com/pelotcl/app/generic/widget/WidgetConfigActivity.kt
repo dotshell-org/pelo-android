@@ -33,7 +33,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -59,9 +58,11 @@ import androidx.compose.ui.unit.sp
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.state.updateAppWidgetState
 import com.pelotcl.app.generic.data.repository.offline.SchedulesRepository
-import com.pelotcl.app.generic.data.repository.offline.FavoritesRepository
+import com.pelotcl.app.generic.ui.components.search.TransportSearchBar
+import com.pelotcl.app.generic.ui.components.search.TransportSearchContent
 import com.pelotcl.app.generic.ui.theme.PrimaryColor
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
+import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.utils.transport.BusIconHelper
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
@@ -80,6 +81,7 @@ class WidgetConfigActivity : ComponentActivity() {
 
     private var appWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
     private var widgetStyle = WidgetStyle.ALL_LINES_MINUTES
+    private lateinit var viewModel: TransportViewModel
 
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -102,16 +104,16 @@ class WidgetConfigActivity : ComponentActivity() {
         }
         widgetStyle = resolveWidgetStyle(applicationContext, appWidgetId)
 
-        val favoritesRepository = FavoritesRepository(applicationContext)
+        // Create ViewModel with context
+        viewModel = TransportViewModel(applicationContext)
+
         val schedulesRepository = SchedulesRepository.getInstance(applicationContext)
-        val favoriteStops = favoritesRepository.getFavoriteStops().toList().sorted()
 
         setContent {
             WidgetConfigScreen(
                 widgetStyle = widgetStyle,
-                favoriteStops = favoriteStops,
-                favoritesRepository = favoritesRepository,
                 schedulesRepository = schedulesRepository,
+                viewModel = viewModel,
                 onConfigComplete = { stopName, lineName, directionId, desserte ->
                     saveWidgetConfig(stopName, lineName, directionId, desserte)
                 },
@@ -155,6 +157,37 @@ class WidgetConfigActivity : ComponentActivity() {
             setResult(RESULT_OK, resultValue)
             finish()
         }
+    }
+}
+
+// -- Search functionality --
+
+@RequiresApi(Build.VERSION_CODES.O)
+@Composable
+private fun SearchStopStep(
+    viewModel: TransportViewModel,
+    onStopSelected: (String) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(DarkBackground)
+    ) {
+        // Use the TransportSearchBar component
+        TransportSearchBar(
+            viewModel = viewModel,
+            modifier = Modifier.padding(8.dp),
+            content = TransportSearchContent.STOPS_ONLY,
+            showHistory = false,
+            startExpanded = true,
+            searchPlaceholder = "Rechercher un arrêt",
+            onStopPrimary = { stopResult ->
+                onStopSelected(stopResult.stopName)
+            },
+            onStopSecondary = { stopResult ->
+                onStopSelected(stopResult.stopName)
+            }
+        )
     }
 }
 
@@ -225,41 +258,55 @@ private fun DarkMenuRow(
     }
 }
 
-// -- Top bar --
+// -- Top bar with search --
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
-private fun DarkTopBar(
+private fun WidgetConfigTopBar(
     title: String,
+    viewModel: TransportViewModel,
+    onStopSelected: (String) -> Unit,
     onBack: () -> Unit
 ) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
+        // Search bar at the top
+        TransportSearchBar(
+            viewModel = viewModel,
             modifier = Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .clickable { onBack() },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Retour",
-                tint = TextPrimary,
-                modifier = Modifier.size(24.dp)
-            )
-        }
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = title,
-            color = TextPrimary,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            content = TransportSearchContent.STOPS_ONLY,
+            showHistory = false,
+            startExpanded = false,
+            searchPlaceholder = "Rechercher un arrêt...",
+            onStopPrimary = { stopResult ->
+                onStopSelected(stopResult.stopName)
+            },
+            onStopSecondary = { stopResult ->
+                onStopSelected(stopResult.stopName)
+            }
         )
+
+        // Title below search bar
+        if (title.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    color = TextPrimary,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
     }
 }
 
@@ -269,9 +316,8 @@ private fun DarkTopBar(
 @Composable
 private fun WidgetConfigScreen(
     widgetStyle: WidgetStyle,
-    favoriteStops: List<String>,
-    favoritesRepository: FavoritesRepository,
     schedulesRepository: SchedulesRepository,
+    viewModel: TransportViewModel,
     onConfigComplete: (stopName: String, lineName: String?, directionId: Int, desserte: String) -> Unit,
     onCancel: () -> Unit
 ) {
@@ -280,9 +326,9 @@ private fun WidgetConfigScreen(
 
     val title = when {
         pendingConfig != null -> "Mise à jour"
-        selectedStop != null && !widgetStyle.requiresSpecificLine -> "Arrêt"
-        selectedStop != null -> "Lignes"
-        else -> "Widget"
+        selectedStop != null && !widgetStyle.requiresSpecificLine -> "Arrêt sélectionné"
+        selectedStop != null -> "Choisir une ligne"
+        else -> ""
     }
 
     val onBack: () -> Unit = {
@@ -298,20 +344,50 @@ private fun WidgetConfigScreen(
             .fillMaxSize()
             .background(DarkBackground)
     ) {
-        DarkTopBar(title = title, onBack = onBack)
+        WidgetConfigTopBar(
+            title = title,
+            viewModel = viewModel,
+            onStopSelected = { stopName ->
+                selectedStop = stopName
+            },
+            onBack = onBack
+        )
 
         if (selectedStop == null) {
-            StopSelectionStep(
-                favoriteStops = favoriteStops,
-                favoritesRepository = favoritesRepository,
-                schedulesRepository = schedulesRepository,
-                onStopSelected = { selectedStop = it }
-            )
+            // Show welcome message when no stop is selected
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = 32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Place,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = AccentRed
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Recherchez un arrêt",
+                        color = TextPrimary,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Utilisez la barre de recherche ci-dessus pour trouver un arrêt",
+                        color = TextSecondary,
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
         } else {
             val desserte = remember(selectedStop) {
-                favoritesRepository.getDesserteForStop(selectedStop!!)
-                    ?: schedulesRepository.getDesserteForStop(selectedStop!!)
-                    ?: ""
+                schedulesRepository.getDesserteForStop(selectedStop!!) ?: ""
             }
 
             if (pendingConfig != null) {
@@ -331,14 +407,16 @@ private fun WidgetConfigScreen(
                     )
                 }
             } else if (!widgetStyle.requiresSpecificLine) {
+                // For widgets that show all lines, complete configuration immediately
                 LaunchedEffect(selectedStop) {
                     pendingConfig = PendingConfig(selectedStop!!, null, 0, desserte)
                 }
             } else {
+                // For widgets that require a specific line, show line selection
                 LineSelectionStep(
                     desserte = desserte,
                     schedulesRepository = schedulesRepository,
-                    onLineSelected = { line ->
+                    onLineSelected = { line: LineWithDirections ->
                         pendingConfig = PendingConfig(
                             selectedStop!!,
                             line.lineName,
@@ -351,131 +429,6 @@ private fun WidgetConfigScreen(
         }
     }
 }
-
-// -- Step 1: Stop selection --
-
-@Composable
-private fun StopSelectionStep(
-    favoriteStops: List<String>,
-    favoritesRepository: FavoritesRepository,
-    schedulesRepository: SchedulesRepository,
-    onStopSelected: (String) -> Unit
-) {
-    if (favoriteStops.isEmpty()) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(horizontal = 32.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Star,
-                    contentDescription = null,
-                    modifier = Modifier.size(48.dp),
-                    tint = AccentYellow
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Aucun arrêt favori",
-                    color = TextPrimary,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Ajoutez des arrêts favoris dans l'app\nen cliquant sur l'étoile d'un arrêt.",
-                    color = TextSecondary,
-                    fontSize = 14.sp,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
-    } else {
-        Column(modifier = Modifier.padding(top = 8.dp)) {
-            Text(
-                text = "Choisir un arrêt favori",
-                color = TextSecondary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-            )
-
-            Column(
-                modifier = Modifier
-                    .padding(horizontal = 16.dp)
-                    .clip(RoundedCornerShape(12.dp))
-            ) {
-                favoriteStops.forEachIndexed { index, stopName ->
-                    val lineNames = remember(stopName) {
-                        val desserte = favoritesRepository.getDesserteForStop(stopName)
-                            ?: schedulesRepository.getDesserteForStop(stopName)
-                            ?: ""
-                        desserte.split(",")
-                            .mapNotNull { entry ->
-                                val parts = entry.split(":")
-                                if (parts.size >= 2) {
-                                    parts[0].trim()
-                                } else null
-                            }
-                            .distinct()
-                    }
-
-                    DarkMenuRow(onClick = { onStopSelected(stopName) }) {
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Filled.Place,
-                                    contentDescription = null,
-                                    tint = AccentRed,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    text = stopName,
-                                    color = TextPrimary,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                            if (lineNames.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Row(
-                                    modifier = Modifier.padding(start = 32.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    lineNames.take(8).forEach { lineName ->
-                                        LineIcon(
-                                            lineName = lineName,
-                                            modifier = Modifier.size(width = 28.dp, height = 16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                    }
-                                    if (lineNames.size > 8) {
-                                        Text(
-                                            text = "+${lineNames.size - 8}",
-                                            color = TextSecondary,
-                                            fontSize = 11.sp
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if (index < favoriteStops.lastIndex) {
-                        HorizontalDivider(
-                            color = DarkDivider,
-                            modifier = Modifier.padding(start = 48.dp)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-// -- Step 2: Line selection --
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
@@ -559,7 +512,7 @@ private fun LineSelectionStep(
 }
 
 @Composable
-private fun LineIcon(
+fun LineIcon(
     lineName: String,
     modifier: Modifier = Modifier
 ) {

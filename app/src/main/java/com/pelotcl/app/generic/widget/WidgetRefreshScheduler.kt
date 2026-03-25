@@ -61,11 +61,13 @@ object WidgetRefreshScheduler {
     fun scheduleNext(context: Context, appWidgetId: Int, intervalMinutes: Int) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val pendingIntent = getPendingIntent(context, appWidgetId)
-        val triggerAt = SystemClock.elapsedRealtime() + intervalMinutes * 60_000L
-
-        alarmManager.setExactAndAllowWhileIdle(
-            AlarmManager.ELAPSED_REALTIME_WAKEUP,
-            triggerAt,
+        
+        // Use setInexactRepeating for better compatibility without special permissions
+        // This will wake up the device at approximately the right time
+        alarmManager.setInexactRepeating(
+            AlarmManager.RTC_WAKEUP,
+            System.currentTimeMillis() + intervalMinutes * 60_000L,
+            intervalMinutes * 60_000L,
             pendingIntent
         )
     }
