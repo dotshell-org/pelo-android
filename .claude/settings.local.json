@@ -12,7 +12,10 @@
       "Bash(powershell -Command:*)",
       "Bash(cmd /c \"gradlew.bat assembleDebug 2>&1\")",
       "Bash(cmd.exe /c \"gradlew.bat assembleDebug 2>&1\")",
-      "WebFetch(domain:medium.com)"
+      "WebFetch(domain:medium.com)",
+      "Bash(./gradlew compileReleaseKotlin)",
+      "Bash(xxd)",
+      "Bash(./gradlew compileDebugKotlin)"
     ]
   }
 }

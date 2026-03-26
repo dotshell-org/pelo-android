@@ -290,7 +290,7 @@ fun InlineItinerarySheetContent(
                         .weight(1f),
                     contentPadding = PaddingValues(bottom = 24.dp)
                 ) {
-                    items(journeys) { journey ->
+                    items(journeys, key = { "${it.departureTime}_${it.arrivalTime}_${it.legs.size}" }) { journey ->
                         CompactJourneyCard(
                             journey = journey,
                             onClick = { selectedJourney = journey },
