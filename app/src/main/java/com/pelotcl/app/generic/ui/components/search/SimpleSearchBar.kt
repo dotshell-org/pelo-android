@@ -197,7 +197,7 @@ fun SimpleSearchBar(
 
     val pickOnlyStopRows = content == TransportSearchContent.STOPS_ONLY && !showHistory
     val trimmedQuery = queryText.trim()
-    val showNoResults = trimmedQuery.length >= minQueryLengthForResults &&
+    val showNoResults = trimmedQuery.length >= minQueryLengthForResults && trimmedQuery.length > 1 &&
             when (content) {
                 TransportSearchContent.STOPS_ONLY -> searchResults.isEmpty()
                 TransportSearchContent.LINES_ONLY -> lineSearchResults.isEmpty()

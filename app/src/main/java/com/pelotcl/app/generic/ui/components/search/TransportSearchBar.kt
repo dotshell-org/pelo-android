@@ -52,8 +52,7 @@ fun TransportSearchBar(
         }
     }
 
-    val resolvedMinLen = minQueryLengthForResults
-        ?: if (content == TransportSearchContent.STOPS_ONLY && !showHistory) 2 else 1
+    val resolvedMinLen = minQueryLengthForResults ?: 1
     val resolvedDebounce = debounceMs
         ?: if (content == TransportSearchContent.STOPS_ONLY && !showHistory) 250L else 300L
 
