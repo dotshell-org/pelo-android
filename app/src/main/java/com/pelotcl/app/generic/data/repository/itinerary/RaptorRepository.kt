@@ -5,6 +5,7 @@ import android.util.Log
 import android.util.LruCache
 import com.pelotcl.app.generic.data.cache.JourneyCache
 import com.pelotcl.app.generic.ui.components.search.LineSearchResult
+import com.pelotcl.app.specific.utils.TransportTypeUtils
 import com.pelotcl.app.utils.SearchUtils
 import io.raptor.PeriodData
 import io.raptor.RaptorLibrary
@@ -983,7 +984,7 @@ class RaptorRepository private constructor(private val context: Context) {
             .distinct()
         if (query.isBlank()) {
             return allNames.sorted().map {
-                LineSearchResult(lineName = it, category = "Bus")
+                LineSearchResult(lineName = it, category = TransportTypeUtils.getTransportType(it))
             }
         }
         val normalizedQuery = query.trim().uppercase()
@@ -1004,7 +1005,7 @@ class RaptorRepository private constructor(private val context: Context) {
             .map { lineName ->
                 LineSearchResult(
                     lineName = lineName,
-                    category = "Bus"
+                    category = TransportTypeUtils.getTransportType(lineName)
                 )
             }
     }

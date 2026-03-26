@@ -76,6 +76,7 @@ import com.pelotcl.app.generic.ui.theme.PrimaryColor
 import com.pelotcl.app.generic.ui.theme.AccentColor
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.generic.ui.theme.Stone900
+import com.pelotcl.app.specific.utils.TransportTypeUtils
 import com.pelotcl.app.utils.transport.BusIconHelper
 
 @Immutable
@@ -453,7 +454,7 @@ private fun StopSearchPickerListItem(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         result.lines.take(4).forEach { lineName ->
-                            SearchConnectionBadge(lineName = lineName)
+                            SearchConnectionBadge(lineName = lineName, sizeDp = 24)
                         }
                     }
                 }
@@ -490,7 +491,7 @@ private fun SectionHeader(icon: ImageVector, text: String) {
 }
 
 @Composable
-private fun SearchConnectionBadge(lineName: String) {
+private fun SearchConnectionBadge(lineName: String, sizeDp: Int = 30) {
     val context = LocalContext.current
     val resourceId = BusIconHelper.getResourceIdForLine(context, lineName)
 
@@ -498,7 +499,7 @@ private fun SearchConnectionBadge(lineName: String) {
         Image(
             painter = painterResource(id = resourceId),
             contentDescription = stringResource(R.string.line_icon, lineName),
-            modifier = Modifier.size(30.dp)
+            modifier = Modifier.size(sizeDp.dp)
         )
     }
 }
@@ -528,7 +529,7 @@ private fun StopSearchResultItem(
                     ) {
                         result.lines.forEach { lineName ->
                             if (isStrongLine(lineName)) {
-                                SearchConnectionBadge(lineName = lineName)
+                                SearchConnectionBadge(lineName = lineName, sizeDp = 24)
                             }
                         }
                     }
@@ -538,7 +539,7 @@ private fun StopSearchResultItem(
                     ) {
                         result.lines.forEach { lineName ->
                             if (!isStrongLine(lineName)) {
-                                SearchConnectionBadge(lineName = lineName)
+                                SearchConnectionBadge(lineName = lineName, sizeDp = 24)
                             }
                         }
                     }
@@ -584,32 +585,45 @@ private fun HistoryListItem(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 24.dp),
+                    .padding(start = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                if (historyItem.type == SearchType.LINE) {
+                    // Show line icon on the left for LINE type history items (larger size)
+                    SearchConnectionBadge(lineName = historyItem.query, sizeDp = 44)
+                    Spacer(modifier = Modifier.size(12.dp))
+                } else if (historyItem.lines.isNotEmpty()) {
+                    // Show first line icon on the left for STOP type with lines
+                    val firstLine = historyItem.lines.firstOrNull { isStrongLine(it) } ?: historyItem.lines.first()
+                    SearchConnectionBadge(lineName = firstLine)
+                    Spacer(modifier = Modifier.size(12.dp))
+                }
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy((-6).dp)
                 ) {
+                    val displayText = if (historyItem.type == SearchType.LINE) {
+                        "${TransportTypeUtils.getTransportType(historyItem.query)} ${historyItem.query}"
+                    } else {
+                        historyItem.query
+                    }
                     Text(
-                        historyItem.query,
+                        displayText,
                         color = SecondaryColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         fontWeight = FontWeight.Medium
                     )
-                    if (historyItem.type == SearchType.LINE) {
-                        // Show line icon for LINE type history items
-                        SearchConnectionBadge(lineName = historyItem.query)
-                    } else if (historyItem.lines.isNotEmpty()) {
+                    // For stops, show additional line icons below the name (excluding the first one already shown on left)
+                    if (historyItem.type == SearchType.STOP && historyItem.lines.size > 1) {
                         Spacer(modifier = Modifier.size(10.dp))
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            historyItem.lines.forEach { lineName ->
+                            historyItem.lines.drop(1).forEach { lineName ->
                                 if (isStrongLine(lineName)) {
-                                    SearchConnectionBadge(lineName = lineName)
+                                    SearchConnectionBadge(lineName = lineName, sizeDp = 24)
                                 }
                             }
                         }
@@ -617,9 +631,9 @@ private fun HistoryListItem(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalArrangement = Arrangement.spacedBy((-8).dp)
                         ) {
-                            historyItem.lines.forEach { lineName ->
+                            historyItem.lines.drop(1).forEach { lineName ->
                                 if (!isStrongLine(lineName)) {
-                                    SearchConnectionBadge(lineName = lineName)
+                                    SearchConnectionBadge(lineName = lineName, sizeDp = 24)
                                 }
                             }
                         }
