@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -36,6 +38,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -63,6 +66,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.traversalIndex
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -154,12 +160,19 @@ fun SimpleSearchBar(
     val queryText = if (isControlled) externalQuery else internalQuery
 
     fun setQueryText(q: String) {
-        if (isControlled) externalOnQueryChange(q) else
-        onQueryChange(q)
+        if (isControlled) {
+            externalOnQueryChange(q)
+        } else {
+            internalQuery = q
+            onQueryChange(q)
+        }
     }
 
     var expanded by remember(startExpanded) { mutableStateOf(startExpanded) }
     val focusRequester = remember { FocusRequester() }
+    var expandedTextFieldValue by remember {
+        mutableStateOf(TextFieldValue(queryText, TextRange(queryText.length)))
+    }
 
     val density = LocalDensity.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -204,10 +217,47 @@ fun SimpleSearchBar(
                 TransportSearchContent.STOPS_AND_LINES -> searchResults.isEmpty() && lineSearchResults.isEmpty()
             }
 
+    fun submitFirstResult() {
+        when (val first = combinedResults.firstOrNull()) {
+            is UnifiedSearchResult.Stop -> {
+                setExpandedState(false)
+                setQueryText("")
+                onSearch(first.result)
+            }
+
+            is UnifiedSearchResult.Line -> {
+                setExpandedState(false)
+                setQueryText("")
+                onLineSearch(first.result)
+            }
+
+            null -> Unit
+        }
+    }
+
     LaunchedEffect(focusNonce) {
         if (focusNonce > 0 || startExpanded) {
             focusRequester.requestFocus()
             keyboardController?.show()
+        }
+    }
+
+    LaunchedEffect(expanded) {
+        if (expanded) {
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        }
+    }
+
+    LaunchedEffect(expanded, queryText) {
+        if (expanded) {
+            if (expandedTextFieldValue.text != queryText) {
+                expandedTextFieldValue = TextFieldValue(queryText, TextRange(queryText.length))
+            } else {
+                expandedTextFieldValue = expandedTextFieldValue.copy(
+                    selection = TextRange(expandedTextFieldValue.text.length)
+                )
+            }
         }
     }
 
@@ -234,64 +284,81 @@ fun SimpleSearchBar(
                 .semantics { traversalIndex = 0f }
                 .padding(horizontal = if (expanded) 0.dp else 10.dp),
             inputField = {
-                SearchBarDefaults.InputField(
-                    modifier = (if (showDarkOutline && !expanded) {
-                        Modifier
-                            .clip(RoundedCornerShape(28.dp))
-                            .border(1.dp, Color.Gray, RoundedCornerShape(28.dp))
-                    } else {
-                        Modifier
-                    }).focusRequester(focusRequester),
-                    query = queryText,
-                    onQueryChange = { q -> setQueryText(q) },
-                    onSearch = {
-                        when (val first = combinedResults.firstOrNull()) {
-                            is UnifiedSearchResult.Stop -> {
-                                setExpandedState(false)
-                                setQueryText("")
-                                onSearch(first.result)
-                            }
-
-                            is UnifiedSearchResult.Line -> {
-                                setExpandedState(false)
-                                setQueryText("")
-                                onLineSearch(first.result)
-                            }
-
-                            null -> {}
-                        }
-                    },
-                    expanded = expanded,
-                    onExpandedChange = { shouldExpand ->
-                        if (shouldExpand || (historyEmptyOrDisabled && !keyboardHiddenByScroll)) {
-                            setExpandedState(shouldExpand)
-                        }
-                    },
-                    placeholder = { Text(searchPlaceholder, color = SecondaryColor) },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "Search",
-                            tint = AccentColor,
-                            modifier = Modifier.padding(
-                                start = if (expanded) 32.dp else 0.dp,
-                                end = if (expanded) 12.dp else 0.dp
+                if (expanded) {
+                    TextField(
+                        modifier = Modifier.focusRequester(focusRequester),
+                        value = expandedTextFieldValue,
+                        onValueChange = { newValue ->
+                            expandedTextFieldValue = newValue.copy(
+                                selection = TextRange(newValue.text.length)
                             )
+                            setQueryText(newValue.text)
+                        },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { submitFirstResult() }),
+                        placeholder = { Text(searchPlaceholder, color = SecondaryColor) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Search",
+                                tint = AccentColor,
+                                modifier = Modifier.padding(start = 32.dp, end = 12.dp)
+                            )
+                        },
+                        colors = TextFieldDefaults.colors(
+                            focusedTextColor = SecondaryColor,
+                            unfocusedTextColor = SecondaryColor,
+                            cursorColor = SecondaryColor,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            disabledIndicatorColor = Color.Transparent,
+                            focusedContainerColor = PrimaryColor,
+                            unfocusedContainerColor = PrimaryColor,
+                            focusedPlaceholderColor = SecondaryColor.copy(alpha = 0.6f),
+                            unfocusedPlaceholderColor = SecondaryColor.copy(alpha = 0.6f)
                         )
-                    },
-                    colors = TextFieldDefaults.colors(
-                        focusedTextColor = SecondaryColor,
-                        unfocusedTextColor = SecondaryColor,
-                        cursorColor = SecondaryColor,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        disabledIndicatorColor = Color.Transparent,
-                        focusedContainerColor = PrimaryColor,
-                        unfocusedContainerColor = PrimaryColor,
-                        focusedPlaceholderColor = SecondaryColor.copy(alpha = 0.6f),
-                        unfocusedPlaceholderColor = SecondaryColor.copy(alpha = 0.6f)
                     )
-                )
+                } else {
+                    SearchBarDefaults.InputField(
+                        modifier = if (showDarkOutline) {
+                            Modifier
+                                .clip(RoundedCornerShape(28.dp))
+                                .border(1.dp, Color.Gray, RoundedCornerShape(28.dp))
+                        } else {
+                            Modifier
+                        },
+                        query = queryText,
+                        onQueryChange = { q -> setQueryText(q) },
+                        onSearch = { submitFirstResult() },
+                        expanded = false,
+                        onExpandedChange = { shouldExpand ->
+                            if (shouldExpand || (historyEmptyOrDisabled && !keyboardHiddenByScroll)) {
+                                setExpandedState(shouldExpand)
+                            }
+                        },
+                        placeholder = { Text(searchPlaceholder, color = SecondaryColor) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Search",
+                                tint = AccentColor
+                            )
+                        },
+                        colors = TextFieldDefaults.colors(
+                            focusedTextColor = SecondaryColor,
+                            unfocusedTextColor = SecondaryColor,
+                            cursorColor = SecondaryColor,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            disabledIndicatorColor = Color.Transparent,
+                            focusedContainerColor = PrimaryColor,
+                            unfocusedContainerColor = PrimaryColor,
+                            focusedPlaceholderColor = SecondaryColor.copy(alpha = 0.6f),
+                            unfocusedPlaceholderColor = SecondaryColor.copy(alpha = 0.6f)
+                        )
+                    )
+                }
             },
             expanded = expanded,
             onExpandedChange = { shouldExpand ->
