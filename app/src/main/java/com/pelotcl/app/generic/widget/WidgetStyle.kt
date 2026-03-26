@@ -10,30 +10,30 @@ enum class TimeDisplayMode {
 
 enum class WidgetStyle(
     val id: Int,
-    val requiresSpecificLine: Boolean,
     val timeDisplayMode: TimeDisplayMode
 ) {
     ALL_LINES_MINUTES(
         id = 1,
-        requiresSpecificLine = false,
         timeDisplayMode = TimeDisplayMode.MINUTES
     ),
     ALL_LINES_CLOCK(
         id = 2,
-        requiresSpecificLine = false,
         timeDisplayMode = TimeDisplayMode.CLOCK
     ),
     LINE_MINUTES(
         id = 3,
-        requiresSpecificLine = true,
         timeDisplayMode = TimeDisplayMode.MINUTES
     ),
     LINE_CLOCK(
         id = 4,
-        requiresSpecificLine = true,
         timeDisplayMode = TimeDisplayMode.CLOCK
     );
 
+    val requiresSpecificLine: Boolean
+        get() = when (this) {
+            LINE_MINUTES, LINE_CLOCK -> true
+            else -> false
+        }
     val refreshIntervalMinutes: Int
         get() = if (timeDisplayMode == TimeDisplayMode.MINUTES) 1 else 5
 
@@ -42,9 +42,9 @@ enum class WidgetStyle(
 
         fun fromProviderClassName(providerClassName: String?): WidgetStyle {
             return when (providerClassName) {
-                "com.pelotcl.app.core.widget.PeloWidgetClockAllLinesReceiver" -> ALL_LINES_CLOCK
-                "com.pelotcl.app.core.widget.PeloWidgetLineMinutesReceiver" -> LINE_MINUTES
-                "com.pelotcl.app.core.widget.PeloWidgetLineClockReceiver" -> LINE_CLOCK
+                "com.pelotcl.app.generic.widget.PeloWidgetClockAllLinesReceiver" -> ALL_LINES_CLOCK
+                "com.pelotcl.app.generic.widget.PeloWidgetLineMinutesReceiver" -> LINE_MINUTES
+                "com.pelotcl.app.generic.widget.PeloWidgetLineClockReceiver" -> LINE_CLOCK
                 else -> ALL_LINES_MINUTES
             }
         }

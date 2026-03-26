@@ -406,25 +406,27 @@ private fun WidgetConfigScreen(
                         fontSize = 14.sp
                     )
                 }
-            } else if (!widgetStyle.requiresSpecificLine) {
-                // For widgets that show all lines, complete configuration immediately
-                LaunchedEffect(selectedStop) {
-                    pendingConfig = PendingConfig(selectedStop!!, null, 0, desserte)
-                }
             } else {
-                // For widgets that require a specific line, show line selection
-                LineSelectionStep(
-                    desserte = desserte,
-                    schedulesRepository = schedulesRepository,
-                    onLineSelected = { line: LineWithDirections ->
-                        pendingConfig = PendingConfig(
-                            selectedStop!!,
-                            line.lineName,
-                            DIRECTION_BOTH,
-                            desserte
-                        )
+                if (widgetStyle.requiresSpecificLine) {
+                    // For line-specific widgets, show line selection
+                    LineSelectionStep(
+                        desserte = desserte,
+                        schedulesRepository = schedulesRepository,
+                        onLineSelected = { lineWithDirections ->
+                            pendingConfig = PendingConfig(
+                                selectedStop!!,
+                                lineWithDirections.lineName,
+                                DIRECTION_BOTH, // Show both directions for the selected line
+                                desserte
+                            )
+                        }
+                    )
+                } else {
+                    // For all-lines widgets, complete configuration immediately
+                    LaunchedEffect(selectedStop) {
+                        pendingConfig = PendingConfig(selectedStop!!, null, 0, desserte)
                     }
-                )
+                }
             }
         }
     }
@@ -466,15 +468,6 @@ private fun LineSelectionStep(
             .verticalScroll(rememberScrollState())
             .padding(top = 8.dp)
     ) {
-        // Specific lines
-        Text(
-            text = "Choisir une ligne",
-            color = TextSecondary,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-        )
-
         Column(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
