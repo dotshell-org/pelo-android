@@ -2266,9 +2266,10 @@ fun PlanScreen(
                                 selectedStop = itineraryDepartureStop,
                                 onClick = {
                                     itinerarySearchTarget = ItineraryFieldTarget.DEPARTURE
-                                    itineraryDepartureQuery = itineraryDepartureQuery.ifBlank {
-                                        itineraryDepartureStop?.name ?: ""
-                                    }
+                                    // If a stop is selected, always reopen with its full name.
+                                    // This prevents reverting to a previous partial query after choosing a result.
+                                    itineraryDepartureQuery = itineraryDepartureStop?.name
+                                        ?: itineraryDepartureQuery.ifBlank { "" }
                                     itinerarySearchFocusNonce++
                                 },
                                 icon = Icons.Default.MyLocation,
@@ -2280,9 +2281,10 @@ fun PlanScreen(
                                 selectedStop = itineraryArrivalStop,
                                 onClick = {
                                     itinerarySearchTarget = ItineraryFieldTarget.ARRIVAL
-                                    itineraryArrivalQuery = itineraryArrivalQuery.ifBlank {
-                                        itineraryArrivalStop?.name ?: ""
-                                    }
+                                    // If a stop is selected, always reopen with its full name.
+                                    // This prevents reverting to a previous partial query after choosing a result.
+                                    itineraryArrivalQuery = itineraryArrivalStop?.name
+                                        ?: itineraryArrivalQuery.ifBlank { "" }
                                     itinerarySearchFocusNonce++
                                 },
                                 icon = Icons.Default.Search,
