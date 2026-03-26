@@ -81,7 +81,10 @@
 -dontwarn sun.misc.**
 
 # Application classes that will be serialized/deserialized over Gson
--keep class com.pelotcl.app.generic.data.model.TrafficAlert { *; }
+# Keep ALL data model classes (generic + specific) — R8 strips field names otherwise,
+# breaking Gson deserialization (fields without @SerializedName get renamed)
+-keep class com.pelotcl.app.generic.data.model.** { *; }
+-keep class com.pelotcl.app.specific.data.model.** { *; }
 
 # Prevent proguard from stripping interface information from TypeAdapter, TypeAdapterFactory,
 # JsonSerializer, JsonDeserializer instances (so they can be used in @JsonAdapter)
@@ -93,6 +96,19 @@
 # Prevent R8 from leaving Data object members always null
 -keepclassmembers,allowobfuscation class * {
   @com.google.gson.annotations.SerializedName <fields>;
+}
+
+# ==================== Kotlin Serialization ====================
+-keepattributes *Annotation*, InnerClasses
+-dontnote kotlinx.serialization.AnnotationsKt
+-keepclassmembers class kotlinx.serialization.json.** { *** Companion; }
+-keepclasseswithmembers class kotlinx.serialization.json.** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+-keepclassmembers @kotlinx.serialization.Serializable class com.pelotcl.app.** {
+    *** Companion;
+    *** INSTANCE;
+    kotlinx.serialization.KSerializer serializer(...);
 }
 
 # ==================== OkHttp ====================
