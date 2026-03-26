@@ -585,17 +585,12 @@ private fun HistoryListItem(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 8.dp),
+                    .padding(start = if (historyItem.type == SearchType.LINE) 10.dp else 11.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (historyItem.type == SearchType.LINE) {
                     // Show line icon on the left for LINE type history items (larger size)
                     SearchConnectionBadge(lineName = historyItem.query, sizeDp = 44)
-                    Spacer(modifier = Modifier.size(12.dp))
-                } else if (historyItem.lines.isNotEmpty()) {
-                    // Show first line icon on the left for STOP type with lines
-                    val firstLine = historyItem.lines.firstOrNull { isStrongLine(it) } ?: historyItem.lines.first()
-                    SearchConnectionBadge(lineName = firstLine)
                     Spacer(modifier = Modifier.size(12.dp))
                 }
                 Column(
@@ -614,14 +609,14 @@ private fun HistoryListItem(
                         overflow = TextOverflow.Ellipsis,
                         fontWeight = FontWeight.Medium
                     )
-                    // For stops, show additional line icons below the name (excluding the first one already shown on left)
-                    if (historyItem.type == SearchType.STOP && historyItem.lines.size > 1) {
+                    // For stops, show ALL line icons below the name
+                    if (historyItem.type == SearchType.STOP && historyItem.lines.isNotEmpty()) {
                         Spacer(modifier = Modifier.size(10.dp))
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            historyItem.lines.drop(1).forEach { lineName ->
+                            historyItem.lines.forEach { lineName ->
                                 if (isStrongLine(lineName)) {
                                     SearchConnectionBadge(lineName = lineName, sizeDp = 24)
                                 }
@@ -631,7 +626,7 @@ private fun HistoryListItem(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalArrangement = Arrangement.spacedBy((-8).dp)
                         ) {
-                            historyItem.lines.drop(1).forEach { lineName ->
+                            historyItem.lines.forEach { lineName ->
                                 if (!isStrongLine(lineName)) {
                                     SearchConnectionBadge(lineName = lineName, sizeDp = 24)
                                 }
