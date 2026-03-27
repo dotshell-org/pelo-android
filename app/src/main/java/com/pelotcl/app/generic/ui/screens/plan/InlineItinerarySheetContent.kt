@@ -4,7 +4,10 @@ package com.pelotcl.app.generic.ui.screens.plan
 
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -13,10 +16,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -28,13 +34,20 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.pelotcl.app.generic.ui.theme.SecondaryColor
+import com.pelotcl.app.utils.transport.BusIconHelper
+import com.pelotcl.app.utils.transport.LineColorHelper
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.Dp
 import com.pelotcl.app.generic.data.repository.itinerary.ItineraryPreferencesRepository
 import com.pelotcl.app.generic.data.repository.itinerary.JourneyResult
 import com.pelotcl.app.generic.ui.theme.PrimaryColor
@@ -219,33 +232,7 @@ fun InlineItinerarySheetContent(
             .heightIn(max = maxHeight)
             .padding(horizontal = 16.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (selectedJourney != null) {
-                    IconButton(onClick = { selectedJourney = null }) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Retour",
-                            tint = PrimaryColor
-                        )
-                    }
-                }
-                Text(
-                    "Itineraire",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = PrimaryColor
-                )
-            }
-            IconButton(onClick = onClose) {
-                Icon(Icons.Default.Close, contentDescription = "Fermer", tint = PrimaryColor)
-            }
-        }
-
+        // Show date/time selection only when no journey is selected
         if (selectedJourney == null) {
             TimeSelectionRow(
                 timeMode = timeMode,
@@ -262,7 +249,79 @@ fun InlineItinerarySheetContent(
             )
 
             Spacer(modifier = Modifier.height(10.dp))
+        }
 
+        // Header row with close button and line icons (when journey selected)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Show extra large line icons on the left when a journey is selected
+            if (selectedJourney != null) {
+                val context = LocalContext.current
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Start
+                ) {
+                    val nonWalkingLegs = selectedJourney!!.legs.filterNot { it.isWalking }
+                    
+                    nonWalkingLegs.forEachIndexed { index, leg ->
+                        val resourceId = BusIconHelper.getResourceIdForLine(context, leg.routeName ?: "")
+                        
+                        if (resourceId != 0) {
+                            Image(
+                                painter = painterResource(id = resourceId),
+                                contentDescription = null,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        Color(
+                                            LineColorHelper.getColorForLineString(
+                                                leg.routeName ?: ""
+                                            )
+                                        )
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = leg.routeName ?: "?",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SecondaryColor
+                                )
+                            }
+                        }
+                        
+                        if (index < nonWalkingLegs.size - 1) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = PrimaryColor,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Add space between line icons and journey details
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Only show close button when a journey is selected (acts as back button)
+            if (selectedJourney != null) {
+                IconButton(onClick = { selectedJourney = null }) {
+                    Icon(Icons.Default.Close, contentDescription = "Retour", tint = PrimaryColor)
+                }
+            }
+        }
+
+        if (selectedJourney == null) {
             if (isLoading) {
                 Row(
                     modifier = Modifier

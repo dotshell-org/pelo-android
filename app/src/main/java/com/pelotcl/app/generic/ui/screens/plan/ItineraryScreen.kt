@@ -1,6 +1,6 @@
 package com.pelotcl.app.generic.ui.screens.plan
 
-import androidx.compose.animation.animateColorAsState
+ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -20,12 +20,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowRight
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CalendarToday
@@ -33,24 +33,25 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.outlined.Navigation
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -59,13 +60,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.pelotcl.app.generic.data.repository.itinerary.JourneyLeg
 import com.pelotcl.app.generic.data.repository.itinerary.JourneyResult
-import com.pelotcl.app.generic.ui.theme.Gray700
 import com.pelotcl.app.generic.ui.theme.AccentColor
-import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.ui.window.Dialog
+import com.pelotcl.app.generic.ui.theme.Gray700
 import com.pelotcl.app.generic.ui.theme.PrimaryColor
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.utils.transport.BusIconHelper
@@ -497,117 +496,11 @@ fun JourneyDetailsSheetContent(
             Modifier.fillMaxWidth()
         }
 
+        if (scrollAllContent) {
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
         Column(modifier = headerAndLegsModifier) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = journey.formatDepartureTime(),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = primaryTextColor
-                    )
-                    Text(
-                        text = " -> ",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = secondaryTextColor
-                    )
-                    Text(
-                        text = journey.formatArrivalTime(),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = primaryTextColor
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .background(
-                            color = chipBackgroundColor,
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                ) {
-                    Text(
-                        text = formattedDuration,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        color = primaryTextColor,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clipToBounds()
-            ) {
-                Row(
-                    modifier = Modifier.wrapContentWidth(),
-                    horizontalArrangement = Arrangement.Start,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val nonWalkingLegs = journey.legs.filterNot { it.isWalking }
-
-                    nonWalkingLegs.forEachIndexed { index, leg ->
-                        val resourceId =
-                            BusIconHelper.getResourceIdForLine(context, leg.routeName ?: "")
-
-                        if (resourceId != 0) {
-                            Image(
-                                painter = painterResource(id = resourceId),
-                                contentDescription = null,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(28.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        Color(
-                                            LineColorHelper.getColorForLineString(
-                                                leg.routeName ?: ""
-                                            )
-                                        )
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = leg.routeName ?: "?",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = SecondaryColor
-                                )
-                            }
-                        }
-
-                        if (index < nonWalkingLegs.size - 1) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                contentDescription = null,
-                                tint = if (useLightColors) Color(0xFF6B7280) else SecondaryColor.copy(
-                                    alpha = 0.5f
-                                ),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
-            HorizontalDivider(
-                color = if (useLightColors) Color(0xFFE5E7EB) else SecondaryColor.copy(alpha = 0.2f),
-                thickness = 1.dp
-            )
-            Spacer(modifier = Modifier.height(32.dp))
-
             if (scrollAllContent) {
                 journey.legs.forEachIndexed { index, leg ->
                     key("${leg.fromStopId}_${leg.departureTime}") {
@@ -621,7 +514,7 @@ fun JourneyDetailsSheetContent(
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(80.dp))
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
 
@@ -648,6 +541,92 @@ fun JourneyDetailsSheetContent(
                     }
                 }
                 Spacer(modifier = Modifier.height(80.dp))
+            }
+        }
+    }
+
+    // Fixed bottom section with "Démarrer" button and time info
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 15.dp, bottom = 15.dp, end = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // "Démarrer" button on the left - even closer to edge
+            Box(
+                modifier = Modifier
+                    .background(
+                        color = PrimaryColor,
+                        shape = RoundedCornerShape(24.dp)
+                    )
+                    .clickable { /* TODO: Implement navigation */ }
+                    .padding(horizontal = 16.dp, vertical  = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Navigation,
+                        contentDescription = null,
+                        tint = SecondaryColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "Démarrer",
+                        color = SecondaryColor,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+
+            // Time info on the right - closer to edge
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = journey.formatDepartureTime(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = primaryTextColor
+                    )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowRight,
+                        contentDescription = null,
+                        tint = Gray700
+                    )
+                    Text(
+                        text = journey.formatArrivalTime(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = primaryTextColor
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .background(
+                            color = chipBackgroundColor,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                ) {
+                    Text(
+                        text = formattedDuration,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        color = primaryTextColor,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
+                }
             }
         }
     }
