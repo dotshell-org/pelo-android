@@ -458,12 +458,12 @@ fun JourneyDetailsSheetContent(
     useLightColors: Boolean = false,
     scrollAllContent: Boolean = false
 ) {
-    val context = LocalContext.current
     val primaryTextColor = if (useLightColors) PrimaryColor else SecondaryColor
     val secondaryTextColor =
         if (useLightColors) Color(0xFF4B5563) else SecondaryColor.copy(alpha = 0.7f)
     val chipBackgroundColor =
         if (useLightColors) Color(0xFFF3F4F6) else SecondaryColor.copy(alpha = 0.15f)
+    val bottomBarHeight = 72.dp
 
     // Memoize formatted duration to avoid recalculation on recomposition
     val formattedDuration by remember(journey.durationMinutes) {
@@ -478,154 +478,129 @@ fun JourneyDetailsSheetContent(
         }
     }
 
-    Column(
+    val scrollState = rememberScrollState()
+
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .fillMaxHeight(1f)
-            .padding(horizontal = 16.dp)
+            .fillMaxHeight()
     ) {
-        val headerAndLegsModifier = if (scrollAllContent) {
-            Modifier
+        Column(
+            modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f)
+                .fillMaxHeight()
+                .padding(horizontal = 12.dp)
                 .verticalScroll(
-                    state = rememberScrollState(),
+                    state = scrollState,
                     enabled = isExpanded
                 )
-        } else {
-            Modifier.fillMaxWidth()
-        }
-
-        if (scrollAllContent) {
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-
-        Column(modifier = headerAndLegsModifier) {
+        ) {
             if (scrollAllContent) {
-                journey.legs.forEachIndexed { index, leg ->
-                    key("${leg.fromStopId}_${leg.departureTime}") {
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            JourneyLegItem(
-                                leg = leg,
-                                isFirst = index == 0,
-                                isLast = index == journey.legs.size - 1,
-                                useLightColors = useLightColors
-                            )
-                        }
-                    }
-                }
                 Spacer(modifier = Modifier.height(16.dp))
             }
-        }
-
-        if (!scrollAllContent) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .verticalScroll(
-                        state = rememberScrollState(),
-                        enabled = isExpanded
-                    )
-            ) {
-                journey.legs.forEachIndexed { index, leg ->
-                    key("${leg.fromStopId}_${leg.departureTime}") {
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            JourneyLegItem(
-                                leg = leg,
-                                isFirst = index == 0,
-                                isLast = index == journey.legs.size - 1,
-                                useLightColors = useLightColors
-                            )
-                        }
+            journey.legs.forEachIndexed { index, leg ->
+                key("${leg.fromStopId}_${leg.departureTime}") {
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        JourneyLegItem(
+                            leg = leg,
+                            isFirst = index == 0,
+                            isLast = index == journey.legs.size - 1,
+                            useLightColors = useLightColors
+                        )
                     }
                 }
+            }
+            if (scrollAllContent) {
+                Spacer(modifier = Modifier.height(16.dp))
+            } else {
                 Spacer(modifier = Modifier.height(80.dp))
             }
+            Spacer(modifier = Modifier.height(bottomBarHeight))
         }
-    }
 
-    // Fixed bottom section with "Démarrer" button and time info
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 15.dp, bottom = 15.dp, end = 4.dp)
-    ) {
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .background(Color.White)
+                .padding(horizontal = 8.dp, vertical = 16.dp)
         ) {
-            // "Démarrer" button on the left - even closer to edge
-            Box(
+            Row(
                 modifier = Modifier
-                    .background(
-                        color = PrimaryColor,
-                        shape = RoundedCornerShape(24.dp)
-                    )
-                    .clickable { /* TODO: Implement navigation */ }
-                    .padding(horizontal = 16.dp, vertical  = 8.dp),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
+                // "Démarrer" button on the left - even closer to edge
+                Box(
+                    modifier = Modifier
+                        .background(
+                            color = PrimaryColor,
+                            shape = RoundedCornerShape(24.dp)
+                        )
+                        .clickable { /* TODO: Implement navigation */ }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Navigation,
+                            contentDescription = null,
+                            tint = SecondaryColor,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = "Démarrer",
+                            color = SecondaryColor,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+
+                // Time info on the right - closer to edge
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Navigation,
-                        contentDescription = null,
-                        tint = SecondaryColor,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Text(
-                        text = "Démarrer",
-                        color = SecondaryColor,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
-                    )
-                }
-            }
-
-            // Time info on the right - closer to edge
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = journey.formatDepartureTime(),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = primaryTextColor
-                    )
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowRight,
-                        contentDescription = null,
-                        tint = Gray700
-                    )
-                    Text(
-                        text = journey.formatArrivalTime(),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = primaryTextColor
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .background(
-                            color = chipBackgroundColor,
-                            shape = RoundedCornerShape(8.dp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = journey.formatDepartureTime(),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = primaryTextColor
                         )
-                ) {
-                    Text(
-                        text = formattedDuration,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        color = primaryTextColor,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp
-                    )
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowRight,
+                            contentDescription = null,
+                            tint = Gray700
+                        )
+                        Text(
+                            text = journey.formatArrivalTime(),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = primaryTextColor
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                color = chipBackgroundColor,
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                    ) {
+                        Text(
+                            text = formattedDuration,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            color = primaryTextColor,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
                 }
             }
         }

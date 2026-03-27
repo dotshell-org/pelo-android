@@ -1215,6 +1215,12 @@ fun PlanScreen(
         }
     }
 
+    LaunchedEffect(selectedItineraryJourney) {
+        if (selectedItineraryJourney != null) {
+            itinerarySearchTarget = null
+        }
+    }
+
     LaunchedEffect(
         mapInstance,
         mapStyleVersion,
@@ -1610,8 +1616,14 @@ fun PlanScreen(
     val configuration = LocalConfiguration.current
     val itinerarySearchOverlayHeight = 174.dp
     val itinerarySheetSafetyOffset = 90.dp
+    val itinerarySearchReserved =
+        if (sheetContentState == SheetContentState.ITINERARY && selectedItineraryJourney == null) {
+            itinerarySearchOverlayHeight
+        } else {
+            0.dp
+        }
     val itinerarySheetMaxHeight =
-        (configuration.screenHeightDp.dp - itinerarySearchOverlayHeight - bottomPadding - itinerarySheetSafetyOffset)
+        (configuration.screenHeightDp.dp - itinerarySearchReserved - bottomPadding - itinerarySheetSafetyOffset)
             .coerceAtLeast(280.dp)
 
     // Handle back button press - close sheets/selections before exiting app
@@ -2247,7 +2259,7 @@ fun PlanScreen(
                 }
             }
 
-            if (sheetContentState == SheetContentState.ITINERARY) {
+            if (sheetContentState == SheetContentState.ITINERARY && selectedItineraryJourney == null) {
                 Column(
                     modifier = Modifier
                         .align(Alignment.TopCenter)

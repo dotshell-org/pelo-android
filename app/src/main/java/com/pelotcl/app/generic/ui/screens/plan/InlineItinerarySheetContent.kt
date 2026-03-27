@@ -226,6 +226,8 @@ fun InlineItinerarySheetContent(
         onSelectedJourneyChanged(selectedJourney)
     }
 
+    val showSearchBars = selectedJourney == null
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -233,7 +235,7 @@ fun InlineItinerarySheetContent(
             .padding(horizontal = 16.dp)
     ) {
         // Show date/time selection only when no journey is selected
-        if (selectedJourney == null) {
+        if (showSearchBars) {
             TimeSelectionRow(
                 timeMode = timeMode,
                 selectedTimeSeconds = selectedTimeSeconds,
