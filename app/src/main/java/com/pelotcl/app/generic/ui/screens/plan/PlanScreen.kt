@@ -694,7 +694,7 @@ fun PlanScreen(
         scaffoldSheetState.bottomSheetState.currentValue == SheetValue.Expanded ||
                 scaffoldSheetState.bottomSheetState.targetValue == SheetValue.Expanded
 
-    LaunchedEffect(sheetContentState, selectedStation) {
+    LaunchedEffect(sheetContentState, selectedStation, selectedItineraryJourney) {
         onSheetStateChanged(sheetContentState != null)
         onItineraryModeChanged(sheetContentState == SheetContentState.ITINERARY)
 
@@ -711,6 +711,13 @@ fun PlanScreen(
                 }
             }
             return@LaunchedEffect
+        }
+
+        // Expand the sheet when selectedItineraryJourney becomes null
+        if (selectedItineraryJourney == null && sheetContentState == SheetContentState.ITINERARY) {
+            scope.launch {
+                scaffoldSheetState.bottomSheetState.expand()
+            }
         }
 
         if (sheetContentState == SheetContentState.STATION &&
@@ -2028,6 +2035,9 @@ fun PlanScreen(
                                 itineraryArrivalQuery = ""
                                 itineraryNearbyDepartureStops = emptyList()
                                 sheetContentState = null
+                            },
+                            onRequestExpandSheet = {
+                                requestedSheetValueForNextContent = SheetValue.Expanded
                             }
                         )
                     }

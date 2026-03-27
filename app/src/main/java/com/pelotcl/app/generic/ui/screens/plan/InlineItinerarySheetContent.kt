@@ -71,7 +71,8 @@ fun InlineItinerarySheetContent(
     onDepartureFallbackSelected: (SelectedStop) -> Unit = {},
     onJourneysChanged: (List<JourneyResult>) -> Unit = {},
     onSelectedJourneyChanged: (JourneyResult?) -> Unit = {},
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    onRequestExpandSheet: () -> Unit = {}
 ) {
     val raptorRepository = viewModel.raptorRepository
     val context = LocalContext.current
@@ -234,33 +235,23 @@ fun InlineItinerarySheetContent(
             .heightIn(max = maxHeight)
             .padding(horizontal = 16.dp)
     ) {
-        // Show date/time selection only when no journey is selected
-        if (showSearchBars) {
-            TimeSelectionRow(
-                timeMode = timeMode,
-                selectedTimeSeconds = selectedTimeSeconds,
-                selectedDate = selectedDate,
-                onTimeModeChange = { timeMode = it },
-                onTimeClick = { showTimePicker = true },
-                onDateClick = { showDatePicker = true },
-                onClearDateTime = {
-                    selectedTimeSeconds = null
-                    selectedDate = null
-                },
-                useLightColors = true
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-        }
-
-        // Header row with close button and line icons (when journey selected)
+        // Header row with title and close button
         Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 16.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Show extra large line icons on the left when a journey is selected
-            if (selectedJourney != null) {
+            // Show "Itinéraire" title when no journey is selected
+            if (selectedJourney == null) {
+                Text(
+                    text = "Itinéraire",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryColor,
+                    modifier = Modifier.padding(start = 16.dp)
+                )
+            } else {
+                // Show extra large line icons on the left when a journey is selected
                 val context = LocalContext.current
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -312,15 +303,44 @@ fun InlineItinerarySheetContent(
                 }
             }
 
-            // Add space between line icons and journey details
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Only show close button when a journey is selected (acts as back button)
-            if (selectedJourney != null) {
-                IconButton(onClick = { selectedJourney = null }) {
-                    Icon(Icons.Default.Close, contentDescription = "Retour", tint = PrimaryColor)
+            // Show close button (for closing the sheet when no journey is selected, or back button when a journey is selected)
+            IconButton(
+                onClick = {
+                    if (selectedJourney != null) {
+                        selectedJourney = null
+                        onRequestExpandSheet()
+                    } else {
+                        onClose()
+                    }
                 }
+            ) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = if (selectedJourney != null) "Retour" else "Fermer",
+                    tint = PrimaryColor
+                )
             }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Show date/time selection only when no journey is selected
+        if (showSearchBars) {
+            TimeSelectionRow(
+                timeMode = timeMode,
+                selectedTimeSeconds = selectedTimeSeconds,
+                selectedDate = selectedDate,
+                onTimeModeChange = { timeMode = it },
+                onTimeClick = { showTimePicker = true },
+                onDateClick = { showDatePicker = true },
+                onClearDateTime = {
+                    selectedTimeSeconds = null
+                    selectedDate = null
+                },
+                useLightColors = true
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
         }
 
         if (selectedJourney == null) {
