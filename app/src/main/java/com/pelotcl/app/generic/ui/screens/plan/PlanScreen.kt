@@ -1624,12 +1624,13 @@ fun PlanScreen(
     val configuration = LocalConfiguration.current
     val itinerarySearchOverlayHeight = 174.dp
     val itinerarySheetSafetyOffset = 90.dp
-    val itinerarySearchReserved =
+    val itinerarySearchReserved = remember(sheetContentState, selectedItineraryJourney) {
         if (sheetContentState == SheetContentState.ITINERARY && selectedItineraryJourney == null) {
             itinerarySearchOverlayHeight
         } else {
             0.dp
         }
+    }
     val itinerarySheetMaxHeight =
         (configuration.screenHeightDp.dp - itinerarySearchReserved - bottomPadding - itinerarySheetSafetyOffset)
             .coerceAtLeast(280.dp)

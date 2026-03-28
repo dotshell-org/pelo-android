@@ -9,6 +9,7 @@ import com.pelotcl.app.generic.data.model.StopCollection
 import com.pelotcl.app.generic.data.model.TrafficAlertsResponse
 import com.pelotcl.app.generic.data.model.Geometry
 import com.pelotcl.app.generic.data.model.TransportLineProperties
+import com.pelotcl.app.generic.data.network.RetrofitInstance
 import com.pelotcl.app.generic.data.network.TransportApi
 import com.pelotcl.app.generic.data.network.TransportLinesQuery
 import com.pelotcl.app.specific.data.mapper.TrafficAlertMapper
@@ -33,16 +34,23 @@ class LyonTransportApi(private val baseUrl: String) : TransportApi {
     /**
      * WFS / GeoJSON lines and stops use the city data host (e.g. Grand Lyon).
      * Traffic alerts are served from the Pelo API on api.dotshell.eu only.
+     * Both share the cached OkHttpClient from RetrofitInstance for HTTP cache + connection pool.
      */
-    private val linesRetrofit: Retrofit = Retrofit.Builder()
-        .baseUrl(baseUrl)
-        .addConverterFactory(GsonConverterFactory.create())
-        .build()
+    private val linesRetrofit: Retrofit = run {
+        val builder = Retrofit.Builder()
+            .baseUrl(baseUrl)
+            .addConverterFactory(GsonConverterFactory.create())
+        RetrofitInstance.getSharedClient()?.let { builder.client(it) }
+        builder.build()
+    }
 
-    private val trafficAlertsRetrofit: Retrofit = Retrofit.Builder()
-        .baseUrl(TRAFFIC_ALERTS_BASE_URL)
-        .addConverterFactory(GsonConverterFactory.create())
-        .build()
+    private val trafficAlertsRetrofit: Retrofit = run {
+        val builder = Retrofit.Builder()
+            .baseUrl(TRAFFIC_ALERTS_BASE_URL)
+            .addConverterFactory(GsonConverterFactory.create())
+        RetrofitInstance.getSharedClient()?.let { builder.client(it) }
+        builder.build()
+    }
 
     private val lyonTrafficApi: LyonTrafficAlertsEndpoint =
         trafficAlertsRetrofit.create(LyonTrafficAlertsEndpoint::class.java)

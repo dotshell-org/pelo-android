@@ -104,19 +104,23 @@ fun CompactJourneyCard(
     val context = LocalContext.current
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val primaryTextColor = if (useLightColors) PrimaryColor else SecondaryColor
-    val secondaryTextColor =
+    val primaryTextColor = remember(useLightColors) {
+        if (useLightColors) PrimaryColor else SecondaryColor
+    }
+    val secondaryTextColor = remember(useLightColors) {
         if (useLightColors) Color(0xFF4B5563) else SecondaryColor.copy(alpha = 0.7f)
-    val chipBackgroundColor =
+    }
+    val chipBackgroundColor = remember(useLightColors) {
         if (useLightColors) Color(0xFFF3F4F6) else SecondaryColor.copy(alpha = 0.15f)
-    val baseBackgroundColor =
+    }
+    val baseBackgroundColor = remember(useLightColors) {
         if (useLightColors) Color(0xFFF9FAFB) else SecondaryColor.copy(alpha = 0.1f)
+    }
+    val pressedColor = remember(useLightColors) {
+        if (useLightColors) Color(0xFFF3F4F6) else SecondaryColor.copy(alpha = 0.16f)
+    }
     val backgroundColor by animateColorAsState(
-        targetValue = if (isPressed) {
-            if (useLightColors) Color(0xFFF3F4F6) else SecondaryColor.copy(alpha = 0.16f)
-        } else {
-            baseBackgroundColor
-        },
+        targetValue = if (isPressed) pressedColor else baseBackgroundColor,
         label = "compact_journey_press"
     )
 
@@ -194,7 +198,12 @@ fun CompactJourneyCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                val nonWalkingLegs = journey.legs.filterNot { it.isWalking }
+                val nonWalkingLegs = remember(journey.legs) {
+                    journey.legs.filterNot { it.isWalking }
+                }
+                val arrowTint = remember(useLightColors) {
+                    if (useLightColors) Color(0xFF6B7280) else SecondaryColor.copy(alpha = 0.5f)
+                }
 
                 nonWalkingLegs.forEachIndexed { index, leg ->
                     val resourceId =
@@ -207,17 +216,14 @@ fun CompactJourneyCard(
                             modifier = Modifier.size(28.dp)
                         )
                     } else {
+                        val legColor = remember(leg.routeName) {
+                            Color(LineColorHelper.getColorForLineString(leg.routeName ?: ""))
+                        }
                         Box(
                             modifier = Modifier
                                 .size(24.dp)
                                 .clip(CircleShape)
-                                .background(
-                                    Color(
-                                        LineColorHelper.getColorForLineString(
-                                            leg.routeName ?: ""
-                                        )
-                                    )
-                                ),
+                                .background(legColor),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
@@ -233,7 +239,7 @@ fun CompactJourneyCard(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                             contentDescription = null,
-                            tint = if (useLightColors) Color(0xFF6B7280) else SecondaryColor.copy(alpha = 0.5f),
+                            tint = arrowTint,
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -252,16 +258,20 @@ private fun JourneyLegItem(
 ) {
 
     val context = LocalContext.current
-    val lineColor = if (leg.isWalking) Gray700 else Color(
-        LineColorHelper.getColorForLineString(
-            leg.routeName ?: ""
+    val lineColor = remember(leg.isWalking, leg.routeName) {
+        if (leg.isWalking) Gray700 else Color(
+            LineColorHelper.getColorForLineString(leg.routeName ?: "")
         )
-    )
-    val primaryTextColor = if (useLightColors) PrimaryColor else SecondaryColor
-    val secondaryTextColor =
+    }
+    val primaryTextColor = remember(useLightColors) {
+        if (useLightColors) PrimaryColor else SecondaryColor
+    }
+    val secondaryTextColor = remember(useLightColors) {
         if (useLightColors) Color(0xFF4B5563) else SecondaryColor.copy(alpha = 0.7f)
-    val tertiaryTextColor =
+    }
+    val tertiaryTextColor = remember(useLightColors) {
         if (useLightColors) Color(0xFF6B7280) else SecondaryColor.copy(alpha = 0.6f)
+    }
 
     // State for expanding intermediate stops
     var isExpanded by remember { mutableStateOf(false) }
@@ -621,14 +631,21 @@ fun TimeSelectionRow(
     onClearDateTime: () -> Unit,
     useLightColors: Boolean = false
 ) {
-    val containerColor = if (useLightColors) Color(0xFFF9FAFB) else SecondaryColor.copy(alpha = 0.1f)
-    val selectedModeBackground =
+    val containerColor = remember(useLightColors) {
+        if (useLightColors) Color(0xFFF9FAFB) else SecondaryColor.copy(alpha = 0.1f)
+    }
+    val selectedModeBackground = remember(useLightColors) {
         if (useLightColors) Color(0xFFE5E7EB) else SecondaryColor.copy(alpha = 0.2f)
-    val pickerBackground =
+    }
+    val pickerBackground = remember(useLightColors) {
         if (useLightColors) Color(0xFFF3F4F6) else SecondaryColor.copy(alpha = 0.15f)
-    val primaryTextColor = if (useLightColors) PrimaryColor else SecondaryColor
-    val secondaryTextColor =
+    }
+    val primaryTextColor = remember(useLightColors) {
+        if (useLightColors) PrimaryColor else SecondaryColor
+    }
+    val secondaryTextColor = remember(useLightColors) {
         if (useLightColors) Color(0xFF4B5563) else SecondaryColor.copy(alpha = 0.6f)
+    }
 
     Column(
         modifier = Modifier

@@ -257,11 +257,13 @@ fun InlineItinerarySheetContent(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Start
                 ) {
-                    val nonWalkingLegs = selectedJourney!!.legs.filterNot { it.isWalking }
-                    
+                    val nonWalkingLegs = remember(selectedJourney!!.legs) {
+                        selectedJourney!!.legs.filterNot { it.isWalking }
+                    }
+
                     nonWalkingLegs.forEachIndexed { index, leg ->
                         val resourceId = BusIconHelper.getResourceIdForLine(context, leg.routeName ?: "")
-                        
+
                         if (resourceId != 0) {
                             Image(
                                 painter = painterResource(id = resourceId),
@@ -269,17 +271,14 @@ fun InlineItinerarySheetContent(
                                 modifier = Modifier.size(32.dp)
                             )
                         } else {
+                            val legColor = remember(leg.routeName) {
+                                Color(LineColorHelper.getColorForLineString(leg.routeName ?: ""))
+                            }
                             Box(
                                 modifier = Modifier
                                     .size(36.dp)
                                     .clip(CircleShape)
-                                    .background(
-                                        Color(
-                                            LineColorHelper.getColorForLineString(
-                                                leg.routeName ?: ""
-                                            )
-                                        )
-                                    ),
+                                    .background(legColor),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
@@ -371,7 +370,7 @@ fun InlineItinerarySheetContent(
                         .weight(1f),
                     contentPadding = PaddingValues(bottom = 24.dp)
                 ) {
-                    items(journeys) { journey ->
+                    items(journeys, key = { "${it.departureTime}_${it.arrivalTime}_${it.legs.size}" }) { journey ->
                         CompactJourneyCard(
                             journey = journey,
                             onClick = { selectedJourney = journey },

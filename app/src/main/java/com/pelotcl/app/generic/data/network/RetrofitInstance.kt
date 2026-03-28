@@ -109,4 +109,12 @@ object RetrofitInstance {
         }
     }
 
+    /**
+     * Get the shared OkHttpClient with cache and connection pool.
+     * Useful for creating Retrofit instances with different base URLs
+     * while sharing the HTTP cache and connection pool.
+     * Returns null if not yet initialized - callers should fallback gracefully.
+     */
+    fun getSharedClient(): OkHttpClient? = okHttpClient
+
 }
