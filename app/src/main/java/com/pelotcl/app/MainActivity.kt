@@ -492,7 +492,7 @@ fun NavBar(modifier: Modifier = Modifier) {
         val favoritesBarTopPosition = searchBarHeight + 38.dp
 
         // Search Bar - keep visible on Plan, including when station/line detail sheets are open.
-        if (selectedDestination == Destination.PLAN.ordinal && !showLinesSheet && itineraryDestinationStop == null && !isItineraryModeActive) {
+        if (selectedDestination == Destination.PLAN.ordinal && itineraryDestinationStop == null && !isItineraryModeActive) {
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -518,7 +518,7 @@ fun NavBar(modifier: Modifier = Modifier) {
         }
 
         // Favorites row - hidden while a sheet is open to free space for map controls.
-        if (selectedDestination == Destination.PLAN.ordinal && !isBottomSheetOpen && !showLinesSheet && itineraryDestinationStop == null && !isSearchExpanded) {
+        if (selectedDestination == Destination.PLAN.ordinal && !isBottomSheetOpen && itineraryDestinationStop == null && !isSearchExpanded) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
