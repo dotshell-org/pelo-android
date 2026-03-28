@@ -64,8 +64,9 @@ class RaptorRepository private constructor(private val context: Context) {
     // Performance: Cache of normalized stop names to avoid repeated normalization during search
     private var normalizedStopNames: Map<Stop, String> = emptyMap()
     private var stopIdsByNormalizedName: Map<String, List<Int>> = emptyMap()
-    private var routesByPeriod: Map<String, List<Route>> = emptyMap()
-    private var stopsByPeriod: Map<String, List<Stop>> = emptyMap()
+    // Lazy-loaded per period to avoid reading all 8 binary files at startup
+    private val routesByPeriod = java.util.concurrent.ConcurrentHashMap<String, List<Route>>()
+    private val stopsByPeriod = java.util.concurrent.ConcurrentHashMap<String, List<Stop>>()
 
     // Performance: Reusable StringBuilder for cache key building (ThreadLocal for thread safety)
     private val cacheKeyBuilder = ThreadLocal.withInitial { StringBuilder(64) }
@@ -200,8 +201,7 @@ class RaptorRepository private constructor(private val context: Context) {
                 }
 
                 raptorLibrary = RaptorLibrary(periods)
-                routesByPeriod = loadRoutesByPeriod()
-                stopsByPeriod = loadStopsByPeriod()
+                // routesByPeriod and stopsByPeriod are now lazy-loaded per period on first access
 
                 // Set initial period based on current day
                 updatePeriodForDate(LocalDate.now())
@@ -348,28 +348,16 @@ class RaptorRepository private constructor(private val context: Context) {
         }
     }
 
-    private fun loadRoutesByPeriod(): Map<String, List<Route>> {
-        val periodIds = listOf(
-            PERIOD_SATURDAY,
-            PERIOD_SUNDAY,
-            PERIOD_SCHOOL_ON_WEEKDAYS,
-            PERIOD_SCHOOL_OFF_WEEKDAYS
-        )
-        return periodIds.associateWith { periodId ->
+    private fun getRoutesForPeriod(periodId: String): List<Route> {
+        return routesByPeriod.getOrPut(periodId) {
             context.assets.open("routes_$periodId.bin").use { input ->
                 NetworkLoader.loadRoutes(BufferedInputStream(input, 8192))
             }
         }
     }
 
-    private fun loadStopsByPeriod(): Map<String, List<Stop>> {
-        val periodIds = listOf(
-            PERIOD_SATURDAY,
-            PERIOD_SUNDAY,
-            PERIOD_SCHOOL_ON_WEEKDAYS,
-            PERIOD_SCHOOL_OFF_WEEKDAYS
-        )
-        return periodIds.associateWith { periodId ->
+    private fun getStopsForPeriod(periodId: String): List<Stop> {
+        return stopsByPeriod.getOrPut(periodId) {
             context.assets.open("stops_$periodId.bin").use { input ->
                 NetworkLoader.loadStops(BufferedInputStream(input, 8192))
             }
@@ -382,8 +370,8 @@ class RaptorRepository private constructor(private val context: Context) {
     )
 
     private fun getVariantsForRoute(periodId: String, routeName: String): List<RouteVariant> {
-        val routes = routesByPeriod[periodId] ?: return emptyList()
-        val stops = stopsByPeriod[periodId] ?: return emptyList()
+        val routes = getRoutesForPeriod(periodId)
+        val stops = getStopsForPeriod(periodId)
         val stopById = stops.associateBy { it.id }
         return routes
             .filter { it.name.equals(routeName, ignoreCase = true) }
@@ -1002,7 +990,8 @@ class RaptorRepository private constructor(private val context: Context) {
     }
 
     fun searchLinesByName(query: String): List<LineSearchResult> {
-        val routes = routesByPeriod[raptorLibrary?.getCurrentPeriod()] ?: emptyList()
+        val currentPeriod = raptorLibrary?.getCurrentPeriod() ?: return emptyList()
+        val routes = getRoutesForPeriod(currentPeriod)
         val allNames = routes
             .map { it.name }
             .distinct()
@@ -1081,8 +1070,8 @@ class RaptorRepository private constructor(private val context: Context) {
         }
 
         val period = raptorLibrary?.getCurrentPeriod() ?: PERIOD_SCHOOL_ON_WEEKDAYS
-        val stops = stopsByPeriod[period] ?: return null
-        val routes = routesByPeriod[period] ?: return null
+        val stops = getStopsForPeriod(period)
+        val routes = getRoutesForPeriod(period)
         val routeById = routes.groupBy { it.id }
 
         val dessertes = stops
