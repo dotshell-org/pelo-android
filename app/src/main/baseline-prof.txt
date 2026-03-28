@@ -6,55 +6,46 @@ HSPLcom/pelotcl/app/MainActivity;->onCreate(Landroid/os/Bundle;)V
 HSPLcom/pelotcl/app/MainActivityKt;->NavBar(Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
 
 # ViewModel initialization
-HSPLcom/pelotcl/app/ui/viewmodel/TransportViewModel;-><init>(Landroid/app/Application;)V
-HSPLcom/pelotcl/app/ui/viewmodel/TransportViewModel;->preloadAllData()V
+HSPLcom/pelotcl/app/generic/ui/viewmodel/TransportViewModel;-><init>(Landroid/app/Application;)V
 
 # Repository classes
-HSPLcom/pelotcl/app/data/repository/TransportRepository;-><init>(Landroid/content/Context;)V
-HSPLcom/pelotcl/app/data/repository/TransportRepository;->getAllLines()Ljava/lang/Object;
-HSPLcom/pelotcl/app/data/repository/TransportRepository;->getAllStops()Ljava/lang/Object;
+HSPLcom/pelotcl/app/generic/data/repository/offline/SchedulesRepository;-><init>(Landroid/content/Context;)V
 
 # Cache classes
-HSPLcom/pelotcl/app/data/cache/TransportCache;->getInstance(Landroid/content/Context;)Lcom/pelotcl/app/data/cache/TransportCache;
-HSPLcom/pelotcl/app/data/cache/TransportCache;->preloadFromDisk()V
-HSPLcom/pelotcl/app/data/cache/TransportCache;->getMetroLines()Ljava/util/List;
-HSPLcom/pelotcl/app/data/cache/TransportCache;->getTramLines()Ljava/util/List;
-HSPLcom/pelotcl/app/data/cache/TransportCache;->getStops()Ljava/util/List;
-
-# GTFS/Schedules
-HSPLcom/pelotcl/app/data/gtfs/SchedulesRepository;-><init>(Landroid/content/Context;)V
-HSPLcom/pelotcl/app/data/gtfs/SchedulesRepository;->warmupDatabase()V
+HSPLcom/pelotcl/app/generic/data/cache/TransportCache;->getInstance(Landroid/content/Context;)Lcom/pelotcl/app/generic/data/cache/TransportCache;
+HSPLcom/pelotcl/app/generic/data/cache/TransportCache;->getMetroLines()Ljava/util/List;
+HSPLcom/pelotcl/app/generic/data/cache/TransportCache;->getTramLines()Ljava/util/List;
+HSPLcom/pelotcl/app/generic/data/cache/TransportCache;->getStops()Ljava/util/List;
 
 # Retrofit/API
-HSPLcom/pelotcl/app/data/api/RetrofitInstance;->initialize(Landroid/content/Context;)V
+HSPLcom/pelotcl/app/generic/data/network/RetrofitInstance;->initialize(Landroid/content/Context;)V
 
 # MapLibre (app wrapper + native library)
-Lcom/pelotcl/app/ui/components/MapLibreViewKt;
+Lcom/pelotcl/app/generic/ui/components/MapLibreViewKt;
 Lorg/maplibre/android/**;
 
 # Map rendering & stop display (hot paths during map interaction)
-HSPLcom/pelotcl/app/ui/screens/PlanScreenKt;->PlanScreen(Landroidx/compose/ui/Modifier;Lcom/pelotcl/app/ui/viewmodel/TransportViewModel;Landroidx/compose/runtime/Composer;II)V
-Lcom/pelotcl/app/ui/screens/PlanScreenKt;
-HSPLcom/pelotcl/app/utils/BusIconHelper;->getResourceIdForLine(Landroid/content/Context;Ljava/lang/String;)I
-HSPLcom/pelotcl/app/utils/BusIconHelper;->getAllLinesForStop(Lcom/pelotcl/app/data/model/StopFeature;)Ljava/util/List;
-
-# Spatial grid for viewport queries
-Lcom/pelotcl/app/data/cache/SpatialGrid;
+HSPLcom/pelotcl/app/generic/ui/screens/plan/PlanScreenKt;->PlanScreen(Landroidx/compose/ui/Modifier;Lcom/pelotcl/app/generic/ui/viewmodel/TransportViewModel;Landroidx/compose/runtime/Composer;II)V
+Lcom/pelotcl/app/generic/ui/screens/plan/PlanScreenKt;
+HSPLcom/pelotcl/app/utils/transport/BusIconHelper;->getResourceIdForLine(Landroid/content/Context;Ljava/lang/String;)I
+HSPLcom/pelotcl/app/utils/transport/BusIconHelper;->getAllLinesForStop(Lcom/pelotcl/app/generic/data/model/StopFeature;)Ljava/util/List;
 
 # Bottom sheet components
-Lcom/pelotcl/app/ui/components/LinesBottomSheetKt;
-Lcom/pelotcl/app/ui/components/LineDetailsBottomSheetKt;
-Lcom/pelotcl/app/ui/components/StationBottomSheetKt;
-Lcom/pelotcl/app/ui/components/SimpleSearchBarKt;
-Lcom/pelotcl/app/ui/components/AllSchedulesSheetContentKt;
-Lcom/pelotcl/app/ui/components/DirectionSelectorSheetKt;
+Lcom/pelotcl/app/generic/ui/screens/plan/LinesBottomSheetKt;
+Lcom/pelotcl/app/generic/ui/screens/plan/LineDetailsBottomSheetKt;
+Lcom/pelotcl/app/generic/ui/components/StationBottomSheetKt;
+Lcom/pelotcl/app/generic/ui/components/search/SimpleSearchBarKt;
+Lcom/pelotcl/app/generic/ui/screens/plan/AllSchedulesSheetContentKt;
 
-# Connections helper
-Lcom/pelotcl/app/utils/ConnectionsHelper;
+# Itinerary & journey
+Lcom/pelotcl/app/generic/ui/screens/plan/ItineraryScreenKt;
 
-# Itinerary & journey map
-Lcom/pelotcl/app/ui/screens/ItineraryScreenKt;
-Lcom/pelotcl/app/ui/components/JourneyMapViewKt;
+# RAPTOR routing engine
+Lcom/pelotcl/app/generic/data/repository/itinerary/RaptorRepository;
+
+# Utility classes (hot paths)
+Lcom/pelotcl/app/utils/transport/LineColorHelper;
+Lcom/pelotcl/app/utils/SearchUtils;
 
 # Compose runtime (critical)
 Landroidx/compose/runtime/**;
