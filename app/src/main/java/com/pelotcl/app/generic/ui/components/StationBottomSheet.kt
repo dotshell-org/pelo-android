@@ -13,8 +13,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
@@ -31,7 +32,6 @@ import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel.StopDeparturePreview
@@ -329,53 +329,57 @@ fun StationBottomSheet(
                     Spacer(modifier = Modifier.size(actionsInset))
                 }
 
-                // Scrollable list of lines (sorted)
-                Column(
+                // Virtualized list of departures (sorted)
+                val lineOrder = remember(allStopLines) {
+                    sortLines(allStopLines)
+                        .mapIndexed { index, line -> line.uppercase() to index }
+                        .toMap()
+                }
+
+                val sortedDepartures = remember(departures, lineOrder) {
+                    departures?.sortedWith(
+                        compareBy<StopDeparturePreview> {
+                            minutesUntilDeparture(it.nextDeparture)
+                        }
+                            .thenBy { lineOrder[it.lineName.uppercase()] ?: Int.MAX_VALUE }
+                            .thenBy { it.directionId }
+                            .thenBy { parseDepartureToMinutes(it.nextDeparture) ?: Int.MAX_VALUE }
+                    )
+                }
+
+                LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = departuresInset)
-                        .verticalScroll(rememberScrollState())
                 ) {
-                    if (departures == null) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 24.dp),
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            CircularProgressIndicator(color = PrimaryColor)
-                        }
-                    } else if (departures.isEmpty()) {
-                        Text(
-                            text = "Aucun horaire disponible pour cet arrêt",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Gray700,
-                            modifier = Modifier.padding(vertical = 12.dp)
-                        )
-                    } else {
-                        val lineOrder = remember(allStopLines) {
-                            sortLines(allStopLines)
-                                .mapIndexed { index, line -> line.uppercase() to index }
-                                .toMap()
-                        }
-
-                        val sortedDepartures = remember(departures, lineOrder) {
-                            departures.sortedWith(
-                                compareBy<StopDeparturePreview> {
-                                    minutesUntilDeparture(
-                                        it.nextDeparture
-                                    )
+                    when {
+                        departures == null -> {
+                            item(key = "loading") {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 24.dp),
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    CircularProgressIndicator(color = PrimaryColor)
                                 }
-                                    .thenBy { lineOrder[it.lineName.uppercase()] ?: Int.MAX_VALUE }
-                                    .thenBy { it.directionId }
-                                    .thenBy {
-                                        parseDepartureToMinutes(it.nextDeparture) ?: Int.MAX_VALUE
-                                    }
-                            )
+                            }
                         }
-
-                        sortedDepartures.forEachIndexed { index, departure ->
-                            key("${departure.lineName}-${departure.directionId}-${departure.nextDeparture}") {
+                        departures.isEmpty() -> {
+                            item(key = "empty") {
+                                Text(
+                                    text = "Aucun horaire disponible pour cet arrêt",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Gray700,
+                                    modifier = Modifier.padding(vertical = 12.dp)
+                                )
+                            }
+                        }
+                        else -> {
+                            itemsIndexed(
+                                sortedDepartures!!,
+                                key = { _, dep -> "${dep.lineName}-${dep.directionId}-${dep.nextDeparture}" }
+                            ) { index, departure ->
                                 DepartureListItem(
                                     lineName = departure.lineName,
                                     directionName = departure.directionName,
@@ -396,9 +400,11 @@ fun StationBottomSheet(
                                     )
                                 }
                             }
-                        }
 
-                        Spacer(modifier = Modifier.height(20.dp))
+                            item(key = "bottom_spacer") {
+                                Spacer(modifier = Modifier.height(20.dp))
+                            }
+                        }
                     }
                 }
             }

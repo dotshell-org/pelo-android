@@ -223,6 +223,13 @@ private fun getVehicleMarkerType(lineName: String): VehicleMarkerType {
     }
 }
 
+// Cache Paint objects by color to avoid repeated allocations during live tracking
+private val vehiclePaintCache = HashMap<Int, Paint>(8)
+
+// Track which map layer slots are currently in use (typically 4-10 out of 51 possible)
+// Used by filter functions to avoid iterating all (-25..25) slots
+private var currentMapSlots: Set<Int> = emptySet()
+
 private fun ensureVehicleMarkerImage(
     mapStyle: Style,
     context: Context,
@@ -236,10 +243,12 @@ private fun ensureVehicleMarkerImage(
     val bitmap = createBitmap(size, size)
     val canvas = android.graphics.Canvas(bitmap)
 
-    val circlePaint = Paint().apply {
-        this.color = color
-        isAntiAlias = true
-        style = Paint.Style.FILL
+    val circlePaint = vehiclePaintCache.getOrPut(color) {
+        Paint().apply {
+            this.color = color
+            isAntiAlias = true
+            style = Paint.Style.FILL
+        }
     }
     canvas.drawCircle(size / 2f, size / 2f, size / 2f, circlePaint)
 
@@ -2792,8 +2801,8 @@ private fun filterMapStops(
 
     val linePropertyName = "has_line_${canonicalLineName(selectedLineName)}"
 
-    // Filter layers by slot
-    (-25..25).forEach { idx ->
+    // Filter layers only for slots that exist (instead of all -25..25)
+    currentMapSlots.forEach { idx ->
         (style.getLayer("$priorityLayerPrefix-$idx") as? SymbolLayer)?.setFilter(
             Expression.all(
                 Expression.eq(Expression.get("stop_priority"), 2),
@@ -2852,8 +2861,8 @@ private fun filterMapStopsWithSelectedStop(
         val secondaryLayerPrefix = "transport-stops-layer-secondary"
         val linePropertyName = "has_line_${canonicalLineName(selectedLineName)}"
 
-        // Filter layers by slot
-        (-25..25).forEach { idx ->
+        // Filter layers only for slots that exist
+        currentMapSlots.forEach { idx ->
             (style.getLayer("$priorityLayerPrefix-$idx") as? SymbolLayer)?.let { layer ->
                 layer.setFilter(
                     Expression.all(
@@ -3261,8 +3270,8 @@ private fun showAllMapStops(
     val tramLayerPrefix = "transport-stops-layer-tram"
     val secondaryLayerPrefix = "transport-stops-layer-secondary"
 
-    // Reset filters to show all stops (by slot)
-    (-25..25).forEach { idx ->
+    // Reset filters to show all stops — only iterate slots that exist
+    currentMapSlots.forEach { idx ->
         (style.getLayer("$priorityLayerPrefix-$idx") as? SymbolLayer)?.let { layer ->
             layer.setFilter(
                 Expression.all(
@@ -3419,7 +3428,8 @@ private suspend fun addStopsToMap(
         val secondaryLayerPrefix = "transport-stops-layer-secondary"
 
 
-        (-25..25).forEach { idx ->
+        // Only remove layers for slots that were actually created (instead of all -25..25)
+        currentMapSlots.forEach { idx ->
             style.getLayer("$priorityLayerPrefix-$idx")?.let { style.removeLayer(it) }
             style.getLayer("$tramLayerPrefix-$idx")?.let { style.removeLayer(it) }
             style.getLayer("$secondaryLayerPrefix-$idx")?.let { style.removeLayer(it) }
@@ -3527,6 +3537,9 @@ private suspend fun addStopsToMap(
                 // OPTIMIZED: Create layers only for slots that are actually used
                 val iconSizesPriority = 0.7f
                 val iconSizesSecondary = 0.62f
+
+                // Save usedSlots for filter functions to avoid iterating all -25..25
+                currentMapSlots = usedSlots.toSet()
 
                 usedSlots.sorted().forEach { idx ->
                     val yOffset = idx * 13f

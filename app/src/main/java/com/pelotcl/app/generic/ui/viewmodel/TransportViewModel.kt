@@ -141,19 +141,18 @@ class TransportViewModel(private val context: Context) : ViewModel() {
     // Cache alert line index to avoid O(lines * alerts) recomputation in UI.
     private var cachedAlertIndexSource: List<TrafficAlert>? = null
     private var cachedAlertSeverityByLine: Map<String, AlertSeverity> = emptyMap()
+
+    // Cache alerts grouped by line for O(1) lookup in getAlertsForLine()
+    private var cachedAlertsByLineSource: List<TrafficAlert>? = null
+    private var cachedAlertsByLine: Map<String, List<TrafficAlert>> = emptyMap()
     
     init {
-        // Load data sequentially to avoid overwhelming the system
-        viewModelScope.launch {
-            loadTransportLines()
-            // Small delay to let lines load first
-            loadStops()
-            // Load other data in parallel but with lower priority
-            launch(Dispatchers.Default) {
-                loadTrafficAlerts()
-                loadFavorites()
-            }
-        }
+        // Load favorites first (synchronous SharedPrefs read, instant)
+        loadFavorites()
+        // Fire all async loads in parallel — each launches its own coroutine
+        loadTransportLines()
+        loadStops()
+        loadTrafficAlerts()
     }
     
     /**
@@ -597,12 +596,22 @@ class TransportViewModel(private val context: Context) : ViewModel() {
     }
 
     fun getAlertsForLine(lineName: String): List<TrafficAlert> {
-        return trafficAlerts.value
-            .asSequence()
-            .filter { alertAffectsLine(it, lineName) }
-            .distinctBy { it.alertNumber }
-            .sortedBy { it.severityLevel }
-            .toList()
+        val alerts = trafficAlerts.value
+        if (alerts !== cachedAlertsByLineSource) {
+            // Rebuild index: group distinct alerts by each line token they affect
+            val index = mutableMapOf<String, MutableList<TrafficAlert>>()
+            alerts.distinctBy { it.alertNumber }.forEach { alert ->
+                extractAlertLineTokens(alert).forEach { token ->
+                    index.getOrPut(token) { mutableListOf() }.add(alert)
+                }
+            }
+            // Pre-sort each list by severity for consistent output
+            index.values.forEach { list -> list.sortBy { it.severityLevel } }
+            cachedAlertsByLine = index
+            cachedAlertsByLineSource = alerts
+        }
+        val target = normalizeLineToken(lineName)
+        return cachedAlertsByLine[target] ?: emptyList()
     }
 
     fun getAllAvailableLines(): List<String> {
