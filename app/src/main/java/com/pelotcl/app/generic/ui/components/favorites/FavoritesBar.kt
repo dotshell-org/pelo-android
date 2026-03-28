@@ -85,8 +85,10 @@ fun FavoritesBar(
 
         val createButtonWidth =
             remember(density, textMeasurer) { estimateButtonWidth("Creer un favori") }
-        val favoritesTotalWidth = favorites.fold(0.dp) { acc, favorite ->
-            acc + estimateButtonWidth(favorite.name)
+        val favoritesTotalWidth = remember(favorites, density, textMeasurer) {
+            favorites.fold(0.dp) { acc, favorite ->
+                acc + estimateButtonWidth(favorite.name)
+            }
         }
         val totalSpacing = (favorites.size * interItemSpacing.value).dp
         val estimatedTotalContentWidth = createButtonWidth + favoritesTotalWidth + totalSpacing

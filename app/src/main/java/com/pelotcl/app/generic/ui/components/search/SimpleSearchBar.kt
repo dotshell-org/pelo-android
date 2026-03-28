@@ -19,12 +19,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Directions
@@ -371,10 +372,10 @@ fun SimpleSearchBar(
                 dividerColor = Color.Transparent
             )
         ) {
-            val scrollState = rememberScrollState()
+            val lazyListState = rememberLazyListState()
 
-            LaunchedEffect(scrollState) {
-                snapshotFlow { scrollState.isScrollInProgress }
+            LaunchedEffect(lazyListState) {
+                snapshotFlow { lazyListState.isScrollInProgress }
                     .collect { isScrolling ->
                         if (isScrolling) {
                             keyboardHiddenByScroll = true
@@ -383,8 +384,8 @@ fun SimpleSearchBar(
                     }
             }
 
-            Column(
-                Modifier
+            LazyColumn(
+                modifier = Modifier
                     .padding(top = 12.dp, bottom = 28.dp)
                     .pointerInput(Unit) {
                         awaitPointerEventScope {
@@ -394,37 +395,37 @@ fun SimpleSearchBar(
                             }
                         }
                     }
-                    .verticalScroll(scrollState)
                     .clickable(
                         indication = null,
                         interactionSource = remember { MutableInteractionSource() }
-                    ) {}
+                    ) {},
+                state = lazyListState
             ) {
-                if (queryText.isEmpty()) {
-                    if (showHistory && searchHistory.isNotEmpty()) {
+                if (queryText.isEmpty() && showHistory && searchHistory.isNotEmpty()) {
+                    item(key = "history_header") {
                         SectionHeader(icon = Icons.Default.History, text = "Recherches récentes")
-                        searchHistory.forEach { historyItem ->
-                            HistoryListItem(
-                                historyItem = historyItem,
-                                showRemove = true,
-                                onClick = {
-                                    onHistoryItemClick(historyItem)
-                                    setQueryText("")
-                                    setExpandedState(false)
-                                },
-                                onOptionsClick = {
-                                    setQueryText("")
-                                    setExpandedState(false)
-                                    keyboardController?.hide()
-                                    onHistoryItemOptionsClick(historyItem)
-                                },
-                                onRemoveClick = { onHistoryItemRemove(historyItem) }
-                            )
-                        }
+                    }
+                    items(searchHistory, key = { "history_${it.query}_${it.type}" }) { historyItem ->
+                        HistoryListItem(
+                            historyItem = historyItem,
+                            showRemove = true,
+                            onClick = {
+                                onHistoryItemClick(historyItem)
+                                setQueryText("")
+                                setExpandedState(false)
+                            },
+                            onOptionsClick = {
+                                setQueryText("")
+                                setExpandedState(false)
+                                keyboardController?.hide()
+                                onHistoryItemOptionsClick(historyItem)
+                            },
+                            onRemoveClick = { onHistoryItemRemove(historyItem) }
+                        )
                     }
                 }
 
-                combinedResults.forEach { unifiedResult ->
+                items(combinedResults, key = { it.sortKey }) { unifiedResult ->
                     when (unifiedResult) {
                         is UnifiedSearchResult.Line -> {
                             LineSearchResultItem(
@@ -466,32 +467,36 @@ fun SimpleSearchBar(
                     }
                 }
 
-                Spacer(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(60.dp)
-                        .clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() }
-                        ) {
-                            setExpandedState(false)
-                            keyboardController?.hide()
-                        }
-                )
+                item(key = "bottom_spacer") {
+                    Spacer(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(60.dp)
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() }
+                            ) {
+                                setExpandedState(false)
+                                keyboardController?.hide()
+                            }
+                    )
+                }
 
                 if (showNoResults) {
-                    ListItem(
-                        headlineContent = {
-                            Text(
-                                "Aucun résultat",
-                                color = SecondaryColor.copy(alpha = 0.6f),
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        },
-                        colors = ListItemDefaults.colors(containerColor = PrimaryColor),
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    item(key = "no_results") {
+                        ListItem(
+                            headlineContent = {
+                                Text(
+                                    "Aucun résultat",
+                                    color = SecondaryColor.copy(alpha = 0.6f),
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            },
+                            colors = ListItemDefaults.colors(containerColor = PrimaryColor),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
             }
         }

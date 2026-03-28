@@ -42,31 +42,17 @@ class SchedulesRepository private constructor(context: Context) {
         val cacheKey = query.trim().lowercase()
         searchCache.get(cacheKey)?.let { return it }
 
+        val assetsAvailable = raptorRepository.checkAssetsAvailable()
         val results = raptorRepository.searchStopsByName(query)
             .map { stop ->
                 val desserte = raptorRepository.getDesserteForStop(stop.name).orEmpty()
                 val lines = if (desserte.isEmpty() || desserte.equals("UNKNOWN", ignoreCase = true)) {
-                    // If desserte is empty or UNKNOWN, try to enrich from Raptor
-                    val assetsAvailable = raptorRepository.checkAssetsAvailable()
                     if (!assetsAvailable) {
                         Log.w("SchedulesRepository", "Stop ${stop.name} has no desserte data - Raptor assets may be missing")
-                        // Return empty list but don't filter out the stop completely
                         emptyList()
                     } else {
-                        // Try to get desserte from Raptor even if WFS says UNKNOWN
-                        val raptorDesserte = raptorRepository.getDesserteForStop(stop.name).orEmpty()
-                        if (raptorDesserte.isNotBlank() && raptorDesserte != "UNKNOWN") {
-                            raptorDesserte.split(',')
-                                .mapNotNull { part ->
-                                    val token = part.trim()
-                                    if (token.isEmpty()) null else token.substringBefore(':').trim()
-                                }
-                                .filter { it.isNotEmpty() }
-                                .distinct()
-                        } else {
-                            // No desserte available from either source
-                            emptyList()
-                        }
+                        // desserte already fetched above - reuse it (no second call needed)
+                        emptyList()
                     }
                 } else {
                     desserte.split(',')

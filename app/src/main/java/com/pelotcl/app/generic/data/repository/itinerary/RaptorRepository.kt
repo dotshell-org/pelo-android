@@ -70,6 +70,13 @@ class RaptorRepository private constructor(private val context: Context) {
     // Performance: Reusable StringBuilder for cache key building (ThreadLocal for thread safety)
     private val cacheKeyBuilder = ThreadLocal.withInitial { StringBuilder(64) }
 
+    // Performance: Cached result of checkAssetsAvailable() to avoid repeated file I/O
+    @Volatile
+    private var cachedAssetsAvailable: Boolean? = null
+
+    // Performance: Pre-computed list of stops with coords to avoid repeated .map{} allocations
+    private var cachedStopsWithCoords: List<RaptorStopWithCoords> = emptyList()
+
     // Period IDs matching asset file naming
     companion object {
         private const val TAG = "RaptorRepository"
@@ -204,6 +211,17 @@ class RaptorRepository private constructor(private val context: Context) {
 
                 // Build performance indexes
                 buildStopIndexes()
+
+                // Pre-compute cached values to avoid repeated allocations
+                cachedAssetsAvailable = true // assets verified above
+                cachedStopsWithCoords = stopsCache.map { stop ->
+                    RaptorStopWithCoords(
+                        id = stop.id,
+                        name = stop.name,
+                        lat = stop.lat,
+                        lon = stop.lon
+                    )
+                }
 
                 isInitialized = true
 
@@ -510,7 +528,8 @@ class RaptorRepository private constructor(private val context: Context) {
      * Useful for coordinate-based matching with WFS stops.
      */
     fun getAllStopsWithCoords(): List<RaptorStopWithCoords> {
-        return stopsCache.map { stop ->
+        if (cachedStopsWithCoords.isNotEmpty()) return cachedStopsWithCoords
+        val result = stopsCache.map { stop ->
             RaptorStopWithCoords(
                 id = stop.id,
                 name = stop.name,
@@ -518,6 +537,8 @@ class RaptorRepository private constructor(private val context: Context) {
                 lon = stop.lon
             )
         }
+        cachedStopsWithCoords = result
+        return result
     }
 
     /**
@@ -525,7 +546,8 @@ class RaptorRepository private constructor(private val context: Context) {
      * @return true if all assets are present, false otherwise
      */
     fun checkAssetsAvailable(): Boolean {
-        return runCatching {
+        cachedAssetsAvailable?.let { return it }
+        val result = runCatching {
             val requiredAssets = listOf(
                 "holidays.json",
                 "stops_saturday.bin", "routes_saturday.bin",
@@ -538,6 +560,8 @@ class RaptorRepository private constructor(private val context: Context) {
                 runCatching { context.assets.open(assetName).close() }.isSuccess
             }
         }.getOrDefault(false)
+        cachedAssetsAvailable = result
+        return result
     }
 
     /**
