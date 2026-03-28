@@ -37,6 +37,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
+data class LineSection(
+    val lineName: String,
+    val startStop: String,
+    val endStop: String
+)
+
 /**
  * ViewModel principal pour la gestion des données de transport
  * Utilise TransportServiceProvider pour accéder aux services
@@ -46,7 +52,7 @@ class TransportViewModel(private val context: Context) : ViewModel() {
     private val transportApi: TransportApi = TransportServiceProvider.getTransportApi()
     private val vehiclePositionsService = TransportServiceProvider.getVehiclePositionsService()
     private val lineRules = TransportServiceProvider.getTransportLineRules()
-    private val transportRepository: TransportRepository = TransportRepository(context)
+    internal val transportRepository: TransportRepository = TransportRepository(context)
     private val trafficAlertsRepository = TrafficAlertsRepository(transportApi, context)
     private val vehiclePositionsRepository = VehiclePositionsRepository(vehiclePositionsService)
     private val schedulesRepository = SchedulesRepository.getInstance(context)
@@ -1170,6 +1176,137 @@ class TransportViewModel(private val context: Context) : ViewModel() {
         val nextDeparture: String
     )
 
+    fun generateBezierCurve(start: List<Double>, end: List<Double>): List<List<Double>> {
+        val points = mutableListOf<List<Double>>()
+        points.add(start)
+        
+        val midX = (start[0] + end[0]) / 2
+        val midY = (start[1] + end[1]) / 2
+        
+        val dx = end[0] - start[0]
+        val dy = end[1] - start[1]
+        
+        val length = kotlin.math.sqrt(dx * dx + dy * dy)
+        val perpx = -dy / length * length * 0.1
+        val perpy = dx / length * length * 0.1
+        
+        val controlX = midX + perpx
+        val controlY = midY + perpy
+        
+        val segments = 20
+        for (i in 1..segments) {
+            val t = i.toDouble() / segments
+            val x = (1-t)*(1-t)*start[0] + 2*(1-t)*t*controlX + t*t*end[0]
+            val y = (1-t)*(1-t)*start[1] + 2*(1-t)*t*controlY + t*t*end[1]
+            points.add(listOf(x, y))
+        }
+        
+        points.add(end)
+        return points
+    }
+
+    internal fun sectionLinesBetweenStops(
+        lines: List<com.pelotcl.app.generic.data.model.Feature>,
+        startStopName: String,
+        endStopName: String
+    ): List<com.pelotcl.app.generic.data.model.Feature> {
+        val sectionedLines = mutableListOf<com.pelotcl.app.generic.data.model.Feature>()
+
+        val stopsState = stopsUiState.value
+        if (stopsState !is TransportStopsUiState.Success) {
+            Log.e("TransportViewModel", "Stops not loaded yet")
+            return sectionedLines
+        }
+        
+        val stops = stopsState.stops
+
+        val startStop = stops.find { it.properties.nom.contains(startStopName, ignoreCase = true) }
+        val endStop = stops.find { it.properties.nom.contains(endStopName, ignoreCase = true) }
+        
+        if (startStop == null || endStop == null) {
+            Log.e("TransportViewModel", "Stops not found: $startStopName or $endStopName")
+            return sectionedLines
+        }
+        
+        for (line in lines) {
+            val lineGeometry = line.geometry
+            if (lineGeometry is com.pelotcl.app.generic.data.model.Geometry) {
+                val coordinates = lineGeometry.coordinates
+                val firstLine = coordinates.firstOrNull() ?: continue
+                
+                val startCoord = listOf(startStop.geometry.coordinates[0], startStop.geometry.coordinates[1])
+                val endCoord = listOf(endStop.geometry.coordinates[0], endStop.geometry.coordinates[1])
+                
+                fun findClosestPointIndex(targetCoord: List<Double>): Int {
+                    var minDistance = Double.MAX_VALUE
+                    var bestIndex = -1
+                    
+                    for (i in firstLine.indices) {
+                        val coord = firstLine[i]
+                        val distance = kotlin.math.sqrt(
+                            (coord[0] - targetCoord[0]) * (coord[0] - targetCoord[0]) +
+                                    (coord[1] - targetCoord[1]) * (coord[1] - targetCoord[1])
+                        )
+                        
+                        if (distance < minDistance) {
+                            minDistance = distance
+                            bestIndex = i
+                        }
+                    }
+                    
+                    return bestIndex
+                }
+                
+                var startIndex = findClosestPointIndex(startCoord)
+                var endIndex = findClosestPointIndex(endCoord)
+                
+                if (startIndex != -1 && endIndex != -1) {
+                    val initialLength = kotlin.math.abs(endIndex - startIndex)
+                    
+                    if (initialLength < 10) {
+                        val extendBy = 5
+                        
+                        startIndex = if (startIndex > extendBy) {
+                            startIndex - extendBy
+                        } else {
+                            0
+                        }
+                        
+                        endIndex = if (endIndex < firstLine.size - extendBy - 1) {
+                            endIndex + extendBy
+                        } else {
+                            firstLine.size - 1
+                        }
+                    }
+                }
+                
+                if (startIndex != -1 && endIndex != -1) {
+                    val isMetroLine = setOf("A", "B", "C", "D").contains(line.properties.lineName)
+                    
+                    var sectionCoordinates: List<List<Double>> = if (isMetroLine) {
+                        generateBezierCurve(startCoord, endCoord)
+                    } else {
+                        if (startIndex < endIndex) {
+                            firstLine.subList(startIndex, endIndex + 1)
+                        } else {
+                            firstLine.subList(endIndex, startIndex + 1).reversed()
+                        }
+                    }
+                    
+                    if (sectionCoordinates.size > 2) {
+                        val sectionedLine = line.copy(
+                            geometry = com.pelotcl.app.generic.data.model.Geometry(
+                                type = line.geometry.type,
+                                coordinates = listOf(sectionCoordinates)
+                            )
+                        )
+                        sectionedLines.add(sectionedLine)
+                    }
+                }
+            }
+        }
+        return sectionedLines
+    }
 
 }
 

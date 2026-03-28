@@ -1250,7 +1250,8 @@ fun PlanScreen(
         drawItinerariesOnMap(
             map = map,
             journeys = itineraryJourneys,
-            selectedJourney = selectedItineraryJourney
+            selectedJourney = selectedItineraryJourney,
+            viewModel = viewModel
         )
     }
 
@@ -3025,7 +3026,8 @@ private fun clearItineraryLayers(style: Style) {
 private fun drawItinerariesOnMap(
     map: MapLibreMap,
     journeys: List<JourneyResult>,
-    selectedJourney: JourneyResult?
+    selectedJourney: JourneyResult?,
+    viewModel: TransportViewModel
 ) {
     map.getStyle { style ->
         clearItineraryLayers(style)
@@ -3042,50 +3044,131 @@ private fun drawItinerariesOnMap(
                     String.format(Locale.ROOT, "#%06X", 0xFFFFFF and colorInt)
                 }
 
-                val coordinatesArray = JsonArray()
-                val fromCoord = JsonArray()
-                fromCoord.add(leg.fromLon)
-                fromCoord.add(leg.fromLat)
-                coordinatesArray.add(fromCoord)
+                var drewSection = false
 
-                leg.intermediateStops.forEach { stop ->
-                    val coord = JsonArray()
-                    coord.add(stop.lon)
-                    coord.add(stop.lat)
-                    coordinatesArray.add(coord)
-                }
-
-                val toCoord = JsonArray()
-                toCoord.add(leg.toLon)
-                toCoord.add(leg.toLat)
-                coordinatesArray.add(toCoord)
-
-                val lineGeoJson = JsonObject().apply {
-                    addProperty("type", "Feature")
-                    val geometry = JsonObject().apply {
-                        addProperty("type", "LineString")
-                        add("coordinates", coordinatesArray)
+                if (!leg.isWalking) {
+                    val lineName = leg.routeName ?: ""
+                    val lines = try {
+                        kotlinx.coroutines.runBlocking {
+                            viewModel.transportRepository.getLineByName(lineName).getOrElse { emptyList() }
+                        }
+                    } catch (e: Exception) {
+                        emptyList<Feature>()
                     }
-                    add("geometry", geometry)
-                }
 
-                val sourceId = "inline-itinerary-leg-source-$journeyIndex-$legIndex"
-                val layerId = "inline-itinerary-leg-layer-$journeyIndex-$legIndex"
-
-                style.addSource(GeoJsonSource(sourceId, lineGeoJson.toString()))
-                val lineLayer = LineLayer(layerId, sourceId).apply {
-                    setProperties(
-                        PropertyFactory.lineColor(lineColor),
-                        PropertyFactory.lineWidth(if (leg.isWalking) 3f else 5f),
-                        PropertyFactory.lineOpacity(1.0f),
-                        PropertyFactory.lineCap("round"),
-                        PropertyFactory.lineJoin("round")
-                    )
-                    if (leg.isWalking) {
-                        setProperties(PropertyFactory.lineDasharray(arrayOf(2f, 2f)))
+                    if (lines.isNotEmpty()) {
+                        val sectionedLines = viewModel.sectionLinesBetweenStops(
+                            lines,
+                            leg.fromStopName,
+                            leg.toStopName
+                        )
+                        if (sectionedLines.isNotEmpty()) {
+                            val sectionedLine = sectionedLines.first()
+                            val sectionGeometry = sectionedLine.geometry
+                            if (sectionGeometry is com.pelotcl.app.generic.data.model.Geometry) {
+                                val coordinates = sectionGeometry.coordinates
+                                if (coordinates.isNotEmpty()) {
+                                    val firstLine = coordinates.firstOrNull()
+                                    if (!firstLine.isNullOrEmpty() && firstLine.size > 1) {
+                                        val coordinatesArray = JsonArray()
+                                        val isMetro = listOf("A", "B", "C", "D").any { lineName.equals(it, ignoreCase = true) }
+                                        if (isMetro) {
+                                            for (i in 0 until firstLine.size - 1) {
+                                                val start = firstLine[i]
+                                                val end = firstLine[i + 1]
+                                                val bezierPoints = viewModel.generateBezierCurve(start, end)
+                                                bezierPoints.forEachIndexed { idx, pt ->
+                                                    if (i == 0 || idx > 0) {
+                                                        val coordArray = JsonArray()
+                                                        coordArray.add(pt[0])
+                                                        coordArray.add(pt[1])
+                                                        coordinatesArray.add(coordArray)
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            firstLine.forEach { coord ->
+                                                val coordArray = JsonArray()
+                                                coordArray.add(coord[0])
+                                                coordArray.add(coord[1])
+                                                coordinatesArray.add(coordArray)
+                                            }
+                                        }
+                                        val lineGeoJson = JsonObject().apply {
+                                            addProperty("type", "Feature")
+                                            val geometry = JsonObject().apply {
+                                                addProperty("type", "LineString")
+                                                add("coordinates", coordinatesArray)
+                                            }
+                                            add("geometry", geometry)
+                                        }
+                                        val sourceId = "inline-itinerary-leg-source-$journeyIndex-$legIndex"
+                                        val layerId = "inline-itinerary-leg-layer-$journeyIndex-$legIndex"
+                                        style.addSource(GeoJsonSource(sourceId, lineGeoJson.toString()))
+                                        val lineLayer = LineLayer(layerId, sourceId).apply {
+                                            setProperties(
+                                                PropertyFactory.lineColor(lineColor),
+                                                PropertyFactory.lineWidth(5f),
+                                                PropertyFactory.lineOpacity(1.0f),
+                                                PropertyFactory.lineCap("round"),
+                                                PropertyFactory.lineJoin("round")
+                                            )
+                                        }
+                                        style.addLayer(lineLayer)
+                                        drewSection = true
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
-                style.addLayer(lineLayer)
+
+                if (!drewSection) {
+                    val coordinatesArray = JsonArray()
+                    val fromCoord = JsonArray()
+                    fromCoord.add(leg.fromLon)
+                    fromCoord.add(leg.fromLat)
+                    coordinatesArray.add(fromCoord)
+
+                    leg.intermediateStops.forEach { stop ->
+                        val coord = JsonArray()
+                        coord.add(stop.lon)
+                        coord.add(stop.lat)
+                        coordinatesArray.add(coord)
+                    }
+
+                    val toCoord = JsonArray()
+                    toCoord.add(leg.toLon)
+                    toCoord.add(leg.toLat)
+                    coordinatesArray.add(toCoord)
+
+                    val lineGeoJson = JsonObject().apply {
+                        addProperty("type", "Feature")
+                        val geometry = JsonObject().apply {
+                            addProperty("type", "LineString")
+                            add("coordinates", coordinatesArray)
+                        }
+                        add("geometry", geometry)
+                    }
+
+                    val sourceId = "inline-itinerary-leg-source-$journeyIndex-$legIndex"
+                    val layerId = "inline-itinerary-leg-layer-$journeyIndex-$legIndex"
+
+                    style.addSource(GeoJsonSource(sourceId, lineGeoJson.toString()))
+                    val lineLayer = LineLayer(layerId, sourceId).apply {
+                        setProperties(
+                            PropertyFactory.lineColor(lineColor),
+                            PropertyFactory.lineWidth(if (leg.isWalking) 3f else 5f),
+                            PropertyFactory.lineOpacity(1.0f),
+                            PropertyFactory.lineCap("round"),
+                            PropertyFactory.lineJoin("round")
+                        )
+                        if (leg.isWalking) {
+                            setProperties(PropertyFactory.lineDasharray(arrayOf(2f, 2f)))
+                        }
+                    }
+                    style.addLayer(lineLayer)
+                }
             }
         }
     }
