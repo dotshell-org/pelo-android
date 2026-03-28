@@ -3,8 +3,8 @@ package com.pelotcl.app.generic.data.cache
 import android.content.Context
 import android.util.Log
 import androidx.core.content.edit
-import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.pelotcl.app.generic.data.GsonProvider
 import com.pelotcl.app.generic.data.model.TrafficAlert
 
 /**
@@ -20,7 +20,7 @@ class TrafficAlertsCache(context: Context) {
     }
 
     private val sharedPrefs = context.getSharedPreferences(CACHE_FILE_NAME, Context.MODE_PRIVATE)
-    private val gson = Gson()
+    private val gson = GsonProvider.instance
 
     /**
      * Saves traffic alerts to cache
