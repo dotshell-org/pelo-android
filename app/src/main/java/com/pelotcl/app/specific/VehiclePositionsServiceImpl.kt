@@ -1,7 +1,7 @@
 package com.pelotcl.app.specific
 
-import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.pelotcl.app.generic.data.GsonProvider
 import com.pelotcl.app.generic.data.model.SiriData
 import com.pelotcl.app.generic.data.model.SimpleVehiclePosition
 import com.pelotcl.app.generic.data.model.VehicleActivity
@@ -32,7 +32,7 @@ class VehiclePositionsServiceImpl : VehiclePositionsService {
         return "https://api.dotshell.eu/pelo/v1/vehicle-monitoring/positions/stream"
     }
     
-    private val gson = Gson()
+    private val gson = GsonProvider.instance
     private val streamClient = OkHttpClient.Builder()
         .addInterceptor(DotshellRequestLogger.interceptor("sse"))
         .connectTimeout(15, TimeUnit.SECONDS)

@@ -17,7 +17,7 @@ class TrafficAlertsWorker(
 
     companion object {
         private const val TAG = "TrafficAlertsWorker"
-
+        private val DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
     }
 
     private val trafficAlertsRepository = TrafficAlertsRepository(TransportServiceProvider.getTransportApi(), applicationContext)
@@ -43,12 +43,11 @@ class TrafficAlertsWorker(
     }
 
     private fun filterValidAlerts(alerts: List<TrafficAlert>): List<TrafficAlert> {
-        val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
         val now = LocalDateTime.now()
 
         return alerts.filter { alert ->
             try {
-                val endDate = LocalDateTime.parse(alert.endDate, dateFormatter)
+                val endDate = LocalDateTime.parse(alert.endDate, DATE_FORMATTER)
                 endDate.isAfter(now)
             } catch (e: Exception) {
                 true // Keep if we can't parse

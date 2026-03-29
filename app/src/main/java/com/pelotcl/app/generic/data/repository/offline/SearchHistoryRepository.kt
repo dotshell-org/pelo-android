@@ -1,8 +1,8 @@
 package com.pelotcl.app.generic.data.repository.offline
 
 import android.content.Context
-import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.pelotcl.app.generic.data.GsonProvider
 import androidx.core.content.edit
 
 /**
@@ -26,7 +26,7 @@ enum class SearchType {
  */
 class SearchHistoryRepository(context: Context) {
     private val prefs = context.getSharedPreferences("pelo_search_history", Context.MODE_PRIVATE)
-    private val gson = Gson()
+    private val gson = GsonProvider.instance
 
     companion object {
         private const val KEY_SEARCH_HISTORY = "search_history"

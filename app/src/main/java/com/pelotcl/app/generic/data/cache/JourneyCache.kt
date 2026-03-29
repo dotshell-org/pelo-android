@@ -255,27 +255,19 @@ class JourneyCache private constructor(context: Context) {
 
     private fun enforceDiskSizeLimit() {
         try {
-            val files = cacheDir.listFiles()?.toMutableList() ?: return
+            val files = cacheDir.listFiles() ?: return
+            if (files.isEmpty()) return
 
-            // Check entry count limit
-            if (files.size > MAX_DISK_ENTRIES) {
-                // Delete oldest files
-                files.sortBy { it.lastModified() }
-                val toDelete = files.take(files.size - MAX_DISK_ENTRIES)
-                toDelete.forEach { it.delete() }
-                files.removeAll(toDelete.toSet())
-            }
+            // Single sort, then handle both count and size limits in one pass
+            val sortedFiles = files.sortedBy { it.lastModified() }
+            var fileCount = sortedFiles.size
+            var totalSize = sortedFiles.sumOf { it.length() }
 
-            // Check size limit
-            var totalSize = files.sumOf { it.length() }
-            if (totalSize > MAX_DISK_CACHE_SIZE_BYTES) {
-                // Delete oldest files until under limit
-                files.sortBy { it.lastModified() }
-                for (file in files) {
-                    if (totalSize <= MAX_DISK_CACHE_SIZE_BYTES) break
-                    totalSize -= file.length()
-                    file.delete()
-                }
+            for (file in sortedFiles) {
+                if (fileCount <= MAX_DISK_ENTRIES && totalSize <= MAX_DISK_CACHE_SIZE_BYTES) break
+                totalSize -= file.length()
+                fileCount--
+                file.delete()
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to enforce disk size limit: ${e.message}")

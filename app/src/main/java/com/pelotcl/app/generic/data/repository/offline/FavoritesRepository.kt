@@ -2,8 +2,8 @@ package com.pelotcl.app.generic.data.repository.offline
 
 import android.content.Context
 import androidx.core.content.edit
-import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.pelotcl.app.generic.data.GsonProvider
 import com.pelotcl.app.generic.data.model.Favorite
 
 /**
@@ -12,7 +12,7 @@ import com.pelotcl.app.generic.data.model.Favorite
  */
 class FavoritesRepository(private val context: Context) {
     private val prefs by lazy { context.getSharedPreferences("pelo_prefs", Context.MODE_PRIVATE) }
-    private val gson = Gson()
+    private val gson = GsonProvider.instance
 
     private val keyFavoriteStops = "favorites_stops"
     private val keyStopDessertePrefix = "stop_desserte_"
@@ -30,19 +30,20 @@ class FavoritesRepository(private val context: Context) {
 
     fun toggleFavoriteStop(stopName: String, desserte: String? = null): Boolean {
         val favorites = getFavoriteStops().toMutableSet()
-        if (favorites.contains(stopName)) {
-            favorites.remove(stopName)
-            // Clean up desserte when removing
-            prefs.edit { remove(keyStopDessertePrefix + stopName) }
-        } else {
-            favorites.add(stopName)
-            // Store desserte alongside stop name
-            if (!desserte.isNullOrEmpty()) {
-                prefs.edit { putString(keyStopDessertePrefix + stopName, desserte) }
+        val isAdding = !favorites.contains(stopName)
+
+        if (isAdding) favorites.add(stopName) else favorites.remove(stopName)
+
+        // Single batch edit for all SharedPreferences changes
+        prefs.edit {
+            putStringSet(keyFavoriteStops, favorites)
+            if (isAdding && !desserte.isNullOrEmpty()) {
+                putString(keyStopDessertePrefix + stopName, desserte)
+            } else if (!isAdding) {
+                remove(keyStopDessertePrefix + stopName)
             }
         }
-        saveFavoriteStops(favorites)
-        return favorites.contains(stopName)
+        return isAdding
     }
 
     fun getDesserteForStop(stopName: String): String? {

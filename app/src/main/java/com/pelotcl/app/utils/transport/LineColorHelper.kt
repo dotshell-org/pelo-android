@@ -8,6 +8,9 @@ import androidx.core.graphics.toColorInt
  */
 object LineColorHelper {
 
+    // Cache for toColorInt() results — ~15 unique colors, near-100% hit rate
+    private val colorIntCache = HashMap<String, Int>(20)
+
     // Defined colors
     private const val METRO_A_COLOR = "#EC4899"
     private const val METRO_B_COLOR = "#3B82F6"
@@ -62,7 +65,11 @@ object LineColorHelper {
      * @return The color in hexadecimal format (#RRGGBB)
      */
     fun getColorForLineString(lineName: String): Int {
-        return getColorForLineStringAux(lineName).toColorInt()
+        val key = lineName.uppercase()
+        colorIntCache[key]?.let { return it }
+        val color = getColorForLineStringAux(lineName).toColorInt()
+        colorIntCache[key] = color
+        return color
     }
 
 }
