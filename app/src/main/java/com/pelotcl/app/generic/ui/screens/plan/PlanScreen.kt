@@ -3060,8 +3060,9 @@ private fun drawItinerariesOnMap(
                     if (lines.isNotEmpty()) {
                         val sectionedLines = viewModel.sectionLinesBetweenStops(
                             lines,
-                            leg.fromStopName,
-                            leg.toStopName
+                            leg.fromStopId,
+                            leg.toStopId,
+                            leg
                         )
                         if (sectionedLines.isNotEmpty()) {
                             val sectionedLine = sectionedLines.first()

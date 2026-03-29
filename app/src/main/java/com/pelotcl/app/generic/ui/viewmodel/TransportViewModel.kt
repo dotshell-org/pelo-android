@@ -1229,10 +1229,53 @@ class TransportViewModel(private val context: Context) : ViewModel() {
         return points
     }
 
+    /**
+     * Find a stop by coordinates when ID-based matching fails.
+     * This handles cases where Raptor and WFS use different GTFS datasets with different IDs.
+     * Uses spatial proximity to find the closest stop within a reasonable distance threshold.
+     */
+    private fun findStopByCoordinates(
+        stops: List<StopFeature>,
+        targetLat: Double,
+        targetLon: Double,
+        stopId: String
+    ): StopFeature? {
+        val thresholdDistance = 0.0002 // ~20 meters in degrees
+        var closestStop: StopFeature? = null
+        var minDistance = Double.MAX_VALUE
+        
+        for (stop in stops) {
+            val stopCoord = stop.geometry.coordinates
+            if (stopCoord.size < 2) continue
+            
+            val stopLon = stopCoord[0]
+            val stopLat = stopCoord[1]
+            
+            // Calculate squared distance to avoid sqrt computation
+            val latDiff = targetLat - stopLat
+            val lonDiff = targetLon - stopLon
+            val distanceSq = latDiff * latDiff + lonDiff * lonDiff
+            
+            if (distanceSq < minDistance) {
+                minDistance = distanceSq
+                closestStop = stop
+            }
+        }
+        
+        if (closestStop != null && minDistance < thresholdDistance * thresholdDistance) {
+            Log.d("TransportViewModel", "Found stop by coordinates for $stopId: ${closestStop.properties.nom} (distance: ${kotlin.math.sqrt(minDistance)} degrees)")
+            return closestStop
+        } else {
+            Log.w("TransportViewModel", "No close stop found by coordinates for $stopId (min distance: ${if (closestStop == null) "none" else kotlin.math.sqrt(minDistance)} degrees)")
+            return null
+        }
+    }
+
     internal fun sectionLinesBetweenStops(
         lines: List<com.pelotcl.app.generic.data.model.Feature>,
-        startStopName: String,
-        endStopName: String
+        startStopId: String,
+        endStopId: String,
+        leg: com.pelotcl.app.generic.data.repository.itinerary.JourneyLeg
     ): List<com.pelotcl.app.generic.data.model.Feature> {
         val sectionedLines = mutableListOf<com.pelotcl.app.generic.data.model.Feature>()
 
@@ -1244,13 +1287,35 @@ class TransportViewModel(private val context: Context) : ViewModel() {
         
         val stops = stopsState.stops
 
-        val startStop = stops.find { it.properties.nom.contains(startStopName, ignoreCase = true) }
-        val endStop = stops.find { it.properties.nom.contains(endStopName, ignoreCase = true) }
+        Log.d("TransportViewModel", "Looking for stops: startStopId=$startStopId, endStopId=$endStopId, total stops=${stops.size}")
         
-        if (startStop == null || endStop == null) {
-            Log.e("TransportViewModel", "Stops not found: $startStopName or $endStopName")
+        // JourneyLeg uses GTFS stop IDs (numeric strings), but StopFeature.id uses GID format
+        // We need to compare with StopProperties.id which contains the GTFS ID
+        val startStop = stops.find { it.properties.id.toString() == startStopId }
+        val endStop = stops.find { it.properties.id.toString() == endStopId }
+        
+        // If ID-based matching fails, try coordinate-based matching as fallback
+        // This can happen when Raptor and WFS use different GTFS datasets with different IDs
+        val finalStartStop = startStop ?: findStopByCoordinates(stops, leg.fromLat, leg.fromLon, startStopId)
+        val finalEndStop = endStop ?: findStopByCoordinates(stops, leg.toLat, leg.toLon, endStopId)
+        
+        // Log which matching method was used
+        val startMatchMethod = if (startStop != null) "ID" else if (finalStartStop != null) "coordinates" else "failed"
+        val endMatchMethod = if (endStop != null) "ID" else if (finalEndStop != null) "coordinates" else "failed"
+        Log.d("TransportViewModel", "Stop matching: start=$startMatchMethod, end=$endMatchMethod")
+        
+        if (finalStartStop == null || finalEndStop == null) {
+            Log.e("TransportViewModel", "Stops not found: startStopId=$startStopId, endStopId=$endStopId")
+            // Debug: list some stop GTFS IDs to see what format they have
+            if (stops.isNotEmpty()) {
+                val sampleStops = stops.take(5)
+                Log.d("TransportViewModel", "Sample GTFS stop IDs: ${sampleStops.joinToString { "${it.properties.id} (${it.properties.nom})" }}")
+                Log.d("TransportViewModel", "Sample GID stop IDs: ${sampleStops.joinToString { "${it.id} (${it.properties.nom})" }}")
+            }
             return sectionedLines
         }
+        
+        Log.d("TransportViewModel", "Found stops: ${finalStartStop.properties.nom} (GTFS: ${finalStartStop.properties.id}, GID: ${finalStartStop.id}) -> ${finalEndStop.properties.nom} (GTFS: ${finalEndStop.properties.id}, GID: ${finalEndStop.id})")
         
         for (line in lines) {
             val lineGeometry = line.geometry
@@ -1258,8 +1323,8 @@ class TransportViewModel(private val context: Context) : ViewModel() {
                 val coordinates = lineGeometry.coordinates
                 val firstLine = coordinates.firstOrNull() ?: continue
                 
-                val startCoord = listOf(startStop.geometry.coordinates[0], startStop.geometry.coordinates[1])
-                val endCoord = listOf(endStop.geometry.coordinates[0], endStop.geometry.coordinates[1])
+                val startCoord = listOf(finalStartStop.geometry.coordinates[0], finalStartStop.geometry.coordinates[1])
+                val endCoord = listOf(finalEndStop.geometry.coordinates[0], finalEndStop.geometry.coordinates[1])
                 
                 fun findClosestPointIndex(targetCoord: List<Double>): Int {
                     var minDistance = Double.MAX_VALUE
@@ -1314,6 +1379,25 @@ class TransportViewModel(private val context: Context) : ViewModel() {
                             firstLine.subList(startIndex, endIndex + 1)
                         } else {
                             firstLine.subList(endIndex, startIndex + 1).reversed()
+                        }
+                    }
+                    
+                    // Replace first and last points with exact stop positions
+                    if (sectionCoordinates.isNotEmpty()) {
+                        // Replace first point with exact start stop position
+                        if (sectionCoordinates.size == 1) {
+                            sectionCoordinates = listOf(startCoord, endCoord)
+                        } else {
+                            sectionCoordinates = sectionCoordinates.toMutableList().apply {
+                                // Replace first point with exact start position
+                                if (this.isNotEmpty()) {
+                                    this[0] = startCoord
+                                }
+                                // Replace last point with exact end position
+                                if (this.size > 1) {
+                                    this[this.size - 1] = endCoord
+                                }
+                            }
                         }
                     }
                     
