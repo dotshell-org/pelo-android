@@ -43,6 +43,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -96,9 +98,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.createBitmap
 import androidx.lifecycle.ViewModel
@@ -114,6 +118,7 @@ import com.pelotcl.app.generic.data.model.Feature
 import com.pelotcl.app.generic.data.model.StopFeature
 import com.pelotcl.app.generic.data.model.StopGeometry
 import com.pelotcl.app.generic.data.model.StopProperties
+import com.pelotcl.app.generic.data.repository.itinerary.JourneyLeg
 import com.pelotcl.app.generic.data.repository.itinerary.JourneyResult
 import com.pelotcl.app.generic.data.repository.offline.MapStyleRepository
 import com.pelotcl.app.generic.data.network.MapStyleData
@@ -128,6 +133,8 @@ import com.pelotcl.app.generic.ui.components.search.TransportSearchContent
 import com.pelotcl.app.generic.ui.theme.PrimaryColor
 import com.pelotcl.app.generic.ui.theme.AccentColor
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
+import com.pelotcl.app.generic.ui.theme.Stone800
+import com.pelotcl.app.generic.ui.theme.Yellow500
 import com.pelotcl.app.generic.ui.viewmodel.TransportLinesUiState
 import com.pelotcl.app.generic.ui.viewmodel.TransportStopsUiState
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
@@ -208,6 +215,48 @@ private fun formatRemainingTime(
     } else {
         "${remainingMinutes / 60}h${(remainingMinutes % 60).toString().padStart(2, '0')}"
     }
+}
+
+private fun normalizeTimeAroundReference(timeSeconds: Int, referenceSeconds: Int): Int {
+    val day = 24 * 3600
+    var normalized = timeSeconds
+    while (normalized < referenceSeconds - day / 2) normalized += day
+    while (normalized > referenceSeconds + day / 2) normalized -= day
+    return normalized
+}
+
+private fun getCurrentAndNextNavigationLeg(
+    journey: JourneyResult,
+    nowSeconds: Int
+): Pair<JourneyLeg?, JourneyLeg?> {
+    val nonWalkingLegs = journey.legs.filterNot { it.isWalking }
+    if (nonWalkingLegs.isEmpty()) return null to null
+
+    val reference = journey.departureTime
+    val now = normalizeTimeAroundReference(nowSeconds, reference)
+    val normalizedLegs = nonWalkingLegs.map { leg ->
+        val dep = normalizeTimeAroundReference(leg.departureTime, reference)
+        val arr = normalizeTimeAroundReference(leg.arrivalTime, reference)
+        dep to arr
+    }
+
+    var currentIndex = normalizedLegs.indexOfFirst { (dep, arr) -> now in dep..arr }
+    if (currentIndex == -1) {
+        currentIndex = normalizedLegs.indexOfFirst { (dep, _) -> now < dep }
+    }
+    if (currentIndex == -1) {
+        currentIndex = nonWalkingLegs.lastIndex
+    }
+
+    val currentLeg = nonWalkingLegs.getOrNull(currentIndex)
+    val nextLeg = nonWalkingLegs.drop(currentIndex + 1).firstOrNull()
+    return currentLeg to nextLeg
+}
+
+private fun formatClockTime(seconds: Int): String {
+    val hours = (seconds / 3600) % 24
+    val minutes = (seconds % 3600) / 60
+    return String.format(Locale.ROOT, "%02d:%02d", hours, minutes)
 }
 
 private fun isValidJourneyCoordinate(lat: Double, lon: Double): Boolean {
@@ -813,6 +862,15 @@ fun PlanScreen(
                     sheetContentState == SheetContentState.NAVIGATION
         )
         onNavigationModeChanged(sheetContentState == SheetContentState.NAVIGATION)
+
+        if (sheetContentState == SheetContentState.NAVIGATION) {
+            requestedSheetValueForNextContent = null
+            scope.launch {
+                scaffoldSheetState.bottomSheetState.hide()
+            }
+            previousSheetContentState = sheetContentState
+            return@LaunchedEffect
+        }
 
         val requestedValue = requestedSheetValueForNextContent
         if (requestedValue != null &&
@@ -2233,6 +2291,7 @@ fun PlanScreen(
                                 },
                                 onStartNavigation = { journey ->
                                     selectedItineraryJourney = journey
+                                    requestedSheetValueForNextContent = null
                                     sheetContentState = SheetContentState.NAVIGATION
                                     scope.launch {
                                         scaffoldSheetState.bottomSheetState.hide()
@@ -2370,15 +2429,157 @@ fun PlanScreen(
             }
 
             if (isNavigationMode) {
-                Box(
+                val currentJourney = selectedItineraryJourney
+                val (currentLeg, nextLeg) = currentJourney?.let {
+                    getCurrentAndNextNavigationLeg(it, navigationNowSeconds)
+                } ?: (null to null)
+                val topMainShape = if (nextLeg != null) {
+                    RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 0.dp, bottomEnd = 20.dp)
+                } else {
+                    RoundedCornerShape(20.dp)
+                }
+
+                Column(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .fillMaxWidth()
-                        .height(132.dp)
-                        .padding(start = 12.dp, end = 12.dp, top = 36.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(PrimaryColor)
-                )
+                        .padding(start = 12.dp, end = 12.dp, top = 32.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(132.dp)
+                            .clip(topMainShape)
+                            .background(PrimaryColor)
+                    ) {
+                        if (currentJourney != null && currentLeg != null) {
+                            val routeName = currentLeg.routeName ?: ""
+                            val iconRes = BusIconHelper.getResourceIdForLine(context, routeName)
+                            val fallbackColor =
+                                Color(LineColorHelper.getColorForLineString(routeName))
+                            val directionValue =
+                                currentLeg.direction?.takeIf { it.isNotBlank() } ?: "?"
+                            val directionText = "Direction $directionValue"
+                            val reference = currentJourney.departureTime
+                            val nowNormalized =
+                                normalizeTimeAroundReference(navigationNowSeconds, reference)
+                            val legDepartureNormalized =
+                                normalizeTimeAroundReference(currentLeg.departureTime, reference)
+                            val isWaitingForVehicle = nowNormalized < legDepartureNormalized
+                            val departureTimeText = formatClockTime(currentLeg.departureTime)
+                            val actionText = if (isWaitingForVehicle) {
+                                "A $departureTimeText, monter à ${currentLeg.fromStopName}"
+                            } else {
+                                "A $departureTimeText, descendre à ${currentLeg.toStopName}"
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .align(Alignment.CenterStart)
+                                    .padding(horizontal = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                if (iconRes != 0) {
+                                    Image(
+                                        painter = painterResource(id = iconRes),
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .padding(horizontal = 4.dp)
+                                            .size(44.dp)
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .padding(horizontal = 4.dp)
+                                            .size(42.dp)
+                                            .clip(CircleShape)
+                                            .background(fallbackColor),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = routeName.ifBlank { "?" }.take(3),
+                                            color = SecondaryColor,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Text(
+                                        text = directionText,
+                                        color = Color(0xFF9CA3AF),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Text(
+                                        text = actionText,
+                                        color = SecondaryColor,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Normal
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    if (nextLeg != null) {
+                        val nextRouteName = nextLeg.routeName ?: ""
+                        val nextIconRes = BusIconHelper.getResourceIdForLine(context, nextRouteName)
+                        val nextFallbackColor =
+                            Color(LineColorHelper.getColorForLineString(nextRouteName))
+                        Box(
+                            modifier = Modifier
+                                .wrapContentWidth()
+                                .wrapContentHeight()
+                                .clip(RoundedCornerShape(bottomStart = 14.dp, bottomEnd = 14.dp))
+                                .background(Stone800)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .wrapContentWidth()
+                                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Start
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 6.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = "A suivre",
+                                        fontSize = 16.sp,
+                                        color = SecondaryColor,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    if (nextIconRes != 0) {
+                                        Image(
+                                            painter = painterResource(id = nextIconRes),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(32.dp)
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(20.dp)
+                                                .clip(CircleShape)
+                                                .background(nextFallbackColor),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = nextRouteName.ifBlank { "?" }.take(2),
+                                                color = SecondaryColor,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -2424,12 +2625,24 @@ fun PlanScreen(
                                 .padding(start = 20.dp)
                                 .size(48.dp)
                                 .clip(CircleShape)
-                                .background(Color.Gray.copy(alpha = 0.3f))
+                                .background(Stone800)
                                 .clickable {
                                     requestedSheetValueForNextContent = SheetValue.Expanded
                                     sheetContentState = SheetContentState.ITINERARY
                                 }
                                 .padding(8.dp)
+                        )
+                        Icon(
+                            painter = painterResource(id = R.drawable.add_triangle_24px),
+                            contentDescription = null,
+                            tint = Yellow500,
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .padding(end = 20.dp)
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(Stone800)
+                                .padding(10.dp)
                         )
                     }
                 }
