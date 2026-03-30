@@ -71,6 +71,7 @@ fun InlineItinerarySheetContent(
     onDepartureFallbackSelected: (SelectedStop) -> Unit = {},
     onJourneysChanged: (List<JourneyResult>) -> Unit = {},
     onSelectedJourneyChanged: (JourneyResult?) -> Unit = {},
+    onStartNavigation: (JourneyResult) -> Unit = {},
     onClose: () -> Unit,
     onRequestExpandSheet: () -> Unit = {}
 ) {
@@ -386,6 +387,7 @@ fun InlineItinerarySheetContent(
             JourneyDetailsSheetContent(
                 journey = selectedJourney!!,
                 isExpanded = true,
+                onStartNavigation = { onStartNavigation(selectedJourney!!) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),

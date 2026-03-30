@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -45,10 +46,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddLocationAlt
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.outlined.AddLocationAlt
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -91,6 +95,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -313,7 +318,8 @@ enum class SheetContentState {
     STATION,
     LINE_DETAILS,
     ALL_SCHEDULES,
-    ITINERARY
+    ITINERARY,
+    NAVIGATION
 }
 
 private enum class ItineraryFieldTarget {
@@ -593,7 +599,8 @@ fun PlanScreen(
     isVisible: Boolean = true,
     onMapStyleChanged: (MapStyleData) -> Unit = {},
     isSearchExpanded: Boolean = false,
-    onItineraryModeChanged: (Boolean) -> Unit = {}
+    onItineraryModeChanged: (Boolean) -> Unit = {},
+    onNavigationModeChanged: (Boolean) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState(initial = TransportLinesUiState.Loading)
     val stopsUiState by viewModel.stopsUiState.collectAsState(initial = TransportStopsUiState.Loading)
@@ -705,7 +712,11 @@ fun PlanScreen(
 
     LaunchedEffect(sheetContentState, selectedStation, selectedItineraryJourney) {
         onSheetStateChanged(sheetContentState != null)
-        onItineraryModeChanged(sheetContentState == SheetContentState.ITINERARY)
+        onItineraryModeChanged(
+            sheetContentState == SheetContentState.ITINERARY ||
+                    sheetContentState == SheetContentState.NAVIGATION
+        )
+        onNavigationModeChanged(sheetContentState == SheetContentState.NAVIGATION)
 
         val requestedValue = requestedSheetValueForNextContent
         if (requestedValue != null &&
@@ -854,7 +865,7 @@ fun PlanScreen(
             val justBecameHidden =
                 previous != null && previous != SheetValue.Hidden && current == SheetValue.Hidden
 
-            if (justBecameHidden) {
+            if (justBecameHidden && sheetContentState != SheetContentState.NAVIGATION) {
                 sheetContentState = null
                 selectedStation = null
                 selectedLine = null
@@ -866,7 +877,11 @@ fun PlanScreen(
 
     // Additional effect to handle sheet dismissal by swipe or other means
     LaunchedEffect(scaffoldSheetState.bottomSheetState.isVisible) {
-        if (!scaffoldSheetState.bottomSheetState.isVisible && sheetContentState != null) {
+        if (
+            !scaffoldSheetState.bottomSheetState.isVisible &&
+            sheetContentState != null &&
+            sheetContentState != SheetContentState.NAVIGATION
+        ) {
             sheetContentState = null
             selectedStation = null
             selectedLine = null
@@ -1225,7 +1240,14 @@ fun PlanScreen(
             temporaryLoadedBusLines = emptySet()
         }
 
-        if (sheetContentState != SheetContentState.ITINERARY) {
+        if (sheetContentState == SheetContentState.NAVIGATION) {
+            scaffoldSheetState.bottomSheetState.hide()
+        }
+
+        if (
+            sheetContentState != SheetContentState.ITINERARY &&
+            sheetContentState != SheetContentState.NAVIGATION
+        ) {
             itineraryJourneys = emptyList()
             selectedItineraryJourney = null
         }
@@ -1248,7 +1270,10 @@ fun PlanScreen(
         if (isMapStyleMenuExpanded) return@LaunchedEffect
         val map = mapInstance ?: return@LaunchedEffect
 
-        if (sheetContentState != SheetContentState.ITINERARY) {
+        if (
+            sheetContentState != SheetContentState.ITINERARY &&
+            sheetContentState != SheetContentState.NAVIGATION
+        ) {
             map.getStyle { style ->
                 clearItineraryLayers(style)
             }
@@ -1256,9 +1281,15 @@ fun PlanScreen(
         }
 
         hideMapLines(map)
+        val journeysToDraw = when (sheetContentState) {
+            SheetContentState.NAVIGATION -> {
+                selectedItineraryJourney?.let { listOf(it) } ?: emptyList()
+            }
+            else -> itineraryJourneys
+        }
         drawItinerariesOnMap(
             map = map,
-            journeys = itineraryJourneys,
+            journeys = journeysToDraw,
             selectedJourney = selectedItineraryJourney,
             viewModel = viewModel
         )
@@ -1271,11 +1302,20 @@ fun PlanScreen(
         isMapStyleMenuExpanded
     ) {
         if (isMapStyleMenuExpanded) return@LaunchedEffect
-        if (sheetContentState != SheetContentState.ITINERARY) return@LaunchedEffect
+        if (
+            sheetContentState != SheetContentState.ITINERARY &&
+            sheetContentState != SheetContentState.NAVIGATION
+        ) return@LaunchedEffect
         val map = mapInstance ?: return@LaunchedEffect
-        if (itineraryJourneys.isEmpty()) return@LaunchedEffect
+        val journeysToZoom = when (sheetContentState) {
+            SheetContentState.NAVIGATION -> {
+                selectedItineraryJourney?.let { listOf(it) } ?: emptyList()
+            }
+            else -> itineraryJourneys
+        }
+        if (journeysToZoom.isEmpty()) return@LaunchedEffect
 
-        zoomToItineraries(map, itineraryJourneys)
+        zoomToItineraries(map, journeysToZoom)
     }
 
     // Keep LIVE mode active while switching between global and per-line context.
@@ -1598,7 +1638,10 @@ fun PlanScreen(
 
                         else -> {}
                     }
-                } else if (currentSheetState == SheetContentState.ITINERARY) {
+                } else if (
+                    currentSheetState == SheetContentState.ITINERARY ||
+                    currentSheetState == SheetContentState.NAVIGATION
+                ) {
                     hideMapLines(map)
                 } else {
                     showAllMapLines(map, lines)
@@ -1669,6 +1712,10 @@ fun PlanScreen(
                 itineraryDepartureQuery = ""
                 itineraryArrivalQuery = ""
             }
+            sheetContentState == SheetContentState.NAVIGATION -> {
+                requestedSheetValueForNextContent = SheetValue.Expanded
+                sheetContentState = SheetContentState.ITINERARY
+            }
             // If viewing line details, go back to station (if came from station) or close
             sheetContentState == SheetContentState.LINE_DETAILS -> {
                 // Clean up temporary bus lines
@@ -1710,6 +1757,7 @@ fun PlanScreen(
         SheetContentState.ALL_SCHEDULES -> stationCollapsedPeekHeight
         SheetContentState.STATION -> stationCollapsedPeekHeight
         SheetContentState.ITINERARY -> itineraryCollapsedPeekHeight
+        SheetContentState.NAVIGATION -> 0.dp
         else -> 0.dp
     }
     val unifiedSheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
@@ -1721,344 +1769,358 @@ fun PlanScreen(
         modifier = modifier,
         sheetContainerColor = SecondaryColor,
         sheetContent = {
-            Column(
-                modifier = Modifier
-                    .padding(bottom = bottomPadding)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                when (sheetContentState) {
-                    SheetContentState.LINE_DETAILS -> {
-                        if (selectedLine != null) {
-                            LineDetailsSheetContent(
-                                lineInfo = selectedLine!!,
-                                viewModel = viewModel,
-                                selectedDirection = selectedDirection,
-                                onDirectionChange = { newDirection ->
-                                    selectedDirection = newDirection
-                                },
-                                onBackToStation = {
-                                    selectedLine?.let { lineInfo ->
-                                        val lineName = lineInfo.lineName
-                                        if (!isMetroTramOrFunicular(lineName)) {
-                                            viewModel.removeLineFromLoaded(lineName)
+            if (sheetContentState == SheetContentState.NAVIGATION) {
+                Spacer(modifier = Modifier.height(0.dp))
+            } else {
+                Column(
+                    modifier = Modifier
+                        .padding(bottom = bottomPadding)
+                        .fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    when (sheetContentState) {
+                        SheetContentState.LINE_DETAILS -> {
+                            if (selectedLine != null) {
+                                LineDetailsSheetContent(
+                                    lineInfo = selectedLine!!,
+                                    viewModel = viewModel,
+                                    selectedDirection = selectedDirection,
+                                    onDirectionChange = { newDirection ->
+                                        selectedDirection = newDirection
+                                    },
+                                    onBackToStation = {
+                                        selectedLine?.let { lineInfo ->
+                                            val lineName = lineInfo.lineName
+                                            if (!isMetroTramOrFunicular(lineName)) {
+                                                viewModel.removeLineFromLoaded(lineName)
+                                            }
                                         }
-                                    }
 
-                                    if (selectedStation != null) {
+                                        if (selectedStation != null) {
+                                            requestedSheetValueForNextContent =
+                                                if (isSheetExpandedOrExpanding) {
+                                                    SheetValue.Expanded
+                                                } else {
+                                                    SheetValue.PartiallyExpanded
+                                                }
+                                            selectedLine = null
+                                            sheetContentState = SheetContentState.STATION
+                                        } else {
+                                            scope.launch {
+                                                scaffoldSheetState.bottomSheetState.hide()
+                                            }
+                                            selectedLine = null
+                                            selectedStation = null
+                                            sheetContentState = null
+                                        }
+                                    },
+                                    onLineClick = { lineName ->
+                                        // Cancel pending operations and clear states from previous line to prevent OOM
+                                        viewModel.resetLineDetailState()
+
+                                        selectedLine = LineInfo(
+                                            lineName = lineName,
+                                            currentStationName = selectedLine?.currentStationName ?: ""
+                                        )
+
+                                        if (!isMetroTramOrFunicular(lineName)) {
+                                            scope.launch {
+                                                viewModel.addLineToLoaded(lineName)
+                                                if (isTemporaryBus(lineName)) {
+                                                    temporaryLoadedBusLines =
+                                                        temporaryLoadedBusLines + lineName
+                                                }
+                                                delay(100)
+                                                sheetContentState = SheetContentState.LINE_DETAILS
+                                            }
+                                        } else {
+                                            sheetContentState = SheetContentState.LINE_DETAILS
+                                        }
+                                    },
+                                    onStopClick = { stopName ->
+                                        // Clear schedule state to prevent stale "Aucun horaire" message
+                                        viewModel.clearScheduleState()
+
+                                        // Preserve current direction when navigating to another stop
+                                        // from the line details stops list.
+                                        preserveSelectedDirectionOnce = true
+
+                                        // Keep station state aligned with the last stop selected from line details,
+                                        // so Back returns to this stop instead of the initial one.
+                                        val matchingStop =
+                                            (stopsUiState as? TransportStopsUiState.Success)
+                                                ?.stops
+                                                ?.find {
+                                                    it.properties.nom.equals(
+                                                        stopName,
+                                                        ignoreCase = true
+                                                    )
+                                                }
+                                        selectedStation = if (matchingStop != null) {
+                                            StationInfo(
+                                                nom = matchingStop.properties.nom,
+                                                lignes = BusIconHelper.getAllLinesForStop(matchingStop),
+                                                desserte = matchingStop.properties.desserte
+                                            )
+                                        } else {
+                                            StationInfo(
+                                                nom = stopName,
+                                                lignes = selectedStation?.lignes ?: emptyList(),
+                                                desserte = selectedStation?.desserte ?: ""
+                                            )
+                                        }
+
+                                        selectedLine = LineInfo(
+                                            lineName = selectedLine!!.lineName,
+                                            currentStationName = selectedStation?.nom ?: stopName
+                                        )
+                                        scope.launch {
+                                            scaffoldSheetState.bottomSheetState.partialExpand()
+                                        }
+                                    },
+                                    onShowAllSchedules = { lineName, directionName, schedules ->
                                         requestedSheetValueForNextContent =
                                             if (isSheetExpandedOrExpanding) {
                                                 SheetValue.Expanded
                                             } else {
                                                 SheetValue.PartiallyExpanded
                                             }
-                                        selectedLine = null
-                                        sheetContentState = SheetContentState.STATION
-                                    } else {
+                                        allSchedulesInfo = AllSchedulesInfo(
+                                            lineName = lineName,
+                                            directionName = directionName,
+                                            schedules = schedules,
+                                            availableDirections = availableDirections,
+                                            headsigns = headsigns
+                                        )
+                                        sheetContentState = SheetContentState.ALL_SCHEDULES
+                                    },
+                                    onItineraryClick = { stopName ->
+                                        requestedSheetValueForNextContent = SheetValue.Expanded
+                                        itineraryDepartureStop = null
+                                        itineraryDepartureQuery = ""
+                                        itineraryNearbyDepartureStops = emptyList()
+                                        itineraryInitialStopName = stopName
+                                        itineraryArrivalQuery = stopName
+                                        itineraryArrivalStop = SelectedStop(
+                                            name = stopName,
+                                            stopIds = emptyList()
+                                        )
+                                        sheetContentState = SheetContentState.ITINERARY
+                                        scope.launch {
+                                            val ids =
+                                                viewModel.raptorRepository.resolveStopIdsByName(stopName)
+                                            if (itineraryInitialStopName == stopName) {
+                                                itineraryArrivalStop = SelectedStop(
+                                                    name = stopName,
+                                                    stopIds = ids)
+                                            }
+                                        }
+                                    },
+                                    onHeaderClick = {
+                                        scope.launch {
+                                            scaffoldSheetState.bottomSheetState.expand()
+                                        }
+                                    },
+                                    favoriteStops = favoriteStops,
+                                    onToggleFavoriteStop = { viewModel.toggleFavoriteStop(it) },
+                                    onHeaderLineCountChanged = { _ -> }
+                                )
+                            }
+                        }
+
+                        SheetContentState.STATION -> {
+                            if (selectedStation != null) {
+                                StationSheetContent(
+                                    stationInfo = selectedStation!!,
+                                    viewModel = viewModel,
+                                    onDismiss = {
                                         scope.launch {
                                             scaffoldSheetState.bottomSheetState.hide()
                                         }
+                                        sheetContentState = null
+                                    },
+                                    onDepartureClick = { lineName, directionId, _ ->
+                                        // Cancel pending operations and clear states from previous line to prevent OOM
+                                        viewModel.resetLineDetailState()
+                                        val shouldKeepExpanded =
+                                            scaffoldSheetState.bottomSheetState.currentValue == SheetValue.Expanded ||
+                                                    scaffoldSheetState.bottomSheetState.targetValue == SheetValue.Expanded
+                                        requestedSheetValueForNextContent = if (shouldKeepExpanded) {
+                                            SheetValue.Expanded
+                                        } else {
+                                            SheetValue.PartiallyExpanded
+                                        }
+
+                                        preserveSelectedDirectionOnce = true
+                                        selectedDirection = directionId
+
+                                        selectedLine = LineInfo(
+                                            lineName = lineName,
+                                            currentStationName = selectedStation?.nom ?: ""
+                                        )
+
+                                        if (!isMetroTramOrFunicular(lineName)) {
+                                            scope.launch {
+                                                viewModel.addLineToLoaded(lineName)
+                                                if (isTemporaryBus(lineName)) {
+                                                    temporaryLoadedBusLines =
+                                                        temporaryLoadedBusLines + lineName
+                                                }
+                                                delay(100)
+                                                sheetContentState = SheetContentState.LINE_DETAILS
+                                            }
+                                        } else {
+                                            sheetContentState = SheetContentState.LINE_DETAILS
+                                        }
+                                    },
+                                    isFavoriteStop = favoriteStops.any {
+                                        it.equals(
+                                            selectedStation!!.nom,
+                                            ignoreCase = true
+                                        )
+                                    },
+                                    onToggleFavoriteStop = {
+                                        viewModel.toggleFavoriteStop(
+                                            selectedStation!!.nom
+                                        )
+                                    },
+                                    onAddFavoriteClick = { stopName ->
+                                        addFavoriteInitialStopName = stopName
+                                        showAddFavoriteDialog = true
+                                        requestedSheetValueForNextContent = null
                                         selectedLine = null
                                         selectedStation = null
                                         sheetContentState = null
-                                    }
-                                },
-                                onLineClick = { lineName ->
-                                    // Cancel pending operations and clear states from previous line to prevent OOM
-                                    viewModel.resetLineDetailState()
-
-                                    selectedLine = LineInfo(
-                                        lineName = lineName,
-                                        currentStationName = selectedLine?.currentStationName ?: ""
-                                    )
-
-                                    if (!isMetroTramOrFunicular(lineName)) {
                                         scope.launch {
-                                            viewModel.addLineToLoaded(lineName)
-                                            if (isTemporaryBus(lineName)) {
-                                                temporaryLoadedBusLines =
-                                                    temporaryLoadedBusLines + lineName
-                                            }
-                                            delay(100)
-                                            sheetContentState = SheetContentState.LINE_DETAILS
+                                            scaffoldSheetState.bottomSheetState.hide()
                                         }
-                                    } else {
+                                    },
+                                    onItineraryClick = { stopName ->
+                                        requestedSheetValueForNextContent = SheetValue.Expanded
+                                        itineraryDepartureStop = null
+                                        itineraryDepartureQuery = ""
+                                        itineraryNearbyDepartureStops = emptyList()
+                                        itineraryInitialStopName = stopName
+                                        itineraryArrivalQuery = stopName
+                                        itineraryArrivalStop = SelectedStop(
+                                            name = stopName,
+                                            stopIds = emptyList()
+                                        )
+                                        sheetContentState = SheetContentState.ITINERARY
+                                        scope.launch {
+                                            val ids =
+                                                viewModel.raptorRepository.resolveStopIdsByName(stopName)
+                                            if (itineraryInitialStopName == stopName) {
+                                                itineraryArrivalStop = SelectedStop(
+                                                    name = stopName,
+                                                    stopIds = ids)
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+                        }
+
+                        SheetContentState.ALL_SCHEDULES -> {
+                            if (allSchedulesInfo != null) {
+                                val schedulesForCurrentDirection =
+                                    allSchedules.ifEmpty { allSchedulesInfo!!.schedules }
+                                val resolvedAllSchedulesInfo = allSchedulesInfo!!.copy(
+                                    directionName = headsigns[selectedDirection]
+                                        ?: allSchedulesInfo!!.directionName,
+                                    schedules = schedulesForCurrentDirection
+                                )
+                                val allSchedulesDirections =
+                                    allSchedulesInfo!!.availableDirections.ifEmpty {
+                                        availableDirections
+                                    }
+                                val allSchedulesHeadsigns = allSchedulesInfo!!.headsigns.ifEmpty {
+                                    headsigns
+                                }
+                                AllSchedulesSheetContent(
+                                    allSchedulesInfo = resolvedAllSchedulesInfo,
+                                    lineInfo = selectedLine!!,
+                                    selectedDirection = selectedDirection,
+                                    availableDirections = allSchedulesDirections,
+                                    headsigns = allSchedulesHeadsigns,
+                                    onDirectionChange = { newDirection ->
+                                        selectedDirection = newDirection
+                                        selectedLine?.currentStationName?.takeIf { it.isNotBlank() }
+                                            ?.let { stopName ->
+                                                scope.launch {
+                                                    viewModel.loadSchedulesForDirection(
+                                                        lineName = selectedLine!!.lineName,
+                                                        stopName = stopName,
+                                                        directionId = newDirection
+                                                    )
+                                                }
+                                            }
+                                    },
+                                    onBack = {
+                                        requestedSheetValueForNextContent =
+                                            if (isSheetExpandedOrExpanding) {
+                                                SheetValue.Expanded
+                                            } else {
+                                                SheetValue.PartiallyExpanded
+                                            }
                                         sheetContentState = SheetContentState.LINE_DETAILS
                                     }
-                                },
-                                onStopClick = { stopName ->
-                                    // Clear schedule state to prevent stale "Aucun horaire" message
-                                    viewModel.clearScheduleState()
-
-                                    // Preserve current direction when navigating to another stop
-                                    // from the line details stops list.
-                                    preserveSelectedDirectionOnce = true
-
-                                    // Keep station state aligned with the last stop selected from line details,
-                                    // so Back returns to this stop instead of the initial one.
-                                    val matchingStop =
-                                        (stopsUiState as? TransportStopsUiState.Success)
-                                            ?.stops
-                                            ?.find {
-                                                it.properties.nom.equals(
-                                                    stopName,
-                                                    ignoreCase = true
-                                                )
-                                            }
-                                    selectedStation = if (matchingStop != null) {
-                                        StationInfo(
-                                            nom = matchingStop.properties.nom,
-                                            lignes = BusIconHelper.getAllLinesForStop(matchingStop),
-                                            desserte = matchingStop.properties.desserte
-                                        )
-                                    } else {
-                                        StationInfo(
-                                            nom = stopName,
-                                            lignes = selectedStation?.lignes ?: emptyList(),
-                                            desserte = selectedStation?.desserte ?: ""
-                                        )
-                                    }
-
-                                    selectedLine = LineInfo(
-                                        lineName = selectedLine!!.lineName,
-                                        currentStationName = selectedStation?.nom ?: stopName
-                                    )
-                                    scope.launch {
-                                        scaffoldSheetState.bottomSheetState.partialExpand()
-                                    }
-                                },
-                                onShowAllSchedules = { lineName, directionName, schedules ->
-                                    requestedSheetValueForNextContent =
-                                        if (isSheetExpandedOrExpanding) {
-                                            SheetValue.Expanded
-                                        } else {
-                                            SheetValue.PartiallyExpanded
-                                        }
-                                    allSchedulesInfo = AllSchedulesInfo(
-                                        lineName = lineName,
-                                        directionName = directionName,
-                                        schedules = schedules,
-                                        availableDirections = availableDirections,
-                                        headsigns = headsigns
-                                    )
-                                    sheetContentState = SheetContentState.ALL_SCHEDULES
-                                },
-                                onItineraryClick = { stopName ->
-                                    requestedSheetValueForNextContent = SheetValue.Expanded
-                                    itineraryDepartureStop = null
-                                    itineraryDepartureQuery = ""
-                                    itineraryNearbyDepartureStops = emptyList()
-                                    itineraryInitialStopName = stopName
-                                    itineraryArrivalQuery = stopName
-                                    itineraryArrivalStop = SelectedStop(
-                                        name = stopName,
-                                        stopIds = emptyList()
-                                    )
-                                    sheetContentState = SheetContentState.ITINERARY
-                                    scope.launch {
-                                        val ids =
-                                            viewModel.raptorRepository.resolveStopIdsByName(stopName)
-                                        if (itineraryInitialStopName == stopName) {
-                                            itineraryArrivalStop = SelectedStop(
-                                                name = stopName,
-                                                stopIds = ids)
-                                        }
-                                    }
-                                },
-                                onHeaderClick = {
-                                    scope.launch {
-                                        scaffoldSheetState.bottomSheetState.expand()
-                                    }
-                                },
-                                favoriteStops = favoriteStops,
-                                onToggleFavoriteStop = { viewModel.toggleFavoriteStop(it) },
-                                onHeaderLineCountChanged = { _ -> }
-                            )
+                                )
+                            }
                         }
-                    }
 
-                    SheetContentState.STATION -> {
-                        if (selectedStation != null) {
-                            StationSheetContent(
-                                stationInfo = selectedStation!!,
+                        SheetContentState.ITINERARY -> {
+                            InlineItinerarySheetContent(
                                 viewModel = viewModel,
-                                onDismiss = {
-                                    scope.launch {
-                                        scaffoldSheetState.bottomSheetState.hide()
-                                    }
-                                    sheetContentState = null
+                                departureStop = itineraryDepartureStop,
+                                arrivalStop = itineraryArrivalStop,
+                                maxHeight = itinerarySheetMaxHeight,
+                                nearbyDepartureStops = itineraryNearbyDepartureStops,
+                                onDepartureFallbackSelected = { fallbackDeparture ->
+                                    itineraryDepartureStop = fallbackDeparture
                                 },
-                                onDepartureClick = { lineName, directionId, _ ->
-                                    // Cancel pending operations and clear states from previous line to prevent OOM
-                                    viewModel.resetLineDetailState()
-                                    val shouldKeepExpanded =
-                                        scaffoldSheetState.bottomSheetState.currentValue == SheetValue.Expanded ||
-                                                scaffoldSheetState.bottomSheetState.targetValue == SheetValue.Expanded
-                                    requestedSheetValueForNextContent = if (shouldKeepExpanded) {
-                                        SheetValue.Expanded
-                                    } else {
-                                        SheetValue.PartiallyExpanded
-                                    }
-
-                                    preserveSelectedDirectionOnce = true
-                                    selectedDirection = directionId
-
-                                    selectedLine = LineInfo(
-                                        lineName = lineName,
-                                        currentStationName = selectedStation?.nom ?: ""
-                                    )
-
-                                    if (!isMetroTramOrFunicular(lineName)) {
-                                        scope.launch {
-                                            viewModel.addLineToLoaded(lineName)
-                                            if (isTemporaryBus(lineName)) {
-                                                temporaryLoadedBusLines =
-                                                    temporaryLoadedBusLines + lineName
-                                            }
-                                            delay(100)
-                                            sheetContentState = SheetContentState.LINE_DETAILS
-                                        }
-                                    } else {
-                                        sheetContentState = SheetContentState.LINE_DETAILS
-                                    }
+                                onJourneysChanged = { journeys ->
+                                    itineraryJourneys = journeys
+                                    itineraryResultsVersion++
                                 },
-                                isFavoriteStop = favoriteStops.any {
-                                    it.equals(
-                                        selectedStation!!.nom,
-                                        ignoreCase = true
-                                    )
+                                onSelectedJourneyChanged = { journey ->
+                                    selectedItineraryJourney = journey
                                 },
-                                onToggleFavoriteStop = {
-                                    viewModel.toggleFavoriteStop(
-                                        selectedStation!!.nom
-                                    )
-                                },
-                                onAddFavoriteClick = { stopName ->
-                                    addFavoriteInitialStopName = stopName
-                                    showAddFavoriteDialog = true
-                                    requestedSheetValueForNextContent = null
-                                    selectedLine = null
-                                    selectedStation = null
-                                    sheetContentState = null
+                                onStartNavigation = { journey ->
+                                    selectedItineraryJourney = journey
+                                    sheetContentState = SheetContentState.NAVIGATION
                                     scope.launch {
                                         scaffoldSheetState.bottomSheetState.hide()
                                     }
                                 },
-                                onItineraryClick = { stopName ->
-                                    requestedSheetValueForNextContent = SheetValue.Expanded
+                                onClose = {
+                                    scope.launch {
+                                        scaffoldSheetState.bottomSheetState.hide()
+                                    }
+                                    itineraryInitialStopName = null
                                     itineraryDepartureStop = null
+                                    itineraryArrivalStop = null
                                     itineraryDepartureQuery = ""
+                                    itineraryArrivalQuery = ""
                                     itineraryNearbyDepartureStops = emptyList()
-                                    itineraryInitialStopName = stopName
-                                    itineraryArrivalQuery = stopName
-                                    itineraryArrivalStop = SelectedStop(
-                                        name = stopName,
-                                        stopIds = emptyList()
-                                    )
-                                    sheetContentState = SheetContentState.ITINERARY
-                                    scope.launch {
-                                        val ids =
-                                            viewModel.raptorRepository.resolveStopIdsByName(stopName)
-                                        if (itineraryInitialStopName == stopName) {
-                                            itineraryArrivalStop = SelectedStop(
-                                                name = stopName,
-                                                stopIds = ids)
-                                        }
-                                    }
-                                }
-                            )
-                        }
-                    }
-
-                    SheetContentState.ALL_SCHEDULES -> {
-                        if (allSchedulesInfo != null) {
-                            val schedulesForCurrentDirection =
-                                allSchedules.ifEmpty { allSchedulesInfo!!.schedules }
-                            val resolvedAllSchedulesInfo = allSchedulesInfo!!.copy(
-                                directionName = headsigns[selectedDirection]
-                                    ?: allSchedulesInfo!!.directionName,
-                                schedules = schedulesForCurrentDirection
-                            )
-                            val allSchedulesDirections =
-                                allSchedulesInfo!!.availableDirections.ifEmpty {
-                                    availableDirections
-                                }
-                            val allSchedulesHeadsigns = allSchedulesInfo!!.headsigns.ifEmpty {
-                                headsigns
-                            }
-                            AllSchedulesSheetContent(
-                                allSchedulesInfo = resolvedAllSchedulesInfo,
-                                lineInfo = selectedLine!!,
-                                selectedDirection = selectedDirection,
-                                availableDirections = allSchedulesDirections,
-                                headsigns = allSchedulesHeadsigns,
-                                onDirectionChange = { newDirection ->
-                                    selectedDirection = newDirection
-                                    selectedLine?.currentStationName?.takeIf { it.isNotBlank() }
-                                        ?.let { stopName ->
-                                            scope.launch {
-                                                viewModel.loadSchedulesForDirection(
-                                                    lineName = selectedLine!!.lineName,
-                                                    stopName = stopName,
-                                                    directionId = newDirection
-                                                )
-                                            }
-                                        }
+                                    sheetContentState = null
                                 },
-                                onBack = {
-                                    requestedSheetValueForNextContent =
-                                        if (isSheetExpandedOrExpanding) {
-                                            SheetValue.Expanded
-                                        } else {
-                                            SheetValue.PartiallyExpanded
-                                        }
-                                    sheetContentState = SheetContentState.LINE_DETAILS
+                                onRequestExpandSheet = {
+                                    requestedSheetValueForNextContent = SheetValue.Expanded
                                 }
                             )
                         }
-                    }
 
-                    SheetContentState.ITINERARY -> {
-                        InlineItinerarySheetContent(
-                            viewModel = viewModel,
-                            departureStop = itineraryDepartureStop,
-                            arrivalStop = itineraryArrivalStop,
-                            maxHeight = itinerarySheetMaxHeight,
-                            nearbyDepartureStops = itineraryNearbyDepartureStops,
-                            onDepartureFallbackSelected = { fallbackDeparture ->
-                                itineraryDepartureStop = fallbackDeparture
-                            },
-                            onJourneysChanged = { journeys ->
-                                itineraryJourneys = journeys
-                                itineraryResultsVersion++
-                            },
-                            onSelectedJourneyChanged = { journey ->
-                                selectedItineraryJourney = journey
-                            },
-                            onClose = {
-                                scope.launch {
-                                    scaffoldSheetState.bottomSheetState.hide()
-                                }
-                                itineraryInitialStopName = null
-                                itineraryDepartureStop = null
-                                itineraryArrivalStop = null
-                                itineraryDepartureQuery = ""
-                                itineraryArrivalQuery = ""
-                                itineraryNearbyDepartureStops = emptyList()
-                                sheetContentState = null
-                            },
-                            onRequestExpandSheet = {
-                                requestedSheetValueForNextContent = SheetValue.Expanded
-                            }
-                        )
+                        SheetContentState.NAVIGATION -> {}
+                        null -> {}
                     }
-
-                    null -> {}
                 }
             }
         }
     ) { _ ->
         Box(modifier = Modifier.fillMaxSize()) {
+            val isNavigationMode = sheetContentState == SheetContentState.NAVIGATION
+
             MapLibreView(
                 modifier = Modifier.fillMaxSize(),
                 initialPosition = LatLng(45.75, 4.85),
@@ -2082,7 +2144,10 @@ fun PlanScreen(
                 centerOnUserLocation = shouldCenterOnUser
             )
 
-            if (uiState is TransportLinesUiState.Loading || stopsUiState is TransportStopsUiState.Loading) {
+            if (
+                !isNavigationMode &&
+                (uiState is TransportLinesUiState.Loading || stopsUiState is TransportStopsUiState.Loading)
+            ) {
                 // Show skeleton loading instead of spinner for better UX
                 Box(
                     modifier = Modifier
@@ -2097,7 +2162,7 @@ fun PlanScreen(
 
             // Recenter button
             AnimatedVisibility(
-                visible = userLocation != null && !isCenteredOnUser,
+                visible = !isNavigationMode && userLocation != null && !isCenteredOnUser,
                 enter = fadeIn(),
                 exit = fadeOut(),
                 modifier = Modifier
@@ -2147,6 +2212,62 @@ fun PlanScreen(
                 }
             }
 
+            if (isNavigationMode) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .height(132.dp)
+                        .padding(start = 12.dp, end = 12.dp, top = 36.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(PrimaryColor)
+                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .offset(y = bottomPadding)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(108.dp)
+                            .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                            .background(PrimaryColor)
+                            .padding(bottom = 12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = "Retour",
+                            tint = SecondaryColor,
+                            modifier = Modifier
+                                .align(Alignment.CenterStart)
+                                .padding(start = 20.dp)
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(Color.Gray.copy(alpha = 0.3f))
+                                .clickable {
+                                    requestedSheetValueForNextContent = SheetValue.Expanded
+                                    sheetContentState = SheetContentState.ITINERARY
+                                }
+                                .padding(8.dp)
+                        )
+                        Icon(
+                            painter = painterResource(id = R.drawable.add_triangle_24px),
+                            contentDescription = "Retour",
+                            tint = SecondaryColor,
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .padding(end = 20.dp)
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(Color.Gray.copy(alpha = 0.3f))
+                                .padding(10.dp)
+                        )
+                    }
+                }
+            }
+
             // Unified LIVE button (global when no selected bus line, line-specific otherwise)
             val isLineContext =
                 sheetContentState == SheetContentState.LINE_DETAILS || sheetContentState == SheetContentState.ALL_SCHEDULES
@@ -2158,7 +2279,7 @@ fun PlanScreen(
                 selectedLine?.lineName?.let { isLineContext && !isLiveTrackableLine(it) } == true
             val showLiveButton = !isOffline && !hasSelectedNotTrackableLine
 
-            if (sheetContentState != SheetContentState.ITINERARY) {
+            if (sheetContentState != SheetContentState.ITINERARY && !isNavigationMode) {
                 Row(
                     modifier = Modifier
                         .align(Alignment.TopEnd)

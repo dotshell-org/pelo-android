@@ -464,6 +464,7 @@ private fun JourneyLegItem(
 fun JourneyDetailsSheetContent(
     journey: JourneyResult,
     isExpanded: Boolean,
+    onStartNavigation: () -> Unit = {},
     modifier: Modifier = Modifier,
     useLightColors: Boolean = false,
     scrollAllContent: Boolean = false
@@ -548,7 +549,7 @@ fun JourneyDetailsSheetContent(
                             color = PrimaryColor,
                             shape = RoundedCornerShape(24.dp)
                         )
-                        .clickable { /* TODO: Implement navigation */ }
+                        .clickable { onStartNavigation() }
                         .padding(horizontal = 14.dp, vertical = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {

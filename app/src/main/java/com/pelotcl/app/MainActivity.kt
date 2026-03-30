@@ -262,6 +262,7 @@ fun NavBar(modifier: Modifier = Modifier) {
     // Itinerary destination stop
     var itineraryDestinationStop by remember { mutableStateOf<String?>(null) }
     var isItineraryModeActive by remember { mutableStateOf(false) }
+    var isNavigationModeActive by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
 
@@ -369,69 +370,71 @@ fun NavBar(modifier: Modifier = Modifier) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             bottomBar = {
-                NavigationBar(
-                    windowInsets = NavigationBarDefaults.windowInsets,
-                    containerColor = PrimaryColor
-                ) {
-                    Destination.entries.forEachIndexed { index, destination ->
-                        NavigationBarItem(
-                            selected = selectedDestination == index,
-                            onClick = {
-                                if (destination == Destination.LIGNES) {
-                                    // Close itinerary when going to Lines
-                                    itineraryDestinationStop = null
-                                    // Si on n'est pas sur Plan, naviguer vers Plan d'abord
-                                    if (selectedDestination != Destination.PLAN.ordinal) {
-                                        selectedDestination = Destination.PLAN.ordinal
-                                    }
-                                    showLinesSheet = true
-                                } else if (destination == Destination.PARAMETRES) {
-                                    // Don't close itinerary when going to Settings (preserve state)
-                                    // If already on Settings tab, check if we're in a sub-page
-                                    val settingsSubRoutes = listOf(
-                                        Destination.ABOUT,
-                                        Destination.LEGAL,
-                                        Destination.CREDITS,
-                                        Destination.CONTACT,
-                                        Destination.ITINERARY_SETTINGS,
-                                        Destination.OFFLINE_SETTINGS
-                                    )
-                                    if (currentRoute in settingsSubRoutes) {
-                                        // Pop back to Settings root
-                                        navController.popBackStack(
-                                            Destination.PARAMETRES.route,
-                                            false
+                if (!isNavigationModeActive) {
+                    NavigationBar(
+                        windowInsets = NavigationBarDefaults.windowInsets,
+                        containerColor = PrimaryColor
+                    ) {
+                        Destination.entries.forEachIndexed { index, destination ->
+                            NavigationBarItem(
+                                selected = selectedDestination == index,
+                                onClick = {
+                                    if (destination == Destination.LIGNES) {
+                                        // Close itinerary when going to Lines
+                                        itineraryDestinationStop = null
+                                        // Si on n'est pas sur Plan, naviguer vers Plan d'abord
+                                        if (selectedDestination != Destination.PLAN.ordinal) {
+                                            selectedDestination = Destination.PLAN.ordinal
+                                        }
+                                        showLinesSheet = true
+                                    } else if (destination == Destination.PARAMETRES) {
+                                        // Don't close itinerary when going to Settings (preserve state)
+                                        // If already on Settings tab, check if we're in a sub-page
+                                        val settingsSubRoutes = listOf(
+                                            Destination.ABOUT,
+                                            Destination.LEGAL,
+                                            Destination.CREDITS,
+                                            Destination.CONTACT,
+                                            Destination.ITINERARY_SETTINGS,
+                                            Destination.OFFLINE_SETTINGS
                                         )
+                                        if (currentRoute in settingsSubRoutes) {
+                                            // Pop back to Settings root
+                                            navController.popBackStack(
+                                                Destination.PARAMETRES.route,
+                                                false
+                                            )
+                                        } else if (selectedDestination != index) {
+                                            selectedDestination = index
+                                            showLinesSheet = false
+                                        }
                                     } else if (selectedDestination != index) {
+                                        // PLAN destination - just go back, don't close itinerary (preserve state)
                                         selectedDestination = index
                                         showLinesSheet = false
+                                    } else if (destination == Destination.PLAN) {
+                                        // Already on Plan tab - close inline itinerary entry point if set
+                                        if (itineraryDestinationStop != null) {
+                                            itineraryDestinationStop = null
+                                        }
                                     }
-                                } else if (selectedDestination != index) {
-                                    // PLAN destination - just go back, don't close itinerary (preserve state)
-                                    selectedDestination = index
-                                    showLinesSheet = false
-                                } else if (destination == Destination.PLAN) {
-                                    // Already on Plan tab - close inline itinerary entry point if set
-                                    if (itineraryDestinationStop != null) {
-                                        itineraryDestinationStop = null
-                                    }
-                                }
-                            },
-                            icon = {
-                                Icon(
-                                    destination.icon,
-                                    contentDescription = destination.contentDescription
+                                },
+                                icon = {
+                                    Icon(
+                                        destination.icon,
+                                        contentDescription = destination.contentDescription
+                                    )
+                                },
+                                label = { Text(destination.label) },
+                                colors = NavigationBarItemDefaults.colors(
+                                    indicatorColor = AccentColor,
+                                    selectedIconColor = SecondaryColor,
+                                    unselectedIconColor = SecondaryColor,
+                                    selectedTextColor = SecondaryColor,
+                                    unselectedTextColor = SecondaryColor
                                 )
-                            },
-                            label = { Text(destination.label) },
-                            colors = NavigationBarItemDefaults.colors(
-                                indicatorColor = AccentColor,
-                                selectedIconColor = SecondaryColor,
-                                unselectedIconColor = SecondaryColor,
-                                selectedTextColor = SecondaryColor,
-                                unselectedTextColor = SecondaryColor
                             )
-                        )
+                        }
                     }
                 }
             }
@@ -461,6 +464,9 @@ fun NavBar(modifier: Modifier = Modifier) {
                     isSearchExpanded = isSearchExpanded,
                     onItineraryModeChanged = { active ->
                         isItineraryModeActive = active
+                    },
+                    onNavigationModeChanged = { active ->
+                        isNavigationModeActive = active
                     }
                 )
 
