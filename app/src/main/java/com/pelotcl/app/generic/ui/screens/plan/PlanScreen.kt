@@ -96,7 +96,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -145,6 +144,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
@@ -159,6 +159,9 @@ import org.maplibre.android.style.sources.GeoJsonOptions
 import org.maplibre.android.style.sources.GeoJsonSource
 import java.util.Calendar
 import java.util.Locale
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.text.iterator
 
 private const val PRIORITY_STOPS_MIN_ZOOM = 12.5f
@@ -205,6 +208,57 @@ private fun formatRemainingTime(
     } else {
         "${remainingMinutes / 60}h${(remainingMinutes % 60).toString().padStart(2, '0')}"
     }
+}
+
+private fun isValidJourneyCoordinate(lat: Double, lon: Double): Boolean {
+    return lat in -90.0..90.0 && lon in -180.0..180.0 && (lat != 0.0 || lon != 0.0)
+}
+
+private fun buildNavigationPathPoints(journey: JourneyResult): List<LatLng> {
+    val points = mutableListOf<LatLng>()
+    journey.legs.filterNot { it.isWalking }.forEach { leg ->
+        if (isValidJourneyCoordinate(leg.fromLat, leg.fromLon)) {
+            points.add(LatLng(leg.fromLat, leg.fromLon))
+        }
+        leg.intermediateStops.forEach { stop ->
+            if (isValidJourneyCoordinate(stop.lat, stop.lon)) {
+                points.add(LatLng(stop.lat, stop.lon))
+            }
+        }
+        if (isValidJourneyCoordinate(leg.toLat, leg.toLon)) {
+            points.add(LatLng(leg.toLat, leg.toLon))
+        }
+    }
+    return points
+}
+
+private fun findNextNavigationPoint(userLocation: LatLng, pathPoints: List<LatLng>): LatLng? {
+    if (pathPoints.size < 2) return null
+
+    // Choose a nearest point that still has a valid "next" point on the line.
+    val nearestIndex = (0 until pathPoints.lastIndex).minByOrNull { index ->
+        squaredDistance(
+            lat1 = userLocation.latitude,
+            lon1 = userLocation.longitude,
+            lat2 = pathPoints[index].latitude,
+            lon2 = pathPoints[index].longitude
+        )
+    } ?: return null
+
+    return pathPoints.getOrNull(nearestIndex + 1)
+}
+
+private fun computeBearingDegrees(from: LatLng, to: LatLng): Double {
+    val fromLat = Math.toRadians(from.latitude)
+    val fromLon = Math.toRadians(from.longitude)
+    val toLat = Math.toRadians(to.latitude)
+    val toLon = Math.toRadians(to.longitude)
+    val dLon = toLon - fromLon
+
+    val y = sin(dLon) * cos(toLat)
+    val x = cos(fromLat) * sin(toLat) - sin(fromLat) * cos(toLat) * cos(dLon)
+    val bearing = Math.toDegrees(atan2(y, x))
+    return (bearing + 360.0) % 360.0
 }
 
 private fun canonicalLineName(lineName: String): String {
@@ -728,6 +782,7 @@ fun PlanScreen(
     var itineraryJourneys by remember { mutableStateOf<List<JourneyResult>>(emptyList()) }
     var selectedItineraryJourney by remember { mutableStateOf<JourneyResult?>(null) }
     var itineraryResultsVersion by remember { mutableIntStateOf(0) }
+    var wasInNavigationMode by remember { mutableStateOf(false) }
 
     var allSchedulesInfo by remember { mutableStateOf<AllSchedulesInfo?>(null) }
 
@@ -1357,6 +1412,55 @@ fun PlanScreen(
         if (journeysToZoom.isEmpty()) return@LaunchedEffect
 
         zoomToItineraries(map, journeysToZoom)
+    }
+
+    LaunchedEffect(mapInstance, sheetContentState, userLocation, selectedItineraryJourney) {
+        val isInNavigationMode = sheetContentState == SheetContentState.NAVIGATION
+        val map = mapInstance
+
+        if (map == null) {
+            wasInNavigationMode = isInNavigationMode
+            return@LaunchedEffect
+        }
+
+        if (isInNavigationMode) {
+            val currentUserLocation = userLocation
+            val target = currentUserLocation ?: map.cameraPosition.target
+            val journey = selectedItineraryJourney
+            val pathPoints = journey?.let { buildNavigationPathPoints(it) }.orEmpty()
+            val nextPoint = if (currentUserLocation != null) {
+                findNextNavigationPoint(currentUserLocation, pathPoints)
+            } else {
+                null
+            }
+            val bearing = if (currentUserLocation != null && nextPoint != null) {
+                computeBearingDegrees(currentUserLocation, nextPoint)
+            } else {
+                map.cameraPosition.bearing
+            }
+
+            val navigationCamera = CameraPosition.Builder(map.cameraPosition)
+                .target(target)
+                .zoom(maxOf(map.cameraPosition.zoom, 17.5))
+                .tilt(60.0)
+                .bearing(bearing)
+                .build()
+
+            map.animateCamera(
+                CameraUpdateFactory.newCameraPosition(navigationCamera),
+                1000
+            )
+        } else if (!isInNavigationMode && wasInNavigationMode) {
+            val resetCamera = CameraPosition.Builder(map.cameraPosition)
+                .tilt(0.0)
+                .bearing(0.0)
+                .build()
+
+            // Force immediate reset to true north + 2D when exiting navigation.
+            map.moveCamera(CameraUpdateFactory.newCameraPosition(resetCamera))
+        }
+
+        wasInNavigationMode = isInNavigationMode
     }
 
     // Keep LIVE mode active while switching between global and per-line context.
@@ -2193,7 +2297,8 @@ fun PlanScreen(
                     }
                 },
                 userLocation = userLocation,
-                centerOnUserLocation = shouldCenterOnUser
+                centerOnUserLocation = shouldCenterOnUser,
+                isInteractive = true
             )
 
             if (
@@ -2325,18 +2430,6 @@ fun PlanScreen(
                                     sheetContentState = SheetContentState.ITINERARY
                                 }
                                 .padding(8.dp)
-                        )
-                        Icon(
-                            painter = painterResource(id = R.drawable.add_triangle_24px),
-                            contentDescription = "Retour",
-                            tint = SecondaryColor,
-                            modifier = Modifier
-                                .align(Alignment.CenterEnd)
-                                .padding(end = 20.dp)
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(Color.Gray.copy(alpha = 0.3f))
-                                .padding(10.dp)
                         )
                     }
                 }

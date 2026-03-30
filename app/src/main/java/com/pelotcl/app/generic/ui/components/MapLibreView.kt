@@ -32,7 +32,8 @@ fun MapLibreView(
     styleUrl: String = "asset://positron.json",
     onMapReady: (MapLibreMap) -> Unit = {},
     userLocation: LatLng? = null,
-    centerOnUserLocation: Boolean = false
+    centerOnUserLocation: Boolean = false,
+    isInteractive: Boolean = true
 ) {
     val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
@@ -44,8 +45,7 @@ fun MapLibreView(
     val mapView = remember {
         MapView(context).apply {
             getMapAsync { map ->
-                // Disable map rotation
-                map.uiSettings.isRotateGesturesEnabled = false
+                map.applyInteractionSettings(isInteractive)
 
                 map.setStyle(styleUrl) { style ->
                     // Configuration of initial camera position
@@ -69,6 +69,12 @@ fun MapLibreView(
                     onMapReady(map)
                 }
             }
+        }
+    }
+
+    LaunchedEffect(isInteractive) {
+        mapView.getMapAsync { map ->
+            map.applyInteractionSettings(isInteractive)
         }
     }
 
@@ -173,4 +179,14 @@ fun MapLibreView(
             modifier = Modifier.matchParentSize()
         )
     }
+}
+
+private fun MapLibreMap.applyInteractionSettings(isInteractive: Boolean) {
+    uiSettings.isCompassEnabled = false
+    uiSettings.isRotateGesturesEnabled = false
+    uiSettings.isScrollGesturesEnabled = isInteractive
+    uiSettings.isZoomGesturesEnabled = isInteractive
+    uiSettings.isTiltGesturesEnabled = isInteractive
+    uiSettings.isDoubleTapGesturesEnabled = isInteractive
+    uiSettings.isQuickZoomGesturesEnabled = isInteractive
 }
