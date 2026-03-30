@@ -61,6 +61,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SearchBarDefaults
@@ -156,6 +157,7 @@ import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonOptions
 import org.maplibre.android.style.sources.GeoJsonSource
+import java.util.Calendar
 import java.util.Locale
 import kotlin.text.iterator
 
@@ -165,6 +167,45 @@ private const val SECONDARY_STOPS_MIN_ZOOM = 17.0f
 private const val SELECTED_STOP_MIN_ZOOM = 9.0f
 private const val LIVE_MODE_ZOOM_LEVEL =
     12.0f // Zoom level for live tracking mode (below PRIORITY_STOPS_MIN_ZOOM to hide stop icons)
+
+private fun currentTimeInSeconds(): Int {
+    val calendar = Calendar.getInstance()
+    return calendar.get(Calendar.HOUR_OF_DAY) * 3600 +
+            calendar.get(Calendar.MINUTE) * 60 +
+            calendar.get(Calendar.SECOND)
+}
+
+private fun formatRemainingTime(
+    departureTimeSeconds: Int,
+    arrivalTimeSeconds: Int,
+    nowSeconds: Int
+): String {
+    val secondsInDay = 24 * 3600
+    val fullTripSeconds = if (arrivalTimeSeconds >= departureTimeSeconds) {
+        arrivalTimeSeconds - departureTimeSeconds
+    } else {
+        arrivalTimeSeconds + secondsInDay - departureTimeSeconds
+    }
+
+    val elapsedSinceDeparture = if (nowSeconds >= departureTimeSeconds) {
+        nowSeconds - departureTimeSeconds
+    } else {
+        nowSeconds + secondsInDay - departureTimeSeconds
+    }
+
+    val remainingSeconds = if (elapsedSinceDeparture in 0..fullTripSeconds) {
+        fullTripSeconds - elapsedSinceDeparture
+    } else {
+        fullTripSeconds
+    }
+
+    val remainingMinutes = (remainingSeconds / 60).coerceAtLeast(0)
+    return if (remainingMinutes < 60) {
+        "$remainingMinutes min"
+    } else {
+        "${remainingMinutes / 60}h${(remainingMinutes % 60).toString().padStart(2, '0')}"
+    }
+}
 
 private fun canonicalLineName(lineName: String): String {
     return when (val upperName = lineName.trim().uppercase()) {
@@ -2120,6 +2161,17 @@ fun PlanScreen(
     ) { _ ->
         Box(modifier = Modifier.fillMaxSize()) {
             val isNavigationMode = sheetContentState == SheetContentState.NAVIGATION
+            val navigationNowSeconds by produceState(
+                initialValue = currentTimeInSeconds(),
+                key1 = isNavigationMode,
+                key2 = selectedItineraryJourney
+            ) {
+                value = currentTimeInSeconds()
+                while (isNavigationMode && selectedItineraryJourney != null) {
+                    delay(30_000)
+                    value = currentTimeInSeconds()
+                }
+            }
 
             MapLibreView(
                 modifier = Modifier.fillMaxSize(),
@@ -2236,6 +2288,28 @@ fun PlanScreen(
                             .background(PrimaryColor)
                             .padding(bottom = 12.dp)
                     ) {
+                        selectedItineraryJourney?.let { journey ->
+                            Column(
+                                modifier = Modifier.align(Alignment.Center),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = formatRemainingTime(
+                                        departureTimeSeconds = journey.departureTime,
+                                        arrivalTimeSeconds = journey.arrivalTime,
+                                        nowSeconds = navigationNowSeconds
+                                    ),
+                                    color = SecondaryColor,
+                                    style = MaterialTheme.typography.headlineMedium
+                                )
+                                Text(
+                                    text = journey.formatArrivalTime(),
+                                    color = Color(0xFF9CA3AF),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Normal
+                                )
+                            }
+                        }
                         Icon(
                             imageVector = Icons.Filled.Close,
                             contentDescription = "Retour",
