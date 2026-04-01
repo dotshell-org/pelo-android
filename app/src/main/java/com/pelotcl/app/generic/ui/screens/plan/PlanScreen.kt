@@ -50,7 +50,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddLocationAlt
 import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Search
@@ -264,7 +263,8 @@ private fun normalizeTimeAroundReference(timeSeconds: Int, referenceSeconds: Int
 
 private fun getCurrentAndNextNavigationLeg(
     journey: JourneyResult,
-    nowSeconds: Int
+    nowSeconds: Int,
+    userLocation: LatLng?
 ): Pair<JourneyLeg?, JourneyLeg?> {
     val nonWalkingLegs = journey.legs.filterNot { it.isWalking }
     if (nonWalkingLegs.isEmpty()) return null to null
@@ -283,6 +283,18 @@ private fun getCurrentAndNextNavigationLeg(
     }
     if (currentIndex == -1) {
         currentIndex = nonWalkingLegs.lastIndex
+    }
+
+    // Never move to the next line before reaching the transfer stop.
+    val nearestStop = findNearestJourneyStopCandidate(journey, userLocation)
+    if (nearestStop != null) {
+        val maxLegIndexByLocation =
+            if (nearestStop.isLegEnd && nearestStop.legIndex < nonWalkingLegs.lastIndex) {
+                nearestStop.legIndex + 1
+            } else {
+                nearestStop.legIndex
+            }
+        currentIndex = currentIndex.coerceAtMost(maxLegIndexByLocation)
     }
 
     val currentLeg = nonWalkingLegs.getOrNull(currentIndex)
@@ -310,6 +322,80 @@ private data class LegStopPosition(
     val lat: Double,
     val lon: Double
 )
+
+private data class JourneyStopCandidate(
+    val legIndex: Int,
+    val isLegEnd: Boolean,
+    val lat: Double,
+    val lon: Double
+)
+
+private fun findNearestJourneyStopCandidate(
+    journey: JourneyResult,
+    userLocation: LatLng?
+): JourneyStopCandidate? {
+    if (userLocation == null) return null
+
+    val candidates = mutableListOf<JourneyStopCandidate>()
+    journey.legs.filterNot { it.isWalking }.forEachIndexed { legIndex, leg ->
+        if (isValidJourneyCoordinate(leg.fromLat, leg.fromLon)) {
+            candidates += JourneyStopCandidate(
+                legIndex = legIndex,
+                isLegEnd = false,
+                lat = leg.fromLat,
+                lon = leg.fromLon
+            )
+        }
+        leg.intermediateStops.forEach { stop ->
+            if (isValidJourneyCoordinate(stop.lat, stop.lon)) {
+                candidates += JourneyStopCandidate(
+                    legIndex = legIndex,
+                    isLegEnd = false,
+                    lat = stop.lat,
+                    lon = stop.lon
+                )
+            }
+        }
+        if (isValidJourneyCoordinate(leg.toLat, leg.toLon)) {
+            candidates += JourneyStopCandidate(
+                legIndex = legIndex,
+                isLegEnd = true,
+                lat = leg.toLat,
+                lon = leg.toLon
+            )
+        }
+    }
+    if (candidates.isEmpty()) return null
+
+    return candidates.minByOrNull { stop ->
+        squaredDistance(
+            lat1 = userLocation.latitude,
+            lon1 = userLocation.longitude,
+            lat2 = stop.lat,
+            lon2 = stop.lon
+        )
+    }
+}
+
+private fun isSameJourneyLeg(first: JourneyLeg, second: JourneyLeg): Boolean {
+    return first.fromStopId == second.fromStopId &&
+            first.toStopId == second.toStopId &&
+            first.departureTime == second.departureTime &&
+            first.arrivalTime == second.arrivalTime &&
+            first.routeName == second.routeName
+}
+
+private fun isAtCurrentLegTransferStop(
+    journey: JourneyResult,
+    currentLeg: JourneyLeg,
+    userLocation: LatLng?
+): Boolean {
+    val nearestStop = findNearestJourneyStopCandidate(journey, userLocation) ?: return false
+    val nonWalkingLegs = journey.legs.filterNot { it.isWalking }
+    val currentLegIndex = nonWalkingLegs.indexOfFirst { leg -> isSameJourneyLeg(leg, currentLeg) }
+    if (currentLegIndex == -1 || currentLegIndex >= nonWalkingLegs.lastIndex) return false
+    return nearestStop.legIndex == currentLegIndex && nearestStop.isLegEnd
+}
 
 private fun computeRemainingStopsOnLeg(
     leg: JourneyLeg,
@@ -345,13 +431,7 @@ private fun findUpcomingNonWalkingLeg(
     offsetFromCurrent: Int
 ): JourneyLeg? {
     val nonWalkingLegs = journey.legs.filterNot { it.isWalking }
-    val currentIndex = nonWalkingLegs.indexOfFirst { leg ->
-        leg.fromStopId == currentLeg.fromStopId &&
-                leg.toStopId == currentLeg.toStopId &&
-                leg.departureTime == currentLeg.departureTime &&
-                leg.arrivalTime == currentLeg.arrivalTime &&
-                leg.routeName == currentLeg.routeName
-    }
+    val currentIndex = nonWalkingLegs.indexOfFirst { leg -> isSameJourneyLeg(leg, currentLeg) }
     if (currentIndex == -1) return null
     return nonWalkingLegs.getOrNull(currentIndex + offsetFromCurrent)
 }
@@ -2649,7 +2729,7 @@ fun PlanScreen(
             if (isNavigationMode) {
                 val currentJourney = selectedItineraryJourney
                 val (currentLeg, nextLeg) = currentJourney?.let {
-                    getCurrentAndNextNavigationLeg(it, navigationNowSeconds)
+                    getCurrentAndNextNavigationLeg(it, navigationNowSeconds, userLocation)
                 } ?: (null to null)
                 val shouldChangeLineInMainCard =
                     if (currentJourney != null && currentLeg != null && nextLeg != null) {
@@ -2658,7 +2738,15 @@ fun PlanScreen(
                             normalizeTimeAroundReference(navigationNowSeconds, reference)
                         val legDepartureNormalized =
                             normalizeTimeAroundReference(currentLeg.departureTime, reference)
-                        nowNormalized >= legDepartureNormalized
+                        val vehicleLikelyAlreadyDeparted =
+                            currentMovementSpeedMps > WALKING_MAX_SPEED_MPS
+                        val isWaitingForVehicle =
+                            nowNormalized < legDepartureNormalized && !vehicleLikelyAlreadyDeparted
+                        !isWaitingForVehicle && isAtCurrentLegTransferStop(
+                            journey = currentJourney,
+                            currentLeg = currentLeg,
+                            userLocation = userLocation
+                        )
                     } else {
                         false
                     }
@@ -2707,7 +2795,13 @@ fun PlanScreen(
                             val isWaitingForVehicle =
                                 nowNormalized < legDepartureNormalized && !vehicleLikelyAlreadyDeparted
                             val hasCorrespondence = nextLeg != null
-                            val shouldChangeLine = !isWaitingForVehicle && hasCorrespondence
+                            val shouldChangeLine = !isWaitingForVehicle &&
+                                    hasCorrespondence &&
+                                    isAtCurrentLegTransferStop(
+                                        journey = currentJourney,
+                                        currentLeg = currentLeg,
+                                        userLocation = userLocation
+                                    )
                             val displayedLeg =
                                 if (shouldChangeLine && hasCorrespondence) nextLeg else currentLeg
                             val routeName = displayedLeg.routeName ?: ""
