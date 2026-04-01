@@ -341,11 +341,13 @@ private fun buildNavigationPathPoints(journey: JourneyResult): List<LatLng> {
     return points
 }
 
-private fun findNextNavigationPoint(userLocation: LatLng, pathPoints: List<LatLng>): LatLng? {
+private fun findNavigationAxisSegment(
+    userLocation: LatLng,
+    pathPoints: List<LatLng>
+): Pair<LatLng, LatLng>? {
     if (pathPoints.size < 2) return null
 
-    // Choose a nearest point that still has a valid "next" point on the line.
-    val nearestIndex = (0 until pathPoints.lastIndex).minByOrNull { index ->
+    val nearestIndex = pathPoints.indices.minByOrNull { index ->
         squaredDistance(
             lat1 = userLocation.latitude,
             lon1 = userLocation.longitude,
@@ -354,7 +356,14 @@ private fun findNextNavigationPoint(userLocation: LatLng, pathPoints: List<LatLn
         )
     } ?: return null
 
-    return pathPoints.getOrNull(nearestIndex + 1)
+    val startIndex = if (nearestIndex >= pathPoints.lastIndex) {
+        (pathPoints.lastIndex - 1).coerceAtLeast(0)
+    } else {
+        nearestIndex
+    }
+    val endIndex = (startIndex + 1).coerceAtMost(pathPoints.lastIndex)
+    if (startIndex == endIndex) return null
+    return pathPoints[startIndex] to pathPoints[endIndex]
 }
 
 private fun computeBearingDegrees(from: LatLng, to: LatLng): Double {
@@ -914,6 +923,11 @@ fun PlanScreen(
     val isSheetExpandedOrExpanding =
         scaffoldSheetState.bottomSheetState.currentValue == SheetValue.Expanded ||
                 scaffoldSheetState.bottomSheetState.targetValue == SheetValue.Expanded
+    val density = LocalDensity.current
+    val navConfiguration = LocalConfiguration.current
+    val navHorizontalPaddingPx = with(density) { 24.dp.roundToPx() }
+    val navTopPaddingPx = with(density) { (navConfiguration.screenHeightDp.dp * 0.42f).roundToPx() }
+    val navBottomPaddingPx = with(density) { (navConfiguration.screenHeightDp.dp * 0.12f).roundToPx() }
 
     LaunchedEffect(sheetContentState, selectedStation, selectedItineraryJourney) {
         onSheetStateChanged(sheetContentState != null)
@@ -1552,16 +1566,23 @@ fun PlanScreen(
             val target = currentUserLocation ?: map.cameraPosition.target
             val journey = selectedItineraryJourney
             val pathPoints = journey?.let { buildNavigationPathPoints(it) }.orEmpty()
-            val nextPoint = if (currentUserLocation != null) {
-                findNextNavigationPoint(currentUserLocation, pathPoints)
+            val axisSegment = if (currentUserLocation != null) {
+                findNavigationAxisSegment(currentUserLocation, pathPoints)
             } else {
                 null
             }
-            val bearing = if (currentUserLocation != null && nextPoint != null) {
-                computeBearingDegrees(currentUserLocation, nextPoint)
+            val bearing = if (axisSegment != null) {
+                computeBearingDegrees(axisSegment.first, axisSegment.second)
             } else {
                 map.cameraPosition.bearing
             }
+
+            map.setPadding(
+                navHorizontalPaddingPx,
+                navTopPaddingPx,
+                navHorizontalPaddingPx,
+                navBottomPaddingPx
+            )
 
             val navigationCamera = CameraPosition.Builder(map.cameraPosition)
                 .target(target)
@@ -1575,6 +1596,7 @@ fun PlanScreen(
                 1000
             )
         } else if (!isInNavigationMode && wasInNavigationMode) {
+            map.setPadding(0, 0, 0, 0)
             val resetCamera = CameraPosition.Builder(map.cameraPosition)
                 .tilt(0.0)
                 .bearing(0.0)
