@@ -177,6 +177,7 @@ private const val SECONDARY_STOPS_MIN_ZOOM = 17.0f
 private const val SELECTED_STOP_MIN_ZOOM = 9.0f
 private const val LIVE_MODE_ZOOM_LEVEL =
     12.0f // Zoom level for live tracking mode (below PRIORITY_STOPS_MIN_ZOOM to hide stop icons)
+private const val WALKING_MAX_SPEED_MPS = 2.5
 
 private fun currentTimeInSeconds(): Int {
     val calendar = Calendar.getInstance()
@@ -878,10 +879,39 @@ fun PlanScreen(
 
     // Location state
     var userLocation by remember { mutableStateOf(initialUserLocation) }
+    var lastMovementSampleLocation by remember { mutableStateOf<LatLng?>(initialUserLocation) }
+    var lastMovementSampleTimeMs by remember {
+        mutableStateOf(if (initialUserLocation != null) System.currentTimeMillis() else null)
+    }
+    var currentMovementSpeedMps by remember { mutableStateOf(0.0) }
     // Center on user immediately if we have initial location, otherwise wait for first location update
     var shouldCenterOnUser by remember { mutableStateOf(initialUserLocation != null) }
     var isCenteredOnUser by remember { mutableStateOf(initialUserLocation != null) }
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+
+    fun updateMovementSpeed(newLocation: LatLng) {
+        val nowMs = System.currentTimeMillis()
+        val previousLocation = lastMovementSampleLocation
+        val previousTimeMs = lastMovementSampleTimeMs
+
+        if (previousLocation != null && previousTimeMs != null) {
+            val deltaSeconds = (nowMs - previousTimeMs) / 1000.0
+            if (deltaSeconds in 1.0..20.0) {
+                val deltaMeters = distanceMeters(
+                    lat1 = previousLocation.latitude,
+                    lon1 = previousLocation.longitude,
+                    lat2 = newLocation.latitude,
+                    lon2 = newLocation.longitude
+                )
+                val instantSpeed = (deltaMeters / deltaSeconds).coerceAtLeast(0.0)
+                // Smooth noisy GPS spikes while staying reactive.
+                currentMovementSpeedMps = (currentMovementSpeedMps * 0.6) + (instantSpeed * 0.4)
+            }
+        }
+
+        lastMovementSampleLocation = newLocation
+        lastMovementSampleTimeMs = nowMs
+    }
 
     // Handle when initial location becomes available from NavBar after first composition
     LaunchedEffect(initialUserLocation) {
@@ -1169,6 +1199,7 @@ fun PlanScreen(
                 if (userLocation == null) {
                     shouldCenterOnUser = true
                 }
+                updateMovementSpeed(location)
                 userLocation = location
             }
         }
@@ -1189,6 +1220,7 @@ fun PlanScreen(
                 if (!shouldCenterOnUser && userLocation == null) {
                     shouldCenterOnUser = true
                 }
+                updateMovementSpeed(location)
                 userLocation = location
             }
         } else {
@@ -2630,7 +2662,14 @@ fun PlanScreen(
                                 normalizeTimeAroundReference(navigationNowSeconds, reference)
                             val legDepartureNormalized =
                                 normalizeTimeAroundReference(currentLeg.departureTime, reference)
-                            val isWaitingForVehicle = nowNormalized < legDepartureNormalized
+                            val remainingStopsOnCurrentLeg = computeRemainingStopsOnLeg(
+                                leg = currentLeg,
+                                userLocation = userLocation
+                            )
+                            val vehicleLikelyAlreadyDeparted =
+                                currentMovementSpeedMps > WALKING_MAX_SPEED_MPS
+                            val isWaitingForVehicle =
+                                nowNormalized < legDepartureNormalized && !vehicleLikelyAlreadyDeparted
                             val hasCorrespondence = nextLeg != null
                             val shouldChangeLine = !isWaitingForVehicle && hasCorrespondence
                             val displayedLeg =
@@ -2649,10 +2688,7 @@ fun PlanScreen(
                                 )
                                 "Dans $remainingBeforeDeparture, monter à ${currentLeg.fromStopName}"
                             } else {
-                                val remainingStops = computeRemainingStopsOnLeg(
-                                    leg = currentLeg,
-                                    userLocation = userLocation
-                                )
+                                val remainingStops = remainingStopsOnCurrentLeg
                                 val targetStopName = currentLeg.toStopName.ifBlank { "l'arrêt suivant" }
                                 val actionVerb =
                                     if (shouldChangeLine) {
@@ -3296,6 +3332,18 @@ private fun squaredDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Doub
     val dLat = lat1 - lat2
     val dLon = lon1 - lon2
     return dLat * dLat + dLon * dLon
+}
+
+private fun distanceMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+    val earthRadius = 6_371_000.0
+    val dLat = Math.toRadians(lat2 - lat1)
+    val dLon = Math.toRadians(lon2 - lon1)
+    val a = kotlin.math.sin(dLat / 2) * kotlin.math.sin(dLat / 2) +
+            kotlin.math.cos(Math.toRadians(lat1)) *
+            kotlin.math.cos(Math.toRadians(lat2)) *
+            kotlin.math.sin(dLon / 2) * kotlin.math.sin(dLon / 2)
+    val c = 2 * kotlin.math.atan2(kotlin.math.sqrt(a), kotlin.math.sqrt(1 - a))
+    return earthRadius * c
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
