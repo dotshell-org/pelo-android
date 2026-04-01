@@ -180,7 +180,9 @@ private const val SELECTED_STOP_MIN_ZOOM = 9.0f
 private const val LIVE_MODE_ZOOM_LEVEL =
     12.0f // Zoom level for live tracking mode (below PRIORITY_STOPS_MIN_ZOOM to hide stop icons)
 private const val WALKING_MAX_SPEED_MPS = 2.5
-private const val LONG_TRANSFER_THRESHOLD_SECONDS = 5 * 60
+private const val LONG_TRANSFER_THRESHOLD_SECONDS = 10 * 60
+private const val LATE_TRANSFER_RECALC_THRESHOLD_SECONDS = 3 * 60
+private const val AUTO_RECALC_MAX_STOP_IDS = 64
 
 private fun currentTimeInSeconds(): Int {
     val calendar = Calendar.getInstance()
@@ -1107,6 +1109,8 @@ fun PlanScreen(
     var selectedItineraryJourney by remember { mutableStateOf<JourneyResult?>(null) }
     var itineraryResultsVersion by remember { mutableIntStateOf(0) }
     var wasInNavigationMode by remember { mutableStateOf(false) }
+    var lastLateTransferRecalcKey by remember { mutableStateOf<String?>(null) }
+    var isLateTransferRecalculating by remember { mutableStateOf(false) }
 
     var allSchedulesInfo by remember { mutableStateOf<AllSchedulesInfo?>(null) }
 
@@ -2640,13 +2644,94 @@ fun PlanScreen(
                 navigationNowSeconds,
                 userLocation
             ) {
-                if (!isNavigationMode) return@LaunchedEffect
+                if (!isNavigationMode) {
+                    lastLateTransferRecalcKey = null
+                    isLateTransferRecalculating = false
+                    return@LaunchedEffect
+                }
                 val journey = selectedItineraryJourney ?: return@LaunchedEffect
                 val remainingSeconds = computeRemainingJourneySeconds(journey, navigationNowSeconds)
                 val atTerminus = isNearestJourneyStopTerminus(journey, userLocation)
                 if (remainingSeconds < 60 && atTerminus) {
                     requestedSheetValueForNextContent = SheetValue.Expanded
                     sheetContentState = SheetContentState.ITINERARY
+                    return@LaunchedEffect
+                }
+
+                val (currentLeg, nextLeg) =
+                    getCurrentAndNextNavigationLeg(journey, navigationNowSeconds, userLocation)
+                if (currentLeg == null || nextLeg == null) return@LaunchedEffect
+
+                val reference = journey.departureTime
+                val nowNormalized = normalizeTimeAroundReference(navigationNowSeconds, reference)
+                var nextDepartureNormalized =
+                    normalizeTimeAroundReference(nextLeg.departureTime, reference)
+                while (nextDepartureNormalized < nowNormalized - 12 * 3600) {
+                    nextDepartureNormalized += 24 * 3600
+                }
+                val isAtTransferStop = isAtCurrentLegTransferStop(
+                    journey = journey,
+                    currentLeg = currentLeg,
+                    userLocation = userLocation
+                )
+                val isTooLateForCorrespondence =
+                    nowNormalized >= nextDepartureNormalized + LATE_TRANSFER_RECALC_THRESHOLD_SECONDS
+                if (!isAtTransferStop || !isTooLateForCorrespondence || isLateTransferRecalculating) {
+                    return@LaunchedEffect
+                }
+
+                val recalcKey =
+                    "${journey.departureTime}_${journey.arrivalTime}_${currentLeg.toStopId}_${nextLeg.departureTime}"
+                if (lastLateTransferRecalcKey == recalcKey) return@LaunchedEffect
+
+                lastLateTransferRecalcKey = recalcKey
+                isLateTransferRecalculating = true
+                try {
+                    val transferStopName = currentLeg.toStopName.takeIf { it.isNotBlank() }
+                        ?: return@LaunchedEffect
+
+                    val departureIds = currentLeg.toStopId.toIntOrNull()?.let { listOf(it) } ?: emptyList()
+                    if (departureIds.isEmpty()) return@LaunchedEffect
+
+                    val destinationName =
+                        itineraryArrivalStop?.name?.takeIf { it.isNotBlank() }
+                            ?: journey.legs.lastOrNull { !it.isWalking }?.toStopName
+                    val destinationIds = when {
+                        itineraryArrivalStop?.stopIds?.isNotEmpty() == true ->
+                            itineraryArrivalStop!!.stopIds
+                                .distinct()
+                                .take(AUTO_RECALC_MAX_STOP_IDS)
+
+                        destinationName != null -> viewModel.raptorRepository.resolveStopIdsByName(
+                            stopName = destinationName,
+                            maxIds = AUTO_RECALC_MAX_STOP_IDS
+                        )
+
+                        else -> emptyList()
+                    }
+                    if (destinationIds.isEmpty()) return@LaunchedEffect
+
+                    val recalculatedJourneys = withContext(Dispatchers.IO) {
+                        viewModel.raptorRepository.getOptimizedPaths(
+                            originStopIds = departureIds.toList(),
+                            destinationStopIds = destinationIds,
+                            departureTimeSeconds = navigationNowSeconds
+                        )
+                    }
+
+                    if (recalculatedJourneys.isNotEmpty()) {
+                        val fastestJourney = recalculatedJourneys.minByOrNull { it.arrivalTime }
+                        if (fastestJourney != null) {
+                            itineraryJourneys = recalculatedJourneys
+                            itineraryResultsVersion++
+                            selectedItineraryJourney = fastestJourney
+                        }
+                    } else {
+                        requestedSheetValueForNextContent = SheetValue.Expanded
+                        sheetContentState = SheetContentState.ITINERARY
+                    }
+                } finally {
+                    isLateTransferRecalculating = false
                 }
             }
 
