@@ -253,10 +253,70 @@ private fun getCurrentAndNextNavigationLeg(
     return currentLeg to nextLeg
 }
 
-private fun formatClockTime(seconds: Int): String {
-    val hours = (seconds / 3600) % 24
-    val minutes = (seconds % 3600) / 60
-    return String.format(Locale.ROOT, "%02d:%02d", hours, minutes)
+private fun formatDurationUntil(
+    nowNormalizedSeconds: Int,
+    targetNormalizedSeconds: Int
+): String {
+    val remainingSeconds = (targetNormalizedSeconds - nowNormalizedSeconds).coerceAtLeast(0)
+    if (remainingSeconds < 60) return "moins d'1 min"
+
+    val remainingMinutes = remainingSeconds / 60
+    return if (remainingMinutes < 60) {
+        "$remainingMinutes min"
+    } else {
+        "${remainingMinutes / 60}h${(remainingMinutes % 60).toString().padStart(2, '0')}"
+    }
+}
+
+private data class LegStopPosition(
+    val index: Int,
+    val lat: Double,
+    val lon: Double
+)
+
+private fun computeRemainingStopsOnLeg(
+    leg: JourneyLeg,
+    userLocation: LatLng?
+): Int {
+    val stops = ArrayList<LegStopPosition>(leg.intermediateStops.size + 2)
+    stops += LegStopPosition(index = 0, lat = leg.fromLat, lon = leg.fromLon)
+    leg.intermediateStops.forEachIndexed { stopIndex, stop ->
+        stops += LegStopPosition(index = stopIndex + 1, lat = stop.lat, lon = stop.lon)
+    }
+    val terminusIndex = stops.size
+    stops += LegStopPosition(index = terminusIndex, lat = leg.toLat, lon = leg.toLon)
+
+    val nearestStopIndex = userLocation?.let { location ->
+        stops
+            .filter { isValidJourneyCoordinate(it.lat, it.lon) }
+            .minByOrNull { stop ->
+                squaredDistance(
+                    lat1 = location.latitude,
+                    lon1 = location.longitude,
+                    lat2 = stop.lat,
+                    lon2 = stop.lon
+                )
+            }?.index
+    } ?: 0
+
+    return (terminusIndex - nearestStopIndex).coerceAtLeast(0)
+}
+
+private fun findUpcomingNonWalkingLeg(
+    journey: JourneyResult,
+    currentLeg: JourneyLeg,
+    offsetFromCurrent: Int
+): JourneyLeg? {
+    val nonWalkingLegs = journey.legs.filterNot { it.isWalking }
+    val currentIndex = nonWalkingLegs.indexOfFirst { leg ->
+        leg.fromStopId == currentLeg.fromStopId &&
+                leg.toStopId == currentLeg.toStopId &&
+                leg.departureTime == currentLeg.departureTime &&
+                leg.arrivalTime == currentLeg.arrivalTime &&
+                leg.routeName == currentLeg.routeName
+    }
+    if (currentIndex == -1) return null
+    return nonWalkingLegs.getOrNull(currentIndex + offsetFromCurrent)
 }
 
 private fun isValidJourneyCoordinate(lat: Double, lon: Double): Boolean {
@@ -2433,7 +2493,29 @@ fun PlanScreen(
                 val (currentLeg, nextLeg) = currentJourney?.let {
                     getCurrentAndNextNavigationLeg(it, navigationNowSeconds)
                 } ?: (null to null)
-                val topMainShape = if (nextLeg != null) {
+                val shouldChangeLineInMainCard =
+                    if (currentJourney != null && currentLeg != null && nextLeg != null) {
+                        val reference = currentJourney.departureTime
+                        val nowNormalized =
+                            normalizeTimeAroundReference(navigationNowSeconds, reference)
+                        val legDepartureNormalized =
+                            normalizeTimeAroundReference(currentLeg.departureTime, reference)
+                        nowNormalized >= legDepartureNormalized
+                    } else {
+                        false
+                    }
+                val upcomingLeg =
+                    if (currentJourney != null && currentLeg != null) {
+                        val offset = if (shouldChangeLineInMainCard) 2 else 1
+                        findUpcomingNonWalkingLeg(
+                            journey = currentJourney,
+                            currentLeg = currentLeg,
+                            offsetFromCurrent = offset
+                        )
+                    } else {
+                        null
+                    }
+                val topMainShape = if (upcomingLeg != null) {
                     RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 0.dp, bottomEnd = 20.dp)
                 } else {
                     RoundedCornerShape(20.dp)
@@ -2453,24 +2535,38 @@ fun PlanScreen(
                             .background(PrimaryColor)
                     ) {
                         if (currentJourney != null && currentLeg != null) {
-                            val routeName = currentLeg.routeName ?: ""
-                            val iconRes = BusIconHelper.getResourceIdForLine(context, routeName)
-                            val fallbackColor =
-                                Color(LineColorHelper.getColorForLineString(routeName))
-                            val directionValue =
-                                currentLeg.direction?.takeIf { it.isNotBlank() } ?: "?"
-                            val directionText = "Direction $directionValue"
                             val reference = currentJourney.departureTime
                             val nowNormalized =
                                 normalizeTimeAroundReference(navigationNowSeconds, reference)
                             val legDepartureNormalized =
                                 normalizeTimeAroundReference(currentLeg.departureTime, reference)
                             val isWaitingForVehicle = nowNormalized < legDepartureNormalized
-                            val departureTimeText = formatClockTime(currentLeg.departureTime)
+                            val hasCorrespondence = nextLeg != null
+                            val shouldChangeLine = !isWaitingForVehicle && hasCorrespondence
+                            val displayedLeg =
+                                if (shouldChangeLine && hasCorrespondence) nextLeg else currentLeg
+                            val routeName = displayedLeg.routeName ?: ""
+                            val iconRes = BusIconHelper.getResourceIdForLine(context, routeName)
+                            val fallbackColor =
+                                Color(LineColorHelper.getColorForLineString(routeName))
+                            val directionValue =
+                                displayedLeg.direction?.takeIf { it.isNotBlank() } ?: "?"
+                            val directionText = "Direction $directionValue"
                             val actionText = if (isWaitingForVehicle) {
-                                "A $departureTimeText, monter à ${currentLeg.fromStopName}"
+                                val remainingBeforeDeparture = formatDurationUntil(
+                                    nowNormalizedSeconds = nowNormalized,
+                                    targetNormalizedSeconds = legDepartureNormalized
+                                )
+                                "Dans $remainingBeforeDeparture, monter à ${currentLeg.fromStopName}"
                             } else {
-                                "A $departureTimeText, descendre à ${currentLeg.toStopName}"
+                                val remainingStops = computeRemainingStopsOnLeg(
+                                    leg = currentLeg,
+                                    userLocation = userLocation
+                                )
+                                val stopWord = if (remainingStops == 1) "arrêt" else "arrêts"
+                                val actionVerb =
+                                    if (shouldChangeLine) "changer de ligne" else "descendre"
+                                "Dans $remainingStops $stopWord, $actionVerb"
                             }
 
                             Row(
@@ -2523,8 +2619,8 @@ fun PlanScreen(
                             }
                         }
                     }
-                    if (nextLeg != null) {
-                        val nextRouteName = nextLeg.routeName ?: ""
+                    if (upcomingLeg != null) {
+                        val nextRouteName = upcomingLeg.routeName ?: ""
                         val nextIconRes = BusIconHelper.getResourceIdForLine(context, nextRouteName)
                         val nextFallbackColor =
                             Color(LineColorHelper.getColorForLineString(nextRouteName))
