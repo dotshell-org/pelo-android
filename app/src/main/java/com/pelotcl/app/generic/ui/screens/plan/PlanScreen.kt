@@ -49,6 +49,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddLocationAlt
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Search
@@ -101,6 +103,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -215,6 +218,39 @@ private fun formatRemainingTime(
         "$remainingMinutes min"
     } else {
         "${remainingMinutes / 60}h${(remainingMinutes % 60).toString().padStart(2, '0')}"
+    }
+}
+
+@Composable
+private fun NavigationLineIcon(
+    lineName: String,
+    modifier: Modifier = Modifier,
+    size: Dp = 44.dp
+) {
+    val context = LocalContext.current
+    val iconRes = BusIconHelper.getResourceIdForLine(context, lineName)
+    val fallbackColor = Color(LineColorHelper.getColorForLineString(lineName))
+
+    if (iconRes != 0) {
+        Image(
+            painter = painterResource(id = iconRes),
+            contentDescription = null,
+            modifier = modifier.size(size)
+        )
+    } else {
+        Box(
+            modifier = modifier
+                .size((size - 2.dp).coerceAtLeast(20.dp))
+                .clip(CircleShape)
+                .background(fallbackColor),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = lineName.ifBlank { "?" }.take(3),
+                color = SecondaryColor,
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }
 
@@ -2675,9 +2711,6 @@ fun PlanScreen(
                             val displayedLeg =
                                 if (shouldChangeLine && hasCorrespondence) nextLeg else currentLeg
                             val routeName = displayedLeg.routeName ?: ""
-                            val iconRes = BusIconHelper.getResourceIdForLine(context, routeName)
-                            val fallbackColor =
-                                Color(LineColorHelper.getColorForLineString(routeName))
                             val directionValue =
                                 displayedLeg.direction?.takeIf { it.isNotBlank() } ?: "?"
                             val directionText = "Direction $directionValue"
@@ -2711,29 +2744,33 @@ fun PlanScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                if (iconRes != 0) {
-                                    Image(
-                                        painter = painterResource(id = iconRes),
-                                        contentDescription = null,
-                                        modifier = Modifier
-                                            .padding(horizontal = 4.dp)
-                                            .size(44.dp)
-                                    )
-                                } else {
-                                    Box(
-                                        modifier = Modifier
-                                            .padding(horizontal = 4.dp)
-                                            .size(42.dp)
-                                            .clip(CircleShape)
-                                            .background(fallbackColor),
-                                        contentAlignment = Alignment.Center
+                                if (shouldChangeLine) {
+                                    Column(
+                                        modifier = Modifier.padding(horizontal = 4.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(1.dp)
                                     ) {
-                                        Text(
-                                            text = routeName.ifBlank { "?" }.take(3),
-                                            color = SecondaryColor,
-                                            fontWeight = FontWeight.Bold
+                                        NavigationLineIcon(
+                                            lineName = currentLeg.routeName ?: "",
+                                            size = 36.dp
+                                        )
+                                        Icon(
+                                            imageVector = Icons.Filled.ArrowDownward,
+                                            contentDescription = null,
+                                            tint = Color(0xFF9CA3AF),
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        NavigationLineIcon(
+                                            lineName = routeName,
+                                            size = 36.dp
                                         )
                                     }
+                                } else {
+                                    NavigationLineIcon(
+                                        lineName = routeName,
+                                        modifier = Modifier.padding(horizontal = 4.dp),
+                                        size = 44.dp
+                                    )
                                 }
 
                                 Column(
