@@ -108,6 +108,18 @@ fun InlineItinerarySheetContent(
     var selectedJourney by remember { mutableStateOf<JourneyResult?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf<String?>(null) }
+    var previousStopPairKey by remember { mutableStateOf<String?>(null) }
+
+    // Reset date/time overrides when the itinerary stop pair changes so default search
+    // uses the current time for each new itinerary request.
+    LaunchedEffect(departureStop?.name, arrivalStop?.name) {
+        val currentPairKey = "${departureStop?.name.orEmpty()}->${arrivalStop?.name.orEmpty()}"
+        if (previousStopPairKey != null && previousStopPairKey != currentPairKey) {
+            selectedTimeSeconds = null
+            selectedDate = null
+        }
+        previousStopPairKey = currentPairKey
+    }
 
     suspend fun recalc() {
         val departureStopIds =
