@@ -43,7 +43,7 @@ class SchedulesRepository private constructor(context: Context) {
         searchCache.get(cacheKey)?.let { return it }
 
         val assetsAvailable = raptorRepository.checkAssetsAvailable()
-        val results = raptorRepository.searchStopsByName(query)
+        val rawResults = raptorRepository.searchStopsByName(query)
             .map { stop ->
                 val desserte = raptorRepository.getDesserteForStop(stop.name).orEmpty()
                 val lines = if (desserte.isEmpty() || desserte.equals("UNKNOWN", ignoreCase = true)) {
@@ -63,9 +63,25 @@ class SchedulesRepository private constructor(context: Context) {
                         .filter { it.isNotEmpty() }
                         .distinct()
                 }
-                StationSearchResult(stop.name, lines)
+                StationSearchResult(
+                    stopName = stop.name,
+                    lines = lines,
+                    stopId = stop.id
+                )
             }
-            .distinctBy { it.stopName.lowercase() }
+
+        // Group homonymous platforms/quays under one visual stop entry in search results.
+        val results = rawResults
+            .groupBy { it.stopName.trim().lowercase() }
+            .values
+            .map { group ->
+                val representative = group.first()
+                StationSearchResult(
+                    stopName = representative.stopName,
+                    lines = group.flatMap { it.lines }.distinct(),
+                    stopId = representative.stopId
+                )
+            }
             .take(50)
 
         if (cacheKey.length >= 2 && results.isNotEmpty()) {

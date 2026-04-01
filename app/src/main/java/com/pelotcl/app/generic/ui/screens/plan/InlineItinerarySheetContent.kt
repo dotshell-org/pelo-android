@@ -57,7 +57,7 @@ import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.util.Calendar
 
-private const val MAX_ITINERARY_STOP_IDS_PER_SIDE = 4
+private const val MAX_ITINERARY_STOP_IDS_PER_SIDE = 64
 private const val MAX_ITINERARY_FALLBACK_STOPS = 2
 
 @RequiresApi(Build.VERSION_CODES.O)

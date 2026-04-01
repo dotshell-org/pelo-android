@@ -1272,7 +1272,9 @@ fun PlanScreen(
         if (searchSelectedStop != null && mapInstance != null && stopsUiState is TransportStopsUiState.Success) {
             val allStops = (stopsUiState as TransportStopsUiState.Success).stops
 
-            val targetStop = allStops.find {
+            val targetStop = searchSelectedStop.stopId?.let { selectedId ->
+                allStops.find { it.properties.id == selectedId }
+            } ?: allStops.find {
                 it.properties.nom.equals(searchSelectedStop.stopName, ignoreCase = true)
             }
 
@@ -1281,7 +1283,8 @@ fun PlanScreen(
                 val stationInfo = StationInfo(
                     nom = targetStop.properties.nom,
                     lignes = lines,
-                    desserte = targetStop.properties.desserte
+                    desserte = targetStop.properties.desserte,
+                    stopIds = listOf(targetStop.properties.id)
                 )
 
                 if (sheetContentState == SheetContentState.LINE_DETAILS || sheetContentState == SheetContentState.ALL_SCHEDULES) {
@@ -1330,7 +1333,9 @@ fun PlanScreen(
         if (optionsSelectedStop != null && mapInstance != null && stopsUiState is TransportStopsUiState.Success) {
             val allStops = (stopsUiState as TransportStopsUiState.Success).stops
 
-            val targetStop = allStops.find {
+            val targetStop = optionsSelectedStop.stopId?.let { selectedId ->
+                allStops.find { it.properties.id == selectedId }
+            } ?: allStops.find {
                 it.properties.nom.equals(optionsSelectedStop.stopName, ignoreCase = true)
             }
 
@@ -1339,7 +1344,8 @@ fun PlanScreen(
                 val stationInfo = StationInfo(
                     nom = targetStop.properties.nom,
                     lignes = lines,
-                    desserte = targetStop.properties.desserte
+                    desserte = targetStop.properties.desserte,
+                    stopIds = listOf(targetStop.properties.id)
                 )
 
                 if (sheetContentState == SheetContentState.LINE_DETAILS || sheetContentState == SheetContentState.ALL_SCHEDULES) {
@@ -2123,13 +2129,15 @@ fun PlanScreen(
                                             StationInfo(
                                                 nom = matchingStop.properties.nom,
                                                 lignes = BusIconHelper.getAllLinesForStop(matchingStop),
-                                                desserte = matchingStop.properties.desserte
+                                                desserte = matchingStop.properties.desserte,
+                                                stopIds = listOf(matchingStop.properties.id)
                                             )
                                         } else {
                                             StationInfo(
                                                 nom = stopName,
                                                 lignes = selectedStation?.lignes ?: emptyList(),
-                                                desserte = selectedStation?.desserte ?: ""
+                                                desserte = selectedStation?.desserte ?: "",
+                                                stopIds = selectedStation?.stopIds ?: emptyList()
                                             )
                                         }
 
@@ -2983,9 +2991,10 @@ fun PlanScreen(
             },
             onStopPrimary = { result ->
                 scope.launch {
+                    val stopIds = viewModel.raptorRepository.resolveStopIdsByName(result.stopName)
                     val selectedStop = SelectedStop(
                         name = result.stopName,
-                        stopIds = viewModel.raptorRepository.resolveStopIdsByName(result.stopName)
+                        stopIds = stopIds
                     )
                     if (isDepartureSearch) {
                         itineraryDepartureStop = selectedStop
@@ -4243,6 +4252,8 @@ private suspend fun addStopsToMap(
                                 try {
                                     val stopName =
                                         if (props.has("nom")) props.get("nom").asString else ""
+                                    val stopId =
+                                        if (props.has("stop_id")) props.get("stop_id").asInt else null
                                     val lignesJson =
                                         if (props.has("lignes")) props.get("lignes").asString else "[]"
 
@@ -4256,7 +4267,8 @@ private suspend fun addStopsToMap(
                                     if (stopName.isNotBlank()) {
                                         val stationInfo = StationInfo(
                                             nom = stopName,
-                                            lignes = lignes
+                                            lignes = lignes,
+                                            stopIds = stopId?.let { listOf(it) } ?: emptyList()
                                         )
                                         onStationClick(stationInfo)
                                         return@OnMapClickListener true
@@ -4559,6 +4571,7 @@ private fun createStopsGeoJsonFromStops(
             sb.append("]},\"properties\":{")
             sb.append("\"nom\":\"").append(nom).append("\",")
             sb.append("\"desserte\":\"").append(desserte).append("\",")
+            sb.append("\"stop_id\":").append(stop.properties.id).append(",")
             sb.append("\"type\":\"stop\",")
             sb.append("\"stop_priority\":").append(stopPriority).append(",")
             sb.append("\"has_tram\":").append(hasTram).append(",")

@@ -90,6 +90,7 @@ import com.pelotcl.app.utils.transport.BusIconHelper
 data class StationSearchResult(
     val stopName: String,
     val lines: List<String>,
+    val stopId: Int? = null,
 )
 
 @Immutable
@@ -109,13 +110,16 @@ enum class TransportSearchContent {
 
 private sealed class UnifiedSearchResult {
     abstract val sortKey: String
+    abstract val itemKey: String
 
     data class Line(val result: LineSearchResult) : UnifiedSearchResult() {
         override val sortKey: String = result.lineName.uppercase()
+        override val itemKey: String = "line_${result.lineName.uppercase()}"
     }
 
     data class Stop(val result: StationSearchResult) : UnifiedSearchResult() {
         override val sortKey: String = result.stopName.uppercase()
+        override val itemKey: String = "stop_${result.stopId ?: result.stopName.uppercase()}"
     }
 }
 
@@ -425,7 +429,7 @@ fun SimpleSearchBar(
                     }
                 }
 
-                items(combinedResults, key = { it.sortKey }) { unifiedResult ->
+                items(combinedResults, key = { it.itemKey }) { unifiedResult ->
                     when (unifiedResult) {
                         is UnifiedSearchResult.Line -> {
                             LineSearchResultItem(

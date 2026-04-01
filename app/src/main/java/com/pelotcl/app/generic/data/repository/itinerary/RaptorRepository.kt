@@ -481,7 +481,7 @@ class RaptorRepository private constructor(private val context: Context) {
      */
     suspend fun resolveStopIdsByName(
         stopName: String,
-        maxIds: Int = 4
+        maxIds: Int = 64
     ): List<Int> =
         withContext(Dispatchers.Default) {
             ensureInitialized()
