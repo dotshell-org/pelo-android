@@ -2571,10 +2571,19 @@ fun PlanScreen(
                                     leg = currentLeg,
                                     userLocation = userLocation
                                 )
-                                val stopWord = if (remainingStops == 1) "arrêt" else "arrêts"
+                                val targetStopName = currentLeg.toStopName.ifBlank { "l'arrêt suivant" }
                                 val actionVerb =
-                                    if (shouldChangeLine) "changer de ligne" else "descendre"
-                                "Dans $remainingStops $stopWord, $actionVerb"
+                                    if (shouldChangeLine) {
+                                        "changer de ligne à $targetStopName"
+                                    } else {
+                                        "descendre à $targetStopName"
+                                    }
+                                if (remainingStops <= 0) {
+                                    "Au prochain arrêt, $actionVerb"
+                                } else {
+                                    val stopWord = if (remainingStops == 1) "arrêt" else "arrêts"
+                                    "Dans $remainingStops $stopWord, $actionVerb"
+                                }
                             }
 
                             Row(
