@@ -319,6 +319,50 @@ private fun findUpcomingNonWalkingLeg(
     return nonWalkingLegs.getOrNull(currentIndex + offsetFromCurrent)
 }
 
+private fun computeRemainingJourneySeconds(
+    journey: JourneyResult,
+    nowSeconds: Int
+): Int {
+    val reference = journey.departureTime
+    val nowNormalized = normalizeTimeAroundReference(nowSeconds, reference)
+    val arrivalNormalized = normalizeTimeAroundReference(journey.arrivalTime, reference)
+    return (arrivalNormalized - nowNormalized).coerceAtLeast(0)
+}
+
+private fun isNearestJourneyStopTerminus(
+    journey: JourneyResult,
+    userLocation: LatLng?
+): Boolean {
+    if (userLocation == null) return false
+
+    val stops = mutableListOf<LatLng>()
+    journey.legs.filterNot { it.isWalking }.forEach { leg ->
+        if (isValidJourneyCoordinate(leg.fromLat, leg.fromLon)) {
+            stops.add(LatLng(leg.fromLat, leg.fromLon))
+        }
+        leg.intermediateStops.forEach { stop ->
+            if (isValidJourneyCoordinate(stop.lat, stop.lon)) {
+                stops.add(LatLng(stop.lat, stop.lon))
+            }
+        }
+        if (isValidJourneyCoordinate(leg.toLat, leg.toLon)) {
+            stops.add(LatLng(leg.toLat, leg.toLon))
+        }
+    }
+    if (stops.isEmpty()) return false
+
+    val nearestIndex = stops.indices.minByOrNull { index ->
+        squaredDistance(
+            lat1 = userLocation.latitude,
+            lon1 = userLocation.longitude,
+            lat2 = stops[index].latitude,
+            lon2 = stops[index].longitude
+        )
+    } ?: return false
+
+    return nearestIndex == stops.lastIndex
+}
+
 private fun isValidJourneyCoordinate(lat: Double, lon: Double): Boolean {
     return lat in -90.0..90.0 && lon in -180.0..180.0 && (lat != 0.0 || lon != 0.0)
 }
@@ -2423,6 +2467,22 @@ fun PlanScreen(
                 while (isNavigationMode && selectedItineraryJourney != null) {
                     delay(30_000)
                     value = currentTimeInSeconds()
+                }
+            }
+
+            LaunchedEffect(
+                isNavigationMode,
+                selectedItineraryJourney,
+                navigationNowSeconds,
+                userLocation
+            ) {
+                if (!isNavigationMode) return@LaunchedEffect
+                val journey = selectedItineraryJourney ?: return@LaunchedEffect
+                val remainingSeconds = computeRemainingJourneySeconds(journey, navigationNowSeconds)
+                val atTerminus = isNearestJourneyStopTerminus(journey, userLocation)
+                if (remainingSeconds < 60 && atTerminus) {
+                    requestedSheetValueForNextContent = SheetValue.Expanded
+                    sheetContentState = SheetContentState.ITINERARY
                 }
             }
 
