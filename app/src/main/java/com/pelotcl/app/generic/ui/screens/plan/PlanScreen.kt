@@ -3679,28 +3679,11 @@ private fun drawItinerariesOnMap(
                                     val firstLine = coordinates.firstOrNull()
                                     if (!firstLine.isNullOrEmpty() && firstLine.size > 1) {
                                         val coordinatesArray = JsonArray()
-                                        val isMetro = listOf("A", "B", "C", "D").any { lineName.equals(it, ignoreCase = true) }
-                                        if (isMetro) {
-                                            for (i in 0 until firstLine.size - 1) {
-                                                val start = firstLine[i]
-                                                val end = firstLine[i + 1]
-                                                val bezierPoints = viewModel.generateBezierCurve(start, end)
-                                                bezierPoints.forEachIndexed { idx, pt ->
-                                                    if (i == 0 || idx > 0) {
-                                                        val coordArray = JsonArray()
-                                                        coordArray.add(pt[0])
-                                                        coordArray.add(pt[1])
-                                                        coordinatesArray.add(coordArray)
-                                                    }
-                                                }
-                                            }
-                                        } else {
-                                            firstLine.forEach { coord ->
-                                                val coordArray = JsonArray()
-                                                coordArray.add(coord[0])
-                                                coordArray.add(coord[1])
-                                                coordinatesArray.add(coordArray)
-                                            }
+                                        firstLine.forEach { coord ->
+                                            val coordArray = JsonArray()
+                                            coordArray.add(coord[0])
+                                            coordArray.add(coord[1])
+                                            coordinatesArray.add(coordArray)
                                         }
                                         val lineGeoJson = JsonObject().apply {
                                             addProperty("type", "Feature")

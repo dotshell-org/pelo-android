@@ -1379,16 +1379,10 @@ class TransportViewModel(private val context: Context) : ViewModel() {
                 }
                 
                 if (startIndex != -1 && endIndex != -1) {
-                    val isMetroLine = setOf("A", "B", "C", "D").contains(line.properties.lineName)
-                    
-                    var sectionCoordinates: List<List<Double>> = if (isMetroLine) {
-                        generateBezierCurve(startCoord, endCoord)
+                    var sectionCoordinates: List<List<Double>> = if (startIndex < endIndex) {
+                        firstLine.subList(startIndex, endIndex + 1)
                     } else {
-                        if (startIndex < endIndex) {
-                            firstLine.subList(startIndex, endIndex + 1)
-                        } else {
-                            firstLine.subList(endIndex, startIndex + 1).reversed()
-                        }
+                        firstLine.subList(endIndex, startIndex + 1).reversed()
                     }
                     
                     // Replace first and last points with exact stop positions

@@ -170,33 +170,78 @@ class LyonTransportApi(private val baseUrl: String) : TransportApi {
         val requested = lineName.trim()
         if (requested.isEmpty()) return FeatureCollection(features = emptyList())
 
-        val normalized = Normalizer.normalize(requested, Normalizer.Form.NFD)
-            .replace("\\p{Mn}+".toRegex(), "")
-            .uppercase()
+        fun normalizeToken(raw: String): String {
+            return Normalizer.normalize(raw.trim(), Normalizer.Form.NFD)
+                .replace("\\p{Mn}+".toRegex(), "")
+                .uppercase()
+        }
+
+        val normalized = normalizeToken(requested)
 
         // Alias handling (Rhônexpress).
         val isRxRequest = normalized == "RX" ||
             normalized.contains("RHONEXPRESS") ||
             normalized.contains("RHONEXPRES")
+        val isMetroOrFunicularRequest = normalized in setOf("A", "B", "C", "D", "F1", "F2")
+        val isTramRequest = normalized.matches(Regex("^T\\d{1,2}[A-Z]?$"))
+        val isNavigoneRequest = normalized.startsWith("NAV")
 
-        val features = if (isRxRequest) {
-            fetchRhonexpressFeatures()
-        } else {
-            val escapedAlias = normalized.replace("'", "''")
-            val cqlFilter = "ligne = '$escapedAlias'"
-
-            val response = lineApiWrapper.getBusLineByName(
-                SERVICE,
-                VERSION,
-                REQUEST,
-                TYPENAME_BUS,
-                OUTPUT_FORMAT,
-                SRSNAME_4171,
-                SORT_BY,
-                BUS_LINE_BY_NAME_COUNT,
-                cqlFilter
-            )
-            response.features
+        val features = when {
+            isRxRequest -> fetchRhonexpressFeatures()
+            isMetroOrFunicularRequest -> {
+                lineApiWrapper.getMetroLines(
+                    SERVICE,
+                    VERSION,
+                    REQUEST,
+                    TYPENAME_METRO,
+                    OUTPUT_FORMAT,
+                    SRSNAME_4171,
+                    START_INDEX,
+                    SORT_BY,
+                    COUNT_METRO_TRAM_NAVIGONE
+                ).features.filter { normalizeToken(it.properties.lineName) == normalized }
+            }
+            isTramRequest -> {
+                lineApiWrapper.getTramLines(
+                    SERVICE,
+                    VERSION,
+                    REQUEST,
+                    TYPENAME_TRAM,
+                    OUTPUT_FORMAT,
+                    SRSNAME_4171,
+                    START_INDEX,
+                    SORT_BY,
+                    COUNT_METRO_TRAM_NAVIGONE
+                ).features.filter { normalizeToken(it.properties.lineName) == normalized }
+            }
+            isNavigoneRequest -> {
+                lineApiWrapper.getNavigoneLines(
+                    SERVICE,
+                    VERSION,
+                    REQUEST,
+                    TYPENAME_NAVIGONE,
+                    OUTPUT_FORMAT,
+                    SRSNAME_4171,
+                    START_INDEX,
+                    SORT_BY,
+                    COUNT_METRO_TRAM_NAVIGONE
+                ).features.filter { normalizeToken(it.properties.lineName) == normalized }
+            }
+            else -> {
+                val escapedAlias = normalized.replace("'", "''")
+                val cqlFilter = "ligne = '$escapedAlias'"
+                lineApiWrapper.getBusLineByName(
+                    SERVICE,
+                    VERSION,
+                    REQUEST,
+                    TYPENAME_BUS,
+                    OUTPUT_FORMAT,
+                    SRSNAME_4171,
+                    SORT_BY,
+                    BUS_LINE_BY_NAME_COUNT,
+                    cqlFilter
+                ).features
+            }
         }
 
         val unique = features
