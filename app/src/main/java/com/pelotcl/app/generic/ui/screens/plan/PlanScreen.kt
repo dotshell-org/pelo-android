@@ -180,6 +180,7 @@ private const val SELECTED_STOP_MIN_ZOOM = 9.0f
 private const val LIVE_MODE_ZOOM_LEVEL =
     12.0f // Zoom level for live tracking mode (below PRIORITY_STOPS_MIN_ZOOM to hide stop icons)
 private const val WALKING_MAX_SPEED_MPS = 2.5
+private const val LONG_TRANSFER_THRESHOLD_SECONDS = 5 * 60
 
 private fun currentTimeInSeconds(): Int {
     val calendar = Calendar.getInstance()
@@ -315,6 +316,21 @@ private fun formatDurationUntil(
     } else {
         "${remainingMinutes / 60}h${(remainingMinutes % 60).toString().padStart(2, '0')}"
     }
+}
+
+private fun computeTransferWaitSeconds(
+    currentLeg: JourneyLeg,
+    nextLeg: JourneyLeg,
+    journeyReferenceSeconds: Int
+): Int {
+    val currentArrivalNormalized =
+        normalizeTimeAroundReference(currentLeg.arrivalTime, journeyReferenceSeconds)
+    var nextDepartureNormalized =
+        normalizeTimeAroundReference(nextLeg.departureTime, journeyReferenceSeconds)
+    while (nextDepartureNormalized < currentArrivalNormalized) {
+        nextDepartureNormalized += 24 * 3600
+    }
+    return (nextDepartureNormalized - currentArrivalNormalized).coerceAtLeast(0)
 }
 
 private data class LegStopPosition(
@@ -2742,11 +2758,18 @@ fun PlanScreen(
                             currentMovementSpeedMps > WALKING_MAX_SPEED_MPS
                         val isWaitingForVehicle =
                             nowNormalized < legDepartureNormalized && !vehicleLikelyAlreadyDeparted
+                        val transferWaitSeconds = computeTransferWaitSeconds(
+                            currentLeg = currentLeg,
+                            nextLeg = nextLeg,
+                            journeyReferenceSeconds = reference
+                        )
+                        val shouldSplitTransferInstructions =
+                            transferWaitSeconds > LONG_TRANSFER_THRESHOLD_SECONDS
                         !isWaitingForVehicle && isAtCurrentLegTransferStop(
                             journey = currentJourney,
                             currentLeg = currentLeg,
                             userLocation = userLocation
-                        )
+                        ) && !shouldSplitTransferInstructions
                     } else {
                         false
                     }
@@ -2795,8 +2818,20 @@ fun PlanScreen(
                             val isWaitingForVehicle =
                                 nowNormalized < legDepartureNormalized && !vehicleLikelyAlreadyDeparted
                             val hasCorrespondence = nextLeg != null
+                            val transferWaitSeconds = if (nextLeg != null) {
+                                computeTransferWaitSeconds(
+                                    currentLeg = currentLeg,
+                                    nextLeg = nextLeg,
+                                    journeyReferenceSeconds = reference
+                                )
+                            } else {
+                                0
+                            }
+                            val shouldSplitTransferInstructions =
+                                transferWaitSeconds > LONG_TRANSFER_THRESHOLD_SECONDS
                             val shouldChangeLine = !isWaitingForVehicle &&
                                     hasCorrespondence &&
+                                    !shouldSplitTransferInstructions &&
                                     isAtCurrentLegTransferStop(
                                         journey = currentJourney,
                                         currentLeg = currentLeg,
