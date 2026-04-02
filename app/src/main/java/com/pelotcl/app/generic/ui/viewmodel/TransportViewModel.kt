@@ -1180,7 +1180,7 @@ class TransportViewModel(private val context: Context) : ViewModel() {
         } ?: unique.first()
     }
 
-    private fun parseLineCodesFromDesserte(desserte: String): List<String> {
+    fun parseLineCodesFromDesserte(desserte: String): List<String> {
         return desserte
             .split(",")
             .mapNotNull { token ->

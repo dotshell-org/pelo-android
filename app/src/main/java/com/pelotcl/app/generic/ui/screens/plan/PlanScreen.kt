@@ -1108,6 +1108,8 @@ fun PlanScreen(
     var itineraryJourneys by remember { mutableStateOf<List<JourneyResult>>(emptyList()) }
     var selectedItineraryJourney by remember { mutableStateOf<JourneyResult?>(null) }
     var itineraryResultsVersion by remember { mutableIntStateOf(0) }
+    var showAlertReportSheet by rememberSaveable { mutableStateOf(false) }
+    var alertReportInitialStop by remember { mutableStateOf<StationSearchResult?>(null) }
     var wasInNavigationMode by remember { mutableStateOf(false) }
     var lastLateTransferRecalcKey by remember { mutableStateOf<String?>(null) }
     var isLateTransferRecalculating by remember { mutableStateOf(false) }
@@ -3116,7 +3118,7 @@ fun PlanScreen(
                         )
                         Icon(
                             painter = painterResource(id = R.drawable.add_triangle_24px),
-                            contentDescription = null,
+                            contentDescription = "Signaler une alerte",
                             tint = Yellow500,
                             modifier = Modifier
                                 .align(Alignment.CenterEnd)
@@ -3124,6 +3126,49 @@ fun PlanScreen(
                                 .size(48.dp)
                                 .clip(CircleShape)
                                 .background(Stone800)
+                                .clickable {
+                                    println("[DEBUG_LOG] Clicked on add_triangle_24px")
+                                    
+                                    // Auto-select nearest stop in navigation mode
+                                    if (sheetContentState == SheetContentState.NAVIGATION && userLocation != null) {
+                                        val stops = (viewModel.stopsUiState.value as? TransportStopsUiState.Success)?.stops
+                                        if (stops != null) {
+                                            var nearestStop: StopFeature? = null
+                                            var nearestDistance = Double.MAX_VALUE
+                                            stops.forEach { stop ->
+                                                val coords = stop.geometry.coordinates
+                                                if (coords.size >= 2) {
+                                                    val dist = squaredDistance(
+                                                        lat1 = userLocation!!.latitude,
+                                                        lon1 = userLocation!!.longitude,
+                                                        lat2 = coords[1],
+                                                        lon2 = coords[0]
+                                                    )
+                                                    if (dist < nearestDistance) {
+                                                        nearestDistance = dist
+                                                        nearestStop = stop
+                                                    }
+                                                }
+                                            }
+                                            
+                                            if (nearestStop != null) {
+                                                alertReportInitialStop = StationSearchResult(
+                                                    stopName = nearestStop.properties.nom,
+                                                    lines = viewModel.parseLineCodesFromDesserte(nearestStop.properties.desserte),
+                                                    stopId = nearestStop.properties.id
+                                                )
+                                            } else {
+                                                alertReportInitialStop = null
+                                            }
+                                        } else {
+                                            alertReportInitialStop = null
+                                        }
+                                    } else {
+                                        alertReportInitialStop = null
+                                    }
+                                    
+                                    showAlertReportSheet = true
+                                }
                                 .padding(10.dp)
                         )
                     }
@@ -3491,6 +3536,14 @@ fun PlanScreen(
             },
             viewModel = viewModel,
             initialStopName = addFavoriteInitialStopName
+        )
+    }
+
+    if (showAlertReportSheet) {
+        AlertReportBottomSheet(
+            viewModel = viewModel,
+            onDismiss = { showAlertReportSheet = false },
+            initialStop = alertReportInitialStop
         )
     }
 }

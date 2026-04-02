@@ -158,7 +158,8 @@ fun SimpleSearchBar(
     externalQuery: String? = null,
     externalOnQueryChange: ((String) -> Unit)? = null,
     focusNonce: Int = 0,
-    minQueryLengthForResults: Int = 1
+    minQueryLengthForResults: Int = 1,
+    showDirections: Boolean = true
 ) {
     val isControlled = externalQuery != null && externalOnQueryChange != null
     var internalQuery by rememberSaveable { mutableStateOf("") }
@@ -443,7 +444,7 @@ fun SimpleSearchBar(
                         }
 
                         is UnifiedSearchResult.Stop -> {
-                            if (pickOnlyStopRows) {
+                            if (pickOnlyStopRows || !showDirections) {
                                 StopSearchPickerListItem(
                                     result = unifiedResult.result,
                                     onClick = {

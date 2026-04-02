@@ -35,6 +35,7 @@ fun TransportSearchBar(
     onStopPrimary: (StationSearchResult) -> Unit,
     onStopSecondary: (StationSearchResult) -> Unit = {},
     onLineSelected: (LineSearchResult) -> Unit = {},
+    showDirections: Boolean = true,
 ) {
     val context = LocalContext.current
     val searchHistoryRepository = remember(showHistory) {
@@ -122,6 +123,8 @@ fun TransportSearchBar(
 
     fun clearQuery() {
         setEffectiveQuery("")
+        stationSearchResults = emptyList()
+        lineSearchResults = emptyList()
     }
 
     SimpleSearchBar(
@@ -129,22 +132,25 @@ fun TransportSearchBar(
         searchResults = stationSearchResults,
         lineSearchResults = lineSearchResults,
         searchHistory = if (showHistory) searchHistory else emptyList(),
-        onQueryChange = {},
+        onQueryChange = { q -> setEffectiveQuery(q) },
         externalQuery = effectiveQuery,
         externalOnQueryChange = setEffectiveQuery,
         onSearch = { stop ->
+            android.util.Log.d("TransportSearchBar", "onSearch called for stop: ${stop.stopName}")
             if (showHistory) addStopToHistory(stop)
             onStopPrimary(stop)
             clearQuery()
         },
         onLineSearch = { line ->
+            android.util.Log.d("TransportSearchBar", "onLineSearch called for line: ${line.lineName}")
             if (showHistory) addLineToHistory(line)
             onLineSelected(line)
             clearQuery()
         },
         onHistoryItemClick = { historyItem ->
+            android.util.Log.d("TransportSearchBar", "onHistoryItemClick: ${historyItem.query}")
             if (historyItem.type == SearchType.LINE) {
-                viewModel.selectLine(historyItem.query)
+                onLineSelected(LineSearchResult(historyItem.query))
             } else {
                 onStopPrimary(
                     StationSearchResult(
@@ -153,6 +159,7 @@ fun TransportSearchBar(
                     )
                 )
             }
+            clearQuery()
         },
         onHistoryItemRemove = { historyItem ->
             searchHistoryRepository?.removeFromHistory(historyItem.query, historyItem.type)
@@ -179,6 +186,7 @@ fun TransportSearchBar(
         startExpanded = startExpanded,
         searchPlaceholder = searchPlaceholder,
         focusNonce = focusNonce,
-        minQueryLengthForResults = resolvedMinLen
+        minQueryLengthForResults = resolvedMinLen,
+        showDirections = showDirections
     )
 }
