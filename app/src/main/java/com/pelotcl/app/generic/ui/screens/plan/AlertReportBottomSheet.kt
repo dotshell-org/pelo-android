@@ -1,5 +1,6 @@
 package com.pelotcl.app.generic.ui.screens.plan
 
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -35,12 +36,14 @@ import androidx.compose.material.icons.filled.Traffic
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Whatshot
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -111,6 +114,8 @@ fun AlertReportBottomSheet(
     var selectedLine by remember { mutableStateOf<LineSearchResult?>(null) }
     var showSearchFullscreen by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+    var showErrorDialog by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf("") }
     
     val allAlertTypes = AlertType.entries
     
@@ -245,11 +250,16 @@ fun AlertReportBottomSheet(
                                 android.util.Log.d("AlertReportBS", "Alert clicked: ${alertType.id}")
                                 scope.launch {
                                     sendAlert(
+                                        context = context,
                                         alertType = alertType,
                                         stopId = selectedStop?.stopId,
                                         stopName = selectedStop?.stopName,
                                         lineId = selectedLine?.lineName,
-                                        onSuccess = { onDismiss() }
+                                        onSuccess = { onDismiss() },
+                                        onError = { message ->
+                                            errorMessage = message
+                                            showErrorDialog = true
+                                        }
                                     )
                                 }
                             }
@@ -258,6 +268,22 @@ fun AlertReportBottomSheet(
                 }
             }
         }
+    }
+
+    // Error dialog
+    if (showErrorDialog) {
+        AlertDialog(
+            onDismissRequest = { showErrorDialog = false },
+            title = { Text("Erreur d\'envoi") },
+            text = { Text(errorMessage) },
+            confirmButton = {
+                TextButton(
+                    onClick = { showErrorDialog = false }
+                ) {
+                    Text("OK")
+                }
+            }
+        )
     }
 
     if (showSearchFullscreen) {
@@ -346,11 +372,13 @@ fun AlertButton(
 }
 
 private suspend fun sendAlert(
+    context: android.content.Context,
     alertType: AlertType,
     stopId: Int?,
     stopName: String?,
     lineId: String?,
-    onSuccess: () -> Unit
+    onSuccess: () -> Unit,
+    onError: (String) -> Unit
 ) {
     withContext(Dispatchers.IO) {
         try {
@@ -371,13 +399,37 @@ private suspend fun sendAlert(
                 .build()
                 
             client.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    withContext(Dispatchers.Main) {
-                        onSuccess()
+                withContext(Dispatchers.Main) {
+                    when (response.code) {
+                        201 -> {
+                            // Success - show toast
+                            Toast.makeText(context, "Alerte envoyée avec succès", Toast.LENGTH_SHORT).show()
+                            onSuccess()
+                        }
+                        400 -> {
+                            // Fake success when sending two times the same alert
+                            Toast.makeText(context, "Alerte envoyée avec succès", Toast.LENGTH_SHORT).show()
+                            onSuccess()
+                        }
+                        404 -> {
+                            // Stop or line not found
+                            onError("L'arrêt ou la ligne sélectionnée n'a pas été trouvée.")
+                        }
+                        500 -> {
+                            // Database connection failed
+                            onError("Erreur serveur. Veuillez réessayer plus tard.")
+                        }
+                        else -> {
+                            // Other errors
+                            onError("Une erreur est survenue (code: ${response.code}). Veuillez réessayer.")
+                        }
                     }
                 }
             }
         } catch (e: Exception) {
+            withContext(Dispatchers.Main) {
+                onError("Erreur de connexion. Veuillez vérifier votre connexion internet.")
+            }
             e.printStackTrace()
         }
     }

@@ -2795,6 +2795,11 @@ fun PlanScreen(
                                 .clip(CircleShape)
                                 .background(PrimaryColor)
                                 .clickable {
+                                    // Reset initial stop to ensure search page is shown first
+                                    // (unless in navigation mode where nearest stop is auto-selected)
+                                    if (sheetContentState != SheetContentState.NAVIGATION) {
+                                        alertReportInitialStop = null
+                                    }
                                     showAlertReportSheet = true
                                 }
                                 .padding(12.dp)
