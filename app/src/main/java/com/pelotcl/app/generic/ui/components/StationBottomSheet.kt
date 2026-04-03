@@ -20,6 +20,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Directions
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -43,6 +45,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.pelotcl.app.R
 import com.pelotcl.app.generic.ui.theme.Gray200
 import com.pelotcl.app.generic.ui.theme.Gray700
 import com.pelotcl.app.generic.ui.theme.Green500
@@ -214,7 +217,8 @@ fun StationBottomSheet(
     isFavoriteStop: Boolean = false,
     onToggleFavoriteStop: () -> Unit = {},
     onAddFavoriteClick: (String) -> Unit = {},
-    onItineraryClick: () -> Unit = {}
+    onItineraryClick: () -> Unit = {},
+    onReportAlertClick: (String, List<String>) -> Unit = { _, _ -> }
 ) {
     val titleInset = 20.dp
     val departuresInset = 20.dp
@@ -307,6 +311,29 @@ fun StationBottomSheet(
                     }
 
                     Button(
+                        onClick = {
+                            onReportAlertClick(stationInfo.nom, stationInfo.lignes)
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isFavoriteStop) Color(0xFFD1D5DB) else Color(
+                                0xFFE5E7EB
+                            ),
+                            contentColor = Color(0xFF374151)
+                        )
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.add_triangle_24px),
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.size(8.dp))
+                        Text(
+                            text = "Signaler une alerte",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Button(
                         onClick = { onAddFavoriteClick(stationInfo.nom) },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (isFavoriteStop) Color(0xFFD1D5DB) else Color(
@@ -316,7 +343,7 @@ fun StationBottomSheet(
                         )
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Add,
+                            imageVector = Icons.Outlined.FavoriteBorder,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp)
                         )

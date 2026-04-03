@@ -2523,6 +2523,17 @@ fun PlanScreen(
                                                     stopIds = ids)
                                             }
                                         }
+                                    },
+                                    onReportAlertClick = { stopName, lines ->
+                                        alertReportInitialStop = StationSearchResult(
+                                            stopName = stopName,
+                                            lines = lines,
+                                            stopId = selectedStation?.stopIds?.firstOrNull() ?: 0
+                                        )
+                                        showAlertReportSheet = true
+                                        scope.launch {
+                                            scaffoldSheetState.bottomSheetState.hide()
+                                        }
                                     }
                                 )
                             }
@@ -3682,7 +3693,8 @@ private fun StationSheetContent(
     isFavoriteStop: Boolean = false,
     onToggleFavoriteStop: () -> Unit = {},
     onAddFavoriteClick: (String) -> Unit = {},
-    onItineraryClick: (String) -> Unit = {}
+    onItineraryClick: (String) -> Unit = {},
+    onReportAlertClick: (String, List<String>) -> Unit = { _, _ -> }
 ) {
     StationBottomSheet(
         stationInfo = stationInfo,
@@ -3693,7 +3705,8 @@ private fun StationSheetContent(
         isFavoriteStop = isFavoriteStop,
         onToggleFavoriteStop = onToggleFavoriteStop,
         onAddFavoriteClick = onAddFavoriteClick,
-        onItineraryClick = { onItineraryClick(stationInfo.nom) }
+        onItineraryClick = { onItineraryClick(stationInfo.nom) },
+        onReportAlertClick = onReportAlertClick
     )
 }
 
