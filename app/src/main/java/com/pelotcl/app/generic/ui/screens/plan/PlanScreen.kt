@@ -2778,53 +2778,70 @@ fun PlanScreen(
             }
 
             // Recenter button
-            AnimatedVisibility(
-                visible = !isNavigationMode && userLocation != null && !isCenteredOnUser,
-                enter = fadeIn(),
-                exit = fadeOut(),
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(bottom = 120.dp, end = 16.dp)
-            ) {
-                FloatingActionButton(
-                    onClick = {
-                        userLocation?.let { location ->
-                            mapInstance?.animateCamera(
-                                CameraUpdateFactory.newLatLngZoom(location, 17.0),
-                                1000
-                            )
-                            isCenteredOnUser = true
-                        }
-                    },
+            if (!isNavigationMode && userLocation != null) {
+                Box(
                     modifier = Modifier
-                        .size(56.dp)
-                        .then(
-                            if (isDarkMatterStyle && !isSearchExpanded) {
-                                Modifier
-                                    .clip(CircleShape)
-                                    .border(1.dp, Color.Gray, CircleShape)
-                            } else {
-                                Modifier
-                            }
-                        ),
-                    containerColor = PrimaryColor,
-                    shape = CircleShape,
-                    elevation = FloatingActionButtonDefaults.elevation(
-                        defaultElevation = 0.dp
-                    )
+                        .align(Alignment.BottomEnd)
+                        .padding(bottom = 120.dp, end = 16.dp)
                 ) {
-                    Canvas(
-                        modifier = Modifier.size(24.dp)
-                    ) {
-                        drawCircle(
-                            color = Color(0xFF3B82F6),
-                            radius = size.minDimension / 2.5f
+                    if (isCenteredOnUser) {
+                        // Show alert report icon when centered on user
+                        Icon(
+                            painter = painterResource(id = R.drawable.add_triangle_24px),
+                            contentDescription = "Signaler une alerte",
+                            tint = Yellow500,
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(CircleShape)
+                                .background(PrimaryColor)
+                                .clickable {
+                                    showAlertReportSheet = true
+                                }
+                                .padding(12.dp)
                         )
-                        drawCircle(
-                            color = SecondaryColor,
-                            radius = size.minDimension / 2.5f,
-                            style = Stroke(width = 7f)
-                        )
+                    } else {
+                        // Show recenter button when not centered on user
+                        FloatingActionButton(
+                            onClick = {
+                                userLocation?.let { location ->
+                                    mapInstance?.animateCamera(
+                                        CameraUpdateFactory.newLatLngZoom(location, 17.0),
+                                        1000
+                                    )
+                                    isCenteredOnUser = true
+                                }
+                            },
+                            modifier = Modifier
+                                .size(56.dp)
+                                .then(
+                                    if (isDarkMatterStyle && !isSearchExpanded) {
+                                        Modifier
+                                            .clip(CircleShape)
+                                            .border(1.dp, Color.Gray, CircleShape)
+                                    } else {
+                                        Modifier
+                                    }
+                                ),
+                            containerColor = PrimaryColor,
+                            shape = CircleShape,
+                            elevation = FloatingActionButtonDefaults.elevation(
+                                defaultElevation = 0.dp
+                            )
+                        ) {
+                            Canvas(
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                drawCircle(
+                                    color = Color(0xFF3B82F6),
+                                    radius = size.minDimension / 2.5f
+                                )
+                                drawCircle(
+                                    color = SecondaryColor,
+                                    radius = size.minDimension / 2.5f,
+                                    style = Stroke(width = 7f)
+                                )
+                            }
+                        }
                     }
                 }
             }
