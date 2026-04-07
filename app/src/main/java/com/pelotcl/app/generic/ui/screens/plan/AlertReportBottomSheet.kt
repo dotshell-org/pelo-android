@@ -67,9 +67,21 @@ import com.pelotcl.app.generic.ui.components.search.TransportSearchBar
 import com.pelotcl.app.generic.ui.components.search.TransportSearchContent
 import com.pelotcl.app.generic.ui.theme.Amber500
 import com.pelotcl.app.generic.ui.theme.Fuchsia500
+import com.pelotcl.app.generic.ui.theme.Gray800
+import com.pelotcl.app.generic.ui.theme.Gray900
 import com.pelotcl.app.generic.ui.theme.Indigo700
 import com.pelotcl.app.generic.ui.theme.Lime500
+import com.pelotcl.app.generic.ui.theme.Red100
+import com.pelotcl.app.generic.ui.theme.Red200
+import com.pelotcl.app.generic.ui.theme.Red300
+import com.pelotcl.app.generic.ui.theme.Red400
+import com.pelotcl.app.generic.ui.theme.Red50
 import com.pelotcl.app.generic.ui.theme.Red500
+import com.pelotcl.app.generic.ui.theme.Red600
+import com.pelotcl.app.generic.ui.theme.Red700
+import com.pelotcl.app.generic.ui.theme.Red800
+import com.pelotcl.app.generic.ui.theme.Red900
+import com.pelotcl.app.generic.ui.theme.Red950
 import com.pelotcl.app.generic.ui.theme.Rose500
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.generic.ui.theme.Violet500
@@ -91,14 +103,14 @@ enum class AlertType(val id: String, val label: String, val icon: ImageVector, v
     // LINE_ALERT_TYPES=interruption,congestion,works,strike
     
     CLOSURE("closure", "Arrêt Fermé", Icons.Default.Block, Red500, isStop = true, isLine = false),
-    DELAY("delay", "Retard", Icons.Default.Schedule, Indigo700, isStop = true, isLine = false),
-    ELEVATOR("elevator", "Ascenseur HS", Icons.Default.Elevator, Amber500, isStop = true, isLine = false),
-    CROWDING("crowding", "Forte Foule", Icons.Default.Groups, Fuchsia500, isStop = true, isLine = false),
-    WORKS("works", "Travaux", Icons.Default.Engineering, Yellow500, isStop = true, isLine = true),
-    STRIKE("strike", "Grève", Icons.Default.EmojiPeople, Lime500, isStop = true, isLine = true),
-    FIRE("fire", "Incendie", Icons.Default.Whatshot, Rose500, isStop = true, isLine = false),
-    INTERRUPTION("interruption", "Interruption", Icons.Default.Pause, Rose500, isStop = false, isLine = true),
-    CONGESTION("congestion", "Traffic Elevé", Icons.AutoMirrored.Filled.TrendingUp,Violet500, isStop = false, isLine = true)
+    DELAY("delay", "Retard", Icons.Default.Schedule, Red600, isStop = true, isLine = false),
+    ELEVATOR("elevator", "Ascenseur HS", Icons.Default.Elevator, Red700, isStop = true, isLine = false),
+    CROWDING("crowding", "Forte Foule", Icons.Default.Groups, Red800, isStop = true, isLine = false),
+    WORKS("works", "Travaux", Icons.Default.Engineering, Red900, isStop = true, isLine = true),
+    STRIKE("strike", "Grève", Icons.Default.EmojiPeople, Red950, isStop = true, isLine = true),
+    FIRE("fire", "Incendie", Icons.Default.Whatshot, Color.Black, isStop = true, isLine = false),
+    INTERRUPTION("interruption", "Interruption", Icons.Default.Pause, Gray900, isStop = false, isLine = true),
+    CONGESTION("congestion", "Traffic Elevé", Icons.AutoMirrored.Filled.TrendingUp, Gray800, isStop = false, isLine = true)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -121,7 +133,7 @@ fun AlertReportBottomSheet(
     
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = Color.White,
         dragHandle = { BottomSheetDefaults.DragHandle() }
     ) {
         Column(
@@ -363,7 +375,7 @@ fun AlertButton(
         Text(
             text = alertType.label,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = Color.Black,
             textAlign = TextAlign.Center,
             softWrap = false,
             overflow = TextOverflow.Visible
