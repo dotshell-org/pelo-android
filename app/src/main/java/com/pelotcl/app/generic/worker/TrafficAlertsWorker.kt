@@ -24,7 +24,7 @@ class TrafficAlertsWorker(
 
     override suspend fun doWork(): Result {
         return try {
-            Log.d(TAG, "Starting traffic alerts check...")
+            Log.i(TAG, "Starting traffic alerts check...")
             val alertsResult = trafficAlertsRepository.getTrafficAlerts()
             if (alertsResult.isFailure) {
                 Log.e(TAG, "Failed to fetch alerts: ${alertsResult.exceptionOrNull()?.message}")
@@ -32,9 +32,9 @@ class TrafficAlertsWorker(
             }
             val allAlerts = alertsResult.getOrThrow()
             val validAlerts = filterValidAlerts(allAlerts)
-            Log.d(TAG, "Fetched ${validAlerts.size} valid traffic alerts")
+            Log.i(TAG, "Fetched ${validAlerts.size} valid traffic alerts")
             // No notification logic, just fetch and filter
-            Log.d(TAG, "Traffic alerts check completed successfully")
+            Log.i(TAG, "Traffic alerts check completed successfully")
             Result.success()
         } catch (e: Exception) {
             Log.e(TAG, "Error checking traffic alerts", e)

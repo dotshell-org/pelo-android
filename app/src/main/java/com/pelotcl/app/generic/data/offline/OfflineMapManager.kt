@@ -76,7 +76,7 @@ class OfflineMapManager(private val context: Context) {
             object : OfflineManager.CreateOfflineRegionCallback {
                 override fun onCreate(offlineRegion: OfflineRegion) {
                     currentRegion = offlineRegion
-                    Log.d(TAG, "Offline region created, starting download")
+                    Log.i(TAG, "Offline region created, starting download")
 
                     offlineRegion.setObserver(object : OfflineRegion.OfflineRegionObserver {
                         override fun onStatusChanged(status: OfflineRegionStatus) {
@@ -91,7 +91,7 @@ class OfflineMapManager(private val context: Context) {
                             }
 
                             if (status.isComplete) {
-                                Log.d(
+                                Log.i(
                                     TAG,
                                     "Offline region download complete: $completedResources resources"
                                 )

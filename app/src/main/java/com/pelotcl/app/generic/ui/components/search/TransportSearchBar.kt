@@ -136,19 +136,19 @@ fun TransportSearchBar(
         externalQuery = effectiveQuery,
         externalOnQueryChange = setEffectiveQuery,
         onSearch = { stop ->
-            android.util.Log.d("TransportSearchBar", "onSearch called for stop: ${stop.stopName}")
+            android.util.Log.i("TransportSearchBar", "onSearch called for stop: ${stop.stopName}")
             if (showHistory) addStopToHistory(stop)
             onStopPrimary(stop)
             clearQuery()
         },
         onLineSearch = { line ->
-            android.util.Log.d("TransportSearchBar", "onLineSearch called for line: ${line.lineName}")
+            android.util.Log.i("TransportSearchBar", "onLineSearch called for line: ${line.lineName}")
             if (showHistory) addLineToHistory(line)
             onLineSelected(line)
             clearQuery()
         },
         onHistoryItemClick = { historyItem ->
-            android.util.Log.d("TransportSearchBar", "onHistoryItemClick: ${historyItem.query}")
+            android.util.Log.i("TransportSearchBar", "onHistoryItemClick: ${historyItem.query}")
             if (historyItem.type == SearchType.LINE) {
                 onLineSelected(LineSearchResult(historyItem.query))
             } else {

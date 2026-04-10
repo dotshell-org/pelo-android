@@ -30,7 +30,7 @@ class PeloApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "PeloApplication onCreate()")
+        Log.i(TAG, "PeloApplication onCreate()")
         
         // Verify Raptor assets are available at startup
         verifyRaptorAssets()
@@ -56,7 +56,7 @@ class PeloApplication : Application(), Configuration.Provider {
                 Log.e(TAG, "Please try: File > Invalidate Caches / Restart in Android Studio")
                 Log.e(TAG, "Then clean build: ./gradlew clean assembleDebug")
             } else {
-                Log.d(TAG, "All Raptor assets verified successfully")
+                Log.i(TAG, "All Raptor assets verified successfully")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error checking Raptor assets: ${e.message}", e)
@@ -66,7 +66,7 @@ class PeloApplication : Application(), Configuration.Provider {
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         if (level >= TRIM_MEMORY_BACKGROUND) {
-            Log.d(TAG, "onTrimMemory level=$level, trimming caches")
+            Log.i(TAG, "onTrimMemory level=$level, trimming caches")
             SchedulesRepository.trimCaches(level)
             BusIconHelper.trimCache(level)
             try {
@@ -88,6 +88,6 @@ class PeloApplication : Application(), Configuration.Provider {
             ExistingPeriodicWorkPolicy.KEEP,
             workRequest
         )
-        Log.d(TAG, "Periodic work scheduled (every 30 minutes)")
+        Log.i(TAG, "Periodic work scheduled (every 30 minutes)")
     }
 }

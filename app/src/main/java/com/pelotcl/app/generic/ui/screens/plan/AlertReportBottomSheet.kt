@@ -165,7 +165,7 @@ fun AlertReportBottomSheet(
                         .clip(CircleShape)
                         .background(Color.Black)
                         .clickable {
-                            android.util.Log.d("AlertReportBS", "Opening search. Query reset.")
+                            android.util.Log.i("AlertReportBS", "Opening search. Query reset.")
                             searchQuery = "" // Reset query when opening
                             showSearchFullscreen = true
                         }
@@ -259,7 +259,7 @@ fun AlertReportBottomSheet(
                             alertType = alertType,
                             enabled = true,
                             onClick = {
-                                android.util.Log.d("AlertReportBS", "Alert clicked: ${alertType.id}")
+                                android.util.Log.i("AlertReportBS", "Alert clicked: ${alertType.id}")
                                 scope.launch {
                                     sendAlert(
                                         context = context,
@@ -301,7 +301,7 @@ fun AlertReportBottomSheet(
     if (showSearchFullscreen) {
         androidx.compose.ui.window.Dialog(
             onDismissRequest = { 
-                android.util.Log.d("AlertReportBS", "Search dialog dismissed via onDismissRequest")
+                android.util.Log.i("AlertReportBS", "Search dialog dismissed via onDismissRequest")
                 showSearchFullscreen = false 
             },
             properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
@@ -324,17 +324,17 @@ fun AlertReportBottomSheet(
                         searchQuery = q
                     },
                     onExpandedChange = { expanded ->
-                        android.util.Log.d("AlertReportBS", "Search expanded change: $expanded")
+                        android.util.Log.i("AlertReportBS", "Search expanded change: $expanded")
                         if (!expanded) showSearchFullscreen = false
                     },
                     onStopPrimary = { result ->
-                        android.util.Log.d("AlertReportBS", "Stop selected: ${result.stopName}, id=${result.stopId}")
+                        android.util.Log.i("AlertReportBS", "Stop selected: ${result.stopName}, id=${result.stopId}")
                         selectedStop = result
                         selectedLine = null
                         showSearchFullscreen = false
                     },
                     onLineSelected = { result ->
-                        android.util.Log.d("AlertReportBS", "Line selected: ${result.lineName}")
+                        android.util.Log.i("AlertReportBS", "Line selected: ${result.lineName}")
                         selectedLine = result
                         selectedStop = null
                         showSearchFullscreen = false
@@ -399,8 +399,7 @@ private suspend fun sendAlert(
             
             val json = JSONObject().apply {
                 put("type", alertType.id)
-                if (stopId != null) put("stopId", stopId)
-                if (stopName != null) put("stopName", stopName)
+                if (stopName != null) put("stopId", stopName)
                 if (lineId != null) put("lineId", lineId)
             }
             

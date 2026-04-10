@@ -88,7 +88,7 @@ class OfflineRepository(private val context: Context) {
         val legacyDeleted = File(offlineDir, FILE_BUS_LINES).delete()
         val busFilesCount = busDir.listFiles()?.size ?: 0
         busDir.listFiles()?.forEach { it.delete() }
-        Log.d(TAG, "clearBusLines: legacyDeleted=$legacyDeleted, clearedFiles=$busFilesCount")
+        Log.i(TAG, "clearBusLines: legacyDeleted=$legacyDeleted, clearedFiles=$busFilesCount")
     }
 
     /**
@@ -98,7 +98,7 @@ class OfflineRepository(private val context: Context) {
      */
     suspend fun saveBusLinesPage(lines: List<Feature>) = withContext(Dispatchers.IO) {
         val safeLines = lines.sanitizeForSerialization()
-        Log.d(
+        Log.i(
             TAG,
             "saveBusLinesPage: ${lines.size} features, busDir=${busDir.absolutePath}, exists=${busDir.exists()}"
         )
@@ -133,7 +133,7 @@ class OfflineRepository(private val context: Context) {
             }
         }
         val filesOnDisk = busDir.listFiles()?.size ?: 0
-        Log.d(
+        Log.i(
             TAG,
             "Saved page: ${grouped.size} lines, ${lines.size} features, saved=$savedCount, filesOnDisk=$filesOnDisk"
         )
@@ -194,14 +194,14 @@ class OfflineRepository(private val context: Context) {
     suspend fun loadAllLines(): List<Feature> {
         // Log which files exist on disk
         val filesOnDisk = offlineDir.listFiles()?.map { it.name } ?: emptyList()
-        Log.d(TAG, "loadAllLines: files on disk = $filesOnDisk")
+        Log.i(TAG, "loadAllLines: files on disk = $filesOnDisk")
 
         val metro = loadMetroLines() ?: emptyList()
         val tram = loadTramLines() ?: emptyList()
         val navigone = loadNavigoneLines() ?: emptyList()
         val trambus = loadTrambusLines() ?: emptyList()
         val rx = loadRxLines() ?: emptyList()
-        Log.d(
+        Log.i(
             TAG,
             "loadAllLines: metro=${metro.size}, tram=${tram.size}, navigone=${navigone.size}, trambus=${trambus.size}, rx=${rx.size}"
         )
@@ -257,12 +257,12 @@ class OfflineRepository(private val context: Context) {
 
         val busFiles = busDir.listFiles()
         val busCount = busFiles?.count { it.name.endsWith(".json.gz") } ?: 0
-        Log.d(
+        Log.i(
             TAG,
             "getOfflineDataInfo: busDir=${busDir.absolutePath}, exists=${busDir.exists()}, busFiles=${busFiles?.size ?: "null"}, busCount=$busCount, lastDownload=$lastDownload"
         )
         if (busCount > 0) {
-            Log.d(
+            Log.i(
                 TAG,
                 "Bus files sample: ${
                     busFiles?.take(5)?.map { "${it.name} (${it.length()} bytes)" }
@@ -302,7 +302,7 @@ class OfflineRepository(private val context: Context) {
                 GZIPOutputStream(FileOutputStream(file).buffered()).use { gzip ->
                     gzip.write(jsonString.toByteArray(Charsets.UTF_8))
                 }
-                Log.d(TAG, "Wrote ${file.name}: ${file.length()} bytes")
+                Log.i(TAG, "Wrote ${file.name}: ${file.length()} bytes")
             } catch (e: Exception) {
                 Log.e(
                     TAG,

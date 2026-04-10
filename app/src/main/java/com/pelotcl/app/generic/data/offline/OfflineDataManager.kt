@@ -177,11 +177,11 @@ class OfflineDataManager(
 
                 batchResults.navigoneFeatures?.let { features ->
                     offlineRepository.saveNavigoneLines(features)
-                    Log.d(TAG, "Navigone: saved ${features.size} features")
+                    Log.i(TAG, "Navigone: saved ${features.size} features")
                 }
 
                 batchResults.trambusFeatures?.let { features ->
-                    Log.d(
+                    Log.i(
                         TAG,
                         "Trambus API returned ${features.size} features: ${
                             features.map { it.properties.lineName }.distinct()
@@ -190,7 +190,7 @@ class OfflineDataManager(
                     if (features.isNotEmpty()) {
                         offlineRepository.saveTrambusLines(features)
                         val verifyLoad = offlineRepository.loadTrambusLines()
-                        Log.d(
+                        Log.i(
                             TAG,
                             "Trambus: verify after save = ${verifyLoad?.size ?: "NULL (write failed!)"} features"
                         )
@@ -210,7 +210,7 @@ class OfflineDataManager(
                 }
 
                 cumulativeProgress = dataWeight
-                Log.d(TAG, "Batch 1 complete: all non-bus data downloaded and saved")
+                Log.i(TAG, "Batch 1 complete: all non-bus data downloaded and saved")
 
                 // ============================================================
                 // BATCH 2: Bus lines — sequential pages (OOM protection)
@@ -229,11 +229,11 @@ class OfflineDataManager(
                     var hasMore = true
                     val rescuedTrambus = mutableListOf<Feature>()
 
-                    Log.d(TAG, "Starting paginated bus download (pageSize=$pageSize)")
+                    Log.i(TAG, "Starting paginated bus download (pageSize=$pageSize)")
 
                     while (hasMore) {
                         System.gc()
-                        Log.d(TAG, "Fetching bus page: startIndex=$startIndex, count=$pageSize")
+                        Log.i(TAG, "Fetching bus page: startIndex=$startIndex, count=$pageSize")
                         val page = withRetry(maxRetries = 2, initialDelayMs = 1000) {
                             transportApi.getLines(
                                 TransportLinesQuery.BusPage(
@@ -243,7 +243,7 @@ class OfflineDataManager(
                             )
                         }
                         val features = page.features
-                        Log.d(
+                        Log.i(
                             TAG,
                             "Bus page response: ${features.size} features, totalFeatures=${page.totalFeatures}, numberMatched=${page.numberMatched}, numberReturned=${page.numberReturned}"
                         )
@@ -257,7 +257,7 @@ class OfflineDataManager(
 
                             if (trambusInPage.isNotEmpty()) {
                                 rescuedTrambus.addAll(trambusInPage)
-                                Log.d(
+                                Log.i(
                                     TAG,
                                     "Rescued ${trambusInPage.size} trambus features from bus page"
                                 )
@@ -269,7 +269,7 @@ class OfflineDataManager(
                             }
 
                             startIndex += features.size
-                            Log.d(
+                            Log.i(
                                 TAG,
                                 "Bus page saved: ${busFeatures.size} bus features (total: $totalDownloaded), trambus rescued: ${rescuedTrambus.size}"
                             )
@@ -283,7 +283,7 @@ class OfflineDataManager(
                             startIndex += pageSize
                         }
                         hasMore = features.size >= pageSize
-                        Log.d(
+                        Log.i(
                             TAG,
                             "hasMore=$hasMore (features.size=${features.size} >= pageSize=$pageSize)"
                         )
@@ -294,12 +294,12 @@ class OfflineDataManager(
                         val existingTrambus = offlineRepository.loadTrambusLines()
                         if (existingTrambus.isNullOrEmpty()) {
                             offlineRepository.saveTrambusLines(rescuedTrambus)
-                            Log.d(
+                            Log.i(
                                 TAG,
                                 "Saved ${rescuedTrambus.size} rescued trambus features (batch 1 had failed)"
                             )
                         } else {
-                            Log.d(
+                            Log.i(
                                 TAG,
                                 "Trambus already saved from batch 1 (${existingTrambus.size} features), skipping rescued ones"
                             )
@@ -307,7 +307,7 @@ class OfflineDataManager(
                     }
 
                     var busFiles = offlineRepository.getAvailableBusLineNames()
-                    Log.d(
+                    Log.i(
                         TAG,
                         "Bus download complete: $totalDownloaded features total, ${busFiles.size} line files on disk: ${
                             busFiles.take(10)
@@ -364,7 +364,7 @@ class OfflineDataManager(
                                 )
                             }
                             busFiles = offlineRepository.getAvailableBusLineNames()
-                            Log.d(TAG, "Bus fallback complete: ${busFiles.size} line files on disk")
+                            Log.i(TAG, "Bus fallback complete: ${busFiles.size} line files on disk")
                         }
                     }
                 } catch (e: OutOfMemoryError) {
@@ -384,7 +384,7 @@ class OfflineDataManager(
                 offlineRepository.markDownloadComplete()
                 // Log offline info right after marking complete (before map tiles)
                 val infoAfterData = offlineRepository.getOfflineDataInfo()
-                Log.d(
+                Log.i(
                     TAG,
                     "After data download: busLinesCount=${infoAfterData.busLinesCount}, totalSize=${infoAfterData.totalSizeBytes}, isAvailable=${infoAfterData.isAvailable}"
                 )
@@ -438,7 +438,7 @@ class OfflineDataManager(
                         when (terminalState) {
                             is MapTilesDownloadState.Complete -> {
                                 completedStyles.add(style.key)
-                                Log.d(TAG, "Map tiles for ${style.key} complete")
+                                Log.i(TAG, "Map tiles for ${style.key} complete")
                             }
 
                             is MapTilesDownloadState.Error -> {
@@ -462,7 +462,7 @@ class OfflineDataManager(
                 _offlineDataInfo.value = offlineRepository.getOfflineDataInfo()
 
             } catch (e: CancellationException) {
-                Log.d(TAG, "Download cancelled by user")
+                Log.i(TAG, "Download cancelled by user")
                 offlineMapManager.cancelDownload()
                 _downloadState.value = OfflineDownloadState.Idle
                 _offlineDataInfo.value = offlineRepository.getOfflineDataInfo()

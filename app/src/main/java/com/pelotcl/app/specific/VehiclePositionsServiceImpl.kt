@@ -76,7 +76,7 @@ class VehiclePositionsServiceImpl : VehiclePositionsService {
 
             val listener = object : EventSourceListener() {
                 override fun onOpen(eventSource: EventSource, response: Response) {
-                    android.util.Log.d(
+                    android.util.Log.i(
                         "DotshellRequest",
                         "[SSE] Connection established to ${getVehiclePositionsStreamUrl()}"
                     )
@@ -89,17 +89,17 @@ class VehiclePositionsServiceImpl : VehiclePositionsService {
                     data: String
                 ) {
                     if (type == "heartbeat") {
-                        android.util.Log.d("DotshellRequest", "[SSE] Heartbeat received")
+                        android.util.Log.i("DotshellRequest", "[SSE] Heartbeat received")
                         return
                     }
 
-                    android.util.Log.d(
+                    android.util.Log.i(
                         "DotshellRequest",
                         "[SSE] Event received: type=$type, id=$id"
                     )
                     runCatching { parsePositionsEventData(data) }
                         .onSuccess {
-                            android.util.Log.d(
+                            android.util.Log.i(
                                 "DotshellRequest",
                                 "[SSE] Successfully parsed ${it.size} vehicle positions"
                             )
@@ -116,7 +116,7 @@ class VehiclePositionsServiceImpl : VehiclePositionsService {
                 }
 
                 override fun onClosed(eventSource: EventSource) {
-                    android.util.Log.d("DotshellRequest", "[SSE] Connection closed")
+                    android.util.Log.i("DotshellRequest", "[SSE] Connection closed")
                     close()
                 }
 
@@ -125,7 +125,7 @@ class VehiclePositionsServiceImpl : VehiclePositionsService {
                     t: Throwable?,
                     response: Response?
                 ) {
-                    android.util.Log.d(
+                    android.util.Log.i(
                         "DotshellRequest",
                         "[SSE] Connection closed, will reconnect automatically"
                     )

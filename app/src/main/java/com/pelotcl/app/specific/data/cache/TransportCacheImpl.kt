@@ -155,7 +155,7 @@ class TransportCacheImpl(context: Context) : TransportCache {
                 GZIPOutputStream(FileOutputStream(file).buffered()).use { gzip ->
                     gzip.write(jsonString.toByteArray(Charsets.UTF_8))
                 }
-                Log.d("LyonTransportCache", "Successfully wrote $fileName: ${(data as? List<*>)?.size ?: "unknown"} items")
+                Log.i("LyonTransportCache", "Successfully wrote $fileName: ${(data as? List<*>)?.size ?: "unknown"} items")
             } catch (e: Exception) {
                 Log.e("LyonTransportCache", "Error writing to $fileName", e)
             }
@@ -179,7 +179,7 @@ class TransportCacheImpl(context: Context) : TransportCache {
                         return@withContext null
                     }
                     val result = json.decodeFromString<T>(jsonString)
-                    Log.d("LyonTransportCache", "Successfully read $fileName: ${(result as? List<*>)?.size ?: "unknown"} items")
+                    Log.i("LyonTransportCache", "Successfully read $fileName: ${(result as? List<*>)?.size ?: "unknown"} items")
                     result
                 } else null
             } catch (e: Exception) {

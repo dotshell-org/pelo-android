@@ -3,6 +3,7 @@
 package com.pelotcl.app.generic.ui.screens.plan
 
 import android.os.Build
+import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -21,7 +22,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.CircularProgressIndicator
@@ -34,6 +34,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,24 +42,30 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.pelotcl.app.generic.ui.theme.SecondaryColor
-import com.pelotcl.app.utils.transport.BusIconHelper
-import com.pelotcl.app.utils.transport.LineColorHelper
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.unit.Dp
 import com.pelotcl.app.generic.data.repository.itinerary.ItineraryPreferencesRepository
 import com.pelotcl.app.generic.data.repository.itinerary.JourneyResult
 import com.pelotcl.app.generic.ui.theme.PrimaryColor
+import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
+import com.pelotcl.app.utils.transport.BusIconHelper
+import com.pelotcl.app.utils.transport.LineColorHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.text.Normalizer
 import java.time.LocalDate
 import java.util.Calendar
+import java.util.Locale
 
 private const val MAX_ITINERARY_STOP_IDS_PER_SIDE = 64
 private const val MAX_ITINERARY_FALLBACK_STOPS = 2
+
+private data class AvoidedJourneyUi(
+    val journey: JourneyResult,
+    val label: String
+)
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
@@ -105,6 +112,7 @@ fun InlineItinerarySheetContent(
     var showDatePicker by remember { mutableStateOf(false) }
 
     var journeys by remember { mutableStateOf<List<JourneyResult>>(emptyList()) }
+    var journeysAvoidingAlerts by remember { mutableStateOf<List<AvoidedJourneyUi>>(emptyList()) }
     var selectedJourney by remember { mutableStateOf<JourneyResult?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf<String?>(null) }
@@ -122,42 +130,157 @@ fun InlineItinerarySheetContent(
     }
 
     suspend fun recalc() {
+        suspend fun calculateJourneys(
+            originIds: List<Int>,
+            destinationIds: List<Int>,
+            date: LocalDate,
+            blockedNames: Set<String>
+        ): List<JourneyResult> {
+            return withContext(Dispatchers.IO) {
+                if (timeMode == TimeMode.ARRIVAL) {
+                    raptorRepository.getOptimizedPathsArriveBy(
+                        originStopIds = originIds,
+                        destinationStopIds = destinationIds,
+                        arrivalTimeSeconds = selectedTimeSeconds ?: defaultArrivalSeconds(),
+                        searchWindowMinutes = 120,
+                        date = date,
+                        blockedRouteNames = blockedNames
+                    )
+                } else {
+                    raptorRepository.getOptimizedPaths(
+                        originStopIds = originIds,
+                        destinationStopIds = destinationIds,
+                        departureTimeSeconds = selectedTimeSeconds,
+                        date = date,
+                        blockedRouteNames = blockedNames
+                    )
+                }
+            }
+        }
+
+        fun extractStopNames(journey: JourneyResult): Set<String> {
+            val names = mutableSetOf<String>()
+            journey.legs.forEach { leg ->
+                if (!leg.isWalking) {
+                    names.add(leg.fromStopName)
+                    names.add(leg.toStopName)
+                    leg.intermediateStops.forEach { names.add(it.stopName) }
+                }
+            }
+            return names
+        }
+
+        fun extractRouteNamesAtProblematicStops(
+            allJourneys: List<JourneyResult>,
+            problematicStops: Set<String>
+        ): Set<String> {
+            if (problematicStops.isEmpty()) return emptySet()
+
+            fun normalizeStopKey(raw: String): String {
+                return Normalizer.normalize(raw, Normalizer.Form.NFD)
+                    .replace("\\p{M}+".toRegex(), "")
+                    .lowercase(Locale.ROOT)
+                    .replace("[^\\p{Alnum}]".toRegex(), " ")
+                    .replace("\\s+".toRegex(), " ")
+                    .trim()
+            }
+
+            val normalizedProblematic = problematicStops.map(::normalizeStopKey).toSet()
+
+            val blockedNames = mutableSetOf<String>()
+            allJourneys.forEach { journey ->
+                journey.legs.forEach { leg ->
+                    if (leg.isWalking) return@forEach
+                    val touchesProblematicStop =
+                        normalizedProblematic.contains(normalizeStopKey(leg.fromStopName)) ||
+                            normalizedProblematic.contains(normalizeStopKey(leg.toStopName)) ||
+                            leg.intermediateStops.any {
+                                normalizedProblematic.contains(normalizeStopKey(it.stopName))
+                            }
+                    if (touchesProblematicStop && !leg.routeName.isNullOrBlank()) {
+                        blockedNames.add(leg.routeName)
+                    }
+                }
+            }
+            return blockedNames
+        }
+
+        fun journeyTouchesProblematicStop(
+            journey: JourneyResult,
+            problematicStops: Set<String>
+        ): Boolean {
+            if (problematicStops.isEmpty()) return false
+            fun normalizeStopKey(raw: String): String {
+                return Normalizer.normalize(raw, Normalizer.Form.NFD)
+                    .replace("\\p{M}+".toRegex(), "")
+                    .lowercase(Locale.ROOT)
+                    .replace("[^\\p{Alnum}]".toRegex(), " ")
+                    .replace("\\s+".toRegex(), " ")
+                    .trim()
+            }
+
+            val normalizedProblematic = problematicStops.map(::normalizeStopKey).toSet()
+            return journey.legs.any { leg ->
+                if (leg.isWalking) return@any false
+                normalizedProblematic.contains(normalizeStopKey(leg.fromStopName)) ||
+                    normalizedProblematic.contains(normalizeStopKey(leg.toStopName)) ||
+                    leg.intermediateStops.any {
+                        normalizedProblematic.contains(normalizeStopKey(it.stopName))
+                    }
+            }
+        }
+
+        fun buildAvoidedLabel(problematicDetails: Map<String, List<com.pelotcl.app.generic.data.model.UserStopAlert>>): String {
+            if (problematicDetails.isEmpty()) return "Alertes utilisateur évitées"
+
+            val topEntry = problematicDetails
+                .entries
+                .maxByOrNull { (_, alerts) -> alerts.maxOfOrNull { it.karma } ?: Int.MIN_VALUE }
+                ?: return "Alertes utilisateur évitées"
+
+            val stopName = topEntry.key
+            val topAlertType = topEntry.value.maxByOrNull { it.karma }?.type?.lowercase(Locale.ROOT)
+
+            return when (topAlertType) {
+                "closure" -> "Arret ferme évité à $stopName"
+                "delay" -> "Retard évité à $stopName"
+                "elevator" -> "Ascenseur HS évité à $stopName"
+                "crowding" -> "Forte foule évitée à $stopName"
+                "works" -> "Travaux évités à $stopName"
+                "strike" -> "Greve évitée à $stopName"
+                "fire" -> "Incendie évité à $stopName"
+                "interruption" -> "Interruption évitée à $stopName"
+                "congestion" -> "Trafic eleve évité à $stopName"
+                "incident" -> "Incident évité à $stopName"
+                "security" -> "Alerte securite évitée à $stopName"
+                else -> "Alerte utilisateur évitée à $stopName"
+            }
+        }
+
         val departureStopIds =
             departureStop?.stopIds?.distinct()?.take(MAX_ITINERARY_STOP_IDS_PER_SIDE) ?: emptyList()
         val arrivalStopIds =
             arrivalStop?.stopIds?.distinct()?.take(MAX_ITINERARY_STOP_IDS_PER_SIDE) ?: emptyList()
         if (departureStopIds.isEmpty() || arrivalStopIds.isEmpty()) {
             journeys = emptyList()
+            journeysAvoidingAlerts = emptyList()
             selectedJourney = null
             errorText = null
             return
         }
         isLoading = true
         errorText = null
+        journeysAvoidingAlerts = emptyList()
         selectedJourney = null
         try {
             val today = LocalDate.now()
             val date = selectedDate ?: today
-            journeys = withContext(Dispatchers.IO) {
-                if (timeMode == TimeMode.ARRIVAL) {
-                    raptorRepository.getOptimizedPathsArriveBy(
-                        originStopIds = departureStopIds,
-                        destinationStopIds = arrivalStopIds,
-                        arrivalTimeSeconds = selectedTimeSeconds ?: defaultArrivalSeconds(),
-                        searchWindowMinutes = 120,
-                        date = date,
-                        blockedRouteNames = blockedRouteNames
-                    )
-                } else {
-                    raptorRepository.getOptimizedPaths(
-                        originStopIds = departureStopIds,
-                        destinationStopIds = arrivalStopIds,
-                        departureTimeSeconds = selectedTimeSeconds,
-                        date = date,
-                        blockedRouteNames = blockedRouteNames
-                    )
-                }
-            }
+            journeys = calculateJourneys(
+                originIds = departureStopIds,
+                destinationIds = arrivalStopIds,
+                date = date,
+                blockedNames = blockedRouteNames
+            )
             if (journeys.isEmpty() && nearbyDepartureStops.isNotEmpty() && timeMode == TimeMode.DEPARTURE) {
                 for (fallbackName in nearbyDepartureStops.take(MAX_ITINERARY_FALLBACK_STOPS)) {
                     if (fallbackName.equals(departureStop?.name, ignoreCase = true)) continue
@@ -168,15 +291,12 @@ fun InlineItinerarySheetContent(
                     )
                     if (fallbackIds.isEmpty()) continue
 
-                    val fallbackJourneys = withContext(Dispatchers.IO) {
-                        raptorRepository.getOptimizedPaths(
-                            originStopIds = fallbackIds,
-                            destinationStopIds = arrivalStopIds,
-                            departureTimeSeconds = selectedTimeSeconds,
-                            date = date,
-                            blockedRouteNames = blockedRouteNames
-                        )
-                    }
+                    val fallbackJourneys = calculateJourneys(
+                        originIds = fallbackIds,
+                        destinationIds = arrivalStopIds,
+                        date = date,
+                        blockedNames = blockedRouteNames
+                    )
 
                     if (fallbackJourneys.isNotEmpty()) {
                         journeys = fallbackJourneys
@@ -204,15 +324,12 @@ fun InlineItinerarySheetContent(
 
                 if (hasServiceEarlierToday) {
                     val tomorrow = today.plusDays(1)
-                    journeys = withContext(Dispatchers.IO) {
-                        raptorRepository.getOptimizedPaths(
-                            originStopIds = departureStopIds,
-                            destinationStopIds = arrivalStopIds,
-                            departureTimeSeconds = 0,
-                            date = tomorrow,
-                            blockedRouteNames = blockedRouteNames
-                        )
-                    }
+                    journeys = calculateJourneys(
+                        originIds = departureStopIds,
+                        destinationIds = arrivalStopIds,
+                        date = tomorrow,
+                        blockedNames = blockedRouteNames
+                    )
                     selectedDate = tomorrow
                     selectedTimeSeconds = 0
                 }
@@ -220,6 +337,61 @@ fun InlineItinerarySheetContent(
 
             if (journeys.isEmpty()) {
                 errorText = "Aucun itineraire trouve"
+            } else {
+                try {
+                    val stopNames = journeys.flatMap { extractStopNames(it) }.distinct()
+                    if (stopNames.isNotEmpty()) {
+                        Log.d(
+                            "InlineItinerary",
+                            "Alert-avoidance input stops (${stopNames.size}): ${stopNames.joinToString()}"
+                        )
+
+                        val problematicDetails = withContext(Dispatchers.IO) {
+                            viewModel.userStopAlertsRepository.getProblematicAlertDetails(stopNames)
+                        }
+                        val problematicStops = problematicDetails.keys
+                        Log.d(
+                            "InlineItinerary",
+                            "Problematic stops after threshold filter (${problematicStops.size}): ${problematicStops.joinToString()}"
+                        )
+
+                        val routeNamesToAvoid = extractRouteNamesAtProblematicStops(
+                            allJourneys = journeys,
+                            problematicStops = problematicStops
+                        )
+                        Log.d(
+                            "InlineItinerary",
+                            "Route names to avoid (${routeNamesToAvoid.size}): ${routeNamesToAvoid.joinToString()}"
+                        )
+
+                        if (routeNamesToAvoid.isNotEmpty()) {
+                            val blockedForAvoided = blockedRouteNames + routeNamesToAvoid
+                            val avoidedJourneys = calculateJourneys(
+                                originIds = departureStopIds,
+                                destinationIds = arrivalStopIds,
+                                date = selectedDate ?: today,
+                                blockedNames = blockedForAvoided
+                            )
+                            val seenAvoidedSignatures = mutableSetOf<String>()
+                            val label = buildAvoidedLabel(problematicDetails)
+                            journeysAvoidingAlerts = avoidedJourneys
+                                .filter { !journeyTouchesProblematicStop(it, problematicStops) }
+                                .filter {
+                                    val sig = journeySignature(it)
+                                    seenAvoidedSignatures.add(sig)
+                                }
+                                .map { AvoidedJourneyUi(journey = it, label = label) }
+                            Log.d(
+                                "InlineItinerary",
+                                "Avoided journeys kept: ${journeysAvoidingAlerts.size} / recalculated=${avoidedJourneys.size}"
+                            )
+                        } else {
+                            Log.d("InlineItinerary", "No route blocked: no avoided journeys recalculation")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("InlineItinerary", "Error fetching user stop alerts", e)
+                }
             }
         } catch (_: Exception) {
             errorText = "Erreur lors du calcul d'itineraire"
@@ -232,8 +404,8 @@ fun InlineItinerarySheetContent(
         recalc()
     }
 
-    LaunchedEffect(journeys) {
-        onJourneysChanged(journeys)
+    LaunchedEffect(journeys, journeysAvoidingAlerts) {
+        onJourneysChanged(journeysAvoidingAlerts.map { it.journey } + journeys)
     }
 
     LaunchedEffect(selectedJourney) {
@@ -383,15 +555,40 @@ fun InlineItinerarySheetContent(
                         .weight(1f),
                     contentPadding = PaddingValues(bottom = 24.dp)
                 ) {
-                    items(journeys, key = { "${it.departureTime}_${it.arrivalTime}_${it.legs.size}" }) { journey ->
-                        CompactJourneyCard(
-                            journey = journey,
-                            onClick = { selectedJourney = journey },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 6.dp),
-                            useLightColors = true
-                        )
+                    if (journeysAvoidingAlerts.isNotEmpty()) {
+                        items(journeysAvoidingAlerts, key = { "${it.journey.departureTime}_${it.journey.arrivalTime}_${it.journey.legs.size}_${it.label}" }) { avoidedJourney ->
+                            CompactJourneyCard(
+                                journey = avoidedJourney.journey,
+                                onClick = { selectedJourney = avoidedJourney.journey },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp),
+                                useLightColors = true,
+                                showAvoidedAlertsBadge = true,
+                                avoidedAlertsLabel = avoidedJourney.label
+                            )
+                        }
+                        item {
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                    }
+
+                    val avoidedSignatures = journeysAvoidingAlerts
+                        .map { journeySignature(it.journey) }
+                        .toHashSet()
+                    val regularJourneys = journeys
+                        .filter { journeySignature(it) !in avoidedSignatures }
+                    if (regularJourneys.isNotEmpty()) {
+                        items(regularJourneys, key = { "${it.departureTime}_${it.arrivalTime}_${it.legs.size}" }) { journey ->
+                            CompactJourneyCard(
+                                journey = journey,
+                                onClick = { selectedJourney = journey },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp),
+                                useLightColors = true
+                            )
+                        }
                     }
                 }
             }
@@ -433,4 +630,18 @@ fun InlineItinerarySheetContent(
 private fun defaultArrivalSeconds(): Int {
     val cal = Calendar.getInstance()
     return (cal.get(Calendar.HOUR_OF_DAY) + 1) * 3600 + cal.get(Calendar.MINUTE) * 60
+}
+
+private fun journeySignature(journey: JourneyResult): String {
+    val legSig = journey.legs.joinToString("|") { leg ->
+        listOf(
+            leg.fromStopId,
+            leg.toStopId,
+            leg.routeName.orEmpty(),
+            leg.departureTime.toString(),
+            leg.arrivalTime.toString(),
+            leg.isWalking.toString()
+        ).joinToString("~")
+    }
+    return "${journey.departureTime}->${journey.arrivalTime}#$legSig"
 }

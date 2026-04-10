@@ -9,6 +9,7 @@ import com.pelotcl.app.generic.data.model.StopCollection
 import com.pelotcl.app.generic.data.model.TrafficAlertsResponse
 import com.pelotcl.app.generic.data.model.Geometry
 import com.pelotcl.app.generic.data.model.TransportLineProperties
+import com.pelotcl.app.generic.data.model.UserStopAlertsResponse
 import com.pelotcl.app.generic.data.network.RetrofitInstance
 import com.pelotcl.app.generic.data.network.TransportApi
 import com.pelotcl.app.generic.data.network.TransportLinesQuery
@@ -17,6 +18,8 @@ import com.pelotcl.app.specific.data.model.LyonTrafficAlertsResponse
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
+import retrofit2.http.Headers
+import retrofit2.http.Query
 import java.text.Normalizer
 
 /**
@@ -29,6 +32,15 @@ class LyonTransportApi(private val baseUrl: String) : TransportApi {
     interface LyonTrafficAlertsEndpoint {
         @GET("pelo/v1/traffic/alerts")
         suspend fun getLyonTrafficAlerts(): LyonTrafficAlertsResponse
+    }
+
+    interface UserStopAlertsEndpoint {
+        @Headers("Cache-Control: no-cache", "Pragma: no-cache")
+        @GET("pelo/v1/app/users-alerts/stops")
+        suspend fun getUserStopAlerts(
+            @Query("stopIds") stopIds: List<String>,
+            @Query("_ts") timestampMs: Long
+        ): UserStopAlertsResponse
     }
 
     /**
@@ -55,6 +67,9 @@ class LyonTransportApi(private val baseUrl: String) : TransportApi {
     private val lyonTrafficApi: LyonTrafficAlertsEndpoint =
         trafficAlertsRetrofit.create(LyonTrafficAlertsEndpoint::class.java)
 
+    private val userStopAlertsApi: UserStopAlertsEndpoint =
+        trafficAlertsRetrofit.create(UserStopAlertsEndpoint::class.java)
+
     private val lyonLineApi: LyonTransportLineApi =
         linesRetrofit.create(LyonTransportLineApi::class.java)
 
@@ -63,6 +78,22 @@ class LyonTransportApi(private val baseUrl: String) : TransportApi {
     override suspend fun getTrafficAlerts(): TrafficAlertsResponse {
         val lyonResponse = lyonTrafficApi.getLyonTrafficAlerts()
         return TrafficAlertMapper.mapResponseToGeneric(lyonResponse)
+    }
+
+    /**
+     * Fetch user stop alerts (karma-based) for the specified stops
+     * @param stopIds List of stop IDs to check for alerts
+     * @return Map of stopId to StopAlertsStatus containing alerts
+     */
+    suspend fun getUserStopAlerts(stopIds: List<String>): UserStopAlertsResponse {
+        return if (stopIds.isEmpty()) {
+            emptyMap()
+        } else {
+            userStopAlertsApi.getUserStopAlerts(
+                stopIds = stopIds,
+                timestampMs = System.currentTimeMillis()
+            )
+        }
     }
 
     override suspend fun getLines(query: TransportLinesQuery): FeatureCollection {

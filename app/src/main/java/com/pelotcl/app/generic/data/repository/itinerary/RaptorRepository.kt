@@ -177,7 +177,7 @@ class RaptorRepository private constructor(private val context: Context) {
                     return@withContext Result.failure(IllegalStateException(errorMsg))
                 }
 
-                Log.d("RaptorRepository", "All required assets verified successfully")
+                Log.i("RaptorRepository", "All required assets verified successfully")
 
                 // Load school holidays from assets
                 loadSchoolHolidays()
@@ -225,7 +225,7 @@ class RaptorRepository private constructor(private val context: Context) {
 
                 isInitialized = true
 
-                Log.d(
+                Log.i(
                     TAG,
                     "Raptor initialized in ${System.currentTimeMillis() - startTime}ms with ${periods.size} periods, current: ${raptorLibrary?.getCurrentPeriod()}"
                 )
@@ -275,7 +275,7 @@ class RaptorRepository private constructor(private val context: Context) {
                     )
                 } else null
             }
-            Log.d(TAG, "Loaded ${schoolHolidays.size} school holiday periods")
+            Log.i(TAG, "Loaded ${schoolHolidays.size} school holiday periods")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load school holidays: ${e.message}", e)
             schoolHolidays = emptyList()
@@ -321,7 +321,7 @@ class RaptorRepository private constructor(private val context: Context) {
 
         if (currentPeriod != targetPeriod) {
             raptorLibrary?.setPeriod(targetPeriod)
-            Log.d(TAG, "Switched period from $currentPeriod to $targetPeriod for date $date")
+            Log.i(TAG, "Switched period from $currentPeriod to $targetPeriod for date $date")
 
             // Rebuild stop cache and indexes for new period
             stopsCache = raptorLibrary?.searchStopsByName("") ?: emptyList()
@@ -673,7 +673,7 @@ class RaptorRepository private constructor(private val context: Context) {
             }
 
             // Note: Empty checks already handled above, no need to check again
-            Log.d(
+            Log.i(
                 TAG,
                 "getOptimizedPaths: Cache miss, calculating with Raptor for ${originStopIds.size} origin(s) -> ${destinationStopIds.size} destination(s)"
             )
@@ -1129,6 +1129,31 @@ data class JourneyResult(
         val hours = seconds / 3600
         val minutes = (seconds % 3600) / 60
         return String.format(java.util.Locale.ROOT, "%02d:%02d", hours, minutes)
+    }
+
+    /**
+     * Extract all stop IDs from this journey (used for alert checking)
+     */
+    fun getAllStopIds(): Set<String> {
+        val stopIds = mutableSetOf<String>()
+        for (leg in legs) {
+            if (!leg.isWalking) {
+                stopIds.add(leg.fromStopId)
+                stopIds.add(leg.toStopId)
+                leg.intermediateStops.forEach { stop ->
+                    // Try to extract stop ID from intermediate stop name if available
+                    stopIds.add(stop.stopName)
+                }
+            }
+        }
+        return stopIds
+    }
+
+    /**
+     * Check if this journey passes through any of the problematic stops
+     */
+    fun passesThroughProblematicStops(problematicStopIds: Set<String>): Boolean {
+        return getAllStopIds().any { it in problematicStopIds }
     }
 }
 

@@ -36,7 +36,7 @@ class TrafficAlertsRepository(
                 }
 
                 // Fetch from API with retry on transient failures
-                Log.d("TrafficAlertsRepository", "Fetching traffic alerts from API...")
+                Log.i("TrafficAlertsRepository", "Fetching traffic alerts from API...")
                 val response = withRetry(maxRetries = 2, initialDelayMs = 500) {
                     transportApi.getTrafficAlerts()
                 }

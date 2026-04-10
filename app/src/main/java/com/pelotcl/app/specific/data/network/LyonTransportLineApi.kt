@@ -207,11 +207,11 @@ class LyonTransportLineApiWrapper(private val lyonApi: LyonTransportLineApi) {
         val lyonResponse = lyonApi.getTransportStopsRaw(service, version, request, typename, outputFormat, srsName, startIndex, sortBy, count)
         
         // Debug logging to understand WFS response structure
-        Log.d("LyonTransportLineApi", "WFS stops response: ${lyonResponse.features.size} features")
+        Log.i("LyonTransportLineApi", "WFS stops response: ${lyonResponse.features.size} features")
         if (lyonResponse.features.isNotEmpty()) {
             val firstFeature = lyonResponse.features.first()
-            Log.d("LyonTransportLineApi", "First stop geometry: type=${firstFeature.geometry.type}, coords=${firstFeature.geometry.coordinates}")
-            Log.d("LyonTransportLineApi", "First stop properties: ${firstFeature.properties}")
+            Log.i("LyonTransportLineApi", "First stop geometry: type=${firstFeature.geometry.type}, coords=${firstFeature.geometry.coordinates}")
+            Log.i("LyonTransportLineApi", "First stop properties: ${firstFeature.properties}")
         }
         
         return com.pelotcl.app.specific.data.mapper.StopMapper.mapToGeneric(lyonResponse)

@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Schedule
@@ -99,7 +100,9 @@ fun CompactJourneyCard(
     journey: JourneyResult,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    useLightColors: Boolean = false
+    useLightColors: Boolean = false,
+    showAvoidedAlertsBadge: Boolean = false,
+    avoidedAlertsLabel: String? = null
 ) {
     val context = LocalContext.current
     val interactionSource = remember { MutableInteractionSource() }
@@ -149,6 +152,27 @@ fun CompactJourneyCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
+            if (showAvoidedAlertsBadge) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.AutoAwesome,
+                        contentDescription = null,
+                        tint = primaryTextColor,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = avoidedAlertsLabel ?: "Alertes utilisateurs evitees",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = primaryTextColor,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,

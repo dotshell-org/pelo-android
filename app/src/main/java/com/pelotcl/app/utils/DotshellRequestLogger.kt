@@ -16,12 +16,12 @@ object DotshellRequestLogger {
 
     fun logRequest(request: Request, channel: String) {
         if (!isDotshell(request.url)) return
-        Log.d(TAG, "[$channel] ${request.method} ${request.url}")
+        Log.i(TAG, "[$channel] ${request.method} ${request.url}")
     }
 
     fun logResponse(response: Response, channel: String) {
         if (!isDotshell(response.request.url)) return
-        Log.d(
+        Log.i(
             TAG,
             "[$channel] Response: ${response.code} ${response.message} from ${response.request.url}"
         )
