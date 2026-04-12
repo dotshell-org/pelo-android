@@ -508,25 +508,6 @@ fun InlineItinerarySheetContent(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Show date/time selection only when no journey is selected
-        if (showSearchBars) {
-            TimeSelectionRow(
-                timeMode = timeMode,
-                selectedTimeSeconds = selectedTimeSeconds,
-                selectedDate = selectedDate,
-                onTimeModeChange = { timeMode = it },
-                onTimeClick = { showTimePicker = true },
-                onDateClick = { showDatePicker = true },
-                onClearDateTime = {
-                    selectedTimeSeconds = null
-                    selectedDate = null
-                },
-                useLightColors = true
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-        }
-
         if (selectedJourney == null) {
             if (isLoading) {
                 Row(
@@ -555,6 +536,25 @@ fun InlineItinerarySheetContent(
                         .weight(1f),
                     contentPadding = PaddingValues(bottom = 24.dp)
                 ) {
+                    if (showSearchBars) {
+                        item {
+                            TimeSelectionRow(
+                                timeMode = timeMode,
+                                selectedTimeSeconds = selectedTimeSeconds,
+                                selectedDate = selectedDate,
+                                onTimeModeChange = { timeMode = it },
+                                onTimeClick = { showTimePicker = true },
+                                onDateClick = { showDatePicker = true },
+                                onClearDateTime = {
+                                    selectedTimeSeconds = null
+                                    selectedDate = null
+                                },
+                                useLightColors = true
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                        }
+                    }
+
                     if (journeysAvoidingAlerts.isNotEmpty()) {
                         items(journeysAvoidingAlerts, key = { "${it.journey.departureTime}_${it.journey.arrivalTime}_${it.journey.legs.size}_${it.label}" }) { avoidedJourney ->
                             CompactJourneyCard(
