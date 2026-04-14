@@ -1477,6 +1477,7 @@ fun PlanScreen(
 
                 val lineLayer = LineLayer(layerId, sourceId).apply {
                     setProperties(
+                        PropertyFactory.visibility("visible"),
                         PropertyFactory.lineColor(Expression.get("couleur")),
                         PropertyFactory.lineWidth(Expression.get("line_width")),
                         PropertyFactory.lineOpacity(0.8f),
@@ -1494,6 +1495,8 @@ fun PlanScreen(
                 }
             }
         }
+
+        lastDisplayedLinesCount = lines.size
     }
 
     // Handle selection from Search Bar
@@ -2082,7 +2085,7 @@ fun PlanScreen(
     // Use snapshotFlow with debounce to avoid overwhelming the map when user changes stations rapidly.
     // collectLatest automatically cancels previous collection when new values arrive.
     @OptIn(FlowPreview::class)
-    LaunchedEffect(mapInstance, mapStyleVersion, isMapStyleMenuExpanded) {
+    LaunchedEffect(mapInstance, mapStyleVersion, isMapStyleMenuExpanded, lastDisplayedLinesCount) {
         if (isMapStyleMenuExpanded) return@LaunchedEffect
         val map = mapInstance ?: return@LaunchedEffect
 
