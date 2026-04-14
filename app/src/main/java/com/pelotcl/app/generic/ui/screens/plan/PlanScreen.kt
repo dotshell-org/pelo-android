@@ -78,6 +78,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -2094,11 +2095,9 @@ fun PlanScreen(
                 stopsUiState = stopsUiState
             )
         }
-            .debounce(500) // Augmenter à 500ms pour moins de réactivité mais plus de stabilité
-            .distinctUntilChanged() // Skip redundant emissions
+            .debounce(300)
+            .distinctUntilChanged()
             .collectLatest { filterState ->
-                // Ajouter un petit délai avant de traiter
-                delay(50)
                 // This block is automatically cancelled if a new state arrives
                 // Extract lines from both Success and PartialSuccess states
                 val lines: List<Feature> = when (val state = filterState.uiState) {
@@ -2646,8 +2645,27 @@ fun PlanScreen(
             ) {
                 value = currentTimeInSeconds()
                 while (isNavigationMode && selectedItineraryJourney != null) {
-                    delay(30_000)
+                    delay(10_000)
                     value = currentTimeInSeconds()
+                }
+            }
+
+            // Pre-compute nearest stop for alert button to avoid O(n) search on click
+            val nearestAlertStop by remember {
+                derivedStateOf {
+                    if (sheetContentState != SheetContentState.NAVIGATION || userLocation == null) null
+                    else {
+                        val stops = (stopsUiState as? TransportStopsUiState.Success)?.stops
+                        stops?.minByOrNull { stop ->
+                            val coords = stop.geometry.coordinates
+                            if (coords.size >= 2) squaredDistance(
+                                lat1 = userLocation!!.latitude,
+                                lon1 = userLocation!!.longitude,
+                                lat2 = coords[1],
+                                lon2 = coords[0]
+                            ) else Double.MAX_VALUE
+                        }
+                    }
                 }
             }
 
@@ -2862,11 +2880,22 @@ fun PlanScreen(
                 }
             }
 
+            // Cache navigation leg pair to avoid redundant O(n) computation during composition
+            val navigationLegPair by remember {
+                derivedStateOf {
+                    if (sheetContentState == SheetContentState.NAVIGATION) {
+                        selectedItineraryJourney?.let {
+                            getCurrentAndNextNavigationLeg(it, navigationNowSeconds, userLocation)
+                        } ?: (null to null)
+                    } else {
+                        null to null
+                    }
+                }
+            }
+
             if (isNavigationMode) {
                 val currentJourney = selectedItineraryJourney
-                val (currentLeg, nextLeg) = currentJourney?.let {
-                    getCurrentAndNextNavigationLeg(it, navigationNowSeconds, userLocation)
-                } ?: (null to null)
+                val (currentLeg, nextLeg) = navigationLegPair
                 val shouldChangeLineInMainCard =
                     if (currentJourney != null && currentLeg != null && nextLeg != null) {
                         val reference = currentJourney.departureTime
@@ -3160,46 +3189,17 @@ fun PlanScreen(
                                 .clip(CircleShape)
                                 .background(Stone800)
                                 .clickable {
-                                    println("[DEBUG_LOG] Clicked on add_triangle_24px")
-                                    
-                                    // Auto-select nearest stop in navigation mode
-                                    if (sheetContentState == SheetContentState.NAVIGATION && userLocation != null) {
-                                        val stops = (viewModel.stopsUiState.value as? TransportStopsUiState.Success)?.stops
-                                        if (stops != null) {
-                                            var nearestStop: StopFeature? = null
-                                            var nearestDistance = Double.MAX_VALUE
-                                            stops.forEach { stop ->
-                                                val coords = stop.geometry.coordinates
-                                                if (coords.size >= 2) {
-                                                    val dist = squaredDistance(
-                                                        lat1 = userLocation!!.latitude,
-                                                        lon1 = userLocation!!.longitude,
-                                                        lat2 = coords[1],
-                                                        lon2 = coords[0]
-                                                    )
-                                                    if (dist < nearestDistance) {
-                                                        nearestDistance = dist
-                                                        nearestStop = stop
-                                                    }
-                                                }
-                                            }
-                                            
-                                            if (nearestStop != null) {
-                                                alertReportInitialStop = StationSearchResult(
-                                                    stopName = nearestStop.properties.nom,
-                                                    lines = viewModel.parseLineCodesFromDesserte(nearestStop.properties.desserte),
-                                                    stopId = nearestStop.properties.id
-                                                )
-                                            } else {
-                                                alertReportInitialStop = null
-                                            }
-                                        } else {
-                                            alertReportInitialStop = null
-                                        }
+                                    // Use pre-computed nearest stop in navigation mode
+                                    val stop = nearestAlertStop
+                                    alertReportInitialStop = if (stop != null) {
+                                        StationSearchResult(
+                                            stopName = stop.properties.nom,
+                                            lines = viewModel.parseLineCodesFromDesserte(stop.properties.desserte),
+                                            stopId = stop.properties.id
+                                        )
                                     } else {
-                                        alertReportInitialStop = null
+                                        null
                                     }
-                                    
                                     showAlertReportSheet = true
                                 }
                                 .padding(10.dp)

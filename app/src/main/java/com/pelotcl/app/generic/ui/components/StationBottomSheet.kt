@@ -225,7 +225,6 @@ fun StationBottomSheet(
     val actionsInset = 8.dp
 
     if (stationInfo != null) {
-        android.util.Log.i("StationBottomSheet", "Rendering bottom sheet for station: ${stationInfo.nom}, lines: ${stationInfo.lignes}")
         val allStopLines by produceState(
             initialValue = stationInfo.lignes,
             key1 = stationInfo.nom,

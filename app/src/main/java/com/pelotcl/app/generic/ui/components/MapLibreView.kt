@@ -104,11 +104,7 @@ fun MapLibreView(
         if (userLocation != null) {
             mapView.getMapAsync { map ->
                 map.getStyle { style ->
-                    // Remove existing user location layer and source if any
-                    style.getLayer("user-location-layer")?.let { style.removeLayer(it) }
-                    style.getSource("user-location-source")?.let { style.removeSource(it) }
-
-                    // Create GeoJSON for user location
+                    // Build GeoJSON for user location
                     val userLocationGeoJson = JsonObject().apply {
                         addProperty("type", "Feature")
                         val geometryObject = JsonObject().apply {
@@ -121,23 +117,26 @@ fun MapLibreView(
                         add("geometry", geometryObject)
                     }.toString()
 
-                    // Add source for user location
-                    val userLocationSource =
-                        GeoJsonSource("user-location-source", userLocationGeoJson)
-                    style.addSource(userLocationSource)
+                    // Update existing source in-place, or create source + layer on first call
+                    val existingSource = style.getSourceAs<GeoJsonSource>("user-location-source")
+                    if (existingSource != null) {
+                        existingSource.setGeoJson(userLocationGeoJson)
+                    } else {
+                        val newSource = GeoJsonSource("user-location-source", userLocationGeoJson)
+                        style.addSource(newSource)
 
-                    // Add a blue circle layer for user location
-                    val userLocationLayer =
-                        CircleLayer("user-location-layer", "user-location-source").apply {
-                            setProperties(
-                                PropertyFactory.circleRadius(10f),
-                                PropertyFactory.circleColor("#3B82F6"),
-                                PropertyFactory.circleStrokeWidth(3f),
-                                PropertyFactory.circleStrokeColor("#FFFFFF"),
-                                PropertyFactory.circleOpacity(1.0f)
-                            )
-                        }
-                    style.addLayer(userLocationLayer)
+                        val userLocationLayer =
+                            CircleLayer("user-location-layer", "user-location-source").apply {
+                                setProperties(
+                                    PropertyFactory.circleRadius(10f),
+                                    PropertyFactory.circleColor("#3B82F6"),
+                                    PropertyFactory.circleStrokeWidth(3f),
+                                    PropertyFactory.circleStrokeColor("#FFFFFF"),
+                                    PropertyFactory.circleOpacity(1.0f)
+                                )
+                            }
+                        style.addLayer(userLocationLayer)
+                    }
 
                     // Center on user location if requested
                     if (centerOnUserLocation) {
