@@ -20,6 +20,8 @@ import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
 import retrofit2.http.Headers
 import retrofit2.http.Query
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import java.text.Normalizer
 
 /**
@@ -131,64 +133,73 @@ class LyonTransportApi(private val baseUrl: String) : TransportApi {
         )
     }
 
-    private suspend fun fetchStrongLines(): FeatureCollection {
-        val metro = lineApiWrapper.getMetroLines(
-            SERVICE,
-            VERSION,
-            REQUEST,
-            TYPENAME_METRO,
-            OUTPUT_FORMAT,
-            SRSNAME_4171,
-            START_INDEX,
-            SORT_BY,
-            COUNT_METRO_TRAM_NAVIGONE
-        ).features
+    private suspend fun fetchStrongLines(): FeatureCollection = coroutineScope {
+        val metroDeferred = async {
+            lineApiWrapper.getMetroLines(
+                SERVICE,
+                VERSION,
+                REQUEST,
+                TYPENAME_METRO,
+                OUTPUT_FORMAT,
+                SRSNAME_4171,
+                START_INDEX,
+                SORT_BY,
+                COUNT_METRO_TRAM_NAVIGONE
+            ).features
+        }
 
-        val tram = lineApiWrapper.getTramLines(
-            SERVICE,
-            VERSION,
-            REQUEST,
-            TYPENAME_TRAM,
-            OUTPUT_FORMAT,
-            SRSNAME_4171,
-            START_INDEX,
-            SORT_BY,
-            COUNT_METRO_TRAM_NAVIGONE
-        ).features
+        val tramDeferred = async {
+            lineApiWrapper.getTramLines(
+                SERVICE,
+                VERSION,
+                REQUEST,
+                TYPENAME_TRAM,
+                OUTPUT_FORMAT,
+                SRSNAME_4171,
+                START_INDEX,
+                SORT_BY,
+                COUNT_METRO_TRAM_NAVIGONE
+            ).features
+        }
 
-        val navigone = lineApiWrapper.getNavigoneLines(
-            SERVICE,
-            VERSION,
-            REQUEST,
-            TYPENAME_NAVIGONE,
-            OUTPUT_FORMAT,
-            SRSNAME_4171,
-            START_INDEX,
-            SORT_BY,
-            COUNT_METRO_TRAM_NAVIGONE
-        ).features
+        val navigoneDeferred = async {
+            lineApiWrapper.getNavigoneLines(
+                SERVICE,
+                VERSION,
+                REQUEST,
+                TYPENAME_NAVIGONE,
+                OUTPUT_FORMAT,
+                SRSNAME_4171,
+                START_INDEX,
+                SORT_BY,
+                COUNT_METRO_TRAM_NAVIGONE
+            ).features
+        }
 
-        val trambus = lineApiWrapper.getTrambusLines(
-            SERVICE,
-            VERSION,
-            REQUEST,
-            TYPENAME_BUS,
-            OUTPUT_FORMAT,
-            SRSNAME_4171,
-            START_INDEX,
-            SORT_BY,
-            COUNT_TRAMBUS_LINES,
-            TRAMBUS_CQL_FILTER
-        ).features
+        val trambusDeferred = async {
+            lineApiWrapper.getTrambusLines(
+                SERVICE,
+                VERSION,
+                REQUEST,
+                TYPENAME_BUS,
+                OUTPUT_FORMAT,
+                SRSNAME_4171,
+                START_INDEX,
+                SORT_BY,
+                COUNT_TRAMBUS_LINES,
+                TRAMBUS_CQL_FILTER
+            ).features
+        }
 
-        val rx = fetchRhonexpressFeatures()
+        val rxDeferred = async { fetchRhonexpressFeatures() }
 
-        val allFeatures = metro + tram + navigone + trambus + rx
+        val allFeatures = metroDeferred.await() + tramDeferred.await() +
+            navigoneDeferred.await() + trambusDeferred.await() + rxDeferred.await()
         val uniqueLines = allFeatures
             .groupBy { it.properties.traceCode }
             .map { (_, features) -> features.first() }
 
-        return FeatureCollection(
+        FeatureCollection(
             type = "FeatureCollection",
             features = uniqueLines,
             totalFeatures = uniqueLines.size,

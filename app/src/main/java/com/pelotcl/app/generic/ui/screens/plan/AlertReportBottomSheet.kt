@@ -383,6 +383,8 @@ fun AlertButton(
     }
 }
 
+private val sharedHttpClient = OkHttpClient()
+
 private suspend fun sendAlert(
     context: android.content.Context,
     alertType: AlertType,
@@ -394,7 +396,6 @@ private suspend fun sendAlert(
 ) {
     withContext(Dispatchers.IO) {
         try {
-            val client = OkHttpClient()
             val url = "https://api.dotshell.eu/pelo/v1/app/users-alerts"
             
             val json = JSONObject().apply {
@@ -409,7 +410,7 @@ private suspend fun sendAlert(
                 .post(body)
                 .build()
                 
-            client.newCall(request).execute().use { response ->
+            sharedHttpClient.newCall(request).execute().use { response ->
                 withContext(Dispatchers.Main) {
                     when (response.code) {
                         201 -> {
