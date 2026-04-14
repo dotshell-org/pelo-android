@@ -50,11 +50,11 @@ import com.pelotcl.app.generic.data.repository.itinerary.JourneyResult
 import com.pelotcl.app.generic.ui.theme.PrimaryColor
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
+import com.pelotcl.app.utils.SearchUtils
 import com.pelotcl.app.utils.transport.BusIconHelper
 import com.pelotcl.app.utils.transport.LineColorHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.text.Normalizer
 import java.time.LocalDate
 import java.util.Calendar
 import java.util.Locale
@@ -176,26 +176,17 @@ fun InlineItinerarySheetContent(
         ): Set<String> {
             if (problematicStops.isEmpty()) return emptySet()
 
-            fun normalizeStopKey(raw: String): String {
-                return Normalizer.normalize(raw, Normalizer.Form.NFD)
-                    .replace("\\p{M}+".toRegex(), "")
-                    .lowercase(Locale.ROOT)
-                    .replace("[^\\p{Alnum}]".toRegex(), " ")
-                    .replace("\\s+".toRegex(), " ")
-                    .trim()
-            }
-
-            val normalizedProblematic = problematicStops.map(::normalizeStopKey).toSet()
+            val normalizedProblematic = problematicStops.map(SearchUtils::normalizeStopKey).toSet()
 
             val blockedNames = mutableSetOf<String>()
             allJourneys.forEach { journey ->
                 journey.legs.forEach { leg ->
                     if (leg.isWalking) return@forEach
                     val touchesProblematicStop =
-                        normalizedProblematic.contains(normalizeStopKey(leg.fromStopName)) ||
-                            normalizedProblematic.contains(normalizeStopKey(leg.toStopName)) ||
+                        normalizedProblematic.contains(SearchUtils.normalizeStopKey(leg.fromStopName)) ||
+                            normalizedProblematic.contains(SearchUtils.normalizeStopKey(leg.toStopName)) ||
                             leg.intermediateStops.any {
-                                normalizedProblematic.contains(normalizeStopKey(it.stopName))
+                                normalizedProblematic.contains(SearchUtils.normalizeStopKey(it.stopName))
                             }
                     if (touchesProblematicStop && !leg.routeName.isNullOrBlank()) {
                         blockedNames.add(leg.routeName)
@@ -210,22 +201,14 @@ fun InlineItinerarySheetContent(
             problematicStops: Set<String>
         ): Boolean {
             if (problematicStops.isEmpty()) return false
-            fun normalizeStopKey(raw: String): String {
-                return Normalizer.normalize(raw, Normalizer.Form.NFD)
-                    .replace("\\p{M}+".toRegex(), "")
-                    .lowercase(Locale.ROOT)
-                    .replace("[^\\p{Alnum}]".toRegex(), " ")
-                    .replace("\\s+".toRegex(), " ")
-                    .trim()
-            }
 
-            val normalizedProblematic = problematicStops.map(::normalizeStopKey).toSet()
+            val normalizedProblematic = problematicStops.map(SearchUtils::normalizeStopKey).toSet()
             return journey.legs.any { leg ->
                 if (leg.isWalking) return@any false
-                normalizedProblematic.contains(normalizeStopKey(leg.fromStopName)) ||
-                    normalizedProblematic.contains(normalizeStopKey(leg.toStopName)) ||
+                normalizedProblematic.contains(SearchUtils.normalizeStopKey(leg.fromStopName)) ||
+                    normalizedProblematic.contains(SearchUtils.normalizeStopKey(leg.toStopName)) ||
                     leg.intermediateStops.any {
-                        normalizedProblematic.contains(normalizeStopKey(it.stopName))
+                        normalizedProblematic.contains(SearchUtils.normalizeStopKey(it.stopName))
                     }
             }
         }
@@ -530,6 +513,13 @@ fun InlineItinerarySheetContent(
                     Text(text = errorText!!, color = PrimaryColor)
                 }
             } else {
+                val avoidedSignatures = remember(journeysAvoidingAlerts) {
+                    journeysAvoidingAlerts.map { journeySignature(it.journey) }.toHashSet()
+                }
+                val regularJourneys = remember(journeys, avoidedSignatures) {
+                    journeys.filter { journeySignature(it) !in avoidedSignatures }
+                }
+
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -573,11 +563,6 @@ fun InlineItinerarySheetContent(
                         }
                     }
 
-                    val avoidedSignatures = journeysAvoidingAlerts
-                        .map { journeySignature(it.journey) }
-                        .toHashSet()
-                    val regularJourneys = journeys
-                        .filter { journeySignature(it) !in avoidedSignatures }
                     if (regularJourneys.isNotEmpty()) {
                         items(regularJourneys, key = { "${it.departureTime}_${it.arrivalTime}_${it.legs.size}" }) { journey ->
                             CompactJourneyCard(

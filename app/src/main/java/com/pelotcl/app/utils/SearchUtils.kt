@@ -1,11 +1,17 @@
 package com.pelotcl.app.utils
 
 import java.text.Normalizer
+import java.util.Locale
 
 /**
  * Utilities for search functionality
  */
 object SearchUtils {
+    // Pre-compiled regex patterns to avoid recompilation on every call
+    private val COMBINING_MARKS_REGEX = "\\p{M}+".toRegex()
+    private val NON_ALNUM_REGEX = "[^\\p{Alnum}]".toRegex()
+    private val WHITESPACE_REGEX = "\\s+".toRegex()
+
     /**
      * Normalize a string for fuzzy search matching:
      * - Removes accents/diacritics
@@ -21,11 +27,24 @@ object SearchUtils {
     fun normalizeForSearch(text: String): String {
         // Remove diacritics/accents
         val normalized = Normalizer.normalize(text, Normalizer.Form.NFD)
-            .replace("\\p{M}".toRegex(), "")
+            .replace(COMBINING_MARKS_REGEX, "")
 
         // Lowercase and normalize whitespace
         return normalized.lowercase()
-            .replace("\\s+".toRegex(), " ")
+            .replace(WHITESPACE_REGEX, " ")
+            .trim()
+    }
+
+    /**
+     * Normalize a stop name key for comparison (accent-insensitive, case-insensitive,
+     * non-alphanumeric replaced by spaces, collapsed whitespace).
+     */
+    fun normalizeStopKey(raw: String): String {
+        return Normalizer.normalize(raw, Normalizer.Form.NFD)
+            .replace(COMBINING_MARKS_REGEX, "")
+            .lowercase(Locale.ROOT)
+            .replace(NON_ALNUM_REGEX, " ")
+            .replace(WHITESPACE_REGEX, " ")
             .trim()
     }
 
