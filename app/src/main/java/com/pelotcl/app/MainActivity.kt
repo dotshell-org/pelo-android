@@ -67,6 +67,7 @@ import com.pelotcl.app.generic.ui.screens.settings.about.CreditsScreen
 import com.pelotcl.app.generic.ui.screens.settings.about.LegalScreen
 import com.pelotcl.app.generic.ui.screens.plan.PlanScreen
 import com.pelotcl.app.specific.ui.screens.settings.ItinerarySettingsScreen
+import com.pelotcl.app.generic.ui.screens.settings.ApiHealthScreen
 import com.pelotcl.app.generic.ui.screens.settings.OfflineSettingsScreen
 import com.pelotcl.app.generic.ui.screens.settings.SettingsScreen
 import com.pelotcl.app.generic.ui.theme.PeloTheme
@@ -205,6 +206,7 @@ private enum class Destination(
         const val CONTACT = "contact"
         const val ITINERARY_SETTINGS = "itinerary_settings"
         const val OFFLINE_SETTINGS = "offline_settings"
+        const val API_HEALTH = "api_health"
     }
 }
 
@@ -338,7 +340,8 @@ fun NavBar(modifier: Modifier = Modifier) {
             Destination.CREDITS,
             Destination.CONTACT,
             Destination.ITINERARY_SETTINGS,
-            Destination.OFFLINE_SETTINGS
+            Destination.OFFLINE_SETTINGS,
+            Destination.API_HEALTH
         )
 
         if (currentRoute in darkBackgroundRoutes) {
@@ -396,7 +399,8 @@ fun NavBar(modifier: Modifier = Modifier) {
                                             Destination.CREDITS,
                                             Destination.CONTACT,
                                             Destination.ITINERARY_SETTINGS,
-                                            Destination.OFFLINE_SETTINGS
+                                            Destination.OFFLINE_SETTINGS,
+                                            Destination.API_HEALTH
                                         )
                                         if (currentRoute in settingsSubRoutes) {
                                             // Pop back to Settings root
@@ -604,6 +608,16 @@ private fun AppNavHost(
                 },
                 onOfflineClick = {
                     navController.navigate(Destination.OFFLINE_SETTINGS)
+                },
+                onApiHealthClick = {
+                    navController.navigate(Destination.API_HEALTH)
+                }
+            )
+        }
+        composable(Destination.API_HEALTH) {
+            ApiHealthScreen(
+                onBackClick = {
+                    navController.popBackStack()
                 }
             )
         }

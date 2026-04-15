@@ -1390,7 +1390,6 @@ fun PlanScreen(
 
     LaunchedEffect(uiState, mapInstance, mapStyleVersion) {
         val map = mapInstance ?: return@LaunchedEffect
-
         // Extract lines from both Success and PartialSuccess states
         val lines: List<Feature> = when (val state = uiState) {
             is TransportLinesUiState.Success -> state.lines
@@ -1468,10 +1467,8 @@ fun PlanScreen(
             // Check if source already exists (for incremental updates)
             val existingSource = style.getSource(sourceId) as? GeoJsonSource
             if (existingSource != null) {
-                // Update existing source with new GeoJSON (incremental update)
                 existingSource.setGeoJson(allLinesGeoJson)
             } else {
-                // First time: create source and layer
                 style.getLayer(layerId)?.let { style.removeLayer(it) }
                 style.addSource(GeoJsonSource(sourceId, allLinesGeoJson))
 

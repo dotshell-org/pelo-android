@@ -20,8 +20,9 @@ import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
 import retrofit2.http.Headers
 import retrofit2.http.Query
+import android.util.Log
 import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.supervisorScope
 import java.text.Normalizer
 
 /**
@@ -133,68 +134,73 @@ class LyonTransportApi(private val baseUrl: String) : TransportApi {
         )
     }
 
-    private suspend fun fetchStrongLines(): FeatureCollection = coroutineScope {
+    private suspend fun fetchStrongLines(): FeatureCollection = supervisorScope {
         val metroDeferred = async {
-            lineApiWrapper.getMetroLines(
-                SERVICE,
-                VERSION,
-                REQUEST,
-                TYPENAME_METRO,
-                OUTPUT_FORMAT,
-                SRSNAME_4171,
-                START_INDEX,
-                SORT_BY,
-                COUNT_METRO_TRAM_NAVIGONE
-            ).features
+            runCatching {
+                lineApiWrapper.getMetroLines(
+                    SERVICE, VERSION, REQUEST, TYPENAME_METRO,
+                    OUTPUT_FORMAT, SRSNAME_4171, START_INDEX, SORT_BY,
+                    COUNT_METRO_TRAM_NAVIGONE
+                ).features
+            }.getOrElse { e ->
+                Log.w("LyonTransportApi", "fetchStrongLines: metro failed: ${e.message}")
+                emptyList()
+            }
         }
 
         val tramDeferred = async {
-            lineApiWrapper.getTramLines(
-                SERVICE,
-                VERSION,
-                REQUEST,
-                TYPENAME_TRAM,
-                OUTPUT_FORMAT,
-                SRSNAME_4171,
-                START_INDEX,
-                SORT_BY,
-                COUNT_METRO_TRAM_NAVIGONE
-            ).features
+            runCatching {
+                lineApiWrapper.getTramLines(
+                    SERVICE, VERSION, REQUEST, TYPENAME_TRAM,
+                    OUTPUT_FORMAT, SRSNAME_4171, START_INDEX, SORT_BY,
+                    COUNT_METRO_TRAM_NAVIGONE
+                ).features
+            }.getOrElse { e ->
+                Log.w("LyonTransportApi", "fetchStrongLines: tram failed: ${e.message}")
+                emptyList()
+            }
         }
 
         val navigoneDeferred = async {
-            lineApiWrapper.getNavigoneLines(
-                SERVICE,
-                VERSION,
-                REQUEST,
-                TYPENAME_NAVIGONE,
-                OUTPUT_FORMAT,
-                SRSNAME_4171,
-                START_INDEX,
-                SORT_BY,
-                COUNT_METRO_TRAM_NAVIGONE
-            ).features
+            runCatching {
+                lineApiWrapper.getNavigoneLines(
+                    SERVICE, VERSION, REQUEST, TYPENAME_NAVIGONE,
+                    OUTPUT_FORMAT, SRSNAME_4171, START_INDEX, SORT_BY,
+                    COUNT_METRO_TRAM_NAVIGONE
+                ).features
+            }.getOrElse { e ->
+                Log.w("LyonTransportApi", "fetchStrongLines: navigone failed: ${e.message}")
+                emptyList()
+            }
         }
 
         val trambusDeferred = async {
-            lineApiWrapper.getTrambusLines(
-                SERVICE,
-                VERSION,
-                REQUEST,
-                TYPENAME_BUS,
-                OUTPUT_FORMAT,
-                SRSNAME_4171,
-                START_INDEX,
-                SORT_BY,
-                COUNT_TRAMBUS_LINES,
-                TRAMBUS_CQL_FILTER
-            ).features
+            runCatching {
+                lineApiWrapper.getTrambusLines(
+                    SERVICE, VERSION, REQUEST, TYPENAME_BUS,
+                    OUTPUT_FORMAT, SRSNAME_4171, START_INDEX, SORT_BY,
+                    COUNT_TRAMBUS_LINES, TRAMBUS_CQL_FILTER
+                ).features
+            }.getOrElse { e ->
+                Log.w("LyonTransportApi", "fetchStrongLines: trambus failed: ${e.message}")
+                emptyList()
+            }
         }
 
-        val rxDeferred = async { fetchRhonexpressFeatures() }
+        val rxDeferred = async {
+            runCatching { fetchRhonexpressFeatures() }.getOrElse { e ->
+                Log.w("LyonTransportApi", "fetchStrongLines: rhonexpress failed: ${e.message}")
+                emptyList()
+            }
+        }
 
         val allFeatures = metroDeferred.await() + tramDeferred.await() +
             navigoneDeferred.await() + trambusDeferred.await() + rxDeferred.await()
+
+        if (allFeatures.isEmpty()) {
+            throw IllegalStateException("All strong line requests failed")
+        }
+
         val uniqueLines = allFeatures
             .groupBy { it.properties.traceCode }
             .map { (_, features) -> features.first() }
