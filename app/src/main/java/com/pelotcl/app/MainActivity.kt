@@ -67,7 +67,6 @@ import com.pelotcl.app.generic.ui.screens.settings.about.CreditsScreen
 import com.pelotcl.app.generic.ui.screens.settings.about.LegalScreen
 import com.pelotcl.app.generic.ui.screens.plan.PlanScreen
 import com.pelotcl.app.specific.ui.screens.settings.ItinerarySettingsScreen
-import com.pelotcl.app.generic.ui.screens.settings.ApiHealthScreen
 import com.pelotcl.app.generic.ui.screens.settings.OfflineSettingsScreen
 import com.pelotcl.app.generic.ui.screens.settings.SettingsScreen
 import com.pelotcl.app.generic.ui.theme.PeloTheme
@@ -611,13 +610,6 @@ private fun AppNavHost(
                 },
                 onApiHealthClick = {
                     navController.navigate(Destination.API_HEALTH)
-                }
-            )
-        }
-        composable(Destination.API_HEALTH) {
-            ApiHealthScreen(
-                onBackClick = {
-                    navController.popBackStack()
                 }
             )
         }
