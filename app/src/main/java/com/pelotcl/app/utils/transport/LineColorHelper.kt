@@ -50,7 +50,7 @@ object LineColorHelper {
 
             name in (1..2).map { "F$it" } -> FUNICULAR_COLOR
 
-            name == "NAV1" -> NAVIGONE_COLOR
+            name == "NAV1" || name == "NAVI1" -> NAVIGONE_COLOR
 
             else -> BUS_COLOR
         }
