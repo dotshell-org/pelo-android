@@ -65,7 +65,8 @@ fun SettingsScreen(
     onCreditsClick: () -> Unit,
     onContactClick: () -> Unit,
     modifier: Modifier = Modifier,
-    onOfflineClick: () -> Unit = {}
+    onOfflineClick: () -> Unit = {},
+    onApiHealthClick: () -> Unit = {}
 ) {
     var clickCount by remember { mutableIntStateOf(0) }
     var isEasterEggActive by remember { mutableStateOf(false) }
@@ -182,6 +183,11 @@ fun SettingsScreen(
                 SettingsMenuRow(
                     title = "Mode hors ligne",
                     onClick = onOfflineClick
+                )
+                HorizontalDivider(color = Color(0xFF3A3A3C))
+                SettingsMenuRow(
+                    title = "Santé des API",
+                    onClick = onApiHealthClick
                 )
                 HorizontalDivider(color = Color(0xFF3A3A3C))
                 SettingsMenuRow(

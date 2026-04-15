@@ -232,7 +232,6 @@ class OfflineDataManager(
                     Log.i(TAG, "Starting paginated bus download (pageSize=$pageSize)")
 
                     while (hasMore) {
-                        System.gc()
                         Log.i(TAG, "Fetching bus page: startIndex=$startIndex, count=$pageSize")
                         val page = withRetry(maxRetries = 2, initialDelayMs = 1000) {
                             transportApi.getLines(

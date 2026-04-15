@@ -162,41 +162,56 @@ class TransportViewModel(private val context: Context) : ViewModel() {
     }
     
     /**
-     * Charge les lignes de transport
+     * Charge les lignes de transport avec retry automatique en cas d'échec.
      */
     fun loadTransportLines() {
         viewModelScope.launch {
             _linesState.value = TransportLinesState.Loading
             _uiState.value = TransportLinesUiState.Loading
-            try {
-                val result = transportRepository.getAllLines()
-                result.onSuccess { lines ->
-                    _linesState.value = TransportLinesState.Success(lines)
-                    _uiState.value = TransportLinesUiState.Success(lines.features.orEmpty())
-                    
-                    // Save lines to cache for future use
-                    val cache = transportCache
-                    val metroLines = lines.features.filter { 
-                        it.properties.transportType == "METRO" || 
-                        it.properties.transportType == "FUNICULAR"
-                    }
-                    val tramLines = lines.features.filter { 
-                        it.properties.transportType == "TRAM"
-                    }
-                    
-                    if (metroLines.isNotEmpty()) {
-                        cache.saveMetroLines(metroLines)
-                    }
-                    if (tramLines.isNotEmpty()) {
-                        cache.saveTramLines(tramLines)
-                    }
-                }.onFailure { error ->
-                    _linesState.value = TransportLinesState.Error(error.message ?: "Unknown error")
-                    _uiState.value = TransportLinesUiState.Error(error.message ?: "Unknown error")
+
+            val retryDelays = listOf(0L, 3_000L, 8_000L)
+            for ((attempt, delayMs) in retryDelays.withIndex()) {
+                if (delayMs > 0) {
+                    Log.i("TransportViewModel", "Retrying loadTransportLines (attempt ${attempt + 1}) after ${delayMs}ms...")
+                    kotlinx.coroutines.delay(delayMs)
                 }
-            } catch (e: Exception) {
-                _linesState.value = TransportLinesState.Error(e.message ?: "Unknown error")
-                _uiState.value = TransportLinesUiState.Error(e.message ?: "Unknown error")
+                try {
+                    val result = transportRepository.getAllLines()
+                    result.onSuccess { lines ->
+                        _linesState.value = TransportLinesState.Success(lines)
+                        _uiState.value = TransportLinesUiState.Success(lines.features.orEmpty())
+
+                        // Save lines to cache for future use
+                        val cache = transportCache
+                        val metroLines = lines.features.filter {
+                            it.properties.transportType == "METRO" ||
+                                it.properties.transportType == "FUNICULAR"
+                        }
+                        val tramLines = lines.features.filter {
+                            it.properties.transportType == "TRAM"
+                        }
+
+                        if (metroLines.isNotEmpty()) {
+                            cache.saveMetroLines(metroLines)
+                        }
+                        if (tramLines.isNotEmpty()) {
+                            cache.saveTramLines(tramLines)
+                        }
+                        return@launch // Success — stop retrying
+                    }.onFailure { error ->
+                        Log.w("TransportViewModel", "loadTransportLines attempt ${attempt + 1} failed: ${error.message}")
+                        if (attempt == retryDelays.lastIndex) {
+                            _linesState.value = TransportLinesState.Error(error.message ?: "Unknown error")
+                            _uiState.value = TransportLinesUiState.Error(error.message ?: "Unknown error")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w("TransportViewModel", "loadTransportLines attempt ${attempt + 1} exception: ${e.message}")
+                    if (attempt == retryDelays.lastIndex) {
+                        _linesState.value = TransportLinesState.Error(e.message ?: "Unknown error")
+                        _uiState.value = TransportLinesUiState.Error(e.message ?: "Unknown error")
+                    }
+                }
             }
         }
     }

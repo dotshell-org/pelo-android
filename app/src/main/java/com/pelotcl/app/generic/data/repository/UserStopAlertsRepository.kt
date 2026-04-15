@@ -5,10 +5,9 @@ import com.pelotcl.app.generic.data.model.StopAlertsStatus
 import com.pelotcl.app.generic.data.model.UserStopAlert
 import com.pelotcl.app.generic.data.model.UserStopAlertsResponse
 import com.pelotcl.app.specific.data.network.LyonTransportApi
+import com.pelotcl.app.utils.SearchUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.text.Normalizer
-import java.util.Locale
 
 /**
  * Repository for managing user stop alerts (karma-based alerts)
@@ -20,15 +19,6 @@ class UserStopAlertsRepository(
     companion object {
         private const val TAG = "UserStopAlertsRepository"
         private const val API_STOPS_CHUNK_SIZE = 10
-    }
-
-    private fun normalizeStopKey(raw: String): String {
-        return Normalizer.normalize(raw, Normalizer.Form.NFD)
-            .replace("\\p{M}+".toRegex(), "")
-            .lowercase(Locale.ROOT)
-            .replace("[^\\p{Alnum}]".toRegex(), " ")
-            .replace("\\s+".toRegex(), " ")
-            .trim()
     }
 
     private fun hasKarmaAtOrAboveThreshold(status: StopAlertsStatus): Boolean {
@@ -113,7 +103,7 @@ class UserStopAlertsRepository(
 
             // Build a normalized index, but keep ambiguity information to avoid false positives.
             val normalizedToApiStops = problematicEntries.keys
-                .groupBy(::normalizeStopKey)
+                .groupBy(SearchUtils::normalizeStopKey)
 
             val problematicByExact = problematicEntries
                 .mapValues { (_, status) -> status.karmaAtOrAboveThreshold }
@@ -128,7 +118,7 @@ class UserStopAlertsRepository(
                 }
 
                 // 2) Fallback to normalized key only when it maps to exactly one API stop.
-                val normalized = normalizeStopKey(callerStopName)
+                val normalized = SearchUtils.normalizeStopKey(callerStopName)
                 val candidates = normalizedToApiStops[normalized].orEmpty()
                 if (candidates.size == 1) {
                     val fallback = problematicByExact[candidates.first()]
