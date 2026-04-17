@@ -47,13 +47,19 @@ fun TransportSearchBar(
     val effectiveQuery = if (isParentControlled) query else uncontrolledQuery
     val setEffectiveQuery: (String) -> Unit = { q ->
         if (isParentControlled) {
-            onQueryChange?.invoke(q)
+            onQueryChange.invoke(q)
         } else {
             uncontrolledQuery = q
         }
     }
 
-    val resolvedMinLen = minQueryLengthForResults ?: 1
+    val resolvedStopMinLen = minQueryLengthForResults ?: 2
+    val resolvedLineMinLen = 1
+    val resolvedUiMinLen = if (content == TransportSearchContent.STOPS_ONLY) {
+        resolvedStopMinLen
+    } else {
+        resolvedLineMinLen
+    }
     val resolvedDebounce = debounceMs
         ?: if (content == TransportSearchContent.STOPS_ONLY && !showHistory) 250L else 300L
 
@@ -94,14 +100,15 @@ fun TransportSearchBar(
         else searchHistory = emptyList()
     }
 
-    LaunchedEffect(effectiveQuery, content, resolvedMinLen, resolvedDebounce) {
+    LaunchedEffect(
+        effectiveQuery,
+        content,
+        resolvedStopMinLen,
+        resolvedLineMinLen,
+        resolvedDebounce
+    ) {
         val current = effectiveQuery.trim()
         if (current.isEmpty()) {
-            stationSearchResults = emptyList()
-            lineSearchResults = emptyList()
-            return@LaunchedEffect
-        }
-        if (current.length < resolvedMinLen) {
             stationSearchResults = emptyList()
             lineSearchResults = emptyList()
             return@LaunchedEffect
@@ -109,12 +116,18 @@ fun TransportSearchBar(
         delay(resolvedDebounce)
         if (current != effectiveQuery.trim()) return@LaunchedEffect
 
-        stationSearchResults = if (content != TransportSearchContent.LINES_ONLY) {
+        stationSearchResults = if (
+            content != TransportSearchContent.LINES_ONLY &&
+            current.length >= resolvedStopMinLen
+        ) {
             viewModel.searchStops(current)
         } else {
             emptyList()
         }
-        lineSearchResults = if (content != TransportSearchContent.STOPS_ONLY) {
+        lineSearchResults = if (
+            content != TransportSearchContent.STOPS_ONLY &&
+            current.length >= resolvedLineMinLen
+        ) {
             viewModel.searchLines(current)
         } else {
             emptyList()
@@ -186,7 +199,7 @@ fun TransportSearchBar(
         startExpanded = startExpanded,
         searchPlaceholder = searchPlaceholder,
         focusNonce = focusNonce,
-        minQueryLengthForResults = resolvedMinLen,
+        minQueryLengthForResults = resolvedUiMinLen,
         showDirections = showDirections
     )
 }
