@@ -529,6 +529,110 @@ private fun buildNavigationAlertQuestion(prompt: NavigationAlertPrompt): String 
     }
 }
 
+private enum class NavigationKeyStopType {
+    START,
+    TRANSFER,
+    TERMINUS
+}
+
+private data class NavigationKeyStopDeadline(
+    val stopId: String,
+    val stopName: String,
+    val lat: Double,
+    val lon: Double,
+    val deadlineSeconds: Int,
+    val type: NavigationKeyStopType
+)
+
+private fun buildNavigationKeyStopDeadlines(journey: JourneyResult): List<NavigationKeyStopDeadline> {
+    val nonWalkingLegs = journey.legs.filterNot { it.isWalking }
+    if (nonWalkingLegs.isEmpty()) return emptyList()
+
+    val result = mutableListOf<NavigationKeyStopDeadline>()
+    val firstLeg = nonWalkingLegs.first()
+    if (isValidJourneyCoordinate(firstLeg.fromLat, firstLeg.fromLon)) {
+        result += NavigationKeyStopDeadline(
+            stopId = firstLeg.fromStopId,
+            stopName = firstLeg.fromStopName,
+            lat = firstLeg.fromLat,
+            lon = firstLeg.fromLon,
+            deadlineSeconds = firstLeg.departureTime,
+            type = NavigationKeyStopType.START
+        )
+    }
+
+    for (index in 0 until nonWalkingLegs.lastIndex) {
+        val current = nonWalkingLegs[index]
+        val next = nonWalkingLegs[index + 1]
+        if (isValidJourneyCoordinate(current.toLat, current.toLon)) {
+            result += NavigationKeyStopDeadline(
+                stopId = current.toStopId,
+                stopName = current.toStopName,
+                lat = current.toLat,
+                lon = current.toLon,
+                deadlineSeconds = next.departureTime,
+                type = NavigationKeyStopType.TRANSFER
+            )
+        }
+    }
+
+    val lastLeg = nonWalkingLegs.last()
+    if (isValidJourneyCoordinate(lastLeg.toLat, lastLeg.toLon)) {
+        result += NavigationKeyStopDeadline(
+            stopId = lastLeg.toStopId,
+            stopName = lastLeg.toStopName,
+            lat = lastLeg.toLat,
+            lon = lastLeg.toLon,
+            deadlineSeconds = lastLeg.arrivalTime,
+            type = NavigationKeyStopType.TERMINUS
+        )
+    }
+
+    return result
+}
+
+private fun findOverdueNavigationKeyStop(
+    journey: JourneyResult,
+    userLocation: LatLng?,
+    nowSeconds: Int,
+    maxDistanceMeters: Double = NAV_ALERT_APPROACH_DISTANCE_METERS,
+    overdueThresholdSeconds: Int = LATE_TRANSFER_RECALC_THRESHOLD_SECONDS
+): NavigationKeyStopDeadline? {
+    val location = userLocation ?: return null
+    val keyStops = buildNavigationKeyStopDeadlines(journey)
+    if (keyStops.isEmpty()) return null
+
+    val nearest = keyStops.minByOrNull { stop ->
+        distanceMeters(
+            lat1 = location.latitude,
+            lon1 = location.longitude,
+            lat2 = stop.lat,
+            lon2 = stop.lon
+        )
+    } ?: return null
+
+    val nearestDistance = distanceMeters(
+        lat1 = location.latitude,
+        lon1 = location.longitude,
+        lat2 = nearest.lat,
+        lon2 = nearest.lon
+    )
+    if (nearestDistance > maxDistanceMeters) return null
+
+    val reference = journey.departureTime
+    val nowNormalized = normalizeTimeAroundReference(nowSeconds, reference)
+    var deadlineNormalized = normalizeTimeAroundReference(nearest.deadlineSeconds, reference)
+    while (deadlineNormalized < nowNormalized - 12 * 3600) {
+        deadlineNormalized += 24 * 3600
+    }
+
+    return if (nowNormalized >= deadlineNormalized + overdueThresholdSeconds) {
+        nearest
+    } else {
+        null
+    }
+}
+
 private fun computeRemainingStopsOnLeg(
     leg: JourneyLeg,
     userLocation: LatLng?
@@ -2790,11 +2894,15 @@ fun PlanScreen(
             var navigationAlertSessionKey by remember { mutableStateOf<String?>(null) }
             var cachedJourneyAlerts by remember { mutableStateOf<UserStopAlertsResponse>(emptyMap()) }
             var isJourneyAlertsLoaded by remember { mutableStateOf(false) }
+            var showRecalculatedJourneyChoice by remember { mutableStateOf(false) }
+            var recalculatedJourneyChoices by remember { mutableStateOf<List<JourneyResult>>(emptyList()) }
 
             LaunchedEffect(isNavigationMode, selectedItineraryJourney) {
                 if (!isNavigationMode) {
                     cachedJourneyAlerts = emptyMap()
                     isJourneyAlertsLoaded = false
+                    showRecalculatedJourneyChoice = false
+                    recalculatedJourneyChoices = emptyList()
                     return@LaunchedEffect
                 }
 
@@ -2808,6 +2916,8 @@ fun PlanScreen(
                     currentAlertPrompt = null
                     isSubmittingNavigationAlert = false
                     isJourneyAlertsLoaded = false
+                    showRecalculatedJourneyChoice = false
+                    recalculatedJourneyChoices = emptyList()
                 }
 
                 if (isJourneyAlertsLoaded) return@LaunchedEffect
@@ -2836,6 +2946,8 @@ fun PlanScreen(
                     navigationAlertSessionKey = null
                     cachedJourneyAlerts = emptyMap()
                     isJourneyAlertsLoaded = false
+                    showRecalculatedJourneyChoice = false
+                    recalculatedJourneyChoices = emptyList()
                     return@LaunchedEffect
                 }
                 val journey = selectedItineraryJourney ?: return@LaunchedEffect
@@ -2848,6 +2960,8 @@ fun PlanScreen(
                     currentAlertPrompt = null
                     isSubmittingNavigationAlert = false
                     isJourneyAlertsLoaded = false
+                    showRecalculatedJourneyChoice = false
+                    recalculatedJourneyChoices = emptyList()
                 }
                 if (!isJourneyAlertsLoaded) return@LaunchedEffect
                 val alerts = cachedJourneyAlerts
@@ -2884,40 +2998,24 @@ fun PlanScreen(
                     return@LaunchedEffect
                 }
 
-                val (currentLegForRecalc, nextLegForRecalc) =
-                    getCurrentAndNextNavigationLeg(journey, navigationNowSeconds, userLocation)
-                if (currentLegForRecalc == null || nextLegForRecalc == null) return@LaunchedEffect
-
-                val reference = journey.departureTime
-                val nowNormalized = normalizeTimeAroundReference(navigationNowSeconds, reference)
-                var nextDepartureNormalized =
-                    normalizeTimeAroundReference(nextLegForRecalc.departureTime, reference)
-                while (nextDepartureNormalized < nowNormalized - 12 * 3600) {
-                    nextDepartureNormalized += 24 * 3600
-                }
-                val isAtTransferStop = isAtCurrentLegTransferStop(
+                val overdueKeyStop = findOverdueNavigationKeyStop(
                     journey = journey,
-                    currentLeg = currentLegForRecalc,
-                    userLocation = userLocation
+                    userLocation = userLocation,
+                    nowSeconds = navigationNowSeconds
                 )
-                val isTooLateForCorrespondence =
-                    nowNormalized >= nextDepartureNormalized + LATE_TRANSFER_RECALC_THRESHOLD_SECONDS
-                if (!isAtTransferStop || !isTooLateForCorrespondence || isLateTransferRecalculating) {
+                if (overdueKeyStop == null || isLateTransferRecalculating) {
                     return@LaunchedEffect
                 }
 
                 val recalcKey =
-                    "${journey.departureTime}_${journey.arrivalTime}_${currentLegForRecalc.toStopId}_${nextLegForRecalc.departureTime}"
+                    "${journey.departureTime}_${journey.arrivalTime}_${overdueKeyStop.stopId}_${overdueKeyStop.deadlineSeconds}_${overdueKeyStop.type}"
                 if (lastLateTransferRecalcKey == recalcKey) return@LaunchedEffect
 
                 lastLateTransferRecalcKey = recalcKey
                 isLateTransferRecalculating = true
                 try {
-                    if (currentLegForRecalc.toStopName.isBlank()) {
-                        return@LaunchedEffect
-                    }
-
-                    val departureIds = currentLegForRecalc.toStopId.toIntOrNull()?.let { listOf(it) } ?: emptyList()
+                    val departureIds =
+                        overdueKeyStop.stopId.toIntOrNull()?.let { listOf(it) } ?: emptyList()
                     if (departureIds.isEmpty()) return@LaunchedEffect
 
                     val destinationName =
@@ -2946,20 +3044,68 @@ fun PlanScreen(
                         )
                     }
 
-                    if (recalculatedJourneys.isNotEmpty()) {
-                        val fastestJourney = recalculatedJourneys.minByOrNull { it.arrivalTime }
-                        if (fastestJourney != null) {
+                    when {
+                        recalculatedJourneys.isEmpty() -> {
+                            requestedSheetValueForNextContent = SheetValue.Expanded
+                            sheetContentState = SheetContentState.ITINERARY
+                        }
+
+                        recalculatedJourneys.size == 1 -> {
                             itineraryJourneys = recalculatedJourneys
                             itineraryResultsVersion++
-                            selectedItineraryJourney = fastestJourney
+                            selectedItineraryJourney = recalculatedJourneys.first()
+                            showRecalculatedJourneyChoice = false
+                            recalculatedJourneyChoices = emptyList()
                         }
-                    } else {
-                        requestedSheetValueForNextContent = SheetValue.Expanded
-                        sheetContentState = SheetContentState.ITINERARY
+
+                        else -> {
+                            recalculatedJourneyChoices = recalculatedJourneys
+                            showRecalculatedJourneyChoice = true
+                        }
                     }
                 } finally {
                     isLateTransferRecalculating = false
                 }
+            }
+
+            if (showRecalculatedJourneyChoice && recalculatedJourneyChoices.isNotEmpty()) {
+                AlertDialog(
+                    onDismissRequest = {
+                        showRecalculatedJourneyChoice = false
+                        recalculatedJourneyChoices = emptyList()
+                    },
+                    title = {
+                        Text("Plusieurs itinéraires disponibles")
+                    },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            recalculatedJourneyChoices.forEachIndexed { index, option ->
+                                TextButton(
+                                    onClick = {
+                                        itineraryJourneys = recalculatedJourneyChoices
+                                        itineraryResultsVersion++
+                                        selectedItineraryJourney = option
+                                        showRecalculatedJourneyChoice = false
+                                        recalculatedJourneyChoices = emptyList()
+                                    }
+                                ) {
+                                    Text(
+                                        text = "${index + 1}. ${option.formatDepartureTime()} → ${option.formatArrivalTime()} (${option.durationMinutes} min)"
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {},
+                    dismissButton = {
+                        TextButton(onClick = {
+                            showRecalculatedJourneyChoice = false
+                            recalculatedJourneyChoices = emptyList()
+                        }) {
+                            Text("Garder l'actuel")
+                        }
+                    }
+                )
             }
 
             MapLibreView(
