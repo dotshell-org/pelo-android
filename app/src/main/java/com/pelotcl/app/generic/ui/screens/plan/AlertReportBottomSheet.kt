@@ -89,14 +89,7 @@ import com.pelotcl.app.generic.ui.theme.Yellow500
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.utils.transport.BusIconHelper
 import com.pelotcl.app.utils.transport.LineColorHelper
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
 
 enum class AlertType(val id: String, val label: String, val icon: ImageVector, val color: Color, val isStop: Boolean, val isLine: Boolean) {
     // STOP_ALERT_TYPES=closure,delay,elevator,crowding,works,strike,fire
@@ -261,18 +254,24 @@ fun AlertReportBottomSheet(
                             onClick = {
                                 android.util.Log.i("AlertReportBS", "Alert clicked: ${alertType.id}")
                                 scope.launch {
-                                    sendAlert(
-                                        context = context,
-                                        alertType = alertType,
+                                    val result = submitUserAlert(
+                                        alertTypeId = alertType.id,
                                         stopId = selectedStop?.stopId,
-                                        stopName = selectedStop?.stopName,
-                                        lineId = selectedLine?.lineName,
-                                        onSuccess = { onDismiss() },
-                                        onError = { message ->
-                                            errorMessage = message
-                                            showErrorDialog = true
-                                        }
+                                        stopNameFallback = selectedStop?.stopName,
+                                        lineId = selectedLine?.lineName
                                     )
+                                    if (result.isSuccess) {
+                                        Toast.makeText(
+                                            context,
+                                            "Alerte envoyée avec succès",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                        onDismiss()
+                                    } else {
+                                        errorMessage = result.errorMessage
+                                            ?: "Une erreur est survenue. Veuillez réessayer."
+                                        showErrorDialog = true
+                                    }
                                 }
                             }
                         )
@@ -380,69 +379,5 @@ fun AlertButton(
             softWrap = false,
             overflow = TextOverflow.Visible
         )
-    }
-}
-
-private val sharedHttpClient = OkHttpClient()
-
-private suspend fun sendAlert(
-    context: android.content.Context,
-    alertType: AlertType,
-    stopId: Int?,
-    stopName: String?,
-    lineId: String?,
-    onSuccess: () -> Unit,
-    onError: (String) -> Unit
-) {
-    withContext(Dispatchers.IO) {
-        try {
-            val url = "https://api.dotshell.eu/pelo/v1/app/users-alerts"
-            
-            val json = JSONObject().apply {
-                put("type", alertType.id)
-                if (stopName != null) put("stopId", stopName)
-                if (lineId != null) put("lineId", lineId)
-            }
-            
-            val body = json.toString().toRequestBody("application/json".toMediaType())
-            val request = Request.Builder()
-                .url(url)
-                .post(body)
-                .build()
-                
-            sharedHttpClient.newCall(request).execute().use { response ->
-                withContext(Dispatchers.Main) {
-                    when (response.code) {
-                        201 -> {
-                            // Success - show toast
-                            Toast.makeText(context, "Alerte envoyée avec succès", Toast.LENGTH_SHORT).show()
-                            onSuccess()
-                        }
-                        400 -> {
-                            // Fake success when sending two times the same alert
-                            Toast.makeText(context, "Alerte envoyée avec succès", Toast.LENGTH_SHORT).show()
-                            onSuccess()
-                        }
-                        404 -> {
-                            // Stop or line not found
-                            onError("L'arrêt ou la ligne sélectionnée n'a pas été trouvée.")
-                        }
-                        500 -> {
-                            // Database connection failed
-                            onError("Erreur serveur. Veuillez réessayer plus tard.")
-                        }
-                        else -> {
-                            // Other errors
-                            onError("Une erreur est survenue (code: ${response.code}). Veuillez réessayer.")
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            withContext(Dispatchers.Main) {
-                onError("Erreur de connexion. Veuillez vérifier votre connexion internet.")
-            }
-            e.printStackTrace()
-        }
     }
 }

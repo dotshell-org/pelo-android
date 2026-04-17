@@ -11,6 +11,7 @@ import android.graphics.RectF
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -57,6 +58,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.outlined.AddLocationAlt
 import androidx.compose.material3.BottomSheetScaffold
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -70,6 +72,7 @@ import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -121,6 +124,7 @@ import com.pelotcl.app.generic.data.model.Feature
 import com.pelotcl.app.generic.data.model.StopFeature
 import com.pelotcl.app.generic.data.model.StopGeometry
 import com.pelotcl.app.generic.data.model.StopProperties
+import com.pelotcl.app.generic.data.model.UserStopAlertsResponse
 import com.pelotcl.app.generic.data.repository.itinerary.JourneyLeg
 import com.pelotcl.app.generic.data.repository.itinerary.JourneyResult
 import com.pelotcl.app.generic.data.repository.offline.MapStyleRepository
@@ -184,6 +188,8 @@ private const val WALKING_MAX_SPEED_MPS = 2.5
 private const val LONG_TRANSFER_THRESHOLD_SECONDS = 10 * 60
 private const val LATE_TRANSFER_RECALC_THRESHOLD_SECONDS = 3 * 60
 private const val AUTO_RECALC_MAX_STOP_IDS = 64
+private const val NAV_ALERT_APPROACH_DISTANCE_METERS = 140.0
+private const val NAV_ALERT_APPROACH_TIME_SECONDS = 3 * 60
 
 private fun currentTimeInSeconds(): Int {
     val calendar = Calendar.getInstance()
@@ -414,6 +420,113 @@ private fun isAtCurrentLegTransferStop(
     val currentLegIndex = nonWalkingLegs.indexOfFirst { leg -> isSameJourneyLeg(leg, currentLeg) }
     if (currentLegIndex == -1 || currentLegIndex >= nonWalkingLegs.lastIndex) return false
     return nearestStop.legIndex == currentLegIndex && nearestStop.isLegEnd
+}
+
+private fun findApproachingAlertStop(
+    journey: JourneyResult,
+    currentLeg: JourneyLeg,
+    nextLeg: JourneyLeg,
+    userLocation: LatLng?,
+    nowSeconds: Int
+): JourneyLeg? {
+    val candidateLegs = listOf(currentLeg, nextLeg)
+    val nearestByDistance = userLocation?.let { location ->
+        candidateLegs
+            .minByOrNull { leg ->
+                distanceMeters(
+                    lat1 = location.latitude,
+                    lon1 = location.longitude,
+                    lat2 = leg.toLat,
+                    lon2 = leg.toLon
+                )
+            }
+            ?.takeIf { leg ->
+                distanceMeters(
+                    lat1 = location.latitude,
+                    lon1 = location.longitude,
+                    lat2 = leg.toLat,
+                    lon2 = leg.toLon
+                ) <= NAV_ALERT_APPROACH_DISTANCE_METERS
+            }
+    }
+
+    val reference = journey.departureTime
+    val nowNormalized = normalizeTimeAroundReference(nowSeconds, reference)
+    val nearestByTime = candidateLegs
+        .minByOrNull { leg ->
+            kotlin.math.abs(
+                normalizeTimeAroundReference(leg.arrivalTime, reference) - nowNormalized
+            )
+        }
+        ?.takeIf { leg ->
+            kotlin.math.abs(
+                normalizeTimeAroundReference(leg.arrivalTime, reference) - nowNormalized
+            ) <= NAV_ALERT_APPROACH_TIME_SECONDS
+        }
+
+    return when {
+        isAtCurrentLegTransferStop(journey, currentLeg, userLocation) -> currentLeg
+        nearestByDistance != null -> nearestByDistance
+        nearestByTime != null -> nearestByTime
+        else -> null
+    }
+}
+
+private fun buildJourneyAlertSessionKey(journey: JourneyResult): String = buildString {
+    append(journey.departureTime)
+    append('_')
+    append(journey.arrivalTime)
+    append('_')
+    append(journey.legs.joinToString(separator = "|") { leg ->
+        "${leg.fromStopId}>${leg.toStopId}>${leg.departureTime}>${leg.arrivalTime}>${leg.routeName ?: ""}"
+    })
+}
+
+private enum class NavigationAlertPromptKind {
+    LOW_KARMA_CONFIRM,
+    HIGH_KARMA_STILL_THERE
+}
+
+private data class NavigationAlertPrompt(
+    val kind: NavigationAlertPromptKind,
+    val alertTypeId: String
+)
+
+private fun buildNavigationAlertPrompt(
+    alerts: UserStopAlertsResponse,
+    stopId: String?
+): NavigationAlertPrompt? {
+    val status = stopId?.let(alerts::get) ?: return null
+
+    val highKarmaAlert = status.karmaAtOrAboveThreshold.maxByOrNull { it.karma }
+    if (highKarmaAlert != null) {
+        return NavigationAlertPrompt(
+            kind = NavigationAlertPromptKind.HIGH_KARMA_STILL_THERE,
+            alertTypeId = highKarmaAlert.type.ifBlank { AlertType.CROWDING.id }
+        )
+    }
+
+    val lowKarmaAlert = status.karmaBelowThreshold.maxByOrNull { it.karma }
+    if (lowKarmaAlert != null) {
+        return NavigationAlertPrompt(
+            kind = NavigationAlertPromptKind.LOW_KARMA_CONFIRM,
+            alertTypeId = lowKarmaAlert.type.ifBlank { AlertType.CROWDING.id }
+        )
+    }
+
+    return null
+}
+
+private fun findAlertTypeLabel(alertTypeId: String): String {
+    return AlertType.entries.firstOrNull { it.id == alertTypeId }?.label ?: "Cette alerte"
+}
+
+private fun buildNavigationAlertQuestion(prompt: NavigationAlertPrompt): String {
+    val alertLabel = findAlertTypeLabel(prompt.alertTypeId)
+    return when (prompt.kind) {
+        NavigationAlertPromptKind.LOW_KARMA_CONFIRM -> "$alertLabel bien là ?"
+        NavigationAlertPromptKind.HIGH_KARMA_STILL_THERE -> "$alertLabel toujours là ?"
+    }
 }
 
 private fun computeRemainingStopsOnLeg(
@@ -2669,6 +2782,43 @@ fun PlanScreen(
                 }
             }
 
+            var showAlertDialog by remember { mutableStateOf(false) }
+            var currentAlertStop by remember { mutableStateOf<JourneyLeg?>(null) }
+            var currentAlertPrompt by remember { mutableStateOf<NavigationAlertPrompt?>(null) }
+            var isSubmittingNavigationAlert by remember { mutableStateOf(false) }
+            var answeredAlertStopsInSession by remember { mutableStateOf<Set<String>>(emptySet()) }
+            var navigationAlertSessionKey by remember { mutableStateOf<String?>(null) }
+            var cachedJourneyAlerts by remember { mutableStateOf<UserStopAlertsResponse>(emptyMap()) }
+            var isJourneyAlertsLoaded by remember { mutableStateOf(false) }
+
+            LaunchedEffect(isNavigationMode, selectedItineraryJourney) {
+                if (!isNavigationMode) {
+                    cachedJourneyAlerts = emptyMap()
+                    isJourneyAlertsLoaded = false
+                    return@LaunchedEffect
+                }
+
+                val journey = selectedItineraryJourney ?: return@LaunchedEffect
+                val journeySessionKey = buildJourneyAlertSessionKey(journey)
+                if (navigationAlertSessionKey != journeySessionKey) {
+                    navigationAlertSessionKey = journeySessionKey
+                    answeredAlertStopsInSession = emptySet()
+                    showAlertDialog = false
+                    currentAlertStop = null
+                    currentAlertPrompt = null
+                    isSubmittingNavigationAlert = false
+                    isJourneyAlertsLoaded = false
+                }
+
+                if (isJourneyAlertsLoaded) return@LaunchedEffect
+
+                val allStopIds = journey.legs
+                    .flatMap { leg -> listOf(leg.fromStopId, leg.toStopId) }
+                    .distinct()
+                cachedJourneyAlerts = viewModel.userStopAlertsRepository.getUserStopAlerts(allStopIds)
+                isJourneyAlertsLoaded = true
+            }
+
             LaunchedEffect(
                 isNavigationMode,
                 selectedItineraryJourney,
@@ -2678,9 +2828,54 @@ fun PlanScreen(
                 if (!isNavigationMode) {
                     lastLateTransferRecalcKey = null
                     isLateTransferRecalculating = false
+                    showAlertDialog = false
+                    currentAlertStop = null
+                    currentAlertPrompt = null
+                    isSubmittingNavigationAlert = false
+                    answeredAlertStopsInSession = emptySet()
+                    navigationAlertSessionKey = null
+                    cachedJourneyAlerts = emptyMap()
+                    isJourneyAlertsLoaded = false
                     return@LaunchedEffect
                 }
                 val journey = selectedItineraryJourney ?: return@LaunchedEffect
+                val journeySessionKey = buildJourneyAlertSessionKey(journey)
+                if (navigationAlertSessionKey != journeySessionKey) {
+                    navigationAlertSessionKey = journeySessionKey
+                    answeredAlertStopsInSession = emptySet()
+                    showAlertDialog = false
+                    currentAlertStop = null
+                    currentAlertPrompt = null
+                    isSubmittingNavigationAlert = false
+                    isJourneyAlertsLoaded = false
+                }
+                if (!isJourneyAlertsLoaded) return@LaunchedEffect
+                val alerts = cachedJourneyAlerts
+
+                val (currentLeg, nextLeg) =
+                    getCurrentAndNextNavigationLeg(journey, navigationNowSeconds, userLocation)
+                if (currentLeg == null || nextLeg == null) return@LaunchedEffect
+
+                val approachingStop = findApproachingAlertStop(
+                    journey = journey,
+                    currentLeg = currentLeg,
+                    nextLeg = nextLeg,
+                    userLocation = userLocation,
+                    nowSeconds = navigationNowSeconds
+                )
+
+                if (approachingStop != null &&
+                    alerts.containsKey(approachingStop.toStopId) &&
+                    approachingStop.toStopId !in answeredAlertStopsInSession
+                ) {
+                    currentAlertPrompt = buildNavigationAlertPrompt(
+                        alerts = alerts,
+                        stopId = approachingStop.toStopId
+                    )
+                    if (currentAlertPrompt == null) return@LaunchedEffect
+                    currentAlertStop = approachingStop
+                    showAlertDialog = true
+                }
                 val remainingSeconds = computeRemainingJourneySeconds(journey, navigationNowSeconds)
                 val atTerminus = isNearestJourneyStopTerminus(journey, userLocation)
                 if (remainingSeconds < 60 && atTerminus) {
@@ -2689,20 +2884,20 @@ fun PlanScreen(
                     return@LaunchedEffect
                 }
 
-                val (currentLeg, nextLeg) =
+                val (currentLegForRecalc, nextLegForRecalc) =
                     getCurrentAndNextNavigationLeg(journey, navigationNowSeconds, userLocation)
-                if (currentLeg == null || nextLeg == null) return@LaunchedEffect
+                if (currentLegForRecalc == null || nextLegForRecalc == null) return@LaunchedEffect
 
                 val reference = journey.departureTime
                 val nowNormalized = normalizeTimeAroundReference(navigationNowSeconds, reference)
                 var nextDepartureNormalized =
-                    normalizeTimeAroundReference(nextLeg.departureTime, reference)
+                    normalizeTimeAroundReference(nextLegForRecalc.departureTime, reference)
                 while (nextDepartureNormalized < nowNormalized - 12 * 3600) {
                     nextDepartureNormalized += 24 * 3600
                 }
                 val isAtTransferStop = isAtCurrentLegTransferStop(
                     journey = journey,
-                    currentLeg = currentLeg,
+                    currentLeg = currentLegForRecalc,
                     userLocation = userLocation
                 )
                 val isTooLateForCorrespondence =
@@ -2712,16 +2907,17 @@ fun PlanScreen(
                 }
 
                 val recalcKey =
-                    "${journey.departureTime}_${journey.arrivalTime}_${currentLeg.toStopId}_${nextLeg.departureTime}"
+                    "${journey.departureTime}_${journey.arrivalTime}_${currentLegForRecalc.toStopId}_${nextLegForRecalc.departureTime}"
                 if (lastLateTransferRecalcKey == recalcKey) return@LaunchedEffect
 
                 lastLateTransferRecalcKey = recalcKey
                 isLateTransferRecalculating = true
                 try {
-                    val transferStopName = currentLeg.toStopName.takeIf { it.isNotBlank() }
-                        ?: return@LaunchedEffect
+                    if (currentLegForRecalc.toStopName.isBlank()) {
+                        return@LaunchedEffect
+                    }
 
-                    val departureIds = currentLeg.toStopId.toIntOrNull()?.let { listOf(it) } ?: emptyList()
+                    val departureIds = currentLegForRecalc.toStopId.toIntOrNull()?.let { listOf(it) } ?: emptyList()
                     if (departureIds.isEmpty()) return@LaunchedEffect
 
                     val destinationName =
@@ -2804,6 +3000,81 @@ fun PlanScreen(
                         color = Color(0xFF3B82F6)
                     )
                 }
+            }
+
+            // Navigation alert validation dialog (progressive, per-stop)
+            if (showAlertDialog && currentAlertStop != null && currentAlertPrompt != null) {
+                AlertDialog(
+                    onDismissRequest = {
+                        currentAlertStop?.toStopId?.let { stopId ->
+                            answeredAlertStopsInSession = answeredAlertStopsInSession + stopId
+                        }
+                        isSubmittingNavigationAlert = false
+                        currentAlertPrompt = null
+                        showAlertDialog = false
+                    },
+                    title = {
+                        Text(text = "Alerte à ${currentAlertStop?.toStopName}")
+                    },
+                    text = {
+                        val prompt = currentAlertPrompt
+                        val message = prompt?.let(::buildNavigationAlertQuestion)
+                            ?: "Confirmez-vous cette alerte ?"
+                        Text(message)
+                    },
+                    confirmButton = {
+                        Button(
+                            enabled = !isSubmittingNavigationAlert,
+                            onClick = {
+                                val stop = currentAlertStop ?: return@Button
+                                val prompt = currentAlertPrompt ?: return@Button
+                                if (isSubmittingNavigationAlert) return@Button
+                                isSubmittingNavigationAlert = true
+                                scope.launch {
+                                    val result = submitUserAlert(
+                                        alertTypeId = prompt.alertTypeId,
+                                        stopId = stop.toStopId.toIntOrNull(),
+                                        stopNameFallback = stop.toStopName,
+                                        lineId = null
+                                    )
+                                    if (result.isSuccess) {
+                                        Toast.makeText(
+                                            context,
+                                            "Alerte envoyée avec succès",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    } else {
+                                        Toast.makeText(
+                                            context,
+                                            result.errorMessage
+                                                ?: "Erreur lors de l'envoi de l'alerte",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                    answeredAlertStopsInSession =
+                                        answeredAlertStopsInSession + stop.toStopId
+                                    currentAlertPrompt = null
+                                    showAlertDialog = false
+                                    isSubmittingNavigationAlert = false
+                                }
+                            }
+                        ) {
+                            Text("Oui")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            currentAlertStop?.toStopId?.let { stopId ->
+                                answeredAlertStopsInSession = answeredAlertStopsInSession + stopId
+                            }
+                            isSubmittingNavigationAlert = false
+                            currentAlertPrompt = null
+                            showAlertDialog = false
+                        }) {
+                            Text("Non")
+                        }
+                    }
+                )
             }
 
             // Recenter button
