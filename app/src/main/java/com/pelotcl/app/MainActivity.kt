@@ -19,10 +19,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Map
-import androidx.compose.material.icons.filled.Route
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarDefaults
@@ -44,7 +40,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -78,11 +73,12 @@ import com.pelotcl.app.generic.ui.theme.AccentColor
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.generic.ui.viewmodel.TransportStopsUiState
 import com.pelotcl.app.generic.data.repository.offline.SchedulesRepository
+import com.pelotcl.app.generic.ui.screens.Destination
 import com.pelotcl.app.generic.ui.theme.PrimaryColor
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.specific.data.cache.TransportCacheImpl
-import com.pelotcl.app.utils.transport.BusIconHelper
-import com.pelotcl.app.utils.LocationHelper
+import com.pelotcl.app.generic.utils.BusIconHelper
+import com.pelotcl.app.generic.utils.LocationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -268,42 +264,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Destination(
-    val route: String,
-    val label: String,
-    val icon: ImageVector,
-    val contentDescription: String
-) {
-    PLAN(
-        route = "plan",
-        label = "Plan",
-        icon = Icons.Filled.Map,
-        contentDescription = "Plan Tab"
-    ),
-    LIGNES(
-        route = "lines",
-        label = "Lignes",
-        icon = Icons.Filled.Route,
-        contentDescription = "Lines Tab"
-    ),
-    PARAMETRES(
-        route = "settings",
-        label = "Paramètres",
-        icon = Icons.Filled.Settings,
-        contentDescription = "Settings Tab"
-    );
-
-    companion object {
-        const val ABOUT = "about"
-        const val LEGAL = "legal"
-        const val CREDITS = "credits"
-        const val CONTACT = "contact"
-        const val ITINERARY_SETTINGS = "itinerary_settings"
-        const val OFFLINE_SETTINGS = "offline_settings"
-        const val API_HEALTH = "api_health"
-    }
-}
-
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -342,7 +302,7 @@ fun NavBar(
     LaunchedEffect(favoriteStops, stopsUiState) {
         val stops = (stopsUiState as? TransportStopsUiState.Success)?.stops
         favoriteStops.map { stopName ->
-            val stop = stops?.find { (it as com.pelotcl.app.generic.data.model.StopFeature).properties.nom.equals(stopName, ignoreCase = true) }
+            val stop = stops?.find { (it as com.pelotcl.app.generic.data.models.StopFeature).properties.nom.equals(stopName, ignoreCase = true) }
             val lines = stop?.let { BusIconHelper.getAllLinesForStop(it) } ?: emptyList()
             SearchHistoryItem(
                 query = stopName,
@@ -436,7 +396,7 @@ fun NavBar(
     DisposableEffect(currentRoute) {
         val activity = context as? ComponentActivity
         val darkBackgroundRoutes = listOf(
-            Destination.PARAMETRES.route,
+            Destination.SETTINGS.route,
             Destination.ABOUT,
             Destination.LEGAL,
             Destination.CREDITS,
@@ -484,7 +444,7 @@ fun NavBar(
                             NavigationBarItem(
                                 selected = selectedDestination == index,
                                 onClick = {
-                                    if (destination == Destination.LIGNES) {
+                                    if (destination == Destination.LINES) {
                                         // Close itinerary when going to Lines
                                         itineraryDestinationStop = null
                                         // Si on n'est pas sur Plan, naviguer vers Plan d'abord
@@ -492,7 +452,7 @@ fun NavBar(
                                             selectedDestination = Destination.PLAN.ordinal
                                         }
                                         showLinesSheet = true
-                                    } else if (destination == Destination.PARAMETRES) {
+                                    } else if (destination == Destination.SETTINGS) {
                                         // Don't close itinerary when going to Settings (preserve state)
                                         // If already on Settings tab, check if we're in a sub-page
                                         val settingsSubRoutes = listOf(
@@ -507,7 +467,7 @@ fun NavBar(
                                         if (currentRoute in settingsSubRoutes) {
                                             // Pop back to Settings root
                                             navController.popBackStack(
-                                                Destination.PARAMETRES.route,
+                                                Destination.SETTINGS.route,
                                                 false
                                             )
                                         } else if (selectedDestination != index) {
@@ -577,7 +537,7 @@ fun NavBar(
                 )
 
                 // Settings screens - displayed on top when on settings tab
-                if (selectedDestination == Destination.PARAMETRES.ordinal) {
+                if (selectedDestination == Destination.SETTINGS.ordinal) {
                     AppNavHost(
                         navController = navController,
                         modifier = Modifier,
@@ -679,7 +639,7 @@ private fun AppNavHost(
 ) {
     NavHost(
         navController = navController,
-        startDestination = Destination.PARAMETRES.route,
+        startDestination = Destination.SETTINGS.route,
         modifier = modifier,
         enterTransition = { EnterTransition.None },
         exitTransition = { ExitTransition.None },
@@ -687,7 +647,7 @@ private fun AppNavHost(
         popExitTransition = { ExitTransition.None }
     ) {
         // Settings screens only - PlanScreen is handled outside NavHost
-        composable(Destination.PARAMETRES.route) {
+        composable(Destination.SETTINGS.route) {
             SettingsScreen(
                 onBackClick = {
                     // Just switch back to Plan tab - no navigation needed since PlanScreen is always mounted

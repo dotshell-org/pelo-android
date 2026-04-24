@@ -6,7 +6,7 @@ import android.util.LruCache
 import com.pelotcl.app.generic.data.cache.JourneyCache
 import com.pelotcl.app.generic.ui.components.search.LineSearchResult
 import com.pelotcl.app.specific.utils.TransportTypeUtils
-import com.pelotcl.app.utils.SearchUtils
+import com.pelotcl.app.generic.utils.SearchUtils
 import io.raptor.PeriodData
 import io.raptor.RaptorLibrary
 import io.raptor.data.NetworkLoader
@@ -16,7 +16,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.BufferedInputStream
 import java.time.LocalDate
@@ -1090,156 +1089,3 @@ class RaptorRepository private constructor(private val context: Context) {
         return if (dessertes.isEmpty()) null else dessertes.joinToString(",")
     }
 }
-
-/**
- * Data class representing a stop from Raptor
- */
-data class RaptorStop(
-    val id: Int,
-    val name: String,
-    val lat: Double = 0.0,
-    val lon: Double = 0.0
-)
-
-/**
- * Data class for stop with coordinates (used for coordinate-based matching)
- */
-data class RaptorStopWithCoords(
-    val id: Int,
-    val name: String,
-    val lat: Double,
-    val lon: Double
-)
-
-/**
- * Data class representing a journey result
- */
-data class JourneyResult(
-    val departureTime: Int, // in seconds from midnight
-    val arrivalTime: Int,   // in seconds from midnight
-    val legs: List<JourneyLeg>
-) {
-    val durationMinutes: Int
-        get() = (arrivalTime - departureTime) / 60
-
-    fun formatDepartureTime(): String = formatTime(departureTime)
-    fun formatArrivalTime(): String = formatTime(arrivalTime)
-
-    private fun formatTime(seconds: Int): String {
-        val hours = seconds / 3600
-        val minutes = (seconds % 3600) / 60
-        return String.format(java.util.Locale.ROOT, "%02d:%02d", hours, minutes)
-    }
-
-    /**
-     * Extract all stop IDs from this journey (used for alert checking)
-     */
-    fun getAllStopIds(): Set<String> {
-        val stopIds = mutableSetOf<String>()
-        for (leg in legs) {
-            if (!leg.isWalking) {
-                stopIds.add(leg.fromStopId)
-                stopIds.add(leg.toStopId)
-                leg.intermediateStops.forEach { stop ->
-                    // Try to extract stop ID from intermediate stop name if available
-                    stopIds.add(stop.stopName)
-                }
-            }
-        }
-        return stopIds
-    }
-
-    /**
-     * Check if this journey passes through any of the problematic stops
-     */
-    fun passesThroughProblematicStops(problematicStopIds: Set<String>): Boolean {
-        return getAllStopIds().any { it in problematicStopIds }
-    }
-}
-
-/**
- * Data class representing an intermediate stop
- */
-data class IntermediateStop(
-    val stopName: String,
-    val arrivalTime: Int,
-    val lat: Double = 0.0,
-    val lon: Double = 0.0
-) {
-    fun formatArrivalTime(): String {
-        val hours = arrivalTime / 3600
-        val minutes = (arrivalTime % 3600) / 60
-        return String.format(java.util.Locale.ROOT, "%02d:%02d", hours, minutes)
-    }
-}
-
-/**
- * Data class representing a leg of a journey
- */
-data class JourneyLeg(
-    val fromStopId: String,
-    val fromStopName: String,
-    val fromLat: Double,
-    val fromLon: Double,
-    val toStopId: String,
-    val toStopName: String,
-    val toLat: Double,
-    val toLon: Double,
-    val departureTime: Int,
-    val arrivalTime: Int,
-    val routeName: String?,
-    val routeColor: String?,
-    val isWalking: Boolean,
-    val direction: String? = null,
-    val intermediateStops: List<IntermediateStop> = emptyList()
-) {
-    val durationMinutes: Int
-        get() = (arrivalTime - departureTime) / 60
-
-    fun formatDepartureTime(): String = formatTime(departureTime)
-    fun formatArrivalTime(): String = formatTime(arrivalTime)
-
-    private fun formatTime(seconds: Int): String {
-        val hours = seconds / 3600
-        val minutes = (seconds % 3600) / 60
-        return String.format(java.util.Locale.ROOT, "%02d:%02d", hours, minutes)
-    }
-}
-
-/**
- * Data classes for parsing holidays.json
- */
-@Serializable
-private data class HolidaysData(
-    @kotlinx.serialization.SerialName("school_year")
-    val schoolYear: String,
-    val location: HolidayLocation,
-    val holidays: List<HolidayEntry>
-)
-
-@Serializable
-private data class HolidayLocation(
-    val department: String,
-    val academy: String,
-    val zone: String
-)
-
-@Serializable
-private data class HolidayEntry(
-    val name: String,
-    @kotlinx.serialization.SerialName("start_date_inclusive")
-    val startDateInclusive: String,
-    @kotlinx.serialization.SerialName("end_date_inclusive")
-    val endDateInclusive: String?,
-    @kotlinx.serialization.SerialName("school_resumes")
-    val schoolResumes: String
-)
-
-/**
- * Internal representation of a holiday period
- */
-private data class HolidayPeriod(
-    val name: String,
-    val startDate: LocalDate,
-    val endDate: LocalDate
-)

@@ -1,6 +1,6 @@
 package com.pelotcl.app.generic.data.network
 
-import com.pelotcl.app.generic.data.model.TrafficAlertsResponse
+import com.pelotcl.app.generic.data.models.TrafficAlertsResponse
 
 /**
  * Service interface for traffic alerts

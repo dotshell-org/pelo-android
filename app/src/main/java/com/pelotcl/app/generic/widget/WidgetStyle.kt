@@ -3,11 +3,6 @@ package com.pelotcl.app.generic.widget
 import android.appwidget.AppWidgetManager
 import android.content.Context
 
-enum class TimeDisplayMode {
-    MINUTES,
-    CLOCK
-}
-
 enum class WidgetStyle(
     val id: Int,
     val timeDisplayMode: TimeDisplayMode

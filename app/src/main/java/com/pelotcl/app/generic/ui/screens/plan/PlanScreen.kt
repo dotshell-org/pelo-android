@@ -49,14 +49,12 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddLocationAlt
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.SwapVert
-import androidx.compose.material.icons.outlined.AddLocationAlt
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -120,11 +118,11 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.pelotcl.app.R
-import com.pelotcl.app.generic.data.model.Feature
-import com.pelotcl.app.generic.data.model.StopFeature
-import com.pelotcl.app.generic.data.model.StopGeometry
-import com.pelotcl.app.generic.data.model.StopProperties
-import com.pelotcl.app.generic.data.model.UserStopAlertsResponse
+import com.pelotcl.app.generic.data.models.Feature
+import com.pelotcl.app.generic.data.models.StopFeature
+import com.pelotcl.app.generic.data.models.StopGeometry
+import com.pelotcl.app.generic.data.models.StopProperties
+import com.pelotcl.app.generic.data.models.UserStopAlertsResponse
 import com.pelotcl.app.generic.data.repository.itinerary.JourneyLeg
 import com.pelotcl.app.generic.data.repository.itinerary.JourneyResult
 import com.pelotcl.app.generic.data.repository.offline.MapStyleRepository
@@ -145,10 +143,10 @@ import com.pelotcl.app.generic.ui.theme.Yellow500
 import com.pelotcl.app.generic.ui.viewmodel.TransportLinesUiState
 import com.pelotcl.app.generic.ui.viewmodel.TransportStopsUiState
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
-import com.pelotcl.app.utils.transport.BusIconHelper
-import com.pelotcl.app.utils.transport.LineColorHelper
-import com.pelotcl.app.utils.LocationHelper.startLocationUpdates
-import com.pelotcl.app.utils.LocationHelper.stopLocationUpdates
+import com.pelotcl.app.generic.utils.BusIconHelper
+import com.pelotcl.app.specific.utils.LineColorHelper
+import com.pelotcl.app.generic.utils.LocationHelper.startLocationUpdates
+import com.pelotcl.app.generic.utils.LocationHelper.stopLocationUpdates
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -342,19 +340,6 @@ private fun computeTransferWaitSeconds(
     return (nextDepartureNormalized - currentArrivalNormalized).coerceAtLeast(0)
 }
 
-private data class LegStopPosition(
-    val index: Int,
-    val lat: Double,
-    val lon: Double
-)
-
-private data class JourneyStopCandidate(
-    val legIndex: Int,
-    val isLegEnd: Boolean,
-    val lat: Double,
-    val lon: Double
-)
-
 private fun findNearestJourneyStopCandidate(
     journey: JourneyResult,
     userLocation: LatLng?
@@ -482,16 +467,6 @@ private fun buildJourneyAlertSessionKey(journey: JourneyResult): String = buildS
     })
 }
 
-private enum class NavigationAlertPromptKind {
-    LOW_KARMA_CONFIRM,
-    HIGH_KARMA_STILL_THERE
-}
-
-private data class NavigationAlertPrompt(
-    val kind: NavigationAlertPromptKind,
-    val alertTypeId: String
-)
-
 private fun buildNavigationAlertPrompt(
     alerts: UserStopAlertsResponse,
     stopId: String?
@@ -528,21 +503,6 @@ private fun buildNavigationAlertQuestion(prompt: NavigationAlertPrompt): String 
         NavigationAlertPromptKind.HIGH_KARMA_STILL_THERE -> "$alertLabel toujours là ?"
     }
 }
-
-private enum class NavigationKeyStopType {
-    START,
-    TRANSFER,
-    TERMINUS
-}
-
-private data class NavigationKeyStopDeadline(
-    val stopId: String,
-    val stopName: String,
-    val lat: Double,
-    val lon: Double,
-    val deadlineSeconds: Int,
-    val type: NavigationKeyStopType
-)
 
 private fun buildNavigationKeyStopDeadlines(journey: JourneyResult): List<NavigationKeyStopDeadline> {
     val nonWalkingLegs = journey.legs.filterNot { it.isWalking }
@@ -771,7 +731,7 @@ private suspend fun buildNavigationPathPoints(
             )
 
             val sectionGeometry = sectionedLines.firstOrNull()?.geometry
-            val coordinates = (sectionGeometry as? com.pelotcl.app.generic.data.model.Geometry)
+            val coordinates = (sectionGeometry as? com.pelotcl.app.generic.data.models.Geometry)
                 ?.coordinates
                 ?.firstOrNull()
                 .orEmpty()
@@ -911,11 +871,6 @@ private fun isLiveTrackableLine(lineName: String): Boolean {
     }
 }
 
-private enum class VehicleMarkerType {
-    BUS,
-    TRAM
-}
-
 private fun getVehicleMarkerType(lineName: String): VehicleMarkerType {
     val upperName = lineName.uppercase()
     return when {
@@ -1002,38 +957,6 @@ private fun getModeIconForLine(lineName: String): String? {
         else -> "mode_bus"
     }
 }
-
-data class AllSchedulesInfo(
-    val lineName: String,
-    val directionName: String,
-    val schedules: List<String>,
-    val availableDirections: List<Int> = emptyList(),
-    val headsigns: Map<Int, String> = emptyMap()
-)
-
-enum class SheetContentState {
-    STATION,
-    LINE_DETAILS,
-    ALL_SCHEDULES,
-    ITINERARY,
-    NAVIGATION
-}
-
-private enum class ItineraryFieldTarget {
-    DEPARTURE,
-    ARRIVAL
-}
-
-/**
- * Data class to hold map filter state for snapshotFlow.
- * Used to batch state changes and avoid excessive recompositions.
- */
-private data class MapFilterState(
-    val sheetContentState: SheetContentState?,
-    val selectedLine: LineInfo?,
-    val uiState: TransportLinesUiState,
-    val stopsUiState: TransportStopsUiState
-)
 
 @Composable
 private fun mapStyleLabel(style: MapStyleData): String {
@@ -4706,7 +4629,7 @@ private fun drawItinerariesOnMap(
                         if (sectionedLines.isNotEmpty()) {
                             val sectionedLine = sectionedLines.first()
                             val sectionGeometry = sectionedLine.geometry
-                            if (sectionGeometry is com.pelotcl.app.generic.data.model.Geometry) {
+                            if (sectionGeometry is com.pelotcl.app.generic.data.models.Geometry) {
                                 val coordinates = sectionGeometry.coordinates
                                 if (coordinates.isNotEmpty()) {
                                     val firstLine = coordinates.firstOrNull()

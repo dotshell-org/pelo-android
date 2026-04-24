@@ -1,6 +1,6 @@
 package com.pelotcl.app.specific
 
-import com.pelotcl.app.generic.data.model.TrafficAlertsResponse
+import com.pelotcl.app.generic.data.models.TrafficAlertsResponse
 import com.pelotcl.app.generic.data.network.TrafficAlertsService
 import com.pelotcl.app.specific.data.network.LyonTransportApi
 

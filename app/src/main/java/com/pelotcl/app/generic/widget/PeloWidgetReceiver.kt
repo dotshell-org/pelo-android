@@ -24,11 +24,3 @@ abstract class BasePeloWidgetReceiver : GlanceAppWidgetReceiver() {
         }
     }
 }
-
-class PeloWidgetReceiver : BasePeloWidgetReceiver()
-
-class PeloWidgetClockAllLinesReceiver : BasePeloWidgetReceiver()
-
-class PeloWidgetLineMinutesReceiver : BasePeloWidgetReceiver()
-
-class PeloWidgetLineClockReceiver : BasePeloWidgetReceiver()

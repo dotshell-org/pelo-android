@@ -1,0 +1,17 @@
+package com.pelotcl.app.generic.data.offline
+
+/**
+ * Metadata about the offline data download.
+ */
+data class OfflineDataInfo(
+    val isAvailable: Boolean = false,
+    val lastDownloadTimestamp: Long = 0L,
+    val totalSizeBytes: Long = 0L,
+    val mapTilesDownloaded: Boolean = false,
+    val downloadedMapStyles: Set<String> = emptySet(),
+    val busLinesCount: Int = 0
+) {
+    val isStale: Boolean
+        get() = isAvailable && lastDownloadTimestamp > 0L &&
+            (System.currentTimeMillis() - lastDownloadTimestamp) > STALE_THRESHOLD_MS
+}

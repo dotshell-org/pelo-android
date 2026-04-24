@@ -83,7 +83,7 @@
 # Application classes that will be serialized/deserialized over Gson
 # Keep ALL data model classes (generic + specific) — R8 strips field names otherwise,
 # breaking Gson deserialization (fields without @SerializedName get renamed)
--keep class com.pelotcl.app.generic.data.model.** { *; }
+-keep class com.pelotcl.app.generic.data.models.** { *; }
 -keep class com.pelotcl.app.specific.data.model.** { *; }
 
 # Prevent proguard from stripping interface information from TypeAdapter, TypeAdapterFactory,

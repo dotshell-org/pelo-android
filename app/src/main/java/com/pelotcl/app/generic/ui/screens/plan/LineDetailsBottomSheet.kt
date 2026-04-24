@@ -68,9 +68,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.pelotcl.app.generic.data.model.AlertSeverity
-import com.pelotcl.app.generic.data.model.LineStopInfo
-import com.pelotcl.app.generic.data.model.TrafficAlert
+import com.pelotcl.app.generic.data.models.AlertSeverity
+import com.pelotcl.app.generic.data.models.LineStopInfo
+import com.pelotcl.app.generic.data.models.TrafficAlert
 import com.pelotcl.app.generic.ui.theme.Gray700
 import com.pelotcl.app.generic.ui.theme.Green500
 import com.pelotcl.app.generic.ui.theme.Orange500
@@ -79,8 +79,8 @@ import com.pelotcl.app.generic.ui.theme.AccentColor
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.generic.ui.viewmodel.TransportLinesUiState
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
-import com.pelotcl.app.utils.transport.BusIconHelper
-import com.pelotcl.app.utils.transport.LineColorHelper
+import com.pelotcl.app.generic.utils.BusIconHelper
+import com.pelotcl.app.specific.utils.LineColorHelper
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay

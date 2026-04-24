@@ -12,33 +12,6 @@ import androidx.glance.state.PreferencesGlanceStateDefinition
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 
-class WidgetAlarmReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {
-        val appWidgetId = intent.getIntExtra("appWidgetId", -1)
-        if (appWidgetId == -1) return
-
-        val pendingResult = goAsync()
-        MainScope().launch {
-            try {
-                val manager = GlanceAppWidgetManager(context)
-                val glanceId = manager.getGlanceIdBy(appWidgetId)
-                PeloWidget().update(context, glanceId)
-                val prefs = getAppWidgetState(
-                    context,
-                    PreferencesGlanceStateDefinition,
-                    glanceId
-                )
-                val intervalMinutes = getRefreshIntervalMinutes(prefs)
-                WidgetRefreshScheduler.scheduleNext(context, appWidgetId, intervalMinutes)
-            } catch (_: Exception) {
-
-            } finally {
-                pendingResult.finish()
-            }
-        }
-    }
-}
-
 object WidgetRefreshScheduler {
 
     private fun getPendingIntent(context: Context, appWidgetId: Int): PendingIntent {
@@ -99,7 +72,7 @@ object WidgetRefreshScheduler {
     }
 }
 
-private fun getRefreshIntervalMinutes(prefs: androidx.datastore.preferences.core.Preferences): Int {
+internal fun getRefreshIntervalMinutes(prefs: androidx.datastore.preferences.core.Preferences): Int {
     val widgetStyle = WidgetStyle.fromId(prefs[PeloWidget.PREF_WIDGET_STYLE])
     if (widgetStyle != null) {
         return widgetStyle.refreshIntervalMinutes

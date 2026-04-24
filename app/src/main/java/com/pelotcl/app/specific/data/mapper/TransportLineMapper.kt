@@ -1,9 +1,9 @@
 package com.pelotcl.app.specific.data.mapper
 
-import com.pelotcl.app.generic.data.model.Feature
-import com.pelotcl.app.generic.data.model.FeatureCollection
-import com.pelotcl.app.generic.data.model.Geometry
-import com.pelotcl.app.generic.data.model.TransportLineProperties
+import com.pelotcl.app.generic.data.models.Feature
+import com.pelotcl.app.generic.data.models.FeatureCollection
+import com.pelotcl.app.generic.data.models.Geometry
+import com.pelotcl.app.generic.data.models.TransportLineProperties
 import com.pelotcl.app.specific.data.model.LyonFeature
 import com.pelotcl.app.specific.data.model.LyonFeatureCollection
 import com.pelotcl.app.specific.data.model.LyonTransportLineProperties
@@ -71,9 +71,9 @@ object TransportLineMapper {
             numberReturned = collection.numberReturned,
             timeStamp = collection.timeStamp,
             crs = collection.crs?.let {
-                com.pelotcl.app.generic.data.model.CRS(
+                com.pelotcl.app.generic.data.models.CRS(
                     type = it.type,
-                    properties = com.pelotcl.app.generic.data.model.CRSProperties(
+                    properties = com.pelotcl.app.generic.data.models.CRSProperties(
                         name = it.properties.name
                     )
                 )

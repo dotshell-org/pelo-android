@@ -4,9 +4,9 @@ import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.pelotcl.app.generic.data.model.Favorite
-import com.pelotcl.app.generic.data.model.SimpleVehiclePosition
-import com.pelotcl.app.generic.data.model.StopFeature
+import com.pelotcl.app.generic.data.models.Favorite
+import com.pelotcl.app.generic.data.models.SimpleVehiclePosition
+import com.pelotcl.app.generic.data.models.StopFeature
 import com.pelotcl.app.generic.data.network.TransportApi
 import com.pelotcl.app.generic.service.TransportServiceProvider
 import com.pelotcl.app.generic.data.repository.TransportRepository
@@ -17,15 +17,13 @@ import com.pelotcl.app.generic.data.repository.offline.FavoritesRepository
 import com.pelotcl.app.generic.data.repository.offline.SchedulesRepository
 import com.pelotcl.app.generic.data.offline.OfflineDataManager
 import com.pelotcl.app.generic.data.offline.OfflineDataInfo
-import com.pelotcl.app.generic.data.model.LineStopInfo
-import com.pelotcl.app.generic.data.model.TrafficAlert
-import com.pelotcl.app.generic.data.model.AlertSeverity
+import com.pelotcl.app.generic.data.models.LineStopInfo
+import com.pelotcl.app.generic.data.models.TrafficAlert
+import com.pelotcl.app.generic.data.models.AlertSeverity
 import com.pelotcl.app.generic.data.repository.itinerary.RaptorRepository
-import com.pelotcl.app.specific.data.mapper.StopMapper
 import com.pelotcl.app.generic.ui.components.search.LineSearchResult
 import com.pelotcl.app.generic.ui.components.search.StationSearchResult
-import com.pelotcl.app.generic.ui.theme.AccentColor
-import com.pelotcl.app.utils.HolidayDetector
+import com.pelotcl.app.specific.utils.HolidayDetector
 import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -37,12 +35,6 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-
-data class LineSection(
-    val lineName: String,
-    val startStop: String,
-    val endStop: String
-)
 
 /**
  * ViewModel principal pour la gestion des données de transport
@@ -1302,12 +1294,12 @@ class TransportViewModel(private val context: Context) : ViewModel() {
     }
 
     internal fun sectionLinesBetweenStops(
-        lines: List<com.pelotcl.app.generic.data.model.Feature>,
+        lines: List<com.pelotcl.app.generic.data.models.Feature>,
         startStopId: String,
         endStopId: String,
         leg: com.pelotcl.app.generic.data.repository.itinerary.JourneyLeg
-    ): List<com.pelotcl.app.generic.data.model.Feature> {
-        val sectionedLines = mutableListOf<com.pelotcl.app.generic.data.model.Feature>()
+    ): List<com.pelotcl.app.generic.data.models.Feature> {
+        val sectionedLines = mutableListOf<com.pelotcl.app.generic.data.models.Feature>()
 
         val stopsState = stopsUiState.value
         if (stopsState !is TransportStopsUiState.Success) {
@@ -1349,7 +1341,7 @@ class TransportViewModel(private val context: Context) : ViewModel() {
         
         for (line in lines) {
             val lineGeometry = line.geometry
-            if (lineGeometry is com.pelotcl.app.generic.data.model.Geometry) {
+            if (lineGeometry is com.pelotcl.app.generic.data.models.Geometry) {
                 val coordinates = lineGeometry.coordinates
                 val firstLine = coordinates.firstOrNull() ?: continue
                 
@@ -1427,7 +1419,7 @@ class TransportViewModel(private val context: Context) : ViewModel() {
                     
                     if (sectionCoordinates.size > 2) {
                         val sectionedLine = line.copy(
-                            geometry = com.pelotcl.app.generic.data.model.Geometry(
+                            geometry = com.pelotcl.app.generic.data.models.Geometry(
                                 type = line.geometry.type,
                                 coordinates = listOf(sectionCoordinates)
                             )
@@ -1440,41 +1432,4 @@ class TransportViewModel(private val context: Context) : ViewModel() {
         return sectionedLines
     }
 
-}
-
-/**
- * États pour les lignes de transport
- */
-sealed class TransportLinesState {
-    object Loading : TransportLinesState()
-    data class Success(val lines: com.pelotcl.app.generic.data.model.FeatureCollection) : TransportLinesState()
-    data class Error(val message: String) : TransportLinesState()
-}
-
-/**
- * États pour les alertes trafic
- */
-sealed class TrafficAlertsState {
-    object Loading : TrafficAlertsState()
-    data class Success(val alerts: List<TrafficAlert>) : TrafficAlertsState()
-    data class Error(val message: String) : TrafficAlertsState()
-}
-
-/**
- * États pour les lignes de transport (Compatibilité PlanScreen)
- */
-sealed class TransportLinesUiState {
-    object Loading : TransportLinesUiState()
-    data class Success(val lines: List<com.pelotcl.app.generic.data.model.Feature>) : TransportLinesUiState()
-    data class PartialSuccess(val lines: List<com.pelotcl.app.generic.data.model.Feature>) : TransportLinesUiState()
-    data class Error(val message: String) : TransportLinesUiState()
-}
-
-/**
- * États pour les arrêts de transport (Compatibilité PlanScreen)
- */
-sealed class TransportStopsUiState {
-    object Loading : TransportStopsUiState()
-    data class Success(val stops: List<StopFeature>) : TransportStopsUiState()
-    data class Error(val message: String) : TransportStopsUiState()
 }

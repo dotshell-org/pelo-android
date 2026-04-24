@@ -1,7 +1,7 @@
 package com.pelotcl.app.generic.data.cache
 
-import com.pelotcl.app.generic.data.model.Feature
-import com.pelotcl.app.generic.data.model.StopFeature
+import com.pelotcl.app.generic.data.models.Feature
+import com.pelotcl.app.generic.data.models.StopFeature
 
 /**
  * Generic interface for transport data caching

@@ -51,14 +51,3 @@ interface TransportTheme {
     @Composable
     fun ApplyTheme(content: @Composable () -> Unit)
 }
-
-/**
- * Theme provider - allows dynamic theme changes
- */
-object TransportThemeProvider {
-    private var currentTheme: TransportTheme = TransportThemeImpl()
-
-    fun setTheme(theme: TransportTheme) {
-        currentTheme = theme
-    }
-}

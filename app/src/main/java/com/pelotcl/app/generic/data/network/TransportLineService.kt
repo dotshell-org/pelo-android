@@ -1,7 +1,7 @@
 package com.pelotcl.app.generic.data.network
 
-import com.pelotcl.app.generic.data.model.FeatureCollection
-import com.pelotcl.app.generic.data.model.StopCollection
+import com.pelotcl.app.generic.data.models.FeatureCollection
+import com.pelotcl.app.generic.data.models.StopCollection
 
 /**
  * Service interface for transport line operations

@@ -1,6 +1,6 @@
 package com.pelotcl.app.generic.data.repository.online
 
-import com.pelotcl.app.generic.data.model.SimpleVehiclePosition
+import com.pelotcl.app.generic.data.models.SimpleVehiclePosition
 import com.pelotcl.app.generic.data.network.VehiclePositionsService
 import kotlinx.coroutines.flow.Flow
 

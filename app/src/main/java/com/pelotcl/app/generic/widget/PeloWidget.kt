@@ -46,7 +46,7 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import com.pelotcl.app.MainActivity
 import com.pelotcl.app.R
-import com.pelotcl.app.utils.transport.BusIconHelper
+import com.pelotcl.app.generic.utils.BusIconHelper
 
 class PeloWidget : GlanceAppWidget() {
 

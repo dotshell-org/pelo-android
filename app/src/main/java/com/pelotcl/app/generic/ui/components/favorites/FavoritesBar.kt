@@ -40,7 +40,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.pelotcl.app.generic.data.model.Favorite
+import com.pelotcl.app.generic.data.models.Favorite
 import com.pelotcl.app.generic.ui.theme.PrimaryColor
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
 

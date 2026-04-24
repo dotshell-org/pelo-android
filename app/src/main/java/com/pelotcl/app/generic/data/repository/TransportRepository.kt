@@ -7,14 +7,13 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.pelotcl.app.generic.data.network.TransportApi
 import com.pelotcl.app.generic.service.TransportServiceProvider
-import com.pelotcl.app.generic.data.cache.TransportCache
-import com.pelotcl.app.generic.data.model.Feature
-import com.pelotcl.app.generic.data.model.FeatureCollection
-import com.pelotcl.app.generic.data.model.Geometry
-import com.pelotcl.app.generic.data.model.TransportLineProperties
+import com.pelotcl.app.generic.data.models.Feature
+import com.pelotcl.app.generic.data.models.FeatureCollection
+import com.pelotcl.app.generic.data.models.Geometry
+import com.pelotcl.app.generic.data.models.TransportLineProperties
+import com.pelotcl.app.generic.data.network.TransportLinesQuery
 import com.pelotcl.app.generic.data.offline.OfflineRepository
-import com.pelotcl.app.utils.withRetry
-import java.text.Normalizer
+import com.pelotcl.app.generic.utils.withRetry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -35,7 +34,7 @@ class TransportRepository(context: Context? = null) {
         return withContext(Dispatchers.IO) {
             runCatching {
                 withRetry(maxRetries = 2, initialDelayMs = 1000) {
-                    transportApi.getLines(com.pelotcl.app.generic.data.network.TransportLinesQuery.StrongLines)
+                    transportApi.getLines(TransportLinesQuery.StrongLines)
                 }
             }.fold(
                 onSuccess = { Result.success(it) },

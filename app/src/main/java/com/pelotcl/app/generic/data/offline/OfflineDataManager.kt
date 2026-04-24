@@ -4,14 +4,9 @@ import android.content.Context
 import android.util.Log
 import com.pelotcl.app.generic.data.network.TransportApi
 import com.pelotcl.app.generic.data.network.TransportLinesQuery
-import com.pelotcl.app.generic.data.model.Feature
-import com.pelotcl.app.generic.data.model.Geometry
-import com.pelotcl.app.generic.data.model.TransportLineProperties
+import com.pelotcl.app.generic.data.models.Feature
 import com.pelotcl.app.generic.service.TransportServiceProvider
-import com.pelotcl.app.utils.withRetry
-import com.google.gson.JsonArray
-import com.google.gson.JsonObject
-import com.google.gson.JsonElement
+import com.pelotcl.app.generic.utils.withRetry
 import com.pelotcl.app.generic.data.repository.offline.SchedulesRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -24,18 +19,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-/**
- * Overall download state for all offline data.
- */
-sealed class OfflineDownloadState {
-    data object Idle : OfflineDownloadState()
-    data class Downloading(val progress: Float, val stepDescription: String) :
-        OfflineDownloadState()
-
-    data object Complete : OfflineDownloadState()
-    data class Error(val message: String) : OfflineDownloadState()
-}
 
 /**
  * Orchestrates the download of all offline data:
@@ -109,8 +92,8 @@ class OfflineDataManager(
                     val navigoneFeatures: List<Feature>?,
                     val trambusFeatures: List<Feature>?,
                     val rxFeatures: List<Feature>?,
-                    val stopsFeatures: List<com.pelotcl.app.generic.data.model.StopFeature>?,
-                    val alertsResponse: com.pelotcl.app.generic.data.model.TrafficAlertsResponse?
+                    val stopsFeatures: List<com.pelotcl.app.generic.data.models.StopFeature>?,
+                    val alertsResponse: com.pelotcl.app.generic.data.models.TrafficAlertsResponse?
                 )
 
                 val batchResults: BatchResults
@@ -473,110 +456,4 @@ class OfflineDataManager(
         }
     }
 
-    /**
-     * Fetches Rhônexpress features from WFS API (replicating TransportRepository logic).
-     */
-    private suspend fun fetchRhonexpressFeatures(): List<Feature> {
-        fun mapJsonToFeatures(json: JsonObject): List<Feature> {
-            val featuresArray: JsonArray? = when {
-                json.has("features") -> json.getAsJsonArray("features")
-                json.has("featureMember") -> json.getAsJsonArray("featureMember")
-                json.has("featureMembers") -> json.getAsJsonArray("featureMembers")
-                else -> null
-            }
-            val array = featuresArray ?: return emptyList()
-            val result = mutableListOf<Feature>()
-
-            fun parsePosition(pos: JsonElement): List<Double>? {
-                if (!pos.isJsonArray) return null
-                val arr = pos.asJsonArray
-                if (arr.size() < 2) return null
-                return listOf(arr[0].asDouble, arr[1].asDouble)
-            }
-
-            fun parseCoordinatesAsMultiLines(coords: JsonElement): List<List<List<Double>>>? {
-                if (!coords.isJsonArray) return null
-                val outer = coords.asJsonArray
-                if (outer.size() == 0) return null
-
-                val first = outer[0]
-                if (!first.isJsonArray) return null
-                val firstArr = first.asJsonArray
-                if (firstArr.size() == 0) return null
-                val firstInner = firstArr[0]
-
-                val isMultiLine =
-                    firstInner != null && firstInner.isJsonArray
-
-                if (isMultiLine) {
-                    val lines = outer.mapNotNull { lineEl ->
-                        if (!lineEl.isJsonArray) return@mapNotNull null
-                        val lineArr = lineEl.asJsonArray
-                        val points = lineArr.mapNotNull { parsePosition(it) }
-                        if (points.isEmpty()) null else points
-                    }
-                    return if (lines.isEmpty()) null else lines
-                } else {
-                    val points = outer.mapNotNull { parsePosition(it) }
-                    return if (points.isEmpty()) null else listOf(points)
-                }
-            }
-
-            for (elem in array) {
-                val featObj = elem.asJsonObject
-                val id = featObj.get("id")?.asString ?: "rx-${System.nanoTime()}"
-                val properties = featObj.getAsJsonObject("properties") ?: featObj
-                val gid =
-                    properties.get("gid")?.asInt
-                        ?: properties.get("GID")?.asInt
-                        ?: kotlin.math.abs(id.hashCode())
-
-                val geomObj = featObj
-                    .getAsJsonObject("geometry")
-                    ?: featObj.getAsJsonObject("the_geom")
-                    ?: featObj.getAsJsonObject("geom")
-                    ?: continue
-                val coordinatesElement = geomObj.get("coordinates") ?: continue
-                val multiLineCoordinates =
-                    parseCoordinatesAsMultiLines(coordinatesElement) ?: continue
-
-                result.add(
-                    Feature(
-                        type = "Feature",
-                        id = "rx_$id",
-                        geometry = Geometry(
-                            type = "MultiLineString",
-                            coordinates = multiLineCoordinates
-                        ),
-                        geometryName = null,
-                        properties = TransportLineProperties(
-                            lineName = "RX", traceCode = "RX-$gid", lineId = "RX",
-                            traceType = "", traceName = "Rhônexpress",
-                            direction = "ALLER",
-                            origin = "Gare Part-Dieu Villette",
-                            destination = "Aéroport St Exupéry -RX",
-                            originName = "Gare Part-Dieu Villette",
-                            destinationName = "Aéroport St Exupéry -RX",
-                            transportType = "TRAM",
-                            startDate = "", endDate = null,
-                            lineTypeCode = "TRAM", lineTypeName = "Tramway",
-                            lastUpdate = "", lastUpdateFme = "",
-                            gid = gid, color = "#E30613"
-                        ),
-                        bbox = null
-                    )
-                )
-            }
-            return result
-        }
-
-        return try {
-            transportApi
-                .getLines(TransportLinesQuery.LineByName("RX"))
-                .features
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to fetch Rhônexpress via TransportApi: ${e.message}")
-            emptyList()
-        }
-    }
 }

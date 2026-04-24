@@ -4,9 +4,9 @@ import android.content.Context
 import android.util.Log
 import com.pelotcl.app.generic.data.network.TransportApi
 import com.pelotcl.app.generic.data.cache.TrafficAlertsCache
-import com.pelotcl.app.generic.data.model.TrafficAlert
+import com.pelotcl.app.generic.data.models.TrafficAlert
 import com.pelotcl.app.generic.data.offline.OfflineRepository
-import com.pelotcl.app.utils.withRetry
+import com.pelotcl.app.generic.utils.withRetry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit

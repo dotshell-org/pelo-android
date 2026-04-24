@@ -4,17 +4,10 @@ import android.content.Context
 import android.os.Build
 import androidx.annotation.RequiresApi
 import com.pelotcl.app.generic.data.repository.offline.SchedulesRepository
-import com.pelotcl.app.utils.HolidayDetector
+import com.pelotcl.app.specific.utils.HolidayDetector
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.temporal.ChronoUnit
-
-data class UpcomingDeparture(
-    val lineName: String,
-    val directionName: String,
-    val time: String,
-    val minutesUntil: Long
-)
 
 object ScheduleWidgetHelper {
 

@@ -20,7 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import com.pelotcl.app.utils.transport.BusIconHelper
+import com.pelotcl.app.generic.utils.BusIconHelper
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,7 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PriorityHigh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import com.pelotcl.app.utils.SearchUtils
+import com.pelotcl.app.generic.utils.SearchUtils
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -51,12 +51,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.text.isDigitsOnly
-import com.pelotcl.app.generic.data.model.AlertSeverity
+import com.pelotcl.app.generic.data.models.AlertSeverity
 import com.pelotcl.app.generic.ui.theme.PrimaryColor
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
-import com.pelotcl.app.generic.data.model.AlertSeverity as TrafficAlertSeverity
+import com.pelotcl.app.generic.data.models.AlertSeverity as TrafficAlertSeverity
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
-import com.pelotcl.app.utils.transport.LineColorHelper
+import com.pelotcl.app.specific.utils.LineColorHelper
 
 /**
  * Bottom Sheet qui affiche toutes les lignes organisées par catégories

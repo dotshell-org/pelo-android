@@ -14,16 +14,6 @@ import org.maplibre.android.offline.OfflineRegionStatus
 import org.maplibre.android.offline.OfflineTilePyramidRegionDefinition
 
 /**
- * State of the map tiles download.
- */
-sealed class MapTilesDownloadState {
-    data object Idle : MapTilesDownloadState()
-    data class Downloading(val progress: Float) : MapTilesDownloadState()
-    data object Complete : MapTilesDownloadState()
-    data class Error(val message: String) : MapTilesDownloadState()
-}
-
-/**
  * Manages offline map tile downloads for the Lyon TCL region using MapLibre OfflineManager.
  */
 class OfflineMapManager(private val context: Context) {

@@ -1,11 +1,11 @@
 package com.pelotcl.app.generic.data.repository
 
 import android.util.Log
-import com.pelotcl.app.generic.data.model.StopAlertsStatus
-import com.pelotcl.app.generic.data.model.UserStopAlert
-import com.pelotcl.app.generic.data.model.UserStopAlertsResponse
+import com.pelotcl.app.generic.data.models.StopAlertsStatus
+import com.pelotcl.app.generic.data.models.UserStopAlert
+import com.pelotcl.app.generic.data.models.UserStopAlertsResponse
 import com.pelotcl.app.specific.data.network.LyonTransportApi
-import com.pelotcl.app.utils.SearchUtils
+import com.pelotcl.app.generic.utils.SearchUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -40,7 +40,7 @@ class UserStopAlertsRepository(
             val requestedStops = stopIds.distinct()
             Log.i(TAG, "Fetching user stop alerts for ${requestedStops.size} stops")
 
-            val merged = linkedMapOf<String, com.pelotcl.app.generic.data.model.StopAlertsStatus>()
+            val merged = linkedMapOf<String, com.pelotcl.app.generic.data.models.StopAlertsStatus>()
 
             requestedStops.chunked(API_STOPS_CHUNK_SIZE).forEach { chunk ->
                 try {

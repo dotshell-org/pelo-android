@@ -13,7 +13,6 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,7 +29,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.HorizontalDivider
@@ -63,7 +61,10 @@ import com.pelotcl.app.generic.ui.components.search.TransportSearchContent
 import com.pelotcl.app.generic.ui.theme.PrimaryColor
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
-import com.pelotcl.app.utils.transport.BusIconHelper
+import com.pelotcl.app.generic.utils.BusIconHelper
+import com.pelotcl.app.generic.widget.config.LineDirection
+import com.pelotcl.app.generic.widget.config.LineWithDirections
+import com.pelotcl.app.generic.widget.config.PendingConfig
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 
@@ -193,25 +194,7 @@ private fun SearchStopStep(
 
 // -- Data classes --
 
-private data class LineDirection(
-    val lineName: String,
-    val directionId: Int,
-    val headsign: String
-)
-
-private data class LineWithDirections(
-    val lineName: String,
-    val directions: List<LineDirection>
-)
-
 private const val DIRECTION_BOTH = -1
-
-private data class PendingConfig(
-    val stopName: String,
-    val lineName: String?,
-    val directionId: Int,
-    val desserte: String
-)
 
 // -- Reusable dark-themed row with press animation --
 

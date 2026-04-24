@@ -2,9 +2,9 @@ package com.pelotcl.app.generic.data.offline
 
 import android.content.Context
 import android.util.Log
-import com.pelotcl.app.generic.data.model.Feature
-import com.pelotcl.app.generic.data.model.StopFeature
-import com.pelotcl.app.generic.data.model.TrafficAlert
+import com.pelotcl.app.generic.data.models.Feature
+import com.pelotcl.app.generic.data.models.StopFeature
+import com.pelotcl.app.generic.data.models.TrafficAlert
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -17,22 +17,6 @@ import androidx.core.content.edit
 
 /** Data older than 7 days is considered stale and a refresh is recommended. */
 const val STALE_THRESHOLD_MS = 7L * 24 * 60 * 60 * 1000
-
-/**
- * Metadata about the offline data download.
- */
-data class OfflineDataInfo(
-    val isAvailable: Boolean = false,
-    val lastDownloadTimestamp: Long = 0L,
-    val totalSizeBytes: Long = 0L,
-    val mapTilesDownloaded: Boolean = false,
-    val downloadedMapStyles: Set<String> = emptySet(),
-    val busLinesCount: Int = 0
-) {
-    val isStale: Boolean
-        get() = isAvailable && lastDownloadTimestamp > 0L &&
-                (System.currentTimeMillis() - lastDownloadTimestamp) > STALE_THRESHOLD_MS
-}
 
 /**
  * Dedicated persistent storage for offline data.

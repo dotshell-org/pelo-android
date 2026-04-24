@@ -50,9 +50,9 @@ import com.pelotcl.app.generic.data.repository.itinerary.JourneyResult
 import com.pelotcl.app.generic.ui.theme.PrimaryColor
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
-import com.pelotcl.app.utils.SearchUtils
-import com.pelotcl.app.utils.transport.BusIconHelper
-import com.pelotcl.app.utils.transport.LineColorHelper
+import com.pelotcl.app.generic.utils.SearchUtils
+import com.pelotcl.app.generic.utils.BusIconHelper
+import com.pelotcl.app.specific.utils.LineColorHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -213,7 +213,7 @@ fun InlineItinerarySheetContent(
             }
         }
 
-        fun buildAvoidedLabel(problematicDetails: Map<String, List<com.pelotcl.app.generic.data.model.UserStopAlert>>): String {
+        fun buildAvoidedLabel(problematicDetails: Map<String, List<com.pelotcl.app.generic.data.models.UserStopAlert>>): String {
             if (problematicDetails.isEmpty()) return "Alertes utilisateur évitées"
 
             val topEntry = problematicDetails

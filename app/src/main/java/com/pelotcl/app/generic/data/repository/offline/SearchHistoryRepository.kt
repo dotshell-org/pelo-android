@@ -6,21 +6,6 @@ import com.pelotcl.app.generic.data.GsonProvider
 import androidx.core.content.edit
 
 /**
- * Model for a search history item that can be either a stop or a line
- */
-data class SearchHistoryItem(
-    val query: String,
-    val type: SearchType,
-    val lines: List<String> = emptyList(), // For stops: the lines serving the stop; For lines: empty
-    val timestamp: Long = System.currentTimeMillis()
-)
-
-enum class SearchType {
-    STOP,
-    LINE
-}
-
-/**
  * Repository for managing search history using SharedPreferences.
  * Stores recent searches for quick access.
  */

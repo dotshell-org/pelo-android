@@ -68,28 +68,11 @@ import com.pelotcl.app.generic.ui.theme.AccentColor
 import com.pelotcl.app.generic.ui.theme.Gray700
 import com.pelotcl.app.generic.ui.theme.PrimaryColor
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
-import com.pelotcl.app.utils.transport.BusIconHelper
-import com.pelotcl.app.utils.transport.LineColorHelper
+import com.pelotcl.app.generic.utils.BusIconHelper
+import com.pelotcl.app.specific.utils.LineColorHelper
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-
-/**
- * Enum for time selection mode: departure or arrival
- */
-enum class TimeMode {
-    DEPARTURE,  // Search by departure time (default)
-    ARRIVAL     // Search by arrival time ("I need to be there by...")
-}
-
-/**
- * Represents a selected stop for the itinerary
- */
-@Immutable
-data class SelectedStop(
-    val name: String,
-    val stopIds: List<Int>
-)
 
 /**
  * Compact journey card showing key information in a condensed format

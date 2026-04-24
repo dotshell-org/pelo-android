@@ -31,18 +31,3 @@ interface MapStyleConfig {
      */
     fun getDefaultMapStyle(): MapStyleData
 }
-
-/**
- * Data class representing a map style
- */
-data class MapStyleData(
-    val key: String,
-    val displayName: String,
-    val styleUrl: String,
-    val category: MapStyleCategory
-)
-
-enum class MapStyleCategory {
-    STANDARD,
-    SATELLITE
-}

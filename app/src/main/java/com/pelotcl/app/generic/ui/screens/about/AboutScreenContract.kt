@@ -3,18 +3,18 @@ package com.pelotcl.app.generic.ui.screens.about
 import androidx.compose.runtime.Composable
 
 /**
- * Contrat pour les écrans "À propos"
- * Chaque ville doit fournir sa propre implémentation
+ * Contract for "About" screens
+ * Each city must provide its own implementation
  */
 interface AboutScreenContract {
-    
+
     /**
-     * Nom de l'écran "À propos"
+     * Name of the "About" screen
      */
     val screenTitle: String
-    
+
     /**
-     * Composant pour l'écran "À propos" principal
+     * Component for the main "About" screen
      */
     @Composable
     fun AboutScreenContent(
@@ -23,9 +23,9 @@ interface AboutScreenContract {
         onLegalClick: () -> Unit,
         onContactClick: () -> Unit
     )
-    
+
     /**
-     * Composant pour l'écran "Crédits"
+     * Component for the "Credits" screen
      */
     @Composable
     fun CreditsScreenContent(
@@ -33,74 +33,74 @@ interface AboutScreenContract {
         onDataSourceClick: () -> Unit,
         onApiSourceClick: () -> Unit
     )
-    
+
     /**
-     * Composant pour l'écran "Mentions légales"
+     * Component for the "Legal Mentions" screen
      */
     @Composable
     fun LegalScreenContent(
         onBackClick: () -> Unit
     )
-    
+
     /**
-     * Composant pour l'écran "Contact"
+     * Component for the "Contact" screen
      */
     @Composable
     fun ContactScreenContent(
         onBackClick: () -> Unit
     )
-    
+
     /**
-     * Modèle de données pour une section de crédits
+     * Data model for a credits section
      */
     data class CreditSection(
         val title: String,
         val content: String,
         val links: List<CreditLink>
     )
-    
+
     /**
-     * Modèle de données pour un lien dans les crédits
+     * Data model for a link within credits
      */
     data class CreditLink(
         val label: String,
         val url: String
     )
-    
+
     /**
-     * Modèle de données pour une section légale
+     * Data model for a legal section
      */
     data class LegalSection(
         val title: String,
         val content: String
     )
-    
+
     /**
-     * Fournit les sections de crédits spécifiques à la ville
+     * Provides city-specific credit sections
      */
     fun getCreditSections(): List<CreditSection>
-    
+
     /**
-     * Fournit les sections légales spécifiques à la ville
+     * Provides city-specific legal sections
      */
     fun getLegalSections(): List<LegalSection>
-    
+
     /**
-     * Fournit les informations de contact
+     * Provides contact information
      */
     fun getContactInfo(): ContactInfo
-    
+
     /**
-     * Modèle de données pour les informations de contact
+     * Data model for contact information
      */
     data class ContactInfo(
         val email: String?,
         val website: String?,
         val socialMedia: List<SocialMediaLink>
     )
-    
+
     /**
-     * Modèle de données pour un lien de réseau social
+     * Data model for a social media link
      */
     data class SocialMediaLink(
         val platform: String,
