@@ -2,9 +2,11 @@ package com.pelotcl.app.generic.data.offline
 
 import android.content.Context
 import android.util.Log
-import com.pelotcl.app.generic.data.network.TransportApi
-import com.pelotcl.app.generic.data.network.TransportLinesQuery
-import com.pelotcl.app.generic.data.models.Feature
+import com.pelotcl.app.generic.data.network.transport.TransportApi
+import com.pelotcl.app.generic.data.network.transport.TransportLinesQuery
+import com.pelotcl.app.generic.data.models.geojson.Feature
+import com.pelotcl.app.generic.data.models.geojson.StopFeature
+import com.pelotcl.app.generic.data.models.realtime.alerts.official.TrafficAlertsResponse
 import com.pelotcl.app.generic.service.TransportServiceProvider
 import com.pelotcl.app.generic.utils.withRetry
 import com.pelotcl.app.generic.data.repository.offline.SchedulesRepository
@@ -92,8 +94,8 @@ class OfflineDataManager(
                     val navigoneFeatures: List<Feature>?,
                     val trambusFeatures: List<Feature>?,
                     val rxFeatures: List<Feature>?,
-                    val stopsFeatures: List<com.pelotcl.app.generic.data.models.StopFeature>?,
-                    val alertsResponse: com.pelotcl.app.generic.data.models.TrafficAlertsResponse?
+                    val stopsFeatures: List<StopFeature>?,
+                    val alertsResponse: TrafficAlertsResponse?
                 )
 
                 val batchResults: BatchResults

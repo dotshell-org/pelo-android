@@ -43,11 +43,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pelotcl.app.R
-import com.pelotcl.app.generic.data.network.MapStyleCategory
+import com.pelotcl.app.generic.data.network.mapstyle.MapStyleCategory
 import com.pelotcl.app.generic.data.offline.OfflineDataInfo
 import com.pelotcl.app.generic.data.offline.OfflineDownloadState
 import com.pelotcl.app.generic.data.offline.OfflineRepository
-import com.pelotcl.app.generic.data.repository.offline.MapStyleCompat
+import com.pelotcl.app.generic.data.repository.offline.mapstyle.MapStyleCompat
 import com.pelotcl.app.generic.service.TransportServiceProvider
 import com.pelotcl.app.generic.ui.theme.AccentColor
 import com.pelotcl.app.generic.ui.theme.PrimaryColor

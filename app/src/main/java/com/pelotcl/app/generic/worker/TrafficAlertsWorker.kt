@@ -4,7 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.pelotcl.app.generic.data.models.TrafficAlert
+import com.pelotcl.app.generic.data.models.realtime.alerts.official.TrafficAlert
 import com.pelotcl.app.generic.service.TransportServiceProvider
 import com.pelotcl.app.generic.data.repository.online.TrafficAlertsRepository
 import java.time.LocalDateTime

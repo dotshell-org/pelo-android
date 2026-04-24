@@ -68,9 +68,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.pelotcl.app.generic.data.models.AlertSeverity
-import com.pelotcl.app.generic.data.models.LineStopInfo
-import com.pelotcl.app.generic.data.models.TrafficAlert
+import com.pelotcl.app.generic.data.models.realtime.alerts.official.AlertSeverity
+import com.pelotcl.app.generic.data.models.gtfs.LineStopInfo
+import com.pelotcl.app.generic.data.models.realtime.alerts.official.TrafficAlert
 import com.pelotcl.app.generic.ui.theme.Gray700
 import com.pelotcl.app.generic.ui.theme.Green500
 import com.pelotcl.app.generic.ui.theme.Orange500

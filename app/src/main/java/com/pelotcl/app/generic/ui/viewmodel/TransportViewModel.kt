@@ -4,10 +4,10 @@ import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.pelotcl.app.generic.data.models.Favorite
-import com.pelotcl.app.generic.data.models.SimpleVehiclePosition
-import com.pelotcl.app.generic.data.models.StopFeature
-import com.pelotcl.app.generic.data.network.TransportApi
+import com.pelotcl.app.generic.data.models.stops.Favorite
+import com.pelotcl.app.generic.data.models.realtime.vehiclepositions.SimpleVehiclePosition
+import com.pelotcl.app.generic.data.models.geojson.StopFeature
+import com.pelotcl.app.generic.data.network.transport.TransportApi
 import com.pelotcl.app.generic.service.TransportServiceProvider
 import com.pelotcl.app.generic.data.repository.TransportRepository
 import com.pelotcl.app.generic.data.repository.UserStopAlertsRepository
@@ -17,12 +17,16 @@ import com.pelotcl.app.generic.data.repository.offline.FavoritesRepository
 import com.pelotcl.app.generic.data.repository.offline.SchedulesRepository
 import com.pelotcl.app.generic.data.offline.OfflineDataManager
 import com.pelotcl.app.generic.data.offline.OfflineDataInfo
-import com.pelotcl.app.generic.data.models.LineStopInfo
-import com.pelotcl.app.generic.data.models.TrafficAlert
-import com.pelotcl.app.generic.data.models.AlertSeverity
-import com.pelotcl.app.generic.data.repository.itinerary.RaptorRepository
-import com.pelotcl.app.generic.ui.components.search.LineSearchResult
-import com.pelotcl.app.generic.ui.components.search.StationSearchResult
+import com.pelotcl.app.generic.data.models.gtfs.LineStopInfo
+import com.pelotcl.app.generic.data.models.realtime.alerts.official.TrafficAlert
+import com.pelotcl.app.generic.data.models.realtime.alerts.official.AlertSeverity
+import com.pelotcl.app.generic.data.models.geojson.Feature
+import com.pelotcl.app.generic.data.models.lines.MultiLineStringGeometry
+import com.pelotcl.app.generic.data.repository.itinerary.itinerary.RaptorRepository
+import com.pelotcl.app.generic.data.repository.itinerary.itinerary.JourneyLeg
+import com.pelotcl.app.generic.data.repository.itinerary.itinerary.RaptorStopWithCoords
+import com.pelotcl.app.generic.data.models.search.LineSearchResult
+import com.pelotcl.app.generic.data.models.search.StationSearchResult
 import com.pelotcl.app.specific.utils.HolidayDetector
 import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
@@ -390,7 +394,7 @@ class TransportViewModel(private val context: Context) : ViewModel() {
                     // Build spatial hash grid for O(1) nearest-neighbor lookup
                     // Key = (latBucket, lonBucket) truncated to ~100m cells
                     val gridCellSize = 0.001 // ~100m in degrees
-                    val spatialGrid = HashMap<Long, MutableList<com.pelotcl.app.generic.data.repository.itinerary.RaptorStopWithCoords>>()
+                    val spatialGrid = HashMap<Long, MutableList<RaptorStopWithCoords>>()
                     for (raptorStop in raptorStopsWithCoords) {
                         val latBucket = (raptorStop.lat / gridCellSize).toLong()
                         val lonBucket = (raptorStop.lon / gridCellSize).toLong()
@@ -409,7 +413,7 @@ class TransportViewModel(private val context: Context) : ViewModel() {
                                 val lonBucket = (wfsLon / gridCellSize).toLong()
 
                                 // Search current cell + 8 neighbors for closest stop
-                                var bestStop: com.pelotcl.app.generic.data.repository.itinerary.RaptorStopWithCoords? = null
+                                var bestStop: RaptorStopWithCoords? = null
                                 var bestDistSq = Double.MAX_VALUE
                                 for (dLat in -1L..1L) {
                                     for (dLon in -1L..1L) {
@@ -1294,12 +1298,12 @@ class TransportViewModel(private val context: Context) : ViewModel() {
     }
 
     internal fun sectionLinesBetweenStops(
-        lines: List<com.pelotcl.app.generic.data.models.Feature>,
+        lines: List<Feature>,
         startStopId: String,
         endStopId: String,
-        leg: com.pelotcl.app.generic.data.repository.itinerary.JourneyLeg
-    ): List<com.pelotcl.app.generic.data.models.Feature> {
-        val sectionedLines = mutableListOf<com.pelotcl.app.generic.data.models.Feature>()
+        leg: JourneyLeg
+    ): List<Feature> {
+        val sectionedLines = mutableListOf<Feature>()
 
         val stopsState = stopsUiState.value
         if (stopsState !is TransportStopsUiState.Success) {
@@ -1340,8 +1344,8 @@ class TransportViewModel(private val context: Context) : ViewModel() {
         Log.i("TransportViewModel", "Found stops: ${finalStartStop.properties.nom} (GTFS: ${finalStartStop.properties.id}, GID: ${finalStartStop.id}) -> ${finalEndStop.properties.nom} (GTFS: ${finalEndStop.properties.id}, GID: ${finalEndStop.id})")
         
         for (line in lines) {
-            val lineGeometry = line.geometry
-            if (lineGeometry is com.pelotcl.app.generic.data.models.Geometry) {
+            val lineGeometry = line.multiLineStringGeometry
+            if (lineGeometry is MultiLineStringGeometry) {
                 val coordinates = lineGeometry.coordinates
                 val firstLine = coordinates.firstOrNull() ?: continue
                 
@@ -1419,8 +1423,8 @@ class TransportViewModel(private val context: Context) : ViewModel() {
                     
                     if (sectionCoordinates.size > 2) {
                         val sectionedLine = line.copy(
-                            geometry = com.pelotcl.app.generic.data.models.Geometry(
-                                type = line.geometry.type,
+                            multiLineStringGeometry = MultiLineStringGeometry(
+                                type = line.multiLineStringGeometry.type,
                                 coordinates = listOf(sectionCoordinates)
                             )
                         )

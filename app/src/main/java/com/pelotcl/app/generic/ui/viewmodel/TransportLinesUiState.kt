@@ -1,6 +1,6 @@
 package com.pelotcl.app.generic.ui.viewmodel
 
-import com.pelotcl.app.generic.data.models.Feature
+import com.pelotcl.app.generic.data.models.geojson.Feature
 
 /**
  * Etats pour les lignes de transport (Compatibilite PlanScreen)

@@ -5,7 +5,7 @@ import android.util.Log
 import androidx.core.content.edit
 import com.google.gson.reflect.TypeToken
 import com.pelotcl.app.generic.data.GsonProvider
-import com.pelotcl.app.generic.data.models.TrafficAlert
+import com.pelotcl.app.generic.data.models.realtime.alerts.official.TrafficAlert
 
 /**
  * Cache for traffic alerts data using SharedPreferences

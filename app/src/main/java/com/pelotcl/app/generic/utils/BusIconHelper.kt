@@ -4,7 +4,7 @@ import android.content.ComponentCallbacks2
 import android.content.Context
 import android.util.Log
 import android.util.LruCache
-import com.pelotcl.app.generic.data.models.StopFeature
+import com.pelotcl.app.generic.data.models.geojson.StopFeature
 
 /**
  * Utility to determine appropriate icons for bus stops

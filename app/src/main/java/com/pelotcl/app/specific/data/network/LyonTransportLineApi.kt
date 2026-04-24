@@ -1,10 +1,6 @@
 package com.pelotcl.app.specific.data.network
 
-import android.util.Log
 import com.google.gson.JsonObject
-import com.pelotcl.app.generic.data.models.FeatureCollection
-import com.pelotcl.app.generic.data.models.StopCollection
-import com.pelotcl.app.specific.data.mapper.TransportLineMapper
 import com.pelotcl.app.specific.data.model.LyonFeatureCollection
 import com.pelotcl.app.specific.data.model.LyonStopCollection
 import retrofit2.http.GET

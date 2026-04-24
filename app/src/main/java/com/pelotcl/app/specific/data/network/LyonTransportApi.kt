@@ -3,16 +3,16 @@ package com.pelotcl.app.specific.data.network
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonElement
-import com.pelotcl.app.generic.data.models.FeatureCollection
-import com.pelotcl.app.generic.data.models.Feature
-import com.pelotcl.app.generic.data.models.StopCollection
-import com.pelotcl.app.generic.data.models.TrafficAlertsResponse
-import com.pelotcl.app.generic.data.models.Geometry
-import com.pelotcl.app.generic.data.models.TransportLineProperties
-import com.pelotcl.app.generic.data.models.UserStopAlertsResponse
+import com.pelotcl.app.generic.data.models.geojson.FeatureCollection
+import com.pelotcl.app.generic.data.models.geojson.Feature
+import com.pelotcl.app.generic.data.models.geojson.StopCollection
+import com.pelotcl.app.generic.data.models.realtime.alerts.official.TrafficAlertsResponse
+import com.pelotcl.app.generic.data.models.lines.MultiLineStringGeometry
+import com.pelotcl.app.generic.data.models.lines.TransportLineProperties
+import com.pelotcl.app.generic.data.models.realtime.alerts.community.UserStopAlertsResponse
 import com.pelotcl.app.generic.data.network.RetrofitInstance
-import com.pelotcl.app.generic.data.network.TransportApi
-import com.pelotcl.app.generic.data.network.TransportLinesQuery
+import com.pelotcl.app.generic.data.network.transport.TransportApi
+import com.pelotcl.app.generic.data.network.transport.TransportLinesQuery
 import com.pelotcl.app.specific.data.mapper.TrafficAlertMapper
 import com.pelotcl.app.specific.data.model.LyonTrafficAlertsResponse
 import retrofit2.Retrofit
@@ -387,7 +387,7 @@ class LyonTransportApi(private val baseUrl: String) : TransportApi {
                 Feature(
                     type = "Feature",
                     id = "rx_$id",
-                    geometry = Geometry(
+                    multiLineStringGeometry = MultiLineStringGeometry(
                         type = "MultiLineString",
                         coordinates = coordinates
                     ),

@@ -2,9 +2,9 @@ package com.pelotcl.app.generic.data.offline
 
 import android.content.Context
 import android.util.Log
-import com.pelotcl.app.generic.data.models.Feature
-import com.pelotcl.app.generic.data.models.StopFeature
-import com.pelotcl.app.generic.data.models.TrafficAlert
+import com.pelotcl.app.generic.data.models.geojson.Feature
+import com.pelotcl.app.generic.data.models.geojson.StopFeature
+import com.pelotcl.app.generic.data.models.realtime.alerts.official.TrafficAlert
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -14,9 +14,6 @@ import java.io.FileOutputStream
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 import androidx.core.content.edit
-
-/** Data older than 7 days is considered stale and a refresh is recommended. */
-const val STALE_THRESHOLD_MS = 7L * 24 * 60 * 60 * 1000
 
 /**
  * Dedicated persistent storage for offline data.
@@ -345,16 +342,16 @@ fun List<Feature>.sanitizeForSerialization(): List<Feature> {
             lastUpdate = (props.lastUpdate as String?) ?: "",
             lastUpdateFme = (props.lastUpdateFme as String?) ?: ""
         )
-        val safeGeometry = feature.geometry.copy(
-            type = (feature.geometry.type as String?) ?: "MultiLineString",
-            coordinates = sanitizeCoordinates(feature.geometry.coordinates)
+        val safeGeometry = feature.multiLineStringGeometry.copy(
+            type = (feature.multiLineStringGeometry.type as String?) ?: "MultiLineString",
+            coordinates = sanitizeCoordinates(feature.multiLineStringGeometry.coordinates)
         )
         val safeId = (feature.id as String?) ?: ""
         val safeType = (feature.type as String?) ?: "Feature"
         feature.copy(
             type = safeType,
             id = safeId,
-            geometry = safeGeometry,
+            multiLineStringGeometry = safeGeometry,
             properties = safeProps,
             bbox = sanitizeDoubleList(feature.bbox)
         )

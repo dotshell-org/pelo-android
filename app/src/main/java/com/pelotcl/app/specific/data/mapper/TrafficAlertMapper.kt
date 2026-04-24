@@ -1,7 +1,7 @@
 package com.pelotcl.app.specific.data.mapper
 
-import com.pelotcl.app.generic.data.models.TrafficAlert
-import com.pelotcl.app.generic.data.models.TrafficAlertsResponse
+import com.pelotcl.app.generic.data.models.realtime.alerts.official.TrafficAlert
+import com.pelotcl.app.generic.data.models.realtime.alerts.official.TrafficAlertsResponse
 import com.pelotcl.app.specific.data.model.LyonTrafficAlert
 import com.pelotcl.app.specific.data.model.LyonTrafficAlertsResponse
 

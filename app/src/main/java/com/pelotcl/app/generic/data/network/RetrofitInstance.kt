@@ -1,6 +1,7 @@
 package com.pelotcl.app.generic.data.network
 
 import android.content.Context
+import com.pelotcl.app.generic.data.network.transport.TransportConfig
 import com.pelotcl.app.generic.utils.DotshellRequestLogger
 import okhttp3.Cache
 import okhttp3.CacheControl

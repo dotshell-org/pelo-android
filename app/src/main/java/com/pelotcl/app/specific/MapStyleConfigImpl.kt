@@ -1,8 +1,8 @@
 package com.pelotcl.app.specific
 
-import com.pelotcl.app.generic.data.network.MapStyleConfig
-import com.pelotcl.app.generic.data.network.MapStyleCategory
-import com.pelotcl.app.generic.data.network.MapStyleData
+import com.pelotcl.app.generic.data.network.mapstyle.MapStyleConfig
+import com.pelotcl.app.generic.data.network.mapstyle.MapStyleCategory
+import com.pelotcl.app.generic.data.network.mapstyle.MapStyleData
 
 /**
  * Lyon-specific implementation of MapStyleConfig

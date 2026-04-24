@@ -1,6 +1,6 @@
 package com.pelotcl.app.generic.ui.viewmodel
 
-import com.pelotcl.app.generic.data.models.FeatureCollection
+import com.pelotcl.app.generic.data.models.geojson.FeatureCollection
 
 /**
  * Etats pour les lignes de transport

@@ -1,6 +1,6 @@
 package com.pelotcl.app.generic.ui.viewmodel
 
-import com.pelotcl.app.generic.data.models.StopFeature
+import com.pelotcl.app.generic.data.models.geojson.StopFeature
 
 /**
  * Etats pour les arrets de transport (Compatibilite PlanScreen)

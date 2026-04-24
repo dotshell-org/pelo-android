@@ -1,6 +1,6 @@
 package com.pelotcl.app.generic.ui.viewmodel
 
-import com.pelotcl.app.generic.data.models.TrafficAlert
+import com.pelotcl.app.generic.data.models.realtime.alerts.official.TrafficAlert
 
 /**
  * Etats pour les alertes trafic

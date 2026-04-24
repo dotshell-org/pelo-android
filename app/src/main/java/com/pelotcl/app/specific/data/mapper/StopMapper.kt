@@ -1,10 +1,12 @@
 package com.pelotcl.app.specific.data.mapper
 
-import com.pelotcl.app.generic.data.models.StopCollection
-import com.pelotcl.app.generic.data.models.StopFeature
-import com.pelotcl.app.generic.data.models.StopGeometry
-import com.pelotcl.app.generic.data.models.StopProperties
-import com.pelotcl.app.generic.data.repository.itinerary.RaptorRepository
+import com.pelotcl.app.generic.data.models.CRS
+import com.pelotcl.app.generic.data.models.CRSProperties
+import com.pelotcl.app.generic.data.models.geojson.StopCollection
+import com.pelotcl.app.generic.data.models.geojson.StopFeature
+import com.pelotcl.app.generic.data.models.stops.StopGeometry
+import com.pelotcl.app.generic.data.models.stops.StopProperties
+import com.pelotcl.app.generic.data.repository.itinerary.itinerary.RaptorRepository
 import com.pelotcl.app.specific.data.model.LyonStopCollection
 import com.pelotcl.app.specific.data.model.LyonStopFeature
 
@@ -120,9 +122,9 @@ object StopMapper {
             numberReturned = collection.numberReturned,
             timeStamp = collection.timeStamp,
             crs = collection.crs?.let {
-                com.pelotcl.app.generic.data.models.CRS(
+                CRS(
                     type = it.type,
-                    properties = com.pelotcl.app.generic.data.models.CRSProperties(
+                    properties = CRSProperties(
                         name = it.properties.name
                     )
                 )

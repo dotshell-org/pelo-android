@@ -1,7 +1,6 @@
 package com.pelotcl.app.generic.ui.components.favorites
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,12 +15,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
@@ -50,12 +47,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.pelotcl.app.generic.ui.components.search.StationSearchResult
+import com.pelotcl.app.generic.data.models.search.StationSearchResult
 import com.pelotcl.app.generic.ui.components.search.TransportSearchBar
-import com.pelotcl.app.generic.ui.components.search.TransportSearchContent
+import com.pelotcl.app.generic.data.models.search.TransportSearchContent
 import com.pelotcl.app.generic.ui.theme.Gray700
 import com.pelotcl.app.generic.ui.theme.PrimaryColor
-import com.pelotcl.app.generic.ui.theme.AccentColor
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
 
@@ -314,71 +310,6 @@ fun AddFavoriteDialog(
         }
     }
 }
-
-/**
- * Icon selection button
- */
-@Composable
-private fun IconSelectionButton(
-    iconName: String,
-    label: String,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    val icon = favoriteIcon(iconName)
-
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(24.dp))
-            .clickable(onClick = onClick)
-            .background(if (isSelected) Color(0x1A000000) else Color.Transparent)
-            .border(1.dp, if (isSelected) PrimaryColor else Color.Gray, RoundedCornerShape(24.dp))
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        contentAlignment = Alignment.CenterStart
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(CircleShape)
-                    .background(PrimaryColor),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = iconName,
-                    tint = SecondaryColor,
-                    modifier = Modifier.size(14.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodySmall,
-                color = PrimaryColor,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-            )
-            if (isSelected) {
-                Spacer(modifier = Modifier.width(6.dp))
-                Box(
-                    modifier = Modifier
-                        .size(16.dp)
-                        .clip(CircleShape)
-                        .background(AccentColor),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = "Selected",
-                        tint = SecondaryColor,
-                        modifier = Modifier.size(12.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
 
 private data class FavoritePreset(
     val name: String,

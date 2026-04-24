@@ -1,8 +1,8 @@
 package com.pelotcl.app.specific.data.network
 
 import android.util.Log
-import com.pelotcl.app.generic.data.models.FeatureCollection
-import com.pelotcl.app.generic.data.models.StopCollection
+import com.pelotcl.app.generic.data.models.geojson.FeatureCollection
+import com.pelotcl.app.generic.data.models.geojson.StopCollection
 import com.pelotcl.app.specific.data.mapper.TransportLineMapper
 
 /**

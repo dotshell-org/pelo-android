@@ -1,9 +1,11 @@
 package com.pelotcl.app.specific.data.mapper
 
-import com.pelotcl.app.generic.data.models.Feature
-import com.pelotcl.app.generic.data.models.FeatureCollection
-import com.pelotcl.app.generic.data.models.Geometry
-import com.pelotcl.app.generic.data.models.TransportLineProperties
+import com.pelotcl.app.generic.data.models.CRS
+import com.pelotcl.app.generic.data.models.CRSProperties
+import com.pelotcl.app.generic.data.models.geojson.Feature
+import com.pelotcl.app.generic.data.models.geojson.FeatureCollection
+import com.pelotcl.app.generic.data.models.lines.MultiLineStringGeometry
+import com.pelotcl.app.generic.data.models.lines.TransportLineProperties
 import com.pelotcl.app.specific.data.model.LyonFeature
 import com.pelotcl.app.specific.data.model.LyonFeatureCollection
 import com.pelotcl.app.specific.data.model.LyonTransportLineProperties
@@ -49,7 +51,7 @@ object TransportLineMapper {
         return Feature(
             type = feature.type,
             id = feature.id,
-            geometry = Geometry(
+            multiLineStringGeometry = MultiLineStringGeometry(
                 type = feature.geometry.type,
                 coordinates = feature.geometry.coordinates
             ),
@@ -71,9 +73,9 @@ object TransportLineMapper {
             numberReturned = collection.numberReturned,
             timeStamp = collection.timeStamp,
             crs = collection.crs?.let {
-                com.pelotcl.app.generic.data.models.CRS(
+                CRS(
                     type = it.type,
-                    properties = com.pelotcl.app.generic.data.models.CRSProperties(
+                    properties = CRSProperties(
                         name = it.properties.name
                     )
                 )

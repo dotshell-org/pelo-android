@@ -1,6 +1,6 @@
 package com.pelotcl.app.generic.data.cache
 
-import com.pelotcl.app.generic.data.repository.itinerary.IntermediateStop
+import com.pelotcl.app.generic.data.repository.itinerary.itinerary.IntermediateStop
 import kotlinx.serialization.Serializable
 
 @Serializable

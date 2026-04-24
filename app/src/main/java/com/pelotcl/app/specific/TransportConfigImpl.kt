@@ -1,6 +1,6 @@
 package com.pelotcl.app.specific
 
-import com.pelotcl.app.generic.data.network.TransportConfig
+import com.pelotcl.app.generic.data.network.transport.TransportConfig
 
 /**
  * Specific transport configuration

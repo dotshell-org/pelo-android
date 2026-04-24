@@ -2,9 +2,9 @@ package com.pelotcl.app.generic.data.repository.online
 
 import android.content.Context
 import android.util.Log
-import com.pelotcl.app.generic.data.network.TransportApi
+import com.pelotcl.app.generic.data.network.transport.TransportApi
 import com.pelotcl.app.generic.data.cache.TrafficAlertsCache
-import com.pelotcl.app.generic.data.models.TrafficAlert
+import com.pelotcl.app.generic.data.models.realtime.alerts.official.TrafficAlert
 import com.pelotcl.app.generic.data.offline.OfflineRepository
 import com.pelotcl.app.generic.utils.withRetry
 import kotlinx.coroutines.Dispatchers

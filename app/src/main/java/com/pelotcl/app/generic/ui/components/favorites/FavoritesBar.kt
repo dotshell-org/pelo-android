@@ -40,7 +40,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.pelotcl.app.generic.data.models.Favorite
+import com.pelotcl.app.generic.data.models.stops.Favorite
 import com.pelotcl.app.generic.ui.theme.PrimaryColor
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
 
@@ -174,76 +174,3 @@ fun FavoritesBar(
     }
 }
 
-/**
- * Individual favorite item in the favorites bar
- */
-@Composable
-private fun FavoriteItem(
-    favorite: Favorite,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-    textStyle: TextStyle,
-    isDarkMode: Boolean = false
-) {
-    val icon = favoriteIcon(favorite.iconName)
-
-    Row(
-        modifier = Modifier
-            .shadow(4.dp, RoundedCornerShape(20.dp))
-            .clip(RoundedCornerShape(20.dp))
-            .background(PrimaryColor)
-            .then(if (isDarkMode) Modifier.border(1.dp, Color(0xFF9CA3AF), RoundedCornerShape(20.dp)) else Modifier)
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick
-            )
-            .padding(start = 15.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = favorite.name,
-            tint = SecondaryColor,
-            modifier = Modifier.size(16.dp)
-        )
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(
-            text = favorite.name,
-            style = textStyle,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
-private fun AddFavoriteItem(
-    onClick: () -> Unit,
-    textStyle: TextStyle,
-    isDarkMode: Boolean = false
-) {
-    Row(
-        modifier = Modifier
-            .shadow(4.dp, RoundedCornerShape(20.dp))
-            .clip(RoundedCornerShape(20.dp))
-            .background(PrimaryColor)
-            .then(if (isDarkMode) Modifier.border(1.dp, Color(0xFF9CA3AF), RoundedCornerShape(20.dp)) else Modifier)
-            .combinedClickable(onClick = onClick)
-            .padding(start = 15.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = Icons.Default.Add,
-            contentDescription = "Ajouter un favori",
-            tint = SecondaryColor,
-            modifier = Modifier.size(16.dp)
-        )
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(
-            text = "Créer un favori",
-            style = textStyle,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}

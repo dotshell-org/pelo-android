@@ -51,10 +51,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.text.isDigitsOnly
-import com.pelotcl.app.generic.data.models.AlertSeverity
+import com.pelotcl.app.generic.data.models.realtime.alerts.official.AlertSeverity
 import com.pelotcl.app.generic.ui.theme.PrimaryColor
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
-import com.pelotcl.app.generic.data.models.AlertSeverity as TrafficAlertSeverity
+import com.pelotcl.app.generic.data.models.realtime.alerts.official.AlertSeverity as TrafficAlertSeverity
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
 import com.pelotcl.app.specific.utils.LineColorHelper
 

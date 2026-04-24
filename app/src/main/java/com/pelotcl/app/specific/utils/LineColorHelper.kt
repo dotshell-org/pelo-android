@@ -1,7 +1,7 @@
 package com.pelotcl.app.specific.utils
 
 import androidx.core.graphics.toColorInt
-import com.pelotcl.app.generic.data.models.Feature
+import com.pelotcl.app.generic.data.models.geojson.Feature
 
 /**
  * Utilitary to determine the color of a transport line based on its type

@@ -57,10 +57,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.pelotcl.app.generic.ui.components.search.LineSearchResult
-import com.pelotcl.app.generic.ui.components.search.StationSearchResult
+import com.pelotcl.app.generic.data.models.search.LineSearchResult
+import com.pelotcl.app.generic.data.models.search.StationSearchResult
 import com.pelotcl.app.generic.ui.components.search.TransportSearchBar
-import com.pelotcl.app.generic.ui.components.search.TransportSearchContent
+import com.pelotcl.app.generic.data.models.search.TransportSearchContent
 import com.pelotcl.app.generic.ui.theme.Gray800
 import com.pelotcl.app.generic.ui.theme.Gray900
 import com.pelotcl.app.generic.ui.theme.Red500

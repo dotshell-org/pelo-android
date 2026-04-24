@@ -50,16 +50,18 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.google.android.gms.location.LocationServices
+import com.pelotcl.app.generic.data.models.geojson.StopFeature
+import com.pelotcl.app.generic.data.repository.itinerary.itinerary.RaptorRepository
 import com.pelotcl.app.generic.service.NavigationModeForegroundService
 import com.pelotcl.app.generic.service.NavigationModeStateStore
 import com.pelotcl.app.generic.ui.components.favorites.AddFavoriteDialog
 import com.pelotcl.app.generic.ui.components.favorites.FavoritesBar
 import com.pelotcl.app.generic.ui.components.search.TransportSearchBar
-import com.pelotcl.app.generic.ui.components.search.TransportSearchContent
-import com.pelotcl.app.generic.ui.components.search.StationSearchResult
-import com.pelotcl.app.generic.data.repository.offline.SearchHistoryItem
-import com.pelotcl.app.generic.data.repository.offline.SearchType
-import com.pelotcl.app.generic.data.repository.offline.MapStyleCompat
+import com.pelotcl.app.generic.data.models.search.TransportSearchContent
+import com.pelotcl.app.generic.data.models.search.StationSearchResult
+import com.pelotcl.app.generic.data.repository.offline.search.SearchHistoryItem
+import com.pelotcl.app.generic.data.repository.offline.search.SearchType
+import com.pelotcl.app.generic.data.repository.offline.mapstyle.MapStyleCompat
 import com.pelotcl.app.generic.ui.screens.settings.about.AboutScreen
 import com.pelotcl.app.generic.ui.screens.settings.about.ContactScreen
 import com.pelotcl.app.generic.ui.screens.settings.about.CreditsScreen
@@ -186,7 +188,7 @@ class MainActivity : ComponentActivity() {
             kotlinx.coroutines.yield()
             try {
                 val raptorRepo =
-                    com.pelotcl.app.generic.data.repository.itinerary.RaptorRepository.getInstance(
+                    RaptorRepository.getInstance(
                         applicationContext
                     )
                 raptorRepo.initialize()
@@ -302,7 +304,7 @@ fun NavBar(
     LaunchedEffect(favoriteStops, stopsUiState) {
         val stops = (stopsUiState as? TransportStopsUiState.Success)?.stops
         favoriteStops.map { stopName ->
-            val stop = stops?.find { (it as com.pelotcl.app.generic.data.models.StopFeature).properties.nom.equals(stopName, ignoreCase = true) }
+            val stop = stops?.find { (it as StopFeature).properties.nom.equals(stopName, ignoreCase = true) }
             val lines = stop?.let { BusIconHelper.getAllLinesForStop(it) } ?: emptyList()
             SearchHistoryItem(
                 query = stopName,

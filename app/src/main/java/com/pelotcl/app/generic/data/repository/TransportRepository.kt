@@ -5,13 +5,13 @@ import android.util.Log
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
-import com.pelotcl.app.generic.data.network.TransportApi
+import com.pelotcl.app.generic.data.network.transport.TransportApi
 import com.pelotcl.app.generic.service.TransportServiceProvider
-import com.pelotcl.app.generic.data.models.Feature
-import com.pelotcl.app.generic.data.models.FeatureCollection
-import com.pelotcl.app.generic.data.models.Geometry
-import com.pelotcl.app.generic.data.models.TransportLineProperties
-import com.pelotcl.app.generic.data.network.TransportLinesQuery
+import com.pelotcl.app.generic.data.models.geojson.Feature
+import com.pelotcl.app.generic.data.models.geojson.FeatureCollection
+import com.pelotcl.app.generic.data.models.lines.MultiLineStringGeometry
+import com.pelotcl.app.generic.data.models.lines.TransportLineProperties
+import com.pelotcl.app.generic.data.network.transport.TransportLinesQuery
 import com.pelotcl.app.generic.data.offline.OfflineRepository
 import com.pelotcl.app.generic.utils.withRetry
 import kotlinx.coroutines.Dispatchers
@@ -82,7 +82,7 @@ class TransportRepository(context: Context? = null) {
             runCatching {
                 transportApi
                     .getLines(
-                        com.pelotcl.app.generic.data.network.TransportLinesQuery.LineByName(lineName)
+                        TransportLinesQuery.LineByName(lineName)
                     )
                     .features
             }
@@ -191,7 +191,7 @@ class TransportRepository(context: Context? = null) {
                     Feature(
                         type = "Feature",
                         id = "rx_$id",
-                        geometry = Geometry(
+                        multiLineStringGeometry = MultiLineStringGeometry(
                             type = "MultiLineString",
                             coordinates = coordinates
                         ),
@@ -234,7 +234,7 @@ class TransportRepository(context: Context? = null) {
 
         return try {
             transportApi
-                .getLines(com.pelotcl.app.generic.data.network.TransportLinesQuery.LineByName("RX"))
+                .getLines(TransportLinesQuery.LineByName("RX"))
                 .features
         } catch (e: Exception) {
             Log.w("TransportRepository", "Failed to fetch Rhônexpress (via TransportApi): ${e.message}")

@@ -2,8 +2,8 @@ package com.pelotcl.app.specific.data.cache
 
 import android.content.Context
 import android.util.Log
-import com.pelotcl.app.generic.data.models.Feature
-import com.pelotcl.app.generic.data.models.StopFeature
+import com.pelotcl.app.generic.data.models.geojson.Feature
+import com.pelotcl.app.generic.data.models.geojson.StopFeature
 import com.pelotcl.app.generic.data.offline.sanitizeForSerialization
 import com.pelotcl.app.generic.data.offline.sanitizeStopsForSerialization
 import kotlinx.coroutines.Dispatchers

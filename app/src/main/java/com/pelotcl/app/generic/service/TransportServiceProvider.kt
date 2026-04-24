@@ -1,12 +1,12 @@
 package com.pelotcl.app.generic.service
 
 import android.content.Context
-import com.pelotcl.app.generic.data.network.MapStyleConfig
-import com.pelotcl.app.generic.data.network.TransportApi
-import com.pelotcl.app.generic.data.network.TransportConfig
-import com.pelotcl.app.generic.data.network.TransportLineRules
+import com.pelotcl.app.generic.data.network.mapstyle.MapStyleConfig
+import com.pelotcl.app.generic.data.network.transport.TransportApi
+import com.pelotcl.app.generic.data.network.transport.TransportConfig
+import com.pelotcl.app.generic.data.network.transport.TransportLineRules
 import com.pelotcl.app.generic.data.network.RetrofitInstance
-import com.pelotcl.app.generic.data.network.TransportLineService
+import com.pelotcl.app.generic.data.network.transport.TransportLineService
 import com.pelotcl.app.generic.data.network.TrafficAlertsService
 import com.pelotcl.app.generic.data.network.VehiclePositionsService
 import com.pelotcl.app.specific.data.rules.LyonTransportLineRules

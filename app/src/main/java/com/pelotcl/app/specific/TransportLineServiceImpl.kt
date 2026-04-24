@@ -1,8 +1,9 @@
 package com.pelotcl.app.specific
 
-import com.pelotcl.app.generic.data.models.FeatureCollection
-import com.pelotcl.app.generic.data.models.StopCollection
-import com.pelotcl.app.generic.data.network.TransportLineService
+import com.pelotcl.app.generic.data.models.geojson.FeatureCollection
+import com.pelotcl.app.generic.data.models.geojson.StopCollection
+import com.pelotcl.app.generic.data.models.geojson.Feature
+import com.pelotcl.app.generic.data.network.transport.TransportLineService
 import com.pelotcl.app.specific.data.network.LyonTransportLineApi
 import com.pelotcl.app.specific.data.network.LyonTransportLineApiWrapper
 import retrofit2.Retrofit
@@ -79,7 +80,7 @@ class TransportLineServiceImpl : TransportLineService {
         val tramLines = getTramLines()
         
         // Combine features from both collections
-        val allFeatures = mutableListOf<com.pelotcl.app.generic.data.models.Feature>().apply {
+        val allFeatures = mutableListOf<Feature>().apply {
             addAll(metroLines.features)
             addAll(tramLines.features)
         }

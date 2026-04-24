@@ -1,6 +1,6 @@
 package com.pelotcl.app.specific.data.rules
 
-import com.pelotcl.app.generic.data.network.TransportLineRules
+import com.pelotcl.app.generic.data.network.transport.TransportLineRules
 
 class LyonTransportLineRules : TransportLineRules {
     override fun normalizeAlertToken(raw: String): String {

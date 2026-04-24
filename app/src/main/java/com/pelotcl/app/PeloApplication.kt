@@ -6,8 +6,9 @@ import androidx.work.Configuration
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import com.pelotcl.app.generic.data.cache.JourneyCache
+import com.pelotcl.app.generic.data.cache.journey.JourneyCache
 import com.pelotcl.app.generic.data.network.RetrofitInstance
+import com.pelotcl.app.generic.data.repository.itinerary.itinerary.RaptorRepository
 import com.pelotcl.app.generic.data.repository.offline.SchedulesRepository
 import com.pelotcl.app.generic.service.TransportServiceProvider
 import com.pelotcl.app.generic.utils.BusIconHelper
@@ -46,7 +47,7 @@ class PeloApplication : Application(), Configuration.Provider {
      */
     private fun verifyRaptorAssets() {
         try {
-            val raptorRepository = com.pelotcl.app.generic.data.repository.itinerary.RaptorRepository.getInstance(this)
+            val raptorRepository = RaptorRepository.getInstance(this)
             val assetsAvailable = raptorRepository.checkAssetsAvailable()
             
             if (!assetsAvailable) {

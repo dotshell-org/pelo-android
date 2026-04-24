@@ -2,10 +2,10 @@ package com.pelotcl.app.specific
 
 import com.google.gson.JsonObject
 import com.pelotcl.app.generic.data.GsonProvider
-import com.pelotcl.app.generic.data.models.SiriData
-import com.pelotcl.app.generic.data.models.SimpleVehiclePosition
-import com.pelotcl.app.generic.data.models.VehicleActivity
-import com.pelotcl.app.generic.data.models.VehiclePositionsResponse
+import com.pelotcl.app.generic.data.models.realtime.vehiclepositions.SiriData
+import com.pelotcl.app.generic.data.models.realtime.vehiclepositions.SimpleVehiclePosition
+import com.pelotcl.app.generic.data.models.realtime.vehiclepositions.VehicleActivity
+import com.pelotcl.app.generic.data.models.realtime.vehiclepositions.VehiclePositionsResponse
 import com.pelotcl.app.generic.data.network.VehiclePositionsService
 import com.pelotcl.app.generic.utils.DotshellRequestLogger
 import kotlinx.coroutines.channels.awaitClose

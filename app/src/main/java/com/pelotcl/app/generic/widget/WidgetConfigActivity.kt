@@ -57,7 +57,7 @@ import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.state.updateAppWidgetState
 import com.pelotcl.app.generic.data.repository.offline.SchedulesRepository
 import com.pelotcl.app.generic.ui.components.search.TransportSearchBar
-import com.pelotcl.app.generic.ui.components.search.TransportSearchContent
+import com.pelotcl.app.generic.data.models.search.TransportSearchContent
 import com.pelotcl.app.generic.ui.theme.PrimaryColor
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel

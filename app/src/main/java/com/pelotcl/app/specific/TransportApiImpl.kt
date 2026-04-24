@@ -1,9 +1,9 @@
 package com.pelotcl.app.specific
 
 import com.google.gson.JsonObject
-import com.pelotcl.app.generic.data.models.FeatureCollection
-import com.pelotcl.app.generic.data.models.StopCollection
-import com.pelotcl.app.generic.data.models.TrafficAlertsResponse
+import com.pelotcl.app.generic.data.models.geojson.FeatureCollection
+import com.pelotcl.app.generic.data.models.geojson.StopCollection
+import com.pelotcl.app.generic.data.models.realtime.alerts.official.TrafficAlertsResponse
 import retrofit2.http.GET
 import retrofit2.http.Query
 
