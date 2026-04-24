@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.EmojiPeople
 import androidx.compose.material.icons.filled.Engineering
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
@@ -111,7 +112,8 @@ enum class AlertType(val id: String, val label: String, val icon: ImageVector, v
 fun AlertReportBottomSheet(
     viewModel: TransportViewModel,
     onDismiss: () -> Unit,
-    initialStop: StationSearchResult? = null
+    initialStop: StationSearchResult? = null,
+    nearestStopCandidate: StationSearchResult? = null
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -176,6 +178,37 @@ fun AlertReportBottomSheet(
                         text = "Rechercher",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color.White
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(CircleShape)
+                        .background(Color(0xFFE5E7EB))
+                        .clickable(enabled = nearestStopCandidate != null) {
+                            nearestStopCandidate?.let {
+                                selectedStop = it
+                                selectedLine = null
+                            }
+                        }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MyLocation,
+                        contentDescription = null,
+                        tint = Color.Black,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "Arrêt le plus proche",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Black,
+                        textAlign = TextAlign.Center
                     )
                 }
             } else {

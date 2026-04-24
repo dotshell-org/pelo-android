@@ -4093,10 +4093,36 @@ fun PlanScreen(
     }
 
     if (showAlertReportSheet) {
+        val nearestStopCandidate = userLocation?.let { location ->
+            val stops = (stopsUiState as? TransportStopsUiState.Success)?.stops
+            val nearestStop = stops?.minByOrNull { stop ->
+                val coords = stop.geometry.coordinates
+                if (coords.size >= 2) {
+                    squaredDistance(
+                        lat1 = location.latitude,
+                        lon1 = location.longitude,
+                        lat2 = coords[1],
+                        lon2 = coords[0]
+                    )
+                } else {
+                    Double.MAX_VALUE
+                }
+            }
+
+            nearestStop?.let { stop ->
+                StationSearchResult(
+                    stopName = stop.properties.nom,
+                    lines = BusIconHelper.getAllLinesForStop(stop),
+                    stopId = stop.properties.id
+                )
+            }
+        }
+
         AlertReportBottomSheet(
             viewModel = viewModel,
             onDismiss = { showAlertReportSheet = false },
-            initialStop = alertReportInitialStop
+            initialStop = alertReportInitialStop,
+            nearestStopCandidate = nearestStopCandidate
         )
     }
 }
