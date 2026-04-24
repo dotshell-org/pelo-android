@@ -1,9 +1,11 @@
 package com.pelotcl.app
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -53,6 +55,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.google.android.gms.location.LocationServices
+import com.pelotcl.app.generic.service.NavigationModeForegroundService
+import com.pelotcl.app.generic.service.NavigationModeStateStore
 import com.pelotcl.app.generic.ui.components.favorites.AddFavoriteDialog
 import com.pelotcl.app.generic.ui.components.favorites.FavoritesBar
 import com.pelotcl.app.generic.ui.components.search.TransportSearchBar
@@ -91,9 +95,18 @@ class MainActivity : ComponentActivity() {
     // Application-level coroutine scope for early background work
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    private var isNavigationModeEnabled = false
+    private var hasAppliedFirstNavigationCallback = false
+
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Restore lockscreen behavior when navigation is still active in foreground service.
+        if (NavigationModeStateStore.isNavigationActive(this)) {
+            isNavigationModeEnabled = true
+            setNavigationLockScreenBehavior(true)
+        }
 
         // Preload disk cache and binary schedule data in parallel BEFORE UI (critical for first render)
         // Retrofit initialization is deferred to after setContent
@@ -129,7 +142,36 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             PeloTheme {
-                NavBar(modifier = Modifier.fillMaxSize())
+                NavBar(
+                    modifier = Modifier.fillMaxSize(),
+                    onNavigationModeChangedExternal = { active ->
+                        if (!hasAppliedFirstNavigationCallback) {
+                            hasAppliedFirstNavigationCallback = true
+                            // Ignore initial Compose state restoration mismatch when service is still active.
+                            if (isNavigationModeEnabled && !active) return@NavBar
+                        }
+                        if (active == isNavigationModeEnabled) return@NavBar
+                        isNavigationModeEnabled = active
+                        if (active) {
+                            startNavigationForegroundService()
+                        } else {
+                            stopNavigationForegroundService()
+                        }
+                        setNavigationLockScreenBehavior(active)
+                    }
+                )
+            }
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val hasNotificationPermission = ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+
+            if (!hasNotificationPermission) {
+                registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+                    .launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
 
@@ -168,6 +210,59 @@ class MainActivity : ComponentActivity() {
                 }
             } catch (e: Exception) {
                 android.util.Log.w("MainActivity", "Widget refresh failed: ${e.message}")
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Keep navigation service running when activity/task is closed.
+        if (!isNavigationModeEnabled) {
+            setNavigationLockScreenBehavior(false)
+        }
+    }
+
+    private fun startNavigationForegroundService() {
+        val serviceIntent = Intent(this, NavigationModeForegroundService::class.java).apply {
+            action = NavigationModeForegroundService.ACTION_START
+        }
+        ContextCompat.startForegroundService(this, serviceIntent)
+    }
+
+    private fun stopNavigationForegroundService() {
+        val serviceIntent = Intent(this, NavigationModeForegroundService::class.java).apply {
+            action = NavigationModeForegroundService.ACTION_STOP
+        }
+        startService(serviceIntent)
+    }
+
+    private fun setNavigationLockScreenBehavior(enabled: Boolean) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(enabled)
+            setTurnScreenOn(enabled)
+            if (enabled) {
+                window.addFlags(
+                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                )
+            } else {
+                window.clearFlags(
+                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                )
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            if (enabled) {
+                window.addFlags(
+                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                )
+            } else {
+                window.clearFlags(
+                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                )
             }
         }
     }
@@ -212,7 +307,10 @@ private enum class Destination(
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NavBar(modifier: Modifier = Modifier) {
+fun NavBar(
+    modifier: Modifier = Modifier,
+    onNavigationModeChangedExternal: (Boolean) -> Unit = {}
+) {
     val navController = rememberNavController()
     val startDestination = Destination.PLAN
     var selectedDestination by rememberSaveable { mutableIntStateOf(startDestination.ordinal) }
@@ -266,6 +364,11 @@ fun NavBar(modifier: Modifier = Modifier) {
     var isNavigationModeActive by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
+    val navModeChangedCallback = onNavigationModeChangedExternal
+
+    LaunchedEffect(isNavigationModeActive) {
+        navModeChangedCallback(isNavigationModeActive)
+    }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
