@@ -720,21 +720,78 @@ private fun isValidJourneyCoordinate(lat: Double, lon: Double): Boolean {
     return lat in -90.0..90.0 && lon in -180.0..180.0 && (lat != 0.0 || lon != 0.0)
 }
 
-private fun buildNavigationPathPoints(journey: JourneyResult): List<LatLng> {
+private suspend fun buildNavigationPathPoints(
+    journey: JourneyResult,
+    viewModel: TransportViewModel
+): List<LatLng> {
     val points = mutableListOf<LatLng>()
-    journey.legs.filterNot { it.isWalking }.forEach { leg ->
+
+    fun appendPointIfDistinct(point: LatLng) {
+        val last = points.lastOrNull()
+        if (last == null ||
+            last.latitude != point.latitude ||
+            last.longitude != point.longitude
+        ) {
+            points.add(point)
+        }
+    }
+
+    fun appendFallbackLegPoints(leg: JourneyLeg) {
         if (isValidJourneyCoordinate(leg.fromLat, leg.fromLon)) {
-            points.add(LatLng(leg.fromLat, leg.fromLon))
+            appendPointIfDistinct(LatLng(leg.fromLat, leg.fromLon))
         }
         leg.intermediateStops.forEach { stop ->
             if (isValidJourneyCoordinate(stop.lat, stop.lon)) {
-                points.add(LatLng(stop.lat, stop.lon))
+                appendPointIfDistinct(LatLng(stop.lat, stop.lon))
             }
         }
         if (isValidJourneyCoordinate(leg.toLat, leg.toLon)) {
-            points.add(LatLng(leg.toLat, leg.toLon))
+            appendPointIfDistinct(LatLng(leg.toLat, leg.toLon))
         }
     }
+
+    journey.legs.filterNot { it.isWalking }.forEach { leg ->
+        val routeName = leg.routeName?.takeIf { it.isNotBlank() }
+        if (routeName == null) {
+            appendFallbackLegPoints(leg)
+            return@forEach
+        }
+
+        val sectionPoints = runCatching {
+            val lines = viewModel.transportRepository
+                .getLineByName(routeName)
+                .getOrElse { emptyList() }
+            if (lines.isEmpty()) return@runCatching emptyList<LatLng>()
+
+            val sectionedLines = viewModel.sectionLinesBetweenStops(
+                lines = lines,
+                startStopId = leg.fromStopId,
+                endStopId = leg.toStopId,
+                leg = leg
+            )
+
+            val sectionGeometry = sectionedLines.firstOrNull()?.geometry
+            val coordinates = (sectionGeometry as? com.pelotcl.app.generic.data.model.Geometry)
+                ?.coordinates
+                ?.firstOrNull()
+                .orEmpty()
+
+            coordinates.mapNotNull { coord ->
+                if (coord.size < 2) return@mapNotNull null
+                val lon = coord[0]
+                val lat = coord[1]
+                if (!isValidJourneyCoordinate(lat, lon)) return@mapNotNull null
+                LatLng(lat, lon)
+            }
+        }.getOrElse { emptyList() }
+
+        if (sectionPoints.size >= 2) {
+            sectionPoints.forEach(::appendPointIfDistinct)
+        } else {
+            appendFallbackLegPoints(leg)
+        }
+    }
+
     return points
 }
 
@@ -744,23 +801,53 @@ private fun findNavigationAxisSegment(
 ): Pair<LatLng, LatLng>? {
     if (pathPoints.size < 2) return null
 
-    val nearestIndex = pathPoints.indices.minByOrNull { index ->
-        squaredDistance(
+    var bestDistanceSq = Double.MAX_VALUE
+    var bestProjectedPoint: LatLng? = null
+    var bestNextPoint: LatLng? = null
+
+    for (index in 0 until pathPoints.lastIndex) {
+        val start = pathPoints[index]
+        val end = pathPoints[index + 1]
+
+        val dx = end.longitude - start.longitude
+        val dy = end.latitude - start.latitude
+        val lengthSq = (dx * dx) + (dy * dy)
+        if (lengthSq <= 1e-14) continue
+
+        val ux = userLocation.longitude - start.longitude
+        val uy = userLocation.latitude - start.latitude
+        val t = ((ux * dx) + (uy * dy)) / lengthSq
+        val clampedT = t.coerceIn(0.0, 1.0)
+
+        val projLon = start.longitude + (clampedT * dx)
+        val projLat = start.latitude + (clampedT * dy)
+
+        val distanceSq = squaredDistance(
             lat1 = userLocation.latitude,
             lon1 = userLocation.longitude,
-            lat2 = pathPoints[index].latitude,
-            lon2 = pathPoints[index].longitude
+            lat2 = projLat,
+            lon2 = projLon
         )
-    } ?: return null
 
-    val startIndex = if (nearestIndex >= pathPoints.lastIndex) {
-        (pathPoints.lastIndex - 1).coerceAtLeast(0)
-    } else {
-        nearestIndex
+        if (distanceSq < bestDistanceSq) {
+            bestDistanceSq = distanceSq
+            val projected = LatLng(projLat, projLon)
+
+            val nextPoint = if (clampedT >= 0.999 && index + 2 <= pathPoints.lastIndex) {
+                pathPoints[index + 2]
+            } else {
+                end
+            }
+
+            bestProjectedPoint = projected
+            bestNextPoint = nextPoint
+        }
     }
-    val endIndex = (startIndex + 1).coerceAtMost(pathPoints.lastIndex)
-    if (startIndex == endIndex) return null
-    return pathPoints[startIndex] to pathPoints[endIndex]
+
+    val from = bestProjectedPoint ?: return null
+    val to = bestNextPoint ?: return null
+    if (from.latitude == to.latitude && from.longitude == to.longitude) return null
+    return from to to
 }
 
 private fun computeBearingDegrees(from: LatLng, to: LatLng): Double {
@@ -1329,6 +1416,7 @@ fun PlanScreen(
     var showAlertReportSheet by rememberSaveable { mutableStateOf(false) }
     var alertReportInitialStop by remember { mutableStateOf<StationSearchResult?>(null) }
     var wasInNavigationMode by remember { mutableStateOf(false) }
+    var navigationPathPoints by remember { mutableStateOf<List<LatLng>>(emptyList()) }
     var lastLateTransferRecalcKey by remember { mutableStateOf<String?>(null) }
     var isLateTransferRecalculating by remember { mutableStateOf(false) }
 
@@ -1984,7 +2072,24 @@ fun PlanScreen(
         zoomToItineraries(map, journeysToZoom)
     }
 
-    LaunchedEffect(mapInstance, sheetContentState, userLocation, selectedItineraryJourney) {
+    LaunchedEffect(sheetContentState, selectedItineraryJourney) {
+        if (sheetContentState != SheetContentState.NAVIGATION) {
+            navigationPathPoints = emptyList()
+            return@LaunchedEffect
+        }
+
+        val journey = selectedItineraryJourney
+        if (journey == null) {
+            navigationPathPoints = emptyList()
+            return@LaunchedEffect
+        }
+
+        navigationPathPoints = withContext(Dispatchers.IO) {
+            buildNavigationPathPoints(journey, viewModel)
+        }
+    }
+
+    LaunchedEffect(mapInstance, sheetContentState, userLocation, navigationPathPoints) {
         val isInNavigationMode = sheetContentState == SheetContentState.NAVIGATION
         val map = mapInstance
 
@@ -1996,10 +2101,8 @@ fun PlanScreen(
         if (isInNavigationMode) {
             val currentUserLocation = userLocation
             val target = currentUserLocation ?: map.cameraPosition.target
-            val journey = selectedItineraryJourney
-            val pathPoints = journey?.let { buildNavigationPathPoints(it) }.orEmpty()
             val axisSegment = if (currentUserLocation != null) {
-                findNavigationAxisSegment(currentUserLocation, pathPoints)
+                findNavigationAxisSegment(currentUserLocation, navigationPathPoints)
             } else {
                 null
             }
