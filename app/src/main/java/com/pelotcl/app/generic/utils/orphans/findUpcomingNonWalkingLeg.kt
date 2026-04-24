@@ -3,7 +3,7 @@ package com.pelotcl.app.generic.utils.orphans
 import com.pelotcl.app.generic.data.repository.itinerary.itinerary.JourneyLeg
 import com.pelotcl.app.generic.data.repository.itinerary.itinerary.JourneyResult
 
-private fun findUpcomingNonWalkingLeg(
+fun findUpcomingNonWalkingLeg(
     journey: JourneyResult,
     currentLeg: JourneyLeg,
     offsetFromCurrent: Int

@@ -186,11 +186,6 @@ fun SettingsScreen(
                 )
                 HorizontalDivider(color = Color(0xFF3A3A3C))
                 SettingsMenuRow(
-                    title = "Santé des API",
-                    onClick = onApiHealthClick
-                )
-                HorizontalDivider(color = Color(0xFF3A3A3C))
-                SettingsMenuRow(
                     title = "À propos",
                     onClick = { isAboutMenu = true }
                 )

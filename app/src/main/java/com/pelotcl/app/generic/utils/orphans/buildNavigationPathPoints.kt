@@ -1,12 +1,9 @@
 package com.pelotcl.app.generic.utils.orphans
 
-import androidx.compose.foundation.layout.size
 import com.pelotcl.app.generic.data.repository.itinerary.itinerary.JourneyLeg
 import com.pelotcl.app.generic.data.repository.itinerary.itinerary.JourneyResult
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
 import org.maplibre.android.geometry.LatLng
-import org.maplibre.geojson.Geometry
-import kotlin.text.get
 
 suspend fun buildNavigationPathPoints(
     journey: JourneyResult,
@@ -58,8 +55,9 @@ suspend fun buildNavigationPathPoints(
                 leg = leg
             )
 
-            val sectionGeometry = sectionedLines.firstOrNull()?.geometry
-            val coordinates = (sectionGeometry as? Geometry)
+            val coordinates = sectionedLines
+                .firstOrNull()
+                ?.multiLineStringGeometry
                 ?.coordinates
                 ?.firstOrNull()
                 .orEmpty()

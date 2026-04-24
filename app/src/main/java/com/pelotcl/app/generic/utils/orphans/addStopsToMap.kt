@@ -218,8 +218,8 @@ suspend fun addStopsToMap(
                 val iconSizesPriority = 0.7f
                 val iconSizesSecondary = 0.62f
 
-                // Save usedSlots for filter functions to avoid iterating all -25..25
-                val currentMapSlots = usedSlots.toSet()
+                // Save used slots for the other map filter helpers.
+                currentMapSlots = usedSlots.toSet()
 
                 usedSlots.sorted().forEach { idx ->
                     val yOffset = idx * 13f

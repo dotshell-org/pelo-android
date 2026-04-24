@@ -6,12 +6,12 @@ import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.SymbolLayer
 
+var currentMapSlots: Set<Int> = emptySet()
+
 fun filterMapStops(
     style: Style,
     selectedLineName: String
 ) {
-    var currentMapSlots: Set<Int> = emptySet()
-
     val priorityLayerPrefix = "transport-stops-layer-priority"
     val tramLayerPrefix = "transport-stops-layer-tram"
     val secondaryLayerPrefix = "transport-stops-layer-secondary"

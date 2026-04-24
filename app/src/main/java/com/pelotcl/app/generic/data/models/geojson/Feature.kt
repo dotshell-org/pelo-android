@@ -21,4 +21,7 @@ data class Feature(
     val geometryName: String? = null,
     val properties: TransportLineProperties = TransportLineProperties(),
     val bbox: List<Double>? = null
-)
+) {
+    val geometry: MultiLineStringGeometry
+        get() = multiLineStringGeometry
+}

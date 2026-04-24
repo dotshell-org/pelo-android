@@ -7,7 +7,7 @@ import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.PropertyFactory
 import kotlin.collections.forEach
 
-private fun filterMapLines(
+fun filterMapLines(
     map: MapLibreMap,
     allLines: List<Feature>,
     selectedLineName: String
