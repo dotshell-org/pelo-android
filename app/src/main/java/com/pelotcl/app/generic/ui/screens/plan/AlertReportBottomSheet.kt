@@ -71,7 +71,7 @@ import com.pelotcl.app.generic.ui.theme.Red900
 import com.pelotcl.app.generic.ui.theme.Red950
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
-import com.pelotcl.app.generic.utils.BusIconHelper
+import com.pelotcl.app.generic.utils.graphics.BusIconHelper
 import com.pelotcl.app.specific.utils.LineColorHelper
 import kotlinx.coroutines.launch
 

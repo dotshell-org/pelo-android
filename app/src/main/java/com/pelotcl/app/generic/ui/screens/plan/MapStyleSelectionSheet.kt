@@ -25,7 +25,7 @@ import com.pelotcl.app.generic.data.network.mapstyle.MapStyleData
 import com.pelotcl.app.generic.service.TransportServiceProvider
 import com.pelotcl.app.generic.ui.theme.PrimaryColor
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
-import com.pelotcl.app.generic.utils.MapStyleUtils.mapStyleLabel
+import com.pelotcl.app.generic.utils.map.MapStyleUtils.mapStyleLabel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

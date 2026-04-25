@@ -9,7 +9,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.pelotcl.app.R
-import com.pelotcl.app.generic.utils.BusIconHelper
+import com.pelotcl.app.generic.utils.graphics.BusIconHelper
 
 @Composable
 fun SearchConnectionBadge(lineName: String, sizeDp: Int = 30) {

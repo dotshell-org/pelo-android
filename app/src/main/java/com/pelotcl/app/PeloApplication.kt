@@ -11,7 +11,7 @@ import com.pelotcl.app.generic.data.network.RetrofitInstance
 import com.pelotcl.app.generic.data.repository.itinerary.itinerary.RaptorRepository
 import com.pelotcl.app.generic.data.repository.offline.SchedulesRepository
 import com.pelotcl.app.generic.service.TransportServiceProvider
-import com.pelotcl.app.generic.utils.BusIconHelper
+import com.pelotcl.app.generic.utils.graphics.BusIconHelper
 import com.pelotcl.app.generic.worker.TrafficAlertsWorker
 import java.util.concurrent.TimeUnit
 

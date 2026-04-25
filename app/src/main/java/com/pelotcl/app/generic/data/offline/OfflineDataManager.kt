@@ -8,7 +8,7 @@ import com.pelotcl.app.generic.data.models.geojson.Feature
 import com.pelotcl.app.generic.data.models.geojson.StopFeature
 import com.pelotcl.app.generic.data.models.realtime.alerts.official.TrafficAlertsResponse
 import com.pelotcl.app.generic.service.TransportServiceProvider
-import com.pelotcl.app.generic.utils.withRetry
+import com.pelotcl.app.generic.utils.network.withRetry
 import com.pelotcl.app.generic.data.repository.offline.SchedulesRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers

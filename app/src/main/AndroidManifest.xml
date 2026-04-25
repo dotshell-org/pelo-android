@@ -56,7 +56,7 @@
 
         <!-- Widget configuration activity -->
         <activity
-            android:name="com.pelotcl.app.generic.widget.WidgetConfigActivity"
+            android:name="com.pelotcl.app.generic.widget.ui.WidgetConfigActivity"
             android:exported="true"
             android:theme="@style/Theme.Pelo">
             <intent-filter>
@@ -66,7 +66,7 @@
 
         <!-- Reschedule widget alarms after device reboot -->
         <receiver
-            android:name="com.pelotcl.app.generic.widget.WidgetBootReceiver"
+            android:name="com.pelotcl.app.generic.widget.receiver.WidgetBootReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
@@ -75,14 +75,14 @@
 
         <!-- Widget alarm refresh receiver -->
         <receiver
-            android:name="com.pelotcl.app.generic.widget.WidgetAlarmReceiver"
+            android:name="com.pelotcl.app.generic.widget.receiver.WidgetAlarmReceiver"
             android:exported="false" />
 
 
 
         <!-- Widget receiver -->
         <receiver
-            android:name="com.pelotcl.app.generic.widget.PeloWidgetReceiver"
+            android:name="com.pelotcl.app.generic.widget.receiver.PeloWidgetReceiver"
             android:label="@string/widget_label_all_lines_minutes"
             android:exported="true">
             <intent-filter>
@@ -94,7 +94,7 @@
         </receiver>
 
         <receiver
-            android:name="com.pelotcl.app.generic.widget.PeloWidgetClockAllLinesReceiver"
+            android:name="com.pelotcl.app.generic.widget.receiver.PeloWidgetClockAllLinesReceiver"
             android:label="@string/widget_label_all_lines_clock"
             android:exported="true">
             <intent-filter>
@@ -106,7 +106,7 @@
         </receiver>
 
         <receiver
-            android:name="com.pelotcl.app.generic.widget.PeloWidgetLineMinutesReceiver"
+            android:name="com.pelotcl.app.generic.widget.receiver.PeloWidgetLineMinutesReceiver"
             android:label="@string/widget_label_line_minutes"
             android:exported="true">
             <intent-filter>
@@ -118,7 +118,7 @@
         </receiver>
 
         <receiver
-            android:name="com.pelotcl.app.generic.widget.PeloWidgetLineClockReceiver"
+            android:name="com.pelotcl.app.generic.widget.receiver.PeloWidgetLineClockReceiver"
             android:label="@string/widget_label_line_clock"
             android:exported="true">
             <intent-filter>

@@ -7,7 +7,7 @@ import com.pelotcl.app.generic.data.models.realtime.vehiclepositions.SimpleVehic
 import com.pelotcl.app.generic.data.models.realtime.vehiclepositions.VehicleActivity
 import com.pelotcl.app.generic.data.models.realtime.vehiclepositions.VehiclePositionsResponse
 import com.pelotcl.app.generic.data.network.VehiclePositionsService
-import com.pelotcl.app.generic.utils.DotshellRequestLogger
+import com.pelotcl.app.generic.utils.network.DotshellRequestLogger
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow

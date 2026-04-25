@@ -46,7 +46,12 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import com.pelotcl.app.MainActivity
 import com.pelotcl.app.R
-import com.pelotcl.app.generic.utils.BusIconHelper
+import com.pelotcl.app.generic.utils.graphics.BusIconHelper
+import com.pelotcl.app.generic.widget.action.RefreshWidgetAction
+import com.pelotcl.app.generic.widget.config.TimeDisplayMode
+import com.pelotcl.app.generic.widget.config.WidgetStyle
+import com.pelotcl.app.generic.widget.model.UpcomingDeparture
+import com.pelotcl.app.generic.widget.schedule.ScheduleWidgetHelper
 
 class PeloWidget : GlanceAppWidget() {
 

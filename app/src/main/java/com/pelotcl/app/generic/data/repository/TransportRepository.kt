@@ -13,7 +13,7 @@ import com.pelotcl.app.generic.data.models.lines.MultiLineStringGeometry
 import com.pelotcl.app.generic.data.models.lines.TransportLineProperties
 import com.pelotcl.app.generic.data.network.transport.TransportLinesQuery
 import com.pelotcl.app.generic.data.offline.OfflineRepository
-import com.pelotcl.app.generic.utils.withRetry
+import com.pelotcl.app.generic.utils.network.withRetry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 

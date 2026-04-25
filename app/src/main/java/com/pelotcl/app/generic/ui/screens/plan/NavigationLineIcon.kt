@@ -17,7 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
-import com.pelotcl.app.generic.utils.BusIconHelper
+import com.pelotcl.app.generic.utils.graphics.BusIconHelper
 import com.pelotcl.app.specific.utils.LineColorHelper
 
 @Composable

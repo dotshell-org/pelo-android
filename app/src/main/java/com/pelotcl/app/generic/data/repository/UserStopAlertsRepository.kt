@@ -5,7 +5,7 @@ import com.pelotcl.app.generic.data.models.realtime.alerts.community.StopAlertsS
 import com.pelotcl.app.generic.data.models.realtime.alerts.community.UserStopAlert
 import com.pelotcl.app.generic.data.models.realtime.alerts.community.UserStopAlertsResponse
 import com.pelotcl.app.specific.data.network.LyonTransportApi
-import com.pelotcl.app.generic.utils.SearchUtils
+import com.pelotcl.app.generic.utils.search.SearchUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 

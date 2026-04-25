@@ -8,7 +8,7 @@ import com.pelotcl.app.generic.data.repository.itinerary.holiday.HolidayPeriod
 import com.pelotcl.app.generic.data.repository.itinerary.holiday.HolidaysData
 import com.pelotcl.app.generic.data.models.search.LineSearchResult
 import com.pelotcl.app.specific.utils.TransportTypeUtils
-import com.pelotcl.app.generic.utils.SearchUtils
+import com.pelotcl.app.generic.utils.search.SearchUtils
 import io.raptor.PeriodData
 import io.raptor.RaptorLibrary
 import io.raptor.data.NetworkLoader

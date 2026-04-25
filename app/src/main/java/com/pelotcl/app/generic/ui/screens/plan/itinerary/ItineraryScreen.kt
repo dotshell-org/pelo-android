@@ -68,7 +68,7 @@ import com.pelotcl.app.generic.data.repository.itinerary.itinerary.JourneyResult
 import com.pelotcl.app.generic.ui.theme.Gray700
 import com.pelotcl.app.generic.ui.theme.PrimaryColor
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
-import com.pelotcl.app.generic.utils.BusIconHelper
+import com.pelotcl.app.generic.utils.graphics.BusIconHelper
 import com.pelotcl.app.specific.utils.LineColorHelper
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter

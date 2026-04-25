@@ -45,7 +45,7 @@ import com.pelotcl.app.generic.ui.theme.Gray700
 import com.pelotcl.app.generic.ui.theme.PrimaryColor
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.generic.ui.viewmodel.TransportViewModel
-import com.pelotcl.app.generic.utils.DepartureManager
+import com.pelotcl.app.generic.utils.schedule.DepartureManager
 import com.pelotcl.app.specific.utils.LineNamingUtils.sortLines
 
 @OptIn(ExperimentalMaterial3Api::class)

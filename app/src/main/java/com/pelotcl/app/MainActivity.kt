@@ -79,8 +79,8 @@ import com.pelotcl.app.generic.ui.screens.Destination
 import com.pelotcl.app.generic.ui.theme.PrimaryColor
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.specific.data.cache.TransportCacheImpl
-import com.pelotcl.app.generic.utils.BusIconHelper
-import com.pelotcl.app.generic.utils.LocationHelper
+import com.pelotcl.app.generic.utils.graphics.BusIconHelper
+import com.pelotcl.app.generic.utils.location.LocationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
