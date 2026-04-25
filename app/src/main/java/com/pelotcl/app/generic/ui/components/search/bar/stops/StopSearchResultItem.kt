@@ -29,7 +29,7 @@ import com.pelotcl.app.generic.data.models.search.StationSearchResult
 import com.pelotcl.app.generic.ui.theme.PrimaryColor
 import com.pelotcl.app.generic.ui.theme.SecondaryColor
 import com.pelotcl.app.generic.ui.theme.Stone900
-import com.pelotcl.app.specific.utils.orphans.isStrongLine
+import com.pelotcl.app.specific.utils.LineClassificationUtils.isStrongLine
 
 @Composable
 fun StopSearchResultItem(

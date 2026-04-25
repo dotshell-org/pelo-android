@@ -17,7 +17,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.pelotcl.app.R
 import com.pelotcl.app.generic.data.network.mapstyle.MapStyleData
-import com.pelotcl.app.generic.utils.orphans.rememberPreviewImage
+import com.pelotcl.app.generic.utils.BitmapUtils.rememberPreviewImage
 
 @Composable
 fun MapStylePreviewTile(
